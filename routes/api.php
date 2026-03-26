@@ -101,5 +101,22 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::delete('/{id}', [ModuleCrudController::class , 'destroy']);
             Route::post('/{id}/restore', [ModuleCrudController::class , 'restore']);
             Route::delete('/{id}/force', [ModuleCrudController::class , 'forceDelete']);
-        }
-        );    });
+        });
+
+        // =============================================
+        // License Management
+        // =============================================
+        Route::prefix('licenses')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\LicenseController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\LicenseController::class, 'store']);
+            Route::get('/verify', [\App\Http\Controllers\Api\LicenseController::class, 'verify']);
+            Route::post('/activate', [\App\Http\Controllers\Api\LicenseController::class, 'activate']);
+            Route::get('/pricing', [\App\Http\Controllers\Api\LicenseController::class, 'pricingIndex']);
+            Route::put('/pricing', [\App\Http\Controllers\Api\LicenseController::class, 'pricingUpdate']);
+            Route::get('/{id}', [\App\Http\Controllers\Api\LicenseController::class, 'show']);
+            Route::put('/{id}', [\App\Http\Controllers\Api\LicenseController::class, 'update']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\LicenseController::class, 'destroy']);
+            Route::post('/{id}/restore', [\App\Http\Controllers\Api\LicenseController::class, 'restore']);
+        });
+    });
+
