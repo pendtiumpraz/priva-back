@@ -3,6 +3,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
+use App\Models\ChatConversation;
+use App\Models\ChatMessage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
@@ -17,6 +19,7 @@ class AiChatController extends Controller
         $request->validate([
             'message' => 'required|string|max:2000',
             'history' => 'nullable|array',
+            'conversation_id' => 'nullable|string',
         ]);
 
         $apiKey = AppSetting::get('deepseek_api_key');
@@ -27,6 +30,48 @@ class AiChatController extends Controller
         $knowledgeBase = $this->getKnowledgeBase();
         $userMessage = $request->message;
         $history = $request->history ?? [];
+        $user = $request->user();
+
+        // Get or create conversation
+        $conversation = null;
+        if ($request->conversation_id) {
+            $conversation = ChatConversation::find($request->conversation_id);
+        }
+        if (!$conversation) {
+            $conversation = ChatConversation::create([
+                'user_id' => $user->id,
+                'org_id' => $user->org_id ?? '',
+                'user_name' => $user->name,
+                'user_email' => $user->email,
+                'status' => 'open',
+                'last_message_at' => now(),
+            ]);
+        }
+
+        // Save user message
+        ChatMessage::create([
+            'conversation_id' => $conversation->id,
+            'role' => 'user',
+            'content' => $userMessage,
+            'sender_name' => $user->name,
+        ]);
+
+        // Check for pending admin messages
+        $adminMessages = ChatMessage::where('conversation_id', $conversation->id)
+            ->where('role', 'admin')
+            ->where('created_at', '>', now()->subMinutes(5))
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        // If admin is actively chatting, don't call AI
+        if ($conversation->status === 'admin_active' && $adminMessages) {
+            $conversation->update(['last_message_at' => now()]);
+            return response()->json([
+                'reply' => null,
+                'conversation_id' => $conversation->id,
+                'admin_active' => true,
+            ]);
+        }
 
         $systemPrompt = <<<PROMPT
 Kamu adalah PRIVASIMU Assistant — asisten AI khusus untuk platform kepatuhan data pribadi PRIVASIMU berdasarkan UU Pelindungan Data Pribadi (UU No. 27 Tahun 2022).
@@ -53,7 +98,8 @@ PROMPT;
         $historySlice = array_slice($history, -10);
         foreach ($historySlice as $msg) {
             if (isset($msg['role']) && isset($msg['content'])) {
-                $messages[] = ['role' => $msg['role'], 'content' => $msg['content']];
+                $role = $msg['role'] === 'admin' ? 'assistant' : $msg['role'];
+                $messages[] = ['role' => $role, 'content' => $msg['content']];
             }
         }
 
@@ -74,19 +120,30 @@ PROMPT;
 
             if ($response->failed()) {
                 \Log::error('DeepSeek API error: ' . $response->body());
-                return response()->json(['message' => 'AI sedang tidak tersedia. Coba lagi nanti.'], 502);
+                return response()->json(['message' => 'AI sedang tidak tersedia. Coba lagi nanti.', 'conversation_id' => $conversation->id], 502);
             }
 
             $data = $response->json();
             $reply = $data['choices'][0]['message']['content'] ?? 'Maaf, tidak ada respons.';
 
+            // Save AI reply
+            ChatMessage::create([
+                'conversation_id' => $conversation->id,
+                'role' => 'assistant',
+                'content' => $reply,
+                'sender_name' => 'PRIVASIMU AI',
+            ]);
+
+            $conversation->update(['last_message_at' => now()]);
+
             return response()->json([
                 'reply' => $reply,
+                'conversation_id' => $conversation->id,
                 'usage' => $data['usage'] ?? null,
             ]);
         } catch (\Exception $e) {
             \Log::error('AI Chat error: ' . $e->getMessage());
-            return response()->json(['message' => 'Terjadi kesalahan. Coba lagi nanti.'], 500);
+            return response()->json(['message' => 'Terjadi kesalahan. Coba lagi nanti.', 'conversation_id' => $conversation->id], 500);
         }
     }
 
@@ -155,82 +212,127 @@ PRIVASIMU adalah platform SaaS untuk membantu organisasi mematuhi UU Pelindungan
 ### 1. Dashboard
 - Menampilkan statistik kepatuhan secara real-time
 - KPI: total ROPA, DPIA, breach incidents, gap assessment score
-- Chart: tren kepatuhan, distribusi risiko
 
 ### 2. ROPA (Record of Processing Activities)
-- Mencatat semua aktivitas pemrosesan data pribadi
 - Wizard 6 langkah: Identifikasi → Tujuan → Kategori Data → Keamanan → Review → Submit
-- Risk level otomatis: data sensitif (kesehatan, biometrik, anak) → HIGH risk → otomatis generate DPIA
-- Field: processing_activity, division, data_categories, legal_basis, retention_period, security_measures
+- Risk level otomatis: data sensitif → HIGH risk → otomatis generate DPIA
 
 ### 3. DPIA (Data Protection Impact Assessment)
-- Penilaian dampak pelindungan data
 - Wizard 4 langkah: Identifikasi → Analisis Risiko → Mitigasi → Review
 - Scoring: likelihood × impact = risk score
-- Hasil: skor risiko, rekomendasi mitigasi
 
-### 4. Gap Assessment (Analisis Kesenjangan UU PDP)
+### 4. Gap Assessment
 - 62 pertanyaan berdasarkan UU PDP
-- 7 domain: Kebijakan, Data-processing, DPIA, Hak Subjek Data, Breach Response, Transfer Data, Organisasi
-- Scoring otomatis: compliance_level (Awal/Berkembang/Terkelola/Optimized)
-- Hasil: ringkasan per domain, rekomendasi tindak lanjut
+- 7 domain kepatuhan
 
 ### 5. Data Breach Management
 - Flow 5 fase: Terdeteksi → Assessment → Containment → Notifikasi → Ditutup
-- Setiap fase memiliki action items yang HARUS diselesaikan sebelum lanjut ke fase berikutnya
 - Countdown 72 jam untuk notifikasi KOMDIGI (UU PDP Pasal 46)
-- RACI Matrix: DPO, IT Security, Legal, Manajemen, PR/Comms
-- Integrasi SIEM & SOAR
-- Template notifikasi ke KOMDIGI dan subjek data (otomatis)
-- Containment checklist 10 item
 
 ### 6. DSR (Data Subject Request)
-- Manajemen permintaan hak subjek data
 - Jenis: akses, koreksi, hapus, portabilitas, tarik consent
-- Deadline tracking
 
 ### 7. Consent Management
-- Kelola persetujuan pengumpulan data
-- Tracking consent per collection point
-- Audit trail
-
 ### 8. Simulasi / Fire Drill
-- 4 mode: Quiz, Tabletop, SOP Walkthrough, Live Visual Drill
-- Live Drill: simulasi real-time dengan efek visual (screen shake, flashing)
-- Skenario: Ransomware Attack, Data Exfiltration
-- Penilaian performa tim (A-F grade)
-
 ### 9. Data Mapping
-- Pemetaan alur data dalam organisasi
-- Identifikasi sumber, tujuan, dan kategori data
-
 ### 10. Dokumentasi
-- Panduan penggunaan, business process, arsitektur sistem
-- Tab: Proses Bisnis, Integrasi, Role & Permission, Pricing, USP & Roadmap
-- Tab Arsitektur & API hanya untuk SuperAdmin
 
 ## Role & Permission
-- **SuperAdmin**: Akses penuh ke semua tenant, manajemen user global, konfigurasi platform, manajemen license
-- **Admin**: Manajemen tenant sendiri, user di bawah organisasinya, input license SaaS
-- **DPO**: Data Protection Officer — akses semua modul compliance
-- **Maker**: Input data dan pemrosesan
-- **Viewer**: Hanya bisa melihat data
-
-## License System
-- Paket: Basic (tanpa AI), Pro (dengan AI), Enterprise (AI Agent)
-- Tipe: Beli Putus (perpetual) atau SaaS (subscription)
-- 1 license = 1x penggunaan, ada domain whitelist
-- Percobaan penggunaan >1x akan tercatat dan dilaporkan
+- SuperAdmin, Admin, DPO, Maker, Viewer
 
 ## Kontak
-Untuk pembelian license: PT Sainskerta Solusi Nusantara
-Kontak: 081319504441 (Galih)
-
-## Kepatuhan UU PDP
-- UU No. 27 Tahun 2022 tentang Pelindungan Data Pribadi
-- Pasal 46: Notifikasi Breach dalam 3×24 jam
-- Data sensitif: kesehatan, biometrik, genetik, anak, keuangan, ras, agama, orientasi seksual, pandangan politik
+PT Sainskerta Solusi Nusantara — 081319504441 (Galih)
 KB;
     }
 
+    // =============================================
+    // CHAT HISTORY — SuperAdmin endpoints
+    // =============================================
+
+    /**
+     * List all conversations (SuperAdmin) or user's conversations
+     */
+    public function conversations(Request $request)
+    {
+        $user = $request->user();
+        $query = ChatConversation::query()->withCount('messages');
+
+        if ($user->role !== 'superadmin') {
+            $query->where('user_id', $user->id);
+        }
+
+        if ($request->search) {
+            $s = $request->search;
+            $query->where(function ($q) use ($s) {
+                $q->where('user_name', 'like', "%{$s}%")
+                  ->orWhere('user_email', 'like', "%{$s}%");
+            });
+        }
+
+        $conversations = $query->orderBy('last_message_at', 'desc')->paginate(20);
+        return response()->json($conversations);
+    }
+
+    /**
+     * Get conversation messages
+     */
+    public function conversationMessages(Request $request, string $id)
+    {
+        $user = $request->user();
+        $conversation = ChatConversation::with('messages')->findOrFail($id);
+
+        // Only owner or superadmin can view
+        if ($user->role !== 'superadmin' && $conversation->user_id !== $user->id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        return response()->json(['data' => $conversation]);
+    }
+
+    /**
+     * SuperAdmin sends a reply to a user's conversation
+     */
+    public function adminReply(Request $request, string $id)
+    {
+        $user = $request->user();
+        if ($user->role !== 'superadmin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $request->validate(['message' => 'required|string|max:2000']);
+
+        $conversation = ChatConversation::findOrFail($id);
+        $conversation->update(['status' => 'admin_active', 'last_message_at' => now()]);
+
+        $msg = ChatMessage::create([
+            'conversation_id' => $conversation->id,
+            'role' => 'admin',
+            'content' => $request->message,
+            'sender_name' => $user->name . ' (Admin)',
+        ]);
+
+        return response()->json(['message' => 'Sent', 'data' => $msg]);
+    }
+
+    /**
+     * Get new messages for polling (user side)
+     */
+    public function pollMessages(Request $request, string $id)
+    {
+        $user = $request->user();
+        $conversation = ChatConversation::findOrFail($id);
+
+        if ($user->role !== 'superadmin' && $conversation->user_id !== $user->id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $after = $request->after; // ISO timestamp
+        $query = ChatMessage::where('conversation_id', $id);
+        if ($after) {
+            $query->where('created_at', '>', $after);
+        }
+
+        $messages = $query->orderBy('created_at')->get();
+        return response()->json(['data' => $messages]);
+    }
 }
