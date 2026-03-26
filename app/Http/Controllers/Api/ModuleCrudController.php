@@ -53,95 +53,115 @@ class ModuleCrudController extends Controller
      */
     public function store(Request $request, string $module)
     {
-        $model = $this->getModel($module);
-        $data = $request->all();
-        $data['org_id'] = $request->user()->org_id;
-        $data['created_by'] = $request->user()->id;
+        try {
+            $model = $this->getModel($module);
+            $data = $request->all();
+            $data['org_id'] = $request->user()->org_id;
+            $data['created_by'] = $request->user()->id;
 
-        // Auto-generate codes
-        switch ($module) {
-            case 'ropa':
-                $data['registration_number'] = $data['registration_number'] ?? $this->nextCode('ROPA', $model, $data['org_id']);
-                // Auto-risk: if data_categories contain sensitive types → auto HIGH
-                $sensitiveKeywords = ['kesehatan', 'biometrik', 'genetik', 'anak', 'keuangan', 'ras', 'agama', 'orientasi seksual', 'pandangan politik'];
-                $categories = $data['data_categories'] ?? [];
-                if (is_array($categories)) {
-                    $categoriesStr = strtolower(implode(' ', $categories));
-                    foreach ($sensitiveKeywords as $keyword) {
-                        if (str_contains($categoriesStr, $keyword)) {
-                            $data['risk_level'] = 'high';
-                            break;
+            // Ensure boolean fields are properly cast
+            if ($module === 'breach') {
+                $data['notification_required'] = filter_var($data['notification_required'] ?? false, FILTER_VALIDATE_BOOLEAN);
+                $data['is_simulation'] = filter_var($data['is_simulation'] ?? false, FILTER_VALIDATE_BOOLEAN);
+                $data['affected_subjects_count'] = (int) ($data['affected_subjects_count'] ?? 0);
+            }
+
+            // Auto-generate codes
+            switch ($module) {
+                case 'ropa':
+                    $data['registration_number'] = $data['registration_number'] ?? $this->nextCode('ROPA', $model, $data['org_id']);
+                    // Auto-risk: if data_categories contain sensitive types → auto HIGH
+                    $sensitiveKeywords = ['kesehatan', 'biometrik', 'genetik', 'anak', 'keuangan', 'ras', 'agama', 'orientasi seksual', 'pandangan politik'];
+                    $categories = $data['data_categories'] ?? [];
+                    if (is_array($categories)) {
+                        $categoriesStr = strtolower(implode(' ', $categories));
+                        foreach ($sensitiveKeywords as $keyword) {
+                            if (str_contains($categoriesStr, $keyword)) {
+                                $data['risk_level'] = 'high';
+                                break;
+                            }
                         }
                     }
-                }
-                break;
-            case 'dpia':
-                $data['registration_number'] = $data['registration_number'] ?? $this->nextCode('DPIA', $model, $data['org_id']);
-                break;
-            case 'dsr':
-                $data['request_id'] = $data['request_id'] ?? $this->nextCode('DSR', $model, $data['org_id']);
-                $data['deadline_at'] = $data['deadline_at'] ?? now()->addHours(72);
-                break;
-            case 'consent':
-                $data['collection_id'] = $data['collection_id'] ?? $this->nextCode('CNT', $model, $data['org_id']);
-                break;
-            case 'breach':
-                $data['incident_code'] = $data['incident_code'] ?? $this->nextCode('BRC', $model, $data['org_id']);
-                $data['detected_at'] = $data['detected_at'] ?? now();
-                if (!empty($data['notification_required'])) {
-                    $data['notification_deadline'] = $data['notification_deadline'] ?? now()->addHours(72);
-                }
-                // Auto-init containment checklist
-                if (empty($data['containment_checklist'])) {
-                    $data['containment_checklist'] = [
-                        'Isolasi sistem yang terdampak' => false,
-                        'Blokir akses yang tidak sah' => false,
-                        'Preserve evidence (backup log)' => false,
-                        'Ubah credentials yang compromised' => false,
-                        'Aktifkan firewall rules tambahan' => false,
-                        'Identifikasi root cause' => false,
-                        'Hapus malware / tutup vulnerability' => false,
-                        'Patch sistem yang terdampak' => false,
-                        'Restore data dari backup' => false,
-                        'Verifikasi integritas data' => false,
-                    ];
-                }
-                // Auto-init timeline
-                if (empty($data['timeline_log'])) {
-                    $data['timeline_log'] = [
-                        ['time' => now()->format('d/m/Y H:i'), 'event' => '🔴 Insiden terdeteksi — ' . ($data['source'] ?? 'manual')],
-                    ];
-                }
-                break;
-        }
-
-        $record = $model->create($data);
-
-        // Audit log: record created
-        AuditLog::log($module, $record->id, 'created', [
-            'registration_number' => $record->registration_number ?? $record->request_id ?? $record->incident_code ?? null,
-        ], 'system');
-
-        // Auto-trigger: if ROPA risk=high → create draft DPIA
-        if ($module === 'ropa' && ($data['risk_level'] ?? '') === 'high') {
-            $dpiaModel = $this->getModel('dpia');
-            $existingDpia = $dpiaModel->where('ropa_id', $record->id)->first();
-            if (!$existingDpia) {
-                $dpiaModel->create([
-                    'org_id' => $data['org_id'],
-                    'registration_number' => $this->nextCode('DPIA', $dpiaModel, $data['org_id']),
-                    'ropa_id' => $record->id,
-                    'risk_level' => 'high',
-                    'status' => 'draft',
-                    'description' => 'Auto-generated dari ROPA high-risk: ' . ($data['processing_activity'] ?? ''),
-                    'risk_assessment' => ['likelihood' => 0, 'impact' => 0, 'risks' => []],
-                    'mitigation_measures' => [],
-                    'created_by' => $data['created_by'],
-                ]);
+                    break;
+                case 'dpia':
+                    $data['registration_number'] = $data['registration_number'] ?? $this->nextCode('DPIA', $model, $data['org_id']);
+                    break;
+                case 'dsr':
+                    $data['request_id'] = $data['request_id'] ?? $this->nextCode('DSR', $model, $data['org_id']);
+                    $data['deadline_at'] = $data['deadline_at'] ?? now()->addHours(72);
+                    break;
+                case 'consent':
+                    $data['collection_id'] = $data['collection_id'] ?? $this->nextCode('CNT', $model, $data['org_id']);
+                    break;
+                case 'breach':
+                    $data['incident_code'] = $data['incident_code'] ?? $this->nextCode('BRC', $model, $data['org_id']);
+                    $data['detected_at'] = $data['detected_at'] ?? now();
+                    if ($data['notification_required']) {
+                        $data['notification_deadline'] = $data['notification_deadline'] ?? now()->addHours(72);
+                    }
+                    // Auto-init containment checklist
+                    if (empty($data['containment_checklist'])) {
+                        $data['containment_checklist'] = [
+                            'Isolasi sistem yang terdampak' => false,
+                            'Blokir akses yang tidak sah' => false,
+                            'Preserve evidence (backup log)' => false,
+                            'Ubah credentials yang compromised' => false,
+                            'Aktifkan firewall rules tambahan' => false,
+                            'Identifikasi root cause' => false,
+                            'Hapus malware / tutup vulnerability' => false,
+                            'Patch sistem yang terdampak' => false,
+                            'Restore data dari backup' => false,
+                            'Verifikasi integritas data' => false,
+                        ];
+                    }
+                    // Auto-init timeline
+                    if (empty($data['timeline_log'])) {
+                        $data['timeline_log'] = [
+                            ['time' => now()->format('d/m/Y H:i'), 'event' => '🔴 Insiden terdeteksi — ' . ($data['source'] ?? 'manual')],
+                        ];
+                    }
+                    break;
             }
-        }
 
-        return response()->json(['message' => 'Created', 'data' => $record], 201);
+            $record = $model->create($data);
+
+            // Audit log: record created
+            try {
+                AuditLog::log($module, $record->id, 'created', [
+                    'registration_number' => $record->registration_number ?? $record->request_id ?? $record->incident_code ?? null,
+                ], 'system');
+            } catch (\Exception $e) {
+                // Don't fail the main operation if audit logging fails
+                \Log::warning('Audit log failed: ' . $e->getMessage());
+            }
+
+            // Auto-trigger: if ROPA risk=high → create draft DPIA
+            if ($module === 'ropa' && ($data['risk_level'] ?? '') === 'high') {
+                $dpiaModel = $this->getModel('dpia');
+                $existingDpia = $dpiaModel->where('ropa_id', $record->id)->first();
+                if (!$existingDpia) {
+                    $dpiaModel->create([
+                        'org_id' => $data['org_id'],
+                        'registration_number' => $this->nextCode('DPIA', $dpiaModel, $data['org_id']),
+                        'ropa_id' => $record->id,
+                        'risk_level' => 'high',
+                        'status' => 'draft',
+                        'description' => 'Auto-generated dari ROPA high-risk: ' . ($data['processing_activity'] ?? ''),
+                        'risk_assessment' => ['likelihood' => 0, 'impact' => 0, 'risks' => []],
+                        'mitigation_measures' => [],
+                        'created_by' => $data['created_by'],
+                    ]);
+                }
+            }
+
+            return response()->json(['message' => 'Created', 'data' => $record], 201);
+        } catch (\Exception $e) {
+            \Log::error('ModuleCrud store error: ' . $e->getMessage(), [
+                'module' => $module,
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return response()->json(['message' => 'Error: ' . $e->getMessage()], 500);
+        }
     }
 
     /**
