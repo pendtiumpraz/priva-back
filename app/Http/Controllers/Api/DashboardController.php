@@ -24,7 +24,7 @@ class DashboardController extends Controller
             ->first();
 
         $stats = [
-            'gap_score' => $latestGap->score ?? 0,
+            'gap_score' => $latestGap->overall_score ?? 0,
             'gap_compliance_level' => $latestGap->compliance_level ?? 'low',
             'gap_progress' => $latestGap->progress ?? 0,
 
@@ -117,7 +117,7 @@ class DashboardController extends Controller
             ->where('org_id', $orgId)
             ->whereNull('deleted_at')
             ->orderBy('created_at')
-            ->select('score', 'compliance_level', 'created_at')
+            ->select('overall_score as score', 'compliance_level', 'created_at')
             ->limit(20)->get();
 
         // ROPA status breakdown
