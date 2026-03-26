@@ -132,5 +132,19 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/ai/conversations/{id}', [\App\Http\Controllers\Api\AiChatController::class, 'conversationMessages']);
         Route::post('/ai/conversations/{id}/reply', [\App\Http\Controllers\Api\AiChatController::class, 'adminReply']);
         Route::get('/ai/conversations/{id}/poll', [\App\Http\Controllers\Api\AiChatController::class, 'pollMessages']);
+
+        // =============================================
+        // AI Features (License-Gated)
+        // =============================================
+        Route::prefix('ai-features')->group(function () {
+            Route::post('/gap/{id}/remediation', [\App\Http\Controllers\Api\AiFeatureController::class, 'gapRemediation']);
+            Route::post('/ropa/{id}/analysis', [\App\Http\Controllers\Api\AiFeatureController::class, 'ropaAnalysis']);
+            Route::post('/dpia/{id}/risk-scoring', [\App\Http\Controllers\Api\AiFeatureController::class, 'dpiaRiskScoring']);
+            Route::post('/breach/{id}/advisor', [\App\Http\Controllers\Api\AiFeatureController::class, 'breachAdvisor']);
+            Route::post('/dsr/{id}/draft', [\App\Http\Controllers\Api\AiFeatureController::class, 'dsrDraft']);
+            Route::post('/consent/generate', [\App\Http\Controllers\Api\AiFeatureController::class, 'consentGenerator']);
+            Route::get('/dashboard/summary', [\App\Http\Controllers\Api\AiFeatureController::class, 'dashboardSummary']);
+            Route::post('/drill/scenario', [\App\Http\Controllers\Api\AiFeatureController::class, 'drillScenario']);
+        });
     });
 
