@@ -175,6 +175,7 @@ class LicenseController extends Controller
 
         try {
             $response = \Illuminate\Support\Facades\Http::timeout(15)
+                ->withoutVerifying()
                 ->post("{$lmUrl}/api/licenses/verify", [
                     'license_key' => $request->license_key,
                     'domain' => $domain,

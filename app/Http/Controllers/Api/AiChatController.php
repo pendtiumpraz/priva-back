@@ -108,6 +108,7 @@ PROMPT;
 
         try {
             $response = Http::timeout(30)
+                ->withoutVerifying()
                 ->withHeaders([
                     'Authorization' => 'Bearer ' . $apiKey,
                     'Content-Type' => 'application/json',
@@ -212,6 +213,7 @@ PROMPT;
 
         try {
             $response = Http::timeout(10)
+                ->withoutVerifying()
                 ->withHeaders([
                     'Authorization' => 'Bearer ' . $apiKey,
                     'Content-Type' => 'application/json',
