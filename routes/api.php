@@ -17,6 +17,11 @@ use Illuminate\Support\Facades\Route;
 Route::post('/auth/register', [AuthController::class , 'register']);
 Route::post('/auth/login', [AuthController::class , 'login']);
 
+// Public Feature Requests (read-only + upvote)
+Route::get('/public/feature-requests', [\App\Http\Controllers\Api\FeatureRequestController::class, 'publicIndex']);
+Route::post('/public/feature-requests', [\App\Http\Controllers\Api\FeatureRequestController::class, 'publicStore']);
+Route::post('/public/feature-requests/{id}/upvote', [\App\Http\Controllers\Api\FeatureRequestController::class, 'upvote']);
+
 // =============================================
 // Protected Routes (Sanctum)
 // =============================================

@@ -9,6 +9,48 @@ use Illuminate\Http\Request;
 class FeatureRequestController extends Controller
 {
     /**
+     * Public list — no auth required, read-only
+     */
+    public function publicIndex()
+    {
+        $requests = FeatureRequest::with('user:id,name,email,role')
+            ->orderByDesc('votes')
+            ->orderByDesc('created_at')
+            ->get();
+
+        return response()->json(['data' => $requests]);
+    }
+
+    /**
+     * Public submit — no auth, uses guest name/email
+     */
+    public function publicStore(Request $request)
+    {
+        $request->validate([
+            'title' => 'required|string|max:255',
+            'description' => 'required|string',
+            'category' => 'required|in:module,ui,integration,security,performance,other',
+            'guest_name' => 'required|string|max:100',
+            'guest_email' => 'required|email|max:150',
+        ]);
+
+        $fr = FeatureRequest::create([
+            'title' => $request->title,
+            'description' => $request->description,
+            'category' => $request->category,
+            'priority' => 'medium',
+            'status' => 'submitted',
+            'guest_name' => $request->guest_name,
+            'guest_email' => $request->guest_email,
+        ]);
+
+        return response()->json([
+            'message' => 'Feature request submitted! Terima kasih atas masukannya.',
+            'data' => $fr,
+        ], 201);
+    }
+
+    /**
      * List feature requests (user sees own org, admin sees all)
      */
     public function index(Request $request)

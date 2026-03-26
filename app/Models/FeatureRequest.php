@@ -13,6 +13,7 @@ class FeatureRequest extends Model
     protected $fillable = [
         'org_id', 'user_id', 'title', 'description',
         'category', 'priority', 'status', 'admin_notes', 'votes',
+        'guest_name', 'guest_email',
     ];
 
     public function user()
