@@ -147,5 +147,21 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/drill/scenario', [\App\Http\Controllers\Api\AiFeatureController::class, 'drillScenario']);
             Route::get('/history/{featureType}/{recordId}', [\App\Http\Controllers\Api\AiFeatureController::class, 'history']);
         });
+
+        // =============================================
+        // Export (CSV / JSON)
+        // =============================================
+        Route::prefix('export')->group(function () {
+            Route::get('/ropa', [\App\Http\Controllers\Api\ExportController::class, 'ropa']);
+            Route::get('/dpia', [\App\Http\Controllers\Api\ExportController::class, 'dpia']);
+            Route::get('/breach', [\App\Http\Controllers\Api\ExportController::class, 'breach']);
+            Route::get('/dsr', [\App\Http\Controllers\Api\ExportController::class, 'dsr']);
+            Route::get('/consent', [\App\Http\Controllers\Api\ExportController::class, 'consent']);
+            Route::get('/gap-assessment', [\App\Http\Controllers\Api\ExportController::class, 'gapAssessment']);
+            Route::get('/data-discovery', [\App\Http\Controllers\Api\ExportController::class, 'dataDiscovery']);
+            Route::get('/ai-results', [\App\Http\Controllers\Api\ExportController::class, 'aiResults']);
+            Route::get('/ai-results/{id}', [\App\Http\Controllers\Api\ExportController::class, 'aiResultSingle']);
+            Route::get('/compliance-report', [\App\Http\Controllers\Api\ExportController::class, 'complianceReport']);
+        });
     });
 
