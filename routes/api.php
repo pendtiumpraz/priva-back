@@ -118,5 +118,12 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::delete('/{id}', [\App\Http\Controllers\Api\LicenseController::class, 'destroy']);
             Route::post('/{id}/restore', [\App\Http\Controllers\Api\LicenseController::class, 'restore']);
         });
+
+        // =============================================
+        // AI Chat Assistant (Knowledge Base)
+        // =============================================
+        Route::post('/ai/chat', [\App\Http\Controllers\Api\AiChatController::class, 'chat']);
+        Route::match(['get', 'put'], '/ai/knowledge-base', [\App\Http\Controllers\Api\AiChatController::class, 'knowledgeBase']);
+        Route::match(['get', 'put'], '/ai/settings', [\App\Http\Controllers\Api\AiChatController::class, 'apiSettings']);
     });
 
