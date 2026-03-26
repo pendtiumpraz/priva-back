@@ -155,8 +155,26 @@ PROMPT;
     public function knowledgeBase(Request $request)
     {
         if ($request->isMethod('GET')) {
+            // Load all sections from knowledge_base_sections table
+            $sections = KnowledgeBaseSection::where('is_active', true)
+                ->orderBy('sort_order')
+                ->get();
+
+            if ($sections->count() > 0) {
+                $kb = '';
+                foreach ($sections as $section) {
+                    $kb .= "# {$section->title}\n{$section->content}\n\n---\n\n";
+                }
+                return response()->json([
+                    'data' => trim($kb),
+                    'sections' => $sections,
+                    'source' => 'database',
+                ]);
+            }
+
+            // Fallback to app_settings
             $kb = AppSetting::get('knowledge_base', $this->getDefaultKnowledgeBase());
-            return response()->json(['data' => $kb]);
+            return response()->json(['data' => $kb, 'source' => 'app_settings']);
         }
 
         // PUT — update
