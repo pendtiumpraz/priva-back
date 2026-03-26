@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\AiService;
-use App\Models\{GapAssessment, Ropa, Dpia, BreachIncident, DsrRequest, BreachSimulation, License};
+use App\Models\{AiResult, GapAssessment, Ropa, Dpia, BreachIncident, DsrRequest, BreachSimulation, License};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -31,6 +31,48 @@ class AiFeatureController extends Controller
         ], 403);
     }
 
+    /**
+     * Save AI result to database and return response
+     */
+    private function saveAndRespond(Request $request, string $featureType, ?array $response, array $inputData = [], ?string $recordId = null, ?string $recordType = null)
+    {
+        if (!$response) {
+            return response()->json(['message' => 'AI sedang tidak tersedia'], 502);
+        }
+
+        $saved = AiResult::create([
+            'org_id' => $request->user()->org_id,
+            'user_id' => $request->user()->id,
+            'feature_type' => $featureType,
+            'record_id' => $recordId,
+            'record_type' => $recordType,
+            'input_data' => $inputData,
+            'result_data' => $response,
+        ]);
+
+        return response()->json([
+            'data' => $response,
+            'type' => $featureType,
+            'ai_result_id' => $saved->id,
+            'saved' => true,
+        ]);
+    }
+
+    /**
+     * Get previous AI results for a record
+     */
+    public function history(Request $request, string $featureType, string $recordId)
+    {
+        $results = AiResult::where('org_id', $request->user()->org_id)
+            ->where('feature_type', $featureType)
+            ->where('record_id', $recordId)
+            ->orderBy('created_at', 'desc')
+            ->limit(10)
+            ->get();
+
+        return response()->json(['data' => $results]);
+    }
+
     // =============================================
     // GAP ASSESSMENT — AI Remediation Plan
     // =============================================
@@ -46,17 +88,19 @@ class AiFeatureController extends Controller
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
+        $inputData = [
+            'overall_score' => $result['overall_score'] ?? 0,
+            'compliance_level' => $result['compliance_level'] ?? 'low',
+            'recommendations_count' => count($result['recommendations'] ?? []),
+        ];
+
         $response = $ai->gapRemediationPlan(
             $result['recommendations'] ?? [],
             $result['overall_score'] ?? 0,
             $result['compliance_level'] ?? 'low'
         );
 
-        if (!$response) {
-            return response()->json(['message' => 'AI sedang tidak tersedia'], 502);
-        }
-
-        return response()->json(['data' => $response, 'type' => 'gap_remediation']);
+        return $this->saveAndRespond($request, 'gap_remediation', $response, $inputData, $id, 'GapAssessment');
     }
 
     // =============================================
@@ -72,7 +116,7 @@ class AiFeatureController extends Controller
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
-        $response = $ai->ropaAnalysis([
+        $inputData = [
             'processing_activity' => $ropa->processing_activity,
             'division' => $ropa->division,
             'risk_level' => $ropa->risk_level,
@@ -84,13 +128,11 @@ class AiFeatureController extends Controller
             'retention_period' => $ropa->retention_period,
             'security_measures' => $ropa->security_measures,
             'wizard_data' => $ropa->wizard_data,
-        ]);
+        ];
 
-        if (!$response) {
-            return response()->json(['message' => 'AI sedang tidak tersedia'], 502);
-        }
+        $response = $ai->ropaAnalysis($inputData);
 
-        return response()->json(['data' => $response, 'type' => 'ropa_analysis']);
+        return $this->saveAndRespond($request, 'ropa_analysis', $response, $inputData, $id, 'Ropa');
     }
 
     // =============================================
@@ -106,6 +148,13 @@ class AiFeatureController extends Controller
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
+        $inputData = [
+            'description' => $dpia->description,
+            'risk_level' => $dpia->risk_level,
+            'wizard_data' => $dpia->wizard_data,
+            'risk_assessment' => $dpia->risk_assessment ?? [],
+        ];
+
         $response = $ai->dpiaRiskScoring(
             [
                 'description' => $dpia->description,
@@ -115,11 +164,7 @@ class AiFeatureController extends Controller
             $dpia->risk_assessment ?? []
         );
 
-        if (!$response) {
-            return response()->json(['message' => 'AI sedang tidak tersedia'], 502);
-        }
-
-        return response()->json(['data' => $response, 'type' => 'dpia_risk_scoring']);
+        return $this->saveAndRespond($request, 'dpia_risk_scoring', $response, $inputData, $id, 'Dpia');
     }
 
     // =============================================
@@ -135,7 +180,7 @@ class AiFeatureController extends Controller
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
-        $response = $ai->breachAdvisor([
+        $inputData = [
             'title' => $breach->title,
             'description' => $breach->description,
             'severity' => $breach->severity,
@@ -146,13 +191,11 @@ class AiFeatureController extends Controller
             'containment_checklist' => $breach->containment_checklist,
             'notification_required' => $breach->notification_required,
             'detected_at' => $breach->detected_at?->toISOString(),
-        ]);
+        ];
 
-        if (!$response) {
-            return response()->json(['message' => 'AI sedang tidak tersedia'], 502);
-        }
+        $response = $ai->breachAdvisor($inputData);
 
-        return response()->json(['data' => $response, 'type' => 'breach_advisor']);
+        return $this->saveAndRespond($request, 'breach_advisor', $response, $inputData, $id, 'BreachIncident');
     }
 
     // =============================================
@@ -168,20 +211,18 @@ class AiFeatureController extends Controller
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
-        $response = $ai->dsrResponseDraft([
+        $inputData = [
             'request_type' => $dsr->request_type,
             'requester_name' => $dsr->requester_name,
             'description' => $dsr->description,
             'status' => $dsr->status,
             'deadline_at' => $dsr->deadline_at?->toISOString(),
             'verification_status' => $dsr->verification_status,
-        ]);
+        ];
 
-        if (!$response) {
-            return response()->json(['message' => 'AI sedang tidak tersedia'], 502);
-        }
+        $response = $ai->dsrResponseDraft($inputData);
 
-        return response()->json(['data' => $response, 'type' => 'dsr_draft']);
+        return $this->saveAndRespond($request, 'dsr_draft', $response, $inputData, $id, 'DsrRequest');
     }
 
     // =============================================
@@ -202,17 +243,19 @@ class AiFeatureController extends Controller
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
+        $inputData = [
+            'purpose' => $request->purpose,
+            'data_types' => $request->data_types,
+            'domain' => $request->domain ?? 'unknown',
+        ];
+
         $response = $ai->consentTextGenerator(
             $request->purpose,
             $request->data_types,
             $request->domain ?? 'unknown'
         );
 
-        if (!$response) {
-            return response()->json(['message' => 'AI sedang tidak tersedia'], 502);
-        }
-
-        return response()->json(['data' => $response, 'type' => 'consent_generator']);
+        return $this->saveAndRespond($request, 'consent_generator', $response, $inputData);
     }
 
     // =============================================
@@ -248,11 +291,7 @@ class AiFeatureController extends Controller
 
         $response = $ai->complianceSummary($stats);
 
-        if (!$response) {
-            return response()->json(['message' => 'AI sedang tidak tersedia'], 502);
-        }
-
-        return response()->json(['data' => $response, 'type' => 'dashboard_summary']);
+        return $this->saveAndRespond($request, 'dashboard_summary', $response, $stats);
     }
 
     // =============================================
@@ -282,16 +321,18 @@ class AiFeatureController extends Controller
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
+        $inputData = [
+            'industry' => $request->industry,
+            'risk_profile' => $request->risk_profile ?? 'medium',
+            'question_count' => $request->question_count ?? 5,
+        ];
+
         $response = $ai->customDrillScenario(
             $request->industry,
             $request->risk_profile ?? 'medium',
             $request->question_count ?? 5
         );
 
-        if (!$response) {
-            return response()->json(['message' => 'AI sedang tidak tersedia'], 502);
-        }
-
-        return response()->json(['data' => $response, 'type' => 'drill_scenario']);
+        return $this->saveAndRespond($request, 'drill_scenario', $response, $inputData);
     }
 }
