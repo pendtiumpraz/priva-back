@@ -29,8 +29,8 @@ class LicenseController extends Controller
             $s = $request->search;
             $query->where(function ($q) use ($s) {
                 $q->where('license_key', 'like', "%{$s}%")
-                  ->orWhere('org_name', 'like', "%{$s}%")
-                  ->orWhere('package_type', 'like', "%{$s}%");
+                    ->orWhere('org_name', 'like', "%{$s}%")
+                    ->orWhere('package_type', 'like', "%{$s}%");
             });
         }
 
@@ -177,10 +177,10 @@ class LicenseController extends Controller
             $response = \Illuminate\Support\Facades\Http::timeout(15)
                 ->withoutVerifying()
                 ->post("{$lmUrl}/api/licenses/verify", [
-                    'license_key' => $request->license_key,
-                    'domain' => $domain,
-                    'ip' => $ip,
-                ]);
+                'license_key' => $request->license_key,
+                'domain' => $domain,
+                'ip' => $ip,
+            ]);
 
             $data = $response->json();
 
@@ -188,20 +188,20 @@ class LicenseController extends Controller
                 // Save license locally
                 $licenseData = $data['license'] ?? [];
                 $local = License::updateOrCreate(
-                    ['license_key' => $request->license_key],
-                    [
-                        'package_type' => $licenseData['package_type'] ?? 'basic',
-                        'license_type' => $licenseData['license_type'] ?? 'perpetual',
-                        'status' => 'active',
-                        'features' => $licenseData['features'] ?? [],
-                        'org_name' => $licenseData['org_name'] ?? $user->organization->name ?? null,
-                        'org_id' => $user->org_id ?? null,
-                        'expires_at' => $licenseData['expires_at'] ?? null,
-                        'activated_at' => $licenseData['activated_at'] ?? now(),
-                        'activation_count' => 1,
-                        'max_activations' => 1,
-                        'ip_log' => [['ip' => $ip, 'domain' => $domain, 'at' => now()->toISOString()]],
-                    ]
+                ['license_key' => $request->license_key],
+                [
+                    'package_type' => $licenseData['package_type'] ?? 'basic',
+                    'license_type' => $licenseData['license_type'] ?? 'perpetual',
+                    'status' => 'active',
+                    'features' => $licenseData['features'] ?? [],
+                    'org_name' => $licenseData['org_name'] ?? $user->organization->name ?? null,
+                    'org_id' => $user->org_id ?? null,
+                    'expires_at' => $licenseData['expires_at'] ?? null,
+                    'activated_at' => $licenseData['activated_at'] ?? now(),
+                    'activation_count' => 1,
+                    'max_activations' => 1,
+                    'ip_log' => [['ip' => $ip, 'domain' => $domain, 'at' => now()->toISOString()]],
+                ]
                 );
 
                 return response()->json([
@@ -217,7 +217,8 @@ class LicenseController extends Controller
                 'status' => $data['status'] ?? 'invalid',
             ], $response->status());
 
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             \Log::error('License Manager connection error: ' . $e->getMessage());
             return response()->json([
                 'message' => 'Gagal menghubungi License Manager. Coba lagi nanti.',
@@ -236,17 +237,21 @@ class LicenseController extends Controller
             return response()->json(['licensed' => false, 'message' => 'Not authenticated'], 200);
         }
 
-        // Check local DB first
-        $license = License::where('org_id', $user->org_id)
-            ->where('status', 'active')
-            ->orderBy('created_at', 'desc')
-            ->first();
+        $license = null;
 
-        // Also check if superadmin has a platform-level license (org_id might be null)
-        if (!$license && $user->role === 'superadmin') {
+        if ($user->role === 'superadmin') {
             $license = License::where('status', 'active')
-                ->whereNull('org_id')
-                ->orWhere('created_by', $user->id)
+                ->where(function($q) use ($user) {
+                    $q->whereNull('org_id')
+                      ->orWhere('created_by', $user->id)
+                      ->orWhere('org_id', $user->org_id);
+                })
+                ->orderBy('created_at', 'desc')
+                ->first();
+        } else {
+            // admin, dpo, maker, viewer
+            $license = License::where('org_id', $user->org_id)
+                ->where('status', 'active')
                 ->orderBy('created_at', 'desc')
                 ->first();
         }
@@ -307,7 +312,7 @@ class LicenseController extends Controller
 
         foreach ($request->plans as $planData) {
             PricingPlan::updateOrCreate(
-                ['package_type' => $planData['package_type']],
+            ['package_type' => $planData['package_type']],
                 $planData
             );
         }
@@ -322,28 +327,28 @@ class LicenseController extends Controller
     private function getPackageFeatures(string $packageType): array
     {
         return match ($packageType) {
-            'basic' => [
+                'basic' => [
                 'ropa' => true, 'dpia' => true, 'consent' => true, 'breach' => true,
                 'dsr' => true, 'gap_assessment' => true, 'simulation' => true,
                 'data_mapping' => true, 'docs' => true,
                 'ai_assistant' => false, 'ai_risk_scoring' => false,
                 'ai_agent' => false, 'live_drill' => false,
             ],
-            'ai' => [
+                'ai' => [
                 'ropa' => true, 'dpia' => true, 'consent' => true, 'breach' => true,
                 'dsr' => true, 'gap_assessment' => true, 'simulation' => true,
                 'data_mapping' => true, 'docs' => true,
                 'ai_assistant' => true, 'ai_risk_scoring' => true,
                 'ai_agent' => false, 'live_drill' => true,
             ],
-            'ai_agent' => [
+                'ai_agent' => [
                 'ropa' => true, 'dpia' => true, 'consent' => true, 'breach' => true,
                 'dsr' => true, 'gap_assessment' => true, 'simulation' => true,
                 'data_mapping' => true, 'docs' => true,
                 'ai_assistant' => true, 'ai_risk_scoring' => true,
                 'ai_agent' => true, 'live_drill' => true,
             ],
-            default => [],
-        };
+                default => [],
+            };
     }
 }
