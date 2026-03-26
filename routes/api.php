@@ -41,6 +41,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Users
     Route::apiResource('/users', UserController::class);
+    Route::post('/users/{id}/restore', [UserController::class, 'restore']);
 
     // =============================================
     // GAP Assessment — Real Compliance Engine
