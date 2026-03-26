@@ -2,6 +2,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AppSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
@@ -18,7 +19,7 @@ class AiChatController extends Controller
             'history' => 'nullable|array',
         ]);
 
-        $apiKey = config('services.deepseek.key', env('DEEPSEEK_API_KEY'));
+        $apiKey = AppSetting::get('deepseek_api_key');
         if (!$apiKey) {
             return response()->json(['message' => 'API key belum dikonfigurasi. Hubungi SuperAdmin.'], 503);
         }
@@ -95,7 +96,7 @@ PROMPT;
     public function knowledgeBase(Request $request)
     {
         if ($request->isMethod('GET')) {
-            $kb = Cache::get('privasimu_knowledge_base', $this->getDefaultKnowledgeBase());
+            $kb = AppSetting::get('knowledge_base', $this->getDefaultKnowledgeBase());
             return response()->json(['data' => $kb]);
         }
 
@@ -106,7 +107,7 @@ PROMPT;
         }
 
         $request->validate(['content' => 'required|string']);
-        Cache::forever('privasimu_knowledge_base', $request->content);
+        AppSetting::set('knowledge_base', $request->content);
 
         return response()->json(['message' => 'Knowledge base updated']);
     }
@@ -122,23 +123,23 @@ PROMPT;
         }
 
         if ($request->isMethod('GET')) {
-            $key = env('DEEPSEEK_API_KEY', '');
+            $key = AppSetting::get('deepseek_api_key', '');
             return response()->json([
                 'has_key' => !empty($key),
                 'key_preview' => $key ? substr($key, 0, 8) . '...' . substr($key, -4) : null,
             ]);
         }
 
-        // PUT — save key to .env
+        // PUT — save key to database
         $request->validate(['api_key' => 'required|string']);
-        $this->updateEnv('DEEPSEEK_API_KEY', $request->api_key);
+        AppSetting::set('deepseek_api_key', $request->api_key);
 
-        return response()->json(['message' => 'API key updated']);
+        return response()->json(['message' => 'API key updated & saved to database']);
     }
 
     private function getKnowledgeBase(): string
     {
-        return Cache::get('privasimu_knowledge_base', $this->getDefaultKnowledgeBase());
+        return AppSetting::get('knowledge_base', $this->getDefaultKnowledgeBase());
     }
 
     private function getDefaultKnowledgeBase(): string
@@ -232,17 +233,4 @@ Kontak: 081319504441 (Galih)
 KB;
     }
 
-    private function updateEnv(string $key, string $value): void
-    {
-        $envFile = base_path('.env');
-        $content = file_get_contents($envFile);
-
-        if (strpos($content, "{$key}=") !== false) {
-            $content = preg_replace("/^{$key}=.*/m", "{$key}={$value}", $content);
-        } else {
-            $content .= "\n{$key}={$value}\n";
-        }
-
-        file_put_contents($envFile, $content);
-    }
 }
