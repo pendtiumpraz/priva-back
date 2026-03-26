@@ -23,8 +23,30 @@ class ModuleCrudController extends Controller
 
     private function nextCode(string $prefix, $model, string $orgId): string
     {
-        $count = $model->where('org_id', $orgId)->withTrashed()->count();
-        return $prefix . '-' . date('Y') . '-' . str_pad($count + 1, 3, '0', STR_PAD_LEFT);
+        $year = date('Y');
+        $pattern = $prefix . '-' . $year . '-%';
+        
+        $codeColumn = match ($prefix) {
+            'ROPA', 'DPIA' => 'registration_number',
+            'DSR' => 'request_id',
+            'CNT' => 'collection_id',
+            'BRC' => 'incident_code',
+            default => 'registration_number',
+        };
+        
+        // Get all existing codes matching the pattern, extract max number
+        $codes = $model->withTrashed()
+            ->where($codeColumn, 'like', $pattern)
+            ->pluck($codeColumn)
+            ->toArray();
+        
+        $maxNum = 0;
+        foreach ($codes as $code) {
+            $num = (int) substr($code, strrpos($code, '-') + 1);
+            if ($num > $maxNum) $maxNum = $num;
+        }
+        
+        return $prefix . '-' . $year . '-' . str_pad($maxNum + 1, 3, '0', STR_PAD_LEFT);
     }
 
     /**
