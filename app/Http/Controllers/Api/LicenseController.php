@@ -157,158 +157,98 @@ class LicenseController extends Controller
     /**
      * Activate a license key (called by admin when inputting license)
      */
+    /**
+     * Activate a license key (called by admin when inputting license)
+     * Proxies to external License Manager
+     */
     public function activate(Request $request)
     {
         $request->validate([
             'license_key' => 'required|string',
         ]);
 
-        $license = License::where('license_key', $request->license_key)->first();
-
-        if (!$license) {
-            return response()->json(['message' => 'License key tidak ditemukan'], 404);
-        }
-
-        $ip = $request->ip();
-        $domain = $request->header('Origin') ?? $request->header('Referer') ?? 'unknown';
-        // Extract just the domain
-        $parsedDomain = parse_url($domain, PHP_URL_HOST) ?? $domain;
-
-        // Log the attempt
-        LicenseActivation::create([
-            'license_id' => $license->id,
-            'ip_address' => $ip,
-            'domain' => $parsedDomain,
-            'server_hostname' => gethostname(),
-            'action' => 'activate_attempt',
-            'details' => "Activation attempt from {$ip} via {$parsedDomain}",
-        ]);
-
-        // Check if expired
-        if ($license->isExpired()) {
-            return response()->json(['message' => 'License sudah expired. Silahkan perpanjang.', 'status' => 'expired'], 403);
-        }
-
-        // Check if revoked
-        if ($license->status === 'revoked') {
-            return response()->json(['message' => 'License telah direvoke.', 'status' => 'revoked'], 403);
-        }
-
-        // Check max activations
-        if ($license->activation_count >= $license->max_activations) {
-            // Check if same org trying to re-activate
-            $user = $request->user();
-            if ($user && $license->org_id === $user->org_id) {
-                // Same org, allow
-            } else {
-                // Different org or exceeded! Log warning
-                LicenseActivation::create([
-                    'license_id' => $license->id,
-                    'ip_address' => $ip,
-                    'domain' => $parsedDomain,
-                    'action' => 'rejected',
-                    'details' => "⚠️ PERINGATAN: Percobaan penggunaan license lebih dari {$license->max_activations}x! IP: {$ip}, Domain: {$parsedDomain}",
-                ]);
-
-                // Update ip_log with warning
-                $ipLog = $license->ip_log ?? [];
-                $ipLog[] = [
-                    'ip' => $ip,
-                    'domain' => $parsedDomain,
-                    'at' => now()->toISOString(),
-                    'warning' => 'DUPLICATE_USAGE_ATTEMPT',
-                ];
-                $license->update(['ip_log' => $ipLog]);
-
-                return response()->json([
-                    'message' => "⚠️ License ini sudah digunakan {$license->activation_count}x (max: {$license->max_activations}). Percobaan dari IP: {$ip}, Domain: {$parsedDomain} telah dicatat.",
-                    'status' => 'exceeded',
-                ], 403);
-            }
-        }
-
-        // Check domain whitelist
-        if (!empty($license->domain_whitelist) && is_array($license->domain_whitelist) && count($license->domain_whitelist) > 0) {
-            if (!in_array($parsedDomain, $license->domain_whitelist)) {
-                LicenseActivation::create([
-                    'license_id' => $license->id,
-                    'ip_address' => $ip,
-                    'domain' => $parsedDomain,
-                    'action' => 'rejected',
-                    'details' => "Domain {$parsedDomain} tidak ada dalam whitelist",
-                ]);
-                return response()->json([
-                    'message' => "Domain {$parsedDomain} tidak diizinkan untuk license ini.",
-                    'status' => 'domain_rejected',
-                ], 403);
-            }
-        }
-
-        // Activate!
         $user = $request->user();
-        $ipLog = $license->ip_log ?? [];
-        $ipLog[] = [
-            'ip' => $ip,
-            'domain' => $parsedDomain,
-            'at' => now()->toISOString(),
-            'action' => 'activated',
-        ];
+        $ip = $request->ip();
+        $domain = parse_url($request->header('Origin') ?? '', PHP_URL_HOST) ?? 'unknown';
 
-        $updateData = [
-            'status' => 'active',
-            'activation_count' => $license->activation_count + 1,
-            'activated_at' => $license->activated_at ?? now(),
-            'ip_log' => $ipLog,
-        ];
+        $lmUrl = env('LICENSE_MANAGER_URL', 'https://license-priva.sainskerta.net');
 
-        // If no org assigned yet, assign to current user's org
-        if (!$license->org_id && $user) {
-            $updateData['org_id'] = $user->org_id;
-            $updateData['org_name'] = $user->organization->name ?? null;
+        try {
+            $response = \Illuminate\Support\Facades\Http::timeout(15)
+                ->post("{$lmUrl}/api/licenses/verify", [
+                    'license_key' => $request->license_key,
+                    'domain' => $domain,
+                    'ip' => $ip,
+                ]);
+
+            $data = $response->json();
+
+            if ($response->ok() && ($data['valid'] ?? false)) {
+                // Save license locally
+                $licenseData = $data['license'] ?? [];
+                $local = License::updateOrCreate(
+                    ['license_key' => $request->license_key],
+                    [
+                        'package_type' => $licenseData['package_type'] ?? 'basic',
+                        'license_type' => $licenseData['license_type'] ?? 'perpetual',
+                        'status' => 'active',
+                        'features' => $licenseData['features'] ?? [],
+                        'org_name' => $licenseData['org_name'] ?? $user->organization->name ?? null,
+                        'org_id' => $user->org_id ?? null,
+                        'expires_at' => $licenseData['expires_at'] ?? null,
+                        'activated_at' => $licenseData['activated_at'] ?? now(),
+                        'activation_count' => 1,
+                        'max_activations' => 1,
+                        'ip_log' => [['ip' => $ip, 'domain' => $domain, 'at' => now()->toISOString()]],
+                    ]
+                );
+
+                return response()->json([
+                    'message' => 'License berhasil diaktifkan!',
+                    'data' => $local,
+                    'status' => 'active',
+                ]);
+            }
+
+            // Forward error from license manager
+            return response()->json([
+                'message' => $data['message'] ?? 'License tidak valid',
+                'status' => $data['status'] ?? 'invalid',
+            ], $response->status());
+
+        } catch (\Exception $e) {
+            \Log::error('License Manager connection error: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Gagal menghubungi License Manager. Coba lagi nanti.',
+            ], 502);
         }
-
-        // If domain whitelist is empty, auto-record the domain
-        if (empty($license->domain_whitelist) || count($license->domain_whitelist) === 0) {
-            $updateData['domain_whitelist'] = [$parsedDomain];
-        }
-
-        // For SaaS: set expiry from activation time
-        if ($license->license_type === 'saas' && !$license->expires_at && $license->duration_days) {
-            $updateData['expires_at'] = now()->addDays($license->duration_days);
-        }
-
-        $license->update($updateData);
-
-        LicenseActivation::create([
-            'license_id' => $license->id,
-            'ip_address' => $ip,
-            'domain' => $parsedDomain,
-            'server_hostname' => gethostname(),
-            'action' => 'activated',
-            'details' => "License activated successfully for org: " . ($updateData['org_name'] ?? $license->org_name ?? 'unknown'),
-        ]);
-
-        return response()->json([
-            'message' => 'License berhasil diaktifkan!',
-            'data' => $license->fresh(),
-            'status' => 'active',
-        ]);
     }
 
     /**
      * Verify current org's license status (called on frontend load)
+     * First checks local DB, then optionally re-validates with License Manager
      */
     public function verify(Request $request)
     {
         $user = $request->user();
-        if (!$user || !$user->org_id) {
-            return response()->json(['licensed' => false, 'message' => 'No organization'], 200);
+        if (!$user) {
+            return response()->json(['licensed' => false, 'message' => 'Not authenticated'], 200);
         }
 
+        // Check local DB first
         $license = License::where('org_id', $user->org_id)
             ->where('status', 'active')
             ->orderBy('created_at', 'desc')
             ->first();
+
+        // Also check if superadmin has a platform-level license (org_id might be null)
+        if (!$license && $user->role === 'superadmin') {
+            $license = License::where('status', 'active')
+                ->whereNull('org_id')
+                ->orWhere('created_by', $user->id)
+                ->orderBy('created_at', 'desc')
+                ->first();
+        }
 
         if (!$license) {
             return response()->json([
@@ -326,10 +266,6 @@ class LicenseController extends Controller
                 'expired_at' => $license->expires_at,
             ]);
         }
-
-        // Log verify
-        $ip = $request->ip();
-        $domain = parse_url($request->header('Origin') ?? '', PHP_URL_HOST) ?? 'unknown';
 
         return response()->json([
             'licensed' => true,
