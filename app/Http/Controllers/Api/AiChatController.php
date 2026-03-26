@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
+use App\Models\KnowledgeBaseSection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
@@ -27,8 +28,8 @@ class AiChatController extends Controller
             return response()->json(['message' => 'API key belum dikonfigurasi. Hubungi SuperAdmin.'], 503);
         }
 
-        $knowledgeBase = $this->getKnowledgeBase();
         $userMessage = $request->message;
+        $knowledgeBase = $this->getKnowledgeBase($userMessage);
         $history = $request->history ?? [];
         $user = $request->user();
 
@@ -194,8 +195,71 @@ PROMPT;
         return response()->json(['message' => 'API key updated & saved to database']);
     }
 
-    private function getKnowledgeBase(): string
+    /**
+     * Test DeepSeek API connection
+     */
+    public function testConnection(Request $request)
     {
+        $user = $request->user();
+        if ($user->role !== 'superadmin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $apiKey = AppSetting::get('deepseek_api_key');
+        if (!$apiKey) {
+            return response()->json(['success' => false, 'message' => 'API key belum dikonfigurasi'], 400);
+        }
+
+        try {
+            $response = Http::timeout(10)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $apiKey,
+                    'Content-Type' => 'application/json',
+                ])
+                ->post('https://api.deepseek.com/chat/completions', [
+                    'model' => 'deepseek-chat',
+                    'messages' => [['role' => 'user', 'content' => 'Hi, test connection only. Reply with: OK']],
+                    'max_tokens' => 10,
+                ]);
+
+            if ($response->ok()) {
+                $data = $response->json();
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Koneksi berhasil! DeepSeek API aktif.',
+                    'model' => $data['model'] ?? 'deepseek-chat',
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'API Error: ' . ($response->json()['error']['message'] ?? $response->body()),
+                ], 400);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Connection failed: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    private function getKnowledgeBase(string $query = ''): string
+    {
+        // Try RAG: find relevant sections from DB
+        $sections = KnowledgeBaseSection::where('is_active', true)->count();
+
+        if ($sections > 0) {
+            $relevant = KnowledgeBaseSection::findRelevant($query);
+            if (!empty($relevant)) {
+                $kb = "";
+                foreach ($relevant as $section) {
+                    $kb .= "\n---\n# {$section->title}\n{$section->content}\n";
+                }
+                return $kb;
+            }
+        }
+
+        // Fallback: use legacy app_settings knowledge_base or default
         return AppSetting::get('knowledge_base', $this->getDefaultKnowledgeBase());
     }
 
@@ -203,45 +267,10 @@ PROMPT;
     {
         return <<<KB
 # PRIVASIMU — Platform Kepatuhan UU PDP
-
-## Tentang PRIVASIMU
-PRIVASIMU adalah platform SaaS untuk membantu organisasi mematuhi UU Pelindungan Data Pribadi (UU No. 27 Tahun 2022). Platform ini multi-tenant, artinya setiap organisasi memiliki data terpisah.
-
-## Modul-Modul Utama
-
-### 1. Dashboard
-- Menampilkan statistik kepatuhan secara real-time
-- KPI: total ROPA, DPIA, breach incidents, gap assessment score
-
-### 2. ROPA (Record of Processing Activities)
-- Wizard 6 langkah: Identifikasi → Tujuan → Kategori Data → Keamanan → Review → Submit
-- Risk level otomatis: data sensitif → HIGH risk → otomatis generate DPIA
-
-### 3. DPIA (Data Protection Impact Assessment)
-- Wizard 4 langkah: Identifikasi → Analisis Risiko → Mitigasi → Review
-- Scoring: likelihood × impact = risk score
-
-### 4. Gap Assessment
-- 62 pertanyaan berdasarkan UU PDP
-- 7 domain kepatuhan
-
-### 5. Data Breach Management
-- Flow 5 fase: Terdeteksi → Assessment → Containment → Notifikasi → Ditutup
-- Countdown 72 jam untuk notifikasi KOMDIGI (UU PDP Pasal 46)
-
-### 6. DSR (Data Subject Request)
-- Jenis: akses, koreksi, hapus, portabilitas, tarik consent
-
-### 7. Consent Management
-### 8. Simulasi / Fire Drill
-### 9. Data Mapping
-### 10. Dokumentasi
-
-## Role & Permission
-- SuperAdmin, Admin, DPO, Maker, Viewer
-
-## Kontak
-PT Sainskerta Solusi Nusantara — 081319504441 (Galih)
+PRIVASIMU adalah platform SaaS untuk membantu organisasi mematuhi UU PDP (UU No. 27 Tahun 2022).
+Modul: Dashboard, Gap Assessment, ROPA, DPIA, Breach, DSR, Consent, Fire Drill, Data Discovery, Docs.
+Role: SuperAdmin, Admin, DPO, Maker, Viewer.
+Kontak: PT Sainskerta Solusi Nusantara — 081319504441 (Galih)
 KB;
     }
 

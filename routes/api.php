@@ -125,6 +125,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/ai/chat', [\App\Http\Controllers\Api\AiChatController::class, 'chat']);
         Route::match(['get', 'put'], '/ai/knowledge-base', [\App\Http\Controllers\Api\AiChatController::class, 'knowledgeBase']);
         Route::match(['get', 'put'], '/ai/settings', [\App\Http\Controllers\Api\AiChatController::class, 'apiSettings']);
+        Route::post('/ai/test-connection', [\App\Http\Controllers\Api\AiChatController::class, 'testConnection']);
 
         // Chat History & Admin CS
         Route::get('/ai/conversations', [\App\Http\Controllers\Api\AiChatController::class, 'conversations']);
