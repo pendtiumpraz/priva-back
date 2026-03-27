@@ -83,8 +83,24 @@ class AuthController extends Controller
      */
     public function me(Request $request): JsonResponse
     {
+        $user = $request->user()->load('organization');
+
+        // Attach active license package_type for frontend feature gating
+        $packageType = null;
+        if ($user->org_id) {
+            $license = \App\Models\License::where('org_id', $user->org_id)
+                ->where('status', 'active')
+                ->first();
+            $packageType = $license?->package_type;
+        } elseif ($user->role === 'superadmin') {
+            $packageType = 'ai_agent'; // SA always has full access
+        }
+
+        $userData = $user->toArray();
+        $userData['package_type'] = $packageType;
+
         return response()->json([
-            'user' => $request->user()->load('organization'),
+            'user' => $userData,
         ]);
     }
 
