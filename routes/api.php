@@ -186,6 +186,16 @@ Route::middleware('auth:sanctum')->group(function () {
         });
 
         // =============================================
+        // AI Agent (Enterprise only — function calling)
+        // =============================================
+        Route::prefix('ai-agent')->group(function () {
+            Route::post('/chat', [\App\Http\Controllers\Api\AiAgentController::class, 'chat']);
+            Route::get('/mentions/{type}', [\App\Http\Controllers\Api\AiAgentController::class, 'mentions']);
+            Route::get('/history', [\App\Http\Controllers\Api\AiAgentController::class, 'history']);
+            Route::get('/history/{id}/messages', [\App\Http\Controllers\Api\AiAgentController::class, 'conversationMessages']);
+        });
+
+        // =============================================
         // System / Superadmin Tools
         // =============================================
         Route::get('/system/check-update', [\App\Http\Controllers\Api\SystemUpdateController::class, 'checkUpdate']);
