@@ -321,15 +321,19 @@ class LicenseController extends Controller
                 ->first();
 
             if ($existingKey) {
-                // Check max activations locally
-                $totalActivations = License::where('license_key', $request->license_key)->count();
-                if ($totalActivations >= ($existingKey->max_activations ?? 1)) {
+                // Check if THIS org already has this key activated
+                $alreadyActivated = License::where('license_key', $request->license_key)
+                    ->where('org_id', $user->org_id)
+                    ->where('status', 'active')
+                    ->exists();
+
+                if ($alreadyActivated) {
                     return response()->json([
-                        'message' => 'License key sudah mencapai batas maksimum aktivasi.',
+                        'message' => 'License key ini sudah aktif untuk tenant Anda.',
                     ], 422);
                 }
 
-                // Key exists & is valid locally — clone it for this tenant
+                // Key exists & is valid locally — activate for this tenant
                 $local = License::updateOrCreate(
                     ['license_key' => $request->license_key, 'org_id' => $user->org_id ?? null],
                     [
