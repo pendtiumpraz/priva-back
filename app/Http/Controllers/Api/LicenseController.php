@@ -308,9 +308,68 @@ class LicenseController extends Controller
 
         }
         catch (\Exception $e) {
-            \Log::error('License Manager connection error: ' . $e->getMessage());
+            \Log::error('License Manager connection error', [
+                'url' => ($lmUrl ?? 'unknown') . '/api/licenses/verify',
+                'license_key' => $request->license_key,
+                'error' => $e->getMessage(),
+            ]);
+
+            // FALLBACK: If License Manager unreachable, check if key already exists locally
+            // (e.g. SA already assigned it via store(), or it was previously activated)
+            $existingKey = License::where('license_key', $request->license_key)
+                ->where('status', 'active')
+                ->first();
+
+            if ($existingKey) {
+                // Check max activations locally
+                $totalActivations = License::where('license_key', $request->license_key)->count();
+                if ($totalActivations >= ($existingKey->max_activations ?? 1)) {
+                    return response()->json([
+                        'message' => 'License key sudah mencapai batas maksimum aktivasi.',
+                    ], 422);
+                }
+
+                // Key exists & is valid locally — clone it for this tenant
+                $local = License::updateOrCreate(
+                    ['license_key' => $request->license_key, 'org_id' => $user->org_id ?? null],
+                    [
+                        'package_type' => $existingKey->package_type,
+                        'license_type' => $existingKey->license_type,
+                        'status' => 'active',
+                        'features' => $existingKey->features,
+                        'org_name' => $user->organization->name ?? null,
+                        'expires_at' => $existingKey->expires_at,
+                        'activated_at' => now(),
+                        'activation_count' => ($existingKey->activation_count ?? 0) + 1,
+                        'max_activations' => $existingKey->max_activations,
+                        'ip_log' => [['ip' => $ip, 'domain' => $domain, 'at' => now()->toISOString(), 'mode' => 'offline']],
+                    ]
+                );
+
+                // Set AI credits
+                if ($user->org_id) {
+                    $credits = match ($existingKey->package_type) {
+                        'ai'       => 100,
+                        'ai_agent' => 500,
+                        default    => 0,
+                    };
+                    Organization::where('id', $user->org_id)->update([
+                        'ai_credits_monthly' => $credits,
+                        'ai_credits_remaining' => $credits,
+                        'ai_credits_reset_at' => now()->addMonth(),
+                    ]);
+                }
+
+                return response()->json([
+                    'message' => 'License berhasil diaktifkan! (offline mode)',
+                    'data' => $local,
+                    'status' => 'active',
+                ]);
+            }
+
             return response()->json([
                 'message' => 'Gagal menghubungi License Manager. Coba lagi nanti.',
+                'debug' => app()->hasDebugModeEnabled() ? $e->getMessage() : null,
             ], 502);
         }
     }
