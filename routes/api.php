@@ -110,6 +110,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/consent-logs', [\App\Http\Controllers\Api\ConsentLogController::class, 'index']);
 
         // Organization Profile (Onboarding)
+        Route::get('/organizations', [\App\Http\Controllers\Api\OrganizationController::class, 'index']); // Super Admin: list all
         Route::get('/organization', [\App\Http\Controllers\Api\OrganizationController::class, 'show']);
         Route::put('/organization', [\App\Http\Controllers\Api\OrganizationController::class, 'update']);
 

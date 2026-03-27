@@ -88,12 +88,37 @@ class LicenseController extends Controller
             $data['expires_at'] = now()->addDays($data['duration_days']);
         }
 
+        // If org_id provided, auto-activate
+        if (!empty($data['org_id'])) {
+            $data['activated_at'] = now();
+            $data['activation_count'] = 1;
+            // Get org name if not provided
+            if (empty($data['org_name'])) {
+                $org = Organization::find($data['org_id']);
+                $data['org_name'] = $org?->name;
+            }
+        }
+
         // Set package features
         $data['features'] = $this->getPackageFeatures($data['package_type']);
 
         $license = License::create($data);
 
-        return response()->json(['message' => 'License created', 'data' => $license], 201);
+        // Auto-set AI credits when assigning to a tenant
+        if (!empty($data['org_id'])) {
+            $credits = match ($data['package_type']) {
+                'ai'       => 100,
+                'ai_agent' => 500,
+                default    => 0,
+            };
+            Organization::where('id', $data['org_id'])->update([
+                'ai_credits_monthly' => $credits,
+                'ai_credits_remaining' => $credits,
+                'ai_credits_reset_at' => now()->addMonth(),
+            ]);
+        }
+
+        return response()->json(['message' => 'License created & assigned', 'data' => $license], 201);
     }
 
     public function show(string $id)

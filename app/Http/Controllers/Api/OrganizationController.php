@@ -8,6 +8,38 @@ use Illuminate\Http\Request;
 
 class OrganizationController extends Controller
 {
+    /**
+     * List all organizations (Super Admin only)
+     */
+    public function index(Request $request)
+    {
+        $user = $request->user();
+        if ($user->role !== 'superadmin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $orgs = Organization::withCount('users')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($org) {
+                // Also get active license for each org
+                $license = \App\Models\License::where('org_id', $org->id)
+                    ->where('status', 'active')
+                    ->first();
+                $org->active_license = $license ? [
+                    'id' => $license->id,
+                    'key' => $license->license_key,
+                    'package_type' => $license->package_type,
+                    'license_type' => $license->license_type,
+                    'expires_at' => $license->expires_at,
+                    'status' => $license->isExpired() ? 'expired' : 'active',
+                ] : null;
+                return $org;
+            });
+
+        return response()->json(['data' => $orgs]);
+    }
+
     public function show(Request $request)
     {
         $user = $request->user();
