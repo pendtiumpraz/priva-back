@@ -12,6 +12,9 @@ use App\Models\ConsentCollectionPoint;
 use App\Models\ConsentRecord;
 use App\Models\InformationSystem;
 use App\Models\Organization;
+use App\Models\User;
+use App\Models\License;
+use App\Models\ChatConversation;
 
 /**
  * Executes AI Agent tool calls with strict tenant isolation.
@@ -77,6 +80,11 @@ class AiAgentToolExecutor
 
             // Summary
             'get_compliance_summary' => $this->getComplianceSummary($args),
+
+            // SuperAdmin tools
+            'list_users' => $this->listUsers($args),
+            'list_licenses' => $this->listLicenses($args),
+            'list_chat_history' => $this->listChatHistory($args),
 
             default => [['error' => "Tool '{$tool}' tidak dikenali."], "❌ Tool tidak dikenali: {$tool}"],
         };
@@ -291,7 +299,6 @@ class AiAgentToolExecutor
     {
         $org = Organization::find($this->orgId);
         if (!$org) return [['error' => 'Organisasi tidak ditemukan'], "❌ Organisasi tidak ditemukan"];
-        // Strip sensitive fields
         $data = $org->toArray();
         unset($data['api_key'], $data['license_key']);
         return [$data, "🏢 Membaca detail organisasi: {$org->name}"];
@@ -301,7 +308,6 @@ class AiAgentToolExecutor
     {
         $org = Organization::find($this->orgId);
         if (!$org) return [['error' => 'Organisasi tidak ditemukan'], "❌ Organisasi tidak ditemukan"];
-        // Only allow safe fields
         $safe = ['name', 'address', 'phone', 'industry', 'size', 'website', 'description'];
         $data = array_intersect_key($args, array_flip($safe));
         $org->update($data);
@@ -334,7 +340,36 @@ class AiAgentToolExecutor
     }
 
     // =============================================
-    // Tool Definitions (for DeepSeek function calling)
+    // SuperAdmin-only tools (read-only)
+    // =============================================
+    private function listUsers(array $args): array
+    {
+        $users = User::select('id', 'name', 'role', 'org_id', 'created_at')
+            ->orderBy('created_at', 'desc')->limit(50)->get();
+        return [$users->toArray(), "👥 Mengambil daftar user... ({$users->count()} user ditemukan)"];
+    }
+
+    private function listLicenses(array $args): array
+    {
+        $licenses = License::select('id', 'license_key', 'org_id', 'package_type', 'status', 'expires_at', 'created_at')
+            ->orderBy('created_at', 'desc')->limit(30)->get();
+        return [$licenses->toArray(), "🔑 Mengambil daftar license... ({$licenses->count()} license ditemukan)"];
+    }
+
+    private function listChatHistory(array $args): array
+    {
+        $chats = ChatConversation::withCount('messages')
+            ->orderBy('last_message_at', 'desc')->limit(30)->get()
+            ->map(fn($c) => [
+                'id' => $c->id, 'user_name' => $c->user_name, 'user_email' => $c->user_email,
+                'org_id' => $c->org_id, 'status' => $c->status, 'messages_count' => $c->messages_count,
+                'last_message_at' => $c->last_message_at,
+            ]);
+        return [$chats->toArray(), "💬 Mengambil riwayat chat... ({$chats->count()} percakapan ditemukan)"];
+    }
+
+    // =============================================
+    // Tool Definitions for regular users (compliance tools)
     // =============================================
     public static function getToolDefinitions(): array
     {
@@ -385,4 +420,19 @@ class AiAgentToolExecutor
             ['type' => 'function', 'function' => ['name' => 'get_compliance_summary', 'description' => 'Ringkasan compliance seluruh modul: jumlah ROPA, DPIA, Breach, DSR, GAP score, dll.', 'parameters' => ['type' => 'object', 'properties' => (object)[], 'required' => []]]],
         ];
     }
+
+    // =============================================
+    // Tool Definitions for SuperAdmin (admin/read-only tools only)
+    // =============================================
+    public static function getSuperAdminToolDefinitions(): array
+    {
+        return [
+            ['type' => 'function', 'function' => ['name' => 'list_users', 'description' => 'List semua user di platform (read-only). Menampilkan nama, role, dan organisasi. TIDAK menampilkan email/password.', 'parameters' => ['type' => 'object', 'properties' => (object)[], 'required' => []]]],
+            ['type' => 'function', 'function' => ['name' => 'list_licenses', 'description' => 'List semua license yang terdaftar. Menampilkan key, package_type, status, dan expired.', 'parameters' => ['type' => 'object', 'properties' => (object)[], 'required' => []]]],
+            ['type' => 'function', 'function' => ['name' => 'list_chat_history', 'description' => 'List riwayat chat dari semua user. Menampilkan nama user, jumlah pesan, dan waktu terakhir.', 'parameters' => ['type' => 'object', 'properties' => (object)[], 'required' => []]]],
+            ['type' => 'function', 'function' => ['name' => 'get_organization', 'description' => 'Ambil detail organisasi (nama, alamat, industri, dll).', 'parameters' => ['type' => 'object', 'properties' => (object)[], 'required' => []]]],
+            ['type' => 'function', 'function' => ['name' => 'get_compliance_summary', 'description' => 'Ringkasan compliance seluruh modul: jumlah ROPA, DPIA, Breach, DSR, GAP score, dll.', 'parameters' => ['type' => 'object', 'properties' => (object)[], 'required' => []]]],
+        ];
+    }
 }
+
