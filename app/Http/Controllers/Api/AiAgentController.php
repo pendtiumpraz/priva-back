@@ -149,109 +149,126 @@ PROMPT;
         }
 
         // Function calling loop
-        $steps = []; // Track what tools are called for UI
-        $iteration = 0;
+        return response()->stream(function () use ($messages, $tools, $apiKey, $executor, $conversation, $user, $orgId, $isSuperAdmin) {
+            $steps = [];
+            $iteration = 0;
 
-        try {
-            while ($iteration < self::MAX_TOOL_ITERATIONS) {
-                $iteration++;
+            try {
+                while ($iteration < self::MAX_TOOL_ITERATIONS) {
+                    $iteration++;
 
-                $payload = [
-                    'model' => 'deepseek-chat',
-                    'messages' => $messages,
-                    'tools' => $tools,
-                    'temperature' => 0.2,
-                    'max_tokens' => 3000,
-                ];
+                    $payload = [
+                        'model' => 'deepseek-chat',
+                        'messages' => $messages,
+                        'tools' => $tools,
+                        'temperature' => 0.2,
+                        'max_tokens' => 3000,
+                    ];
 
-                $response = Http::timeout(60)
-                    ->withoutVerifying()
-                    ->withHeaders([
-                        'Authorization' => 'Bearer ' . $apiKey,
-                        'Content-Type' => 'application/json',
-                    ])
-                    ->post('https://api.deepseek.com/chat/completions', $payload);
+                    $response = Http::timeout(60)
+                        ->withoutVerifying()
+                        ->withHeaders([
+                            'Authorization' => 'Bearer ' . $apiKey,
+                            'Content-Type' => 'application/json',
+                        ])
+                        ->post('https://api.deepseek.com/chat/completions', $payload);
 
-                if ($response->failed()) {
-                    \Log::error('AI Agent DeepSeek error: ' . $response->body());
-                    return response()->json([
-                        'message' => 'AI Agent sedang tidak tersedia.',
-                        'conversation_id' => $conversation->id,
-                        'steps' => $steps,
-                    ], 502);
-                }
-
-                $data = $response->json();
-                $choice = $data['choices'][0] ?? null;
-                if (!$choice) break;
-
-                $assistantMessage = $choice['message'];
-                $finishReason = $choice['finish_reason'] ?? 'stop';
-
-                // Check if AI wants to call tools
-                if ($finishReason === 'tool_calls' && !empty($assistantMessage['tool_calls'])) {
-                    // Add assistant message with tool_calls to history
-                    $messages[] = $assistantMessage;
-
-                    foreach ($assistantMessage['tool_calls'] as $toolCall) {
-                        $fnName = $toolCall['function']['name'];
-                        $fnArgs = json_decode($toolCall['function']['arguments'] ?? '{}', true) ?: [];
-
-                        // Execute tool
-                        [$result, $stepDesc] = $executor->execute($fnName, $fnArgs);
-                        $steps[] = ['tool' => $fnName, 'description' => $stepDesc, 'args' => $fnArgs];
-
-                        // Add tool result to messages
-                        $messages[] = [
-                            'role' => 'tool',
-                            'tool_call_id' => $toolCall['id'],
-                            'content' => json_encode($result, JSON_UNESCAPED_UNICODE),
-                        ];
+                    if ($response->failed()) {
+                        \Log::error('AI Agent DeepSeek error: ' . $response->body());
+                        echo json_encode(['type' => 'error', 'message' => 'AI Agent sedang tidak tersedia.']) . "\n";
+                        if (ob_get_level() > 0) ob_flush(); flush();
+                        break;
                     }
 
-                    continue; // Loop again for AI to process tool results
+                    $data = $response->json();
+                    $choice = $data['choices'][0] ?? null;
+                    if (!$choice) break;
+
+                    $assistantMessage = $choice['message'];
+                    $finishReason = $choice['finish_reason'] ?? 'stop';
+
+                    // Check if AI wants to call tools
+                    if ($finishReason === 'tool_calls' && !empty($assistantMessage['tool_calls'])) {
+                        // Add assistant message with tool_calls to history
+                        $messages[] = $assistantMessage;
+
+                        foreach ($assistantMessage['tool_calls'] as $toolCall) {
+                            $fnName = $toolCall['function']['name'];
+                            $fnArgs = json_decode($toolCall['function']['arguments'] ?? '{}', true) ?: [];
+
+                            // Emit step to frontend immediately
+                            $stepDesc = "Menjalankan internal proses..."; // Fallback temporarily
+                            
+                            // Let the executor handle it and get the translated description
+                            [$result, $stepDesc] = $executor->execute($fnName, $fnArgs);
+                            
+                            $stepData = ['tool' => $fnName, 'description' => $stepDesc, 'args' => $fnArgs];
+                            $steps[] = $stepData;
+                            
+                            echo json_encode(array_merge(['type' => 'step'], $stepData)) . "\n";
+                            if (ob_get_level() > 0) ob_flush(); flush();
+
+                            // Add tool result to messages
+                            $messages[] = [
+                                'role' => 'tool',
+                                'tool_call_id' => $toolCall['id'],
+                                'content' => json_encode($result, JSON_UNESCAPED_UNICODE),
+                            ];
+                        }
+
+                        continue; // Loop again for AI to process tool results
+                    }
+
+                    // AI finished — get final reply
+                    $reply = $assistantMessage['content'] ?? '';
+
+                    // Save AI reply
+                    ChatMessage::create([
+                        'conversation_id' => $conversation->id,
+                        'role' => 'assistant',
+                        'content' => $reply,
+                        'sender_name' => 'PRIVASIMU AI Agent',
+                    ]);
+
+                    $conversation->update(['last_message_at' => now()]);
+
+                    // Deduct credit (skip for SuperAdmin)
+                    if ($orgId && !$isSuperAdmin) {
+                        CreditService::deduct($orgId, $user->id, 'chat', 'ai_agent');
+                    }
+
+                    echo json_encode([
+                        'type' => 'final',
+                        'reply' => $reply,
+                        'conversation_id' => $conversation->id,
+                        'steps' => $steps,
+                        'usage' => $data['usage'] ?? null,
+                    ]) . "\n";
+                    if (ob_get_level() > 0) ob_flush(); flush();
+                    break;
                 }
 
-                // AI finished — get final reply
-                $reply = $assistantMessage['content'] ?? '';
-
-                // Save AI reply
-                ChatMessage::create([
-                    'conversation_id' => $conversation->id,
-                    'role' => 'assistant',
-                    'content' => $reply,
-                    'sender_name' => 'PRIVASIMU AI Agent',
-                ]);
-
-                $conversation->update(['last_message_at' => now()]);
-
-                // Deduct credit (skip for SuperAdmin)
-                if ($orgId && !$isSuperAdmin) {
-                    CreditService::deduct($orgId, $user->id, 'chat', 'ai_agent');
+                if ($iteration >= self::MAX_TOOL_ITERATIONS) {
+                    echo json_encode([
+                        'type' => 'final',
+                        'reply' => '{"greeting": null, "sections": [{"type": "warning", "content": "AI Agent terlalu banyak melakukan proses. Silakan gunakan pertanyaan yang lebih spesifik."}], "closing": null}',
+                        'conversation_id' => $conversation->id,
+                        'steps' => $steps,
+                    ]) . "\n";
+                    if (ob_get_level() > 0) ob_flush(); flush();
                 }
 
-                return response()->json([
-                    'reply' => $reply,
-                    'conversation_id' => $conversation->id,
-                    'steps' => $steps,
-                    'usage' => $data['usage'] ?? null,
-                ]);
+            } catch (\Exception $e) {
+                \Log::error('AI Agent error: ' . $e->getMessage());
+                echo json_encode(['type' => 'error', 'message' => 'Terjadi kesalahan sistem internal.']) . "\n";
+                if (ob_get_level() > 0) ob_flush(); flush();
             }
-
-            // Should not reach here normally
-            return response()->json([
-                'reply' => '{"greeting": null, "sections": [{"type": "warning", "content": "AI Agent membutuhkan terlalu banyak langkah. Coba pertanyaan yang lebih spesifik."}], "closing": null}',
-                'conversation_id' => $conversation->id,
-                'steps' => $steps,
-            ]);
-        } catch (\Exception $e) {
-            \Log::error('AI Agent error: ' . $e->getMessage());
-            return response()->json([
-                'message' => 'Terjadi kesalahan. Coba lagi nanti.',
-                'conversation_id' => $conversation->id,
-                'steps' => $steps,
-            ], 500);
-        }
+        }, 200, [
+            'Content-Type' => 'application/x-ndjson',
+            'X-Accel-Buffering' => 'no',
+            'Cache-Control' => 'no-cache',
+            'Connection' => 'keep-alive',
+        ]);
     }
 
     /**
