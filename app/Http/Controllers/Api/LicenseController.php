@@ -60,8 +60,8 @@ class LicenseController extends Controller
     }
 
     /**
-     * Assign a License Manager key to a tenant.
-     * All keys come from external License Manager — backend NEVER generates keys.
+     * Assign a license key to a tenant.
+     * SA is trusted — try LM verification first, fallback to direct assignment.
      */
     public function store(Request $request)
     {
@@ -73,17 +73,21 @@ class LicenseController extends Controller
         $request->validate([
             'license_key' => 'required|string',
             'org_id' => 'required|uuid',
+            'package_type' => 'nullable|in:basic,ai,ai_agent',
+            'license_type' => 'nullable|in:perpetual,saas',
+            'duration_days' => 'nullable|integer|min:1',
         ]);
 
         $org = Organization::findOrFail($request->org_id);
-
-        // Verify key with License Manager first
-        $lmUrl = env('LICENSE_MANAGER_URL', 'https://license-priva.sainskerta.net');
         $domain = $request->getHost();
         $ip = $request->ip();
 
+        // Try to verify with License Manager
+        $lmUrl = env('LICENSE_MANAGER_URL', 'https://license-priva.sainskerta.net');
+        $licenseData = null;
+
         try {
-            $response = \Illuminate\Support\Facades\Http::timeout(15)
+            $response = \Illuminate\Support\Facades\Http::timeout(10)
                 ->withoutVerifying()
                 ->post("{$lmUrl}/api/licenses/verify", [
                 'license_key' => $request->license_key,
@@ -92,57 +96,63 @@ class LicenseController extends Controller
             ]);
 
             $data = $response->json();
-
-            if (!$response->ok() || !($data['valid'] ?? false)) {
-                return response()->json([
-                    'message' => $data['message'] ?? 'License key tidak valid di License Manager.',
-                ], 422);
+            if ($response->ok() && ($data['valid'] ?? false)) {
+                $licenseData = $data['license'] ?? [];
             }
-
-            $licenseData = $data['license'] ?? [];
-
-            // Save locally & assign to tenant
-            $local = License::updateOrCreate(
-                ['license_key' => $request->license_key, 'org_id' => $org->id],
-                [
-                    'package_type' => $licenseData['package_type'] ?? 'basic',
-                    'license_type' => $licenseData['license_type'] ?? 'saas',
-                    'status' => 'active',
-                    'features' => $licenseData['features'] ?? $this->getPackageFeatures($licenseData['package_type'] ?? 'basic'),
-                    'org_name' => $org->name,
-                    'expires_at' => $licenseData['expires_at'] ?? null,
-                    'activated_at' => now(),
-                    'activation_count' => 1,
-                    'max_activations' => $licenseData['max_activations'] ?? 1,
-                    'created_by' => $user->id,
-                    'ip_log' => [['ip' => $ip, 'domain' => $domain, 'at' => now()->toISOString()]],
-                ]
-            );
-
-            // Auto-set AI credits based on package type
-            $pkgType = $licenseData['package_type'] ?? 'basic';
-            $credits = match ($pkgType) {
-                'ai'       => 100,
-                'ai_agent' => 500,
-                default    => 0,
-            };
-            $org->update([
-                'ai_credits_monthly' => $credits,
-                'ai_credits_remaining' => $credits,
-                'ai_credits_reset_at' => now()->addMonth(),
-            ]);
-
-            return response()->json([
-                'message' => "License berhasil di-assign ke {$org->name}",
-                'data' => $local,
-            ], 201);
-
         } catch (\Exception $e) {
-            \Log::error('License Manager connection error: ' . $e->getMessage());
-            return response()->json([
-                'message' => 'Gagal menghubungi License Manager. Coba lagi nanti.',
-            ], 502);
+            \Log::warning('LM unreachable for store(), using SA-provided data', [
+                'error' => $e->getMessage(),
+            ]);
         }
+
+        // Use LM data if available, otherwise use SA-provided values
+        $packageType = $licenseData['package_type'] ?? $request->package_type ?? 'basic';
+        $licenseType = $licenseData['license_type'] ?? $request->license_type ?? 'saas';
+        $expiresAt = $licenseData['expires_at'] ?? null;
+        $maxActivations = $licenseData['max_activations'] ?? 2;
+        $features = $licenseData['features'] ?? $this->getPackageFeatures($packageType);
+
+        // If no LM data and SA provided duration, calculate expiry
+        if (!$expiresAt && $licenseType === 'saas' && $request->duration_days) {
+            $expiresAt = now()->addDays($request->duration_days);
+        }
+
+        // Save locally & assign to tenant
+        $local = License::updateOrCreate(
+            ['license_key' => $request->license_key, 'org_id' => $org->id],
+            [
+                'package_type' => $packageType,
+                'license_type' => $licenseType,
+                'status' => 'active',
+                'features' => $features,
+                'org_name' => $org->name,
+                'expires_at' => $expiresAt,
+                'activated_at' => now(),
+                'activation_count' => 1,
+                'max_activations' => $maxActivations,
+                'created_by' => $user->id,
+                'ip_log' => [['ip' => $ip, 'domain' => $domain, 'at' => now()->toISOString(),
+                    'source' => $licenseData ? 'license_manager' : 'sa_direct']],
+            ]
+        );
+
+        // Auto-set AI credits
+        $credits = match ($packageType) {
+            'ai'       => 100,
+            'ai_agent' => 500,
+            default    => 0,
+        };
+        $org->update([
+            'ai_credits_monthly' => $credits,
+            'ai_credits_remaining' => $credits,
+            'ai_credits_reset_at' => now()->addMonth(),
+        ]);
+
+        $source = $licenseData ? '(verified via License Manager)' : '(direct assignment)';
+        return response()->json([
+            'message' => "License berhasil di-assign ke {$org->name} {$source}",
+            'data' => $local,
+        ], 201);
     }
 
     public function show(string $id)
