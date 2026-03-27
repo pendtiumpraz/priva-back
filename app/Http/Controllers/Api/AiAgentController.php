@@ -36,8 +36,10 @@ class AiAgentController extends Controller
 
         $user = $request->user();
         $orgId = $user->org_id;
+        $isSuperAdmin = $user->role === 'superadmin';
 
-        if (!$orgId) {
+        // SuperAdmin doesn't need org_id, regular users do
+        if (!$orgId && !$isSuperAdmin) {
             return response()->json(['message' => 'Organisasi tidak ditemukan.'], 400);
         }
 
@@ -46,8 +48,8 @@ class AiAgentController extends Controller
             return response()->json(['message' => 'API key belum dikonfigurasi. Hubungi SuperAdmin.'], 503);
         }
 
-        // Credit check
-        if ($orgId) {
+        // Credit check (skip for SuperAdmin — no org to bill)
+        if ($orgId && !$isSuperAdmin) {
             CreditService::resetIfNeeded($orgId);
             if (!CreditService::hasCredit($orgId, 'chat')) {
                 return response()->json(['message' => 'Quota AI habis bulan ini.', 'credits_exhausted' => true], 402);
@@ -78,10 +80,9 @@ class AiAgentController extends Controller
             'sender_name' => $user->name,
         ]);
 
-        $executor = new AiAgentToolExecutor($orgId);
+        $executor = new AiAgentToolExecutor($orgId ?? '');
 
         // Role-based tool filtering
-        $isSuperAdmin = $user->role === 'superadmin';
         $tools = $isSuperAdmin
             ? AiAgentToolExecutor::getSuperAdminToolDefinitions()
             : AiAgentToolExecutor::getToolDefinitions();
@@ -224,8 +225,8 @@ PROMPT;
 
                 $conversation->update(['last_message_at' => now()]);
 
-                // Deduct credit
-                if ($orgId) {
+                // Deduct credit (skip for SuperAdmin)
+                if ($orgId && !$isSuperAdmin) {
                     CreditService::deduct($orgId, $user->id, 'chat', 'ai_agent');
                 }
 
@@ -258,10 +259,11 @@ PROMPT;
      */
     public function mentions(Request $request, string $type)
     {
-        $orgId = $request->user()->org_id;
-        if (!$orgId) return response()->json([]);
+        $user = $request->user();
+        $orgId = $user->org_id;
 
         $items = match ($type) {
+            // Compliance modules (for regular users)
             'ropa' => Ropa::where('org_id', $orgId)->select('id', 'registration_number', 'processing_activity as label')->orderBy('created_at', 'desc')->limit(20)->get(),
             'dpia' => Dpia::where('org_id', $orgId)->select('id', 'registration_number', 'description as label')->orderBy('created_at', 'desc')->limit(20)->get(),
             'gap' => GapAssessment::where('org_id', $orgId)->selectRaw("id, CONCAT('GAP v', version, ' - Score: ', overall_score, '%') as label")->orderBy('created_at', 'desc')->limit(10)->get(),
@@ -270,6 +272,12 @@ PROMPT;
             'consent' => ConsentCollectionPoint::where('org_id', $orgId)->select('id', 'name as label', 'channel')->orderBy('created_at', 'desc')->limit(20)->get(),
             'discovery' => InformationSystem::where('org_id', $orgId)->select('id', 'name as label', 'source_type')->orderBy('created_at', 'desc')->limit(20)->get(),
             'drill' => BreachSimulation::where('org_id', $orgId)->select('id', 'scenario_title as label', 'scenario_type')->orderBy('created_at', 'desc')->limit(20)->get(),
+
+            // SuperAdmin admin tools
+            'users' => \App\Models\User::select('id', 'name as label', 'role as registration_number')->orderBy('created_at', 'desc')->limit(30)->get(),
+            'licenses' => \App\Models\License::select('id', 'license_key as registration_number', 'package_type as label')->orderBy('created_at', 'desc')->limit(20)->get(),
+            'chat' => \App\Models\ChatConversation::select('id', 'user_name as label', 'user_email as registration_number')->orderBy('last_message_at', 'desc')->limit(20)->get(),
+
             default => collect([]),
         };
 
