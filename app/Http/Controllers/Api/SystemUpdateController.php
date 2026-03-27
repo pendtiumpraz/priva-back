@@ -48,14 +48,40 @@ class SystemUpdateController extends Controller
 
             $pendingCommits = $parseLog($logOutput);
 
-            // Get last 15 commits already installed locally
-            $installedOutput = shell_exec("cd {$basePath} && git log -n 15 --pretty=format:\"%h|%s|%cd\" --date=short 2>&1");
+            // Pagination for installed history
+            $pageParam = $request->query('page', 1);
+            $totalOutput = shell_exec("cd {$basePath} && git rev-list --count HEAD 2>&1");
+            $totalCommits = (int)trim($totalOutput);
+
+            if ($pageParam === 'all') {
+                $installedOutput = shell_exec("cd {$basePath} && git log --pretty=format:\"%h|%s|%cd\" --date=short 2>&1");
+                $installedCommits = $parseLog($installedOutput);
+                
+                return response()->json([
+                    'up_to_date' => count($pendingCommits) === 0,
+                    'commits' => $pendingCommits,
+                    'installed' => $installedCommits,
+                    'history_total' => $totalCommits,
+                    'history_page' => 'all',
+                    'history_pages' => 1,
+                ]);
+            }
+
+            $page = (int)$pageParam;
+            $perPage = 10;
+            $skip = ($page - 1) * $perPage;
+
+            // Get paginated installed commits locally
+            $installedOutput = shell_exec("cd {$basePath} && git log --skip={$skip} -n {$perPage} --pretty=format:\"%h|%s|%cd\" --date=short 2>&1");
             $installedCommits = $parseLog($installedOutput);
 
             return response()->json([
                 'up_to_date' => count($pendingCommits) === 0,
                 'commits' => $pendingCommits,
-                'installed' => $installedCommits
+                'installed' => $installedCommits,
+                'history_total' => $totalCommits,
+                'history_page' => $page,
+                'history_pages' => ceil($totalCommits / $perPage),
             ]);
 
         } catch (\Exception $e) {
