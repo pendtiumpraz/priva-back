@@ -1,0 +1,24 @@
+PRIVASIMU ENTERPRISE (PROPRIETARY) LICENSE
+
+Copyright (c) 2026 PRIVASIMU, All rights reserved.
+
+This source code is PROPRIETARY and CONFIDENTIAL.
+
+1. PERMITTED USE
+You are only permitted to use, modify, and integrate this software ("Software") if your organization has purchased a valid commercial or "Beli Putus" (On-Premise) license directly from PRIVASIMU. A valid License Key must be active and supplied by the PRIVASIMU License Manager.
+
+2. RESTRICTIONS
+Without prior written consent from PRIVASIMU, you SHALL NOT:
+a) Copy, reproduce, or distribute this Software or any part thereof to third parties.
+b) Sublicense, rent, lease, or resell the Software.
+c) Bypass, modify, or disable the integration with the PRIVASIMU License Manager API (`/api/licenses/validate`).
+d) Use the Software to create a competing product or service.
+
+3. AUDIT & OPEN SOURCE VISIBILITY (For Public Repositories)
+If you are viewing this Software from a public repository, you are granted permission to read and review the code strictly for educational or security audit purposes. You are strictly PROHIBITED from deploying, compiling, or executing this Software for commercial, internal business, or governmental use without acquiring a commercial license.
+
+4. TERMINATION
+In the event of a breach of these terms, PRIVASIMU reserves the right to revoke your License Key remotely using the License Manager, causing the Software to degrade or cease functionality, and may pursue legal remedies under the applicable laws (including but not limited to the intellectual property laws of the Republic of Indonesia).
+
+5. DISCLAIMER OF WARRANTY
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY.
