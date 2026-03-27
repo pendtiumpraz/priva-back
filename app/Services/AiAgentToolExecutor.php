@@ -15,6 +15,7 @@ use App\Models\Organization;
 use App\Models\User;
 use App\Models\License;
 use App\Models\ChatConversation;
+use App\Models\AuditLog;
 
 /**
  * Executes AI Agent tool calls with strict tenant isolation.
@@ -113,7 +114,13 @@ class AiAgentToolExecutor
         $forbidden = ['org_id', 'id'];
         $data = array_diff_key($args, array_flip($forbidden));
         $data['org_id'] = $this->orgId;
+        $data['registration_number'] = $data['registration_number'] ?? 'ROPA-AI-' . date('Y') . '-' . rand(100, 999);
         $r = Ropa::create($data);
+        
+        try { 
+            AuditLog::create(['module' => 'ropa', 'record_id' => $r->id, 'action' => 'created', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'Automated AI Creation']); 
+        } catch(\Exception $e) {}
+        
         return [$r->toArray(), "✏️ Membuat ROPA baru: {$r->processing_activity}"];
     }
 
@@ -124,6 +131,11 @@ class AiAgentToolExecutor
         $forbidden = ['org_id', 'id'];
         $data = array_diff_key($args, array_flip($forbidden));
         $r->update($data);
+        
+        try { 
+            AuditLog::create(['module' => 'ropa', 'record_id' => $r->id, 'action' => 'updated', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'AI Automated Edit', 'changes' => array_keys($data)]); 
+        } catch(\Exception $e) {}
+        
         return [$r->fresh()->toArray(), "✅ ROPA berhasil diupdate: {$r->processing_activity}"];
     }
 
@@ -149,7 +161,13 @@ class AiAgentToolExecutor
     {
         $data = array_diff_key($args, array_flip(['org_id', 'id']));
         $data['org_id'] = $this->orgId;
+        $data['registration_number'] = $data['registration_number'] ?? 'DPIA-AI-' . date('Y') . '-' . rand(100, 999);
         $r = Dpia::create($data);
+        
+        try { 
+            AuditLog::create(['module' => 'dpia', 'record_id' => $r->id, 'action' => 'created', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'Automated AI Creation']); 
+        } catch(\Exception $e) {}
+        
         return [$r->toArray(), "✏️ Membuat DPIA baru: {$r->registration_number}"];
     }
 
@@ -159,6 +177,11 @@ class AiAgentToolExecutor
         if (!$r) return [['error' => 'DPIA tidak ditemukan'], "❌ DPIA tidak ditemukan"];
         $data = array_diff_key($args, array_flip(['org_id', 'id']));
         $r->update($data);
+        
+        try { 
+            AuditLog::create(['module' => 'dpia', 'record_id' => $r->id, 'action' => 'updated', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'AI Automated Edit', 'changes' => array_keys($data)]); 
+        } catch(\Exception $e) {}
+        
         return [$r->fresh()->toArray(), "✅ DPIA diupdate: {$r->registration_number}"];
     }
 
@@ -245,6 +268,11 @@ class AiAgentToolExecutor
         if (!$r) return [['error' => 'DSR tidak ditemukan'], "❌ DSR tidak ditemukan"];
         $data = array_diff_key($args, array_flip(['org_id', 'id']));
         $r->update($data);
+        
+        try { 
+            AuditLog::create(['module' => 'dsr', 'record_id' => $r->id, 'action' => 'updated', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'AI Automated Edit', 'changes' => array_keys($data)]); 
+        } catch(\Exception $e) {}
+        
         return [$r->fresh()->toArray(), "✅ DSR diupdate: {$r->request_id}"];
     }
 
@@ -270,7 +298,13 @@ class AiAgentToolExecutor
     {
         $data = array_diff_key($args, array_flip(['org_id', 'id']));
         $data['org_id'] = $this->orgId;
+        $data['incident_code'] = $data['incident_code'] ?? 'BRC-AI-' . date('Y') . '-' . rand(100, 999);
         $r = BreachIncident::create($data);
+        
+        try { 
+            AuditLog::create(['module' => 'breach', 'record_id' => $r->id, 'action' => 'created', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'Automated AI Creation']); 
+        } catch(\Exception $e) {}
+        
         return [$r->toArray(), "✏️ Breach incident baru dicatat: {$r->title}"];
     }
 
@@ -311,6 +345,11 @@ class AiAgentToolExecutor
         $safe = ['name', 'address', 'phone', 'industry', 'size', 'website', 'description'];
         $data = array_intersect_key($args, array_flip($safe));
         $org->update($data);
+        
+        try { 
+            AuditLog::create(['module' => 'organization', 'record_id' => $org->id, 'action' => 'updated', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'AI Automated Edit', 'changes' => array_keys($data)]); 
+        } catch(\Exception $e) {}
+        
         return [$org->fresh()->makeHidden(['api_key', 'license_key'])->toArray(), "✅ Organisasi diupdate: {$org->name}"];
     }
 
