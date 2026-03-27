@@ -26,17 +26,21 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // =============================================
-        // Users — PT Tester Indonesia (all 5 roles)
+        // Platform SuperAdmin (no org — outside tenant)
         // =============================================
         $superadmin = User::create([
             'name' => 'System SuperAdmin',
             'email' => 'superadmin@privasimu.com',
             'password' => 'SuperAdmin@2026',
-            'org_id' => $org->id,
+            'org_id' => null,
             'role' => 'superadmin',
-            'position' => 'System Administrator',
+            'position' => 'Platform Administrator',
             'is_active' => true,
         ]);
+
+        // =============================================
+        // Users — PT Tester Indonesia (admin, dpo, maker, viewer)
+        // =============================================
 
         $admin = User::create([
             'name' => 'Galih Admin',
@@ -91,24 +95,14 @@ class DatabaseSeeder extends Seeder
             'address' => 'Jl. Gatot Subroto Kav. 42, Jakarta Selatan',
         ]);
 
-        // Users — PT Sainskerta (all 5 roles)
-        $ssn_superadmin = User::create([
-            'name' => 'Raka SuperAdmin',
-            'email' => 'raka.superadmin@sainskerta.co.id',
+        // Users — PT Sainskerta (admin, dpo, maker, viewer)
+        $ssn_admin = User::create([
+            'name' => 'Raka Admin',
+            'email' => 'raka.admin@sainskerta.co.id',
             'password' => 'Sainskerta@2026',
             'org_id' => $org2->id,
-            'role' => 'superadmin',
-            'position' => 'CTO',
-            'is_active' => true,
-        ]);
-
-        $ssn_admin = User::create([
-            'name' => 'Dewi Admin',
-            'email' => 'dewi.admin@sainskerta.co.id',
-            'password' => 'password123',
-            'org_id' => $org2->id,
             'role' => 'admin',
-            'position' => 'IT Manager',
+            'position' => 'CTO',
             'is_active' => true,
         ]);
 
@@ -358,8 +352,14 @@ class DatabaseSeeder extends Seeder
             'updated_at' => now()->subMonth(),
         ]);
 
+        // =============================================
+        // Knowledge Base
+        // =============================================
+        $this->call(KnowledgeBaseSectionsSeeder::class);
+
         $this->command->info('🎉 PRIVASIMU seed data created successfully!');
-        $this->command->info('📋 Tenant 1: PT Tester Indonesia — 5 users (superadmin, admin, dpo, maker, viewer)');
-        $this->command->info('📋 Tenant 2: PT Sainskerta Solusi Nusantara — 5 users (superadmin, admin, dpo, maker, viewer)');
+        $this->command->info('👑 Platform: 1 SuperAdmin (org_id = NULL)');
+        $this->command->info('📋 Tenant 1: PT Tester Indonesia — 4 users (admin, dpo, maker, viewer)');
+        $this->command->info('📋 Tenant 2: PT Sainskerta Solusi Nusantara — 4 users (admin, dpo, maker, viewer)');
     }
 }
