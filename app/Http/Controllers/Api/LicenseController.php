@@ -238,20 +238,19 @@ class LicenseController extends Controller
                     }
                 }
 
-                // Save license locally
+                // Save license locally (match by key + org so same key can serve SA + tenant)
                 $local = License::updateOrCreate(
-                ['license_key' => $request->license_key],
+                ['license_key' => $request->license_key, 'org_id' => $user->org_id ?? null],
                 [
                     'package_type' => $licenseData['package_type'] ?? 'basic',
                     'license_type' => $licenseData['license_type'] ?? 'perpetual',
                     'status' => 'active',
                     'features' => $licenseData['features'] ?? [],
                     'org_name' => $licenseData['org_name'] ?? $user->organization->name ?? null,
-                    'org_id' => $user->org_id ?? null,
                     'expires_at' => $newExpiresAt,
                     'activated_at' => $licenseData['activated_at'] ?? now(),
                     'activation_count' => 1,
-                    'max_activations' => 1,
+                    'max_activations' => $licenseData['max_activations'] ?? 1,
                     'ip_log' => [['ip' => $ip, 'domain' => $domain, 'at' => now()->toISOString()]],
                 ]
                 );
