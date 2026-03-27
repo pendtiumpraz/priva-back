@@ -315,64 +315,76 @@ class LicenseController extends Controller
             ]);
 
             // FALLBACK: If License Manager unreachable, check if key already exists locally
-            // (e.g. SA already assigned it via store(), or it was previously activated)
-            $existingKey = License::where('license_key', $request->license_key)
-                ->where('status', 'active')
-                ->first();
-
-            if ($existingKey) {
-                // Check if THIS org already has this key activated
-                $alreadyActivated = License::where('license_key', $request->license_key)
-                    ->where('org_id', $user->org_id)
+            try {
+                $existingKey = License::where('license_key', $request->license_key)
                     ->where('status', 'active')
-                    ->exists();
+                    ->first();
 
-                if ($alreadyActivated) {
+                if ($existingKey) {
+                    // Check if THIS org already has this key activated
+                    $alreadyActivated = License::where('license_key', $request->license_key)
+                        ->where('org_id', $user->org_id)
+                        ->where('status', 'active')
+                        ->exists();
+
+                    if ($alreadyActivated) {
+                        return response()->json([
+                            'message' => 'License key ini sudah aktif untuk tenant Anda.',
+                        ], 422);
+                    }
+
+                    // Get org name safely
+                    $orgName = null;
+                    if ($user->org_id) {
+                        $org = Organization::find($user->org_id);
+                        $orgName = $org?->name;
+                    }
+
+                    // Key exists & is valid locally — activate for this tenant
+                    $local = License::updateOrCreate(
+                        ['license_key' => $request->license_key, 'org_id' => $user->org_id ?? null],
+                        [
+                            'package_type' => $existingKey->package_type,
+                            'license_type' => $existingKey->license_type,
+                            'status' => 'active',
+                            'features' => $existingKey->features,
+                            'org_name' => $orgName,
+                            'expires_at' => $existingKey->expires_at,
+                            'activated_at' => now(),
+                            'activation_count' => ($existingKey->activation_count ?? 0) + 1,
+                            'max_activations' => $existingKey->max_activations,
+                            'ip_log' => [['ip' => $ip, 'domain' => $domain, 'at' => now()->toISOString(), 'mode' => 'offline']],
+                        ]
+                    );
+
+                    // Set AI credits
+                    if ($user->org_id) {
+                        $credits = match ($existingKey->package_type) {
+                            'ai'       => 100,
+                            'ai_agent' => 500,
+                            default    => 0,
+                        };
+                        Organization::where('id', $user->org_id)->update([
+                            'ai_credits_monthly' => $credits,
+                            'ai_credits_remaining' => $credits,
+                            'ai_credits_reset_at' => now()->addMonth(),
+                        ]);
+                    }
+
                     return response()->json([
-                        'message' => 'License key ini sudah aktif untuk tenant Anda.',
-                    ], 422);
-                }
-
-                // Key exists & is valid locally — activate for this tenant
-                $local = License::updateOrCreate(
-                    ['license_key' => $request->license_key, 'org_id' => $user->org_id ?? null],
-                    [
-                        'package_type' => $existingKey->package_type,
-                        'license_type' => $existingKey->license_type,
+                        'message' => 'License berhasil diaktifkan!',
+                        'data' => $local,
                         'status' => 'active',
-                        'features' => $existingKey->features,
-                        'org_name' => $user->organization->name ?? null,
-                        'expires_at' => $existingKey->expires_at,
-                        'activated_at' => now(),
-                        'activation_count' => ($existingKey->activation_count ?? 0) + 1,
-                        'max_activations' => $existingKey->max_activations,
-                        'ip_log' => [['ip' => $ip, 'domain' => $domain, 'at' => now()->toISOString(), 'mode' => 'offline']],
-                    ]
-                );
-
-                // Set AI credits
-                if ($user->org_id) {
-                    $credits = match ($existingKey->package_type) {
-                        'ai'       => 100,
-                        'ai_agent' => 500,
-                        default    => 0,
-                    };
-                    Organization::where('id', $user->org_id)->update([
-                        'ai_credits_monthly' => $credits,
-                        'ai_credits_remaining' => $credits,
-                        'ai_credits_reset_at' => now()->addMonth(),
                     ]);
                 }
-
-                return response()->json([
-                    'message' => 'License berhasil diaktifkan! (offline mode)',
-                    'data' => $local,
-                    'status' => 'active',
+            } catch (\Exception $fallbackError) {
+                \Log::error('License offline fallback error', [
+                    'error' => $fallbackError->getMessage(),
                 ]);
             }
 
             return response()->json([
-                'message' => 'Gagal menghubungi License Manager. Coba lagi nanti.',
+                'message' => 'Gagal menghubungi License Manager dan key tidak ditemukan di database lokal.',
                 'debug' => app()->hasDebugModeEnabled() ? $e->getMessage() : null,
             ], 502);
         }
