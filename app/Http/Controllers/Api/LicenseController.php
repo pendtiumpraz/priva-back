@@ -96,13 +96,31 @@ class LicenseController extends Controller
             ]);
 
             $data = $response->json();
+            
+            // If LM is reachable but explicitly rejects the license (e.g., 403 Forbidden, max activations exceeded)
+            if ($response->failed() && isset($data['message'])) {
+                return response()->json([
+                    'message' => 'License Manager menolak aktivasi: ' . $data['message'],
+                    'status' => $data['status'] ?? 'rejected'
+                ], 403);
+            }
+
             if ($response->ok() && ($data['valid'] ?? false)) {
                 $licenseData = $data['license'] ?? [];
+            } elseif (!$response->ok()) {
+                 // Other non-2xx status code without clear message
+                 throw new \Exception('License Manager returned HTTP ' . $response->status());
             }
         } catch (\Exception $e) {
-            \Log::warning('LM unreachable for store(), using SA-provided data', [
+            \Log::warning('LM unreachable/error for store(), using SA-provided data', [
                 'error' => $e->getMessage(),
             ]);
+            // If SA tries to activate without LM connection, but didn't provide package_type, fail.
+            if (!$request->package_type) {
+                return response()->json([
+                    'message' => 'License Manager tidak dapat dihubungi, dan package_type tidak diisi untuk fallback offline.',
+                ], 400);
+            }
         }
 
         // Use LM data if available, otherwise use SA-provided values
