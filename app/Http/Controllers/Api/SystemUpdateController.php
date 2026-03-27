@@ -9,6 +9,60 @@ use Illuminate\Support\Facades\Log;
 class SystemUpdateController extends Controller
 {
     /**
+     * Check for available updates by fetching from origin and reading git log.
+     */
+    public function checkUpdate(Request $request)
+    {
+        $user = $request->user();
+        if ($user->role !== 'superadmin') {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $basePath = base_path();
+        
+        try {
+            // Fetch origin to update remote tracking branch so we know what's new
+            shell_exec("cd {$basePath} && git fetch origin main 2>&1");
+            
+            // Get commits that are in origin/main but NOT in our local HEAD
+            $logOutput = shell_exec("cd {$basePath} && git log HEAD..origin/main --pretty=format:\"%h|%s|%cd\" --date=short 2>&1");
+            
+            if (!$logOutput || trim($logOutput) === '') {
+                return response()->json([
+                    'up_to_date' => true,
+                    'commits' => []
+                ]);
+            }
+
+            // Parse git log output
+            $commits = [];
+            $lines = explode("\n", trim($logOutput));
+            foreach ($lines as $line) {
+                if (empty(trim($line))) continue;
+                $parts = explode('|', $line, 3);
+                if (count($parts) === 3) {
+                    $commits[] = [
+                        'hash' => trim($parts[0]),
+                        'message' => trim($parts[1]),
+                        'date' => trim($parts[2]),
+                    ];
+                }
+            }
+
+            return response()->json([
+                'up_to_date' => count($commits) === 0,
+                'commits' => $commits
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Gagal mengecek update.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Execute a git pull and migrate on the local server.
      * Only accessible by Superadmin.
      */

@@ -188,6 +188,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // =============================================
         // System / Superadmin Tools
         // =============================================
+        Route::get('/system/check-update', [\App\Http\Controllers\Api\SystemUpdateController::class, 'checkUpdate']);
         Route::post('/system/update-backend', [\App\Http\Controllers\Api\SystemUpdateController::class, 'updateBackend']);
 
     });
