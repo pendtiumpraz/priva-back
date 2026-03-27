@@ -109,6 +109,31 @@ class AiAgentToolExecutor
         return [$r->toArray(), "📋 Membaca detail ROPA: {$r->processing_activity}"];
     }
 
+    private function syncRopaWizardData(\App\Models\Ropa $r, array $data): void
+    {
+        $wizardData = $r->wizard_data ?? [];
+        $changed = false;
+        if (defined('\App\Models\Ropa::WIZARD_SECTIONS')) {
+            foreach (\App\Models\Ropa::WIZARD_SECTIONS as $section) {
+                $key = $section['key'];
+                if (!isset($wizardData[$key])) $wizardData[$key] = [];
+                foreach ($section['fields'] ?? [] as $field) {
+                    if (isset($data[$field])) {
+                        $wizardData[$key][$field] = $data[$field];
+                        $changed = true;
+                    }
+                }
+            }
+        }
+        if ($changed) {
+            $r->wizard_data = $wizardData;
+            if (method_exists($r, 'calculateProgress')) {
+                $r->progress = $r->calculateProgress();
+            }
+            $r->save();
+        }
+    }
+
     private function createRopa(array $args): array
     {
         $forbidden = ['org_id', 'id'];
@@ -117,6 +142,8 @@ class AiAgentToolExecutor
         $data['registration_number'] = $data['registration_number'] ?? 'ROPA-AI-' . date('Y') . '-' . rand(100, 999);
         $r = Ropa::create($data);
         
+        $this->syncRopaWizardData($r, $data);
+
         try { 
             AuditLog::create(['module' => 'ropa', 'record_id' => $r->id, 'action' => 'created', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'Automated AI Creation']); 
         } catch(\Exception $e) {}
@@ -132,6 +159,8 @@ class AiAgentToolExecutor
         $data = array_diff_key($args, array_flip($forbidden));
         $r->update($data);
         
+        $this->syncRopaWizardData($r, $data);
+
         try { 
             AuditLog::create(['module' => 'ropa', 'record_id' => $r->id, 'action' => 'updated', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'AI Automated Edit', 'changes' => array_keys($data)]); 
         } catch(\Exception $e) {}
@@ -157,6 +186,28 @@ class AiAgentToolExecutor
         return [$r->toArray(), "⚠️ Membaca detail DPIA: {$r->registration_number}"];
     }
 
+    private function syncDpiaWizardData(\App\Models\Dpia $r, array $data): void
+    {
+        $wizardData = $r->wizard_data ?? [];
+        $changed = false;
+        
+        if (isset($data['description'])) {
+            if (!isset($wizardData['informasi_dpia'])) $wizardData['informasi_dpia'] = [];
+            $wizardData['informasi_dpia']['description'] = $data['description'];
+            $changed = true;
+        }
+        if (isset($data['ropa_id']) && $data['ropa_id']) {
+            if (!isset($wizardData['koneksi_ropa'])) $wizardData['koneksi_ropa'] = [];
+            $wizardData['koneksi_ropa']['connected_ropas'] = [$data['ropa_id']];
+            $changed = true;
+        }
+        
+        if ($changed) {
+            $r->wizard_data = $wizardData;
+            $r->save();
+        }
+    }
+
     private function createDpia(array $args): array
     {
         $data = array_diff_key($args, array_flip(['org_id', 'id']));
@@ -164,6 +215,8 @@ class AiAgentToolExecutor
         $data['registration_number'] = $data['registration_number'] ?? 'DPIA-AI-' . date('Y') . '-' . rand(100, 999);
         $r = Dpia::create($data);
         
+        $this->syncDpiaWizardData($r, $data);
+
         try { 
             AuditLog::create(['module' => 'dpia', 'record_id' => $r->id, 'action' => 'created', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'Automated AI Creation']); 
         } catch(\Exception $e) {}
@@ -178,6 +231,8 @@ class AiAgentToolExecutor
         $data = array_diff_key($args, array_flip(['org_id', 'id']));
         $r->update($data);
         
+        $this->syncDpiaWizardData($r, $data);
+
         try { 
             AuditLog::create(['module' => 'dpia', 'record_id' => $r->id, 'action' => 'updated', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'AI Automated Edit', 'changes' => array_keys($data)]); 
         } catch(\Exception $e) {}
