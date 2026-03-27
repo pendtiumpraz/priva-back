@@ -59,6 +59,10 @@ class LicenseController extends Controller
         return response()->json($licenses);
     }
 
+    /**
+     * Assign a License Manager key to a tenant.
+     * All keys come from external License Manager — backend NEVER generates keys.
+     */
     public function store(Request $request)
     {
         $user = $request->user();
@@ -67,58 +71,78 @@ class LicenseController extends Controller
         }
 
         $request->validate([
-            'package_type' => 'required|in:basic,ai,ai_agent',
-            'license_type' => 'required|in:perpetual,saas',
-            'org_name' => 'nullable|string',
-            'org_id' => 'nullable|uuid',
-            'domain_whitelist' => 'nullable|array',
-            'max_activations' => 'nullable|integer|min:1',
-            'duration_days' => 'nullable|integer|min:1',
-            'notes' => 'nullable|string',
+            'license_key' => 'required|string',
+            'org_id' => 'required|uuid',
         ]);
 
-        $data = $request->all();
-        $data['license_key'] = License::generateKey();
-        $data['created_by'] = $user->id;
-        $data['status'] = 'active';
-        $data['max_activations'] = $data['max_activations'] ?? 1;
+        $org = Organization::findOrFail($request->org_id);
 
-        // For SaaS: set expiry based on duration
-        if ($data['license_type'] === 'saas' && !empty($data['duration_days'])) {
-            $data['expires_at'] = now()->addDays($data['duration_days']);
-        }
+        // Verify key with License Manager first
+        $lmUrl = env('LICENSE_MANAGER_URL', 'https://license-priva.sainskerta.net');
+        $domain = $request->getHost();
+        $ip = $request->ip();
 
-        // If org_id provided, auto-activate
-        if (!empty($data['org_id'])) {
-            $data['activated_at'] = now();
-            $data['activation_count'] = 1;
-            // Get org name if not provided
-            if (empty($data['org_name'])) {
-                $org = Organization::find($data['org_id']);
-                $data['org_name'] = $org?->name;
+        try {
+            $response = \Illuminate\Support\Facades\Http::timeout(15)
+                ->withoutVerifying()
+                ->post("{$lmUrl}/api/licenses/verify", [
+                'license_key' => $request->license_key,
+                'domain' => $domain,
+                'ip' => $ip,
+            ]);
+
+            $data = $response->json();
+
+            if (!$response->ok() || !($data['valid'] ?? false)) {
+                return response()->json([
+                    'message' => $data['message'] ?? 'License key tidak valid di License Manager.',
+                ], 422);
             }
-        }
 
-        // Set package features
-        $data['features'] = $this->getPackageFeatures($data['package_type']);
+            $licenseData = $data['license'] ?? [];
 
-        $license = License::create($data);
+            // Save locally & assign to tenant
+            $local = License::updateOrCreate(
+                ['license_key' => $request->license_key, 'org_id' => $org->id],
+                [
+                    'package_type' => $licenseData['package_type'] ?? 'basic',
+                    'license_type' => $licenseData['license_type'] ?? 'saas',
+                    'status' => 'active',
+                    'features' => $licenseData['features'] ?? $this->getPackageFeatures($licenseData['package_type'] ?? 'basic'),
+                    'org_name' => $org->name,
+                    'expires_at' => $licenseData['expires_at'] ?? null,
+                    'activated_at' => now(),
+                    'activation_count' => 1,
+                    'max_activations' => $licenseData['max_activations'] ?? 1,
+                    'created_by' => $user->id,
+                    'ip_log' => [['ip' => $ip, 'domain' => $domain, 'at' => now()->toISOString()]],
+                ]
+            );
 
-        // Auto-set AI credits when assigning to a tenant
-        if (!empty($data['org_id'])) {
-            $credits = match ($data['package_type']) {
+            // Auto-set AI credits based on package type
+            $pkgType = $licenseData['package_type'] ?? 'basic';
+            $credits = match ($pkgType) {
                 'ai'       => 100,
                 'ai_agent' => 500,
                 default    => 0,
             };
-            Organization::where('id', $data['org_id'])->update([
+            $org->update([
                 'ai_credits_monthly' => $credits,
                 'ai_credits_remaining' => $credits,
                 'ai_credits_reset_at' => now()->addMonth(),
             ]);
-        }
 
-        return response()->json(['message' => 'License created & assigned', 'data' => $license], 201);
+            return response()->json([
+                'message' => "License berhasil di-assign ke {$org->name}",
+                'data' => $local,
+            ], 201);
+
+        } catch (\Exception $e) {
+            \Log::error('License Manager connection error: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Gagal menghubungi License Manager. Coba lagi nanti.',
+            ], 502);
+        }
     }
 
     public function show(string $id)
