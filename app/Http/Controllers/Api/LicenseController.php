@@ -220,6 +220,7 @@ class LicenseController extends Controller
                     $existingLicense = License::where('org_id', $user->org_id)
                         ->where('status', 'active')
                         ->where('license_type', 'saas')
+                        ->where('license_key', '!=', $request->license_key) // Don't count same key
                         ->whereNotNull('expires_at')
                         ->where('expires_at', '>', now())
                         ->orderBy('expires_at', 'desc')
