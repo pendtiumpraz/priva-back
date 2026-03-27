@@ -109,6 +109,10 @@ Route::middleware('auth:sanctum')->group(function () {
         // Consent Logs (View all consent captured)
         Route::get('/consent-logs', [\App\Http\Controllers\Api\ConsentLogController::class, 'index']);
 
+        // Organization Profile (Onboarding)
+        Route::get('/organization', [\App\Http\Controllers\Api\OrganizationController::class, 'show']);
+        Route::put('/organization', [\App\Http\Controllers\Api\OrganizationController::class, 'update']);
+
         // =============================================
         // License Management
         // =============================================
@@ -152,7 +156,17 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/dashboard/summary', [\App\Http\Controllers\Api\AiFeatureController::class, 'dashboardSummary']);
             Route::post('/drill/scenario', [\App\Http\Controllers\Api\AiFeatureController::class, 'drillScenario']);
             Route::get('/history/{featureType}/{recordId}', [\App\Http\Controllers\Api\AiFeatureController::class, 'history']);
+
+            // Auto-Fill endpoints
+            Route::post('/autofill/ropa', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillRopa']);
+            Route::post('/autofill/dpia', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillDpia']);
+            Route::post('/autofill/breach', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillBreach']);
+            Route::post('/autofill/dsr', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillDsr']);
         });
+
+        // AI Credit Management
+        Route::get('/ai-credits/usage', [\App\Http\Controllers\Api\AiFeatureController::class, 'creditUsage']);
+        Route::post('/ai-credits/topup', [\App\Http\Controllers\Api\AiFeatureController::class, 'creditTopup']);
 
         // =============================================
         // Export (CSV / JSON)

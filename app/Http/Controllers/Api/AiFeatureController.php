@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\AiService;
-use App\Models\{AiResult, GapAssessment, Ropa, Dpia, BreachIncident, DsrRequest, BreachSimulation, License};
+use App\Services\CreditService;
+use App\Services\TenantContextService;
+use App\Models\{AiResult, AiCreditLog, GapAssessment, Ropa, Dpia, BreachIncident, DsrRequest, BreachSimulation, License, Organization};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -34,15 +36,47 @@ class AiFeatureController extends Controller
     /**
      * Save AI result to database and return response
      */
+    /**
+     * Check credit availability. Returns error response or null if OK.
+     */
+    private function checkCredit(Request $request, string $actionType)
+    {
+        $orgId = $request->user()->org_id;
+        if (!$orgId) return null; // superadmin bypass
+
+        CreditService::resetIfNeeded($orgId);
+
+        if (!CreditService::hasCredit($orgId, $actionType)) {
+            $cost = CreditService::getCost($actionType);
+            return response()->json([
+                'message' => "Quota AI Anda habis bulan ini. Dibutuhkan {$cost} credit untuk fitur ini.",
+                'credits_exhausted' => true,
+                'upgrade_required' => true,
+            ], 402);
+        }
+
+        return null;
+    }
+
+    /**
+     * Save AI result + deduct credit (only on success)
+     */
     private function saveAndRespond(Request $request, string $featureType, ?array $response, array $inputData = [], ?string $recordId = null, ?string $recordType = null)
     {
+        $orgId = $request->user()->org_id;
+        $userId = $request->user()->id;
+
         if (!$response) {
-            return response()->json(['message' => 'AI sedang tidak tersedia'], 502);
+            // Log failed attempt (NO credit deducted)
+            if ($orgId) {
+                CreditService::logFailed($orgId, $userId, $featureType, 'AI response null/unavailable');
+            }
+            return response()->json(['message' => 'AI sedang tidak tersedia', 'credits_used' => 0], 502);
         }
 
         $saved = AiResult::create([
-            'org_id' => $request->user()->org_id,
-            'user_id' => $request->user()->id,
+            'org_id' => $orgId,
+            'user_id' => $userId,
             'feature_type' => $featureType,
             'record_id' => $recordId,
             'record_type' => $recordType,
@@ -50,12 +84,38 @@ class AiFeatureController extends Controller
             'result_data' => $response,
         ]);
 
+        // Deduct credit only on success
+        $creditLog = null;
+        if ($orgId) {
+            $creditLog = CreditService::deduct($orgId, $userId, $featureType, $this->featureToModule($featureType), $recordId);
+        }
+
+        $org = $orgId ? Organization::find($orgId) : null;
+
         return response()->json([
             'data' => $response,
             'type' => $featureType,
             'ai_result_id' => $saved->id,
             'saved' => true,
+            'credits_used' => $creditLog?->credits_used ?? 0,
+            'credits_remaining' => $org ? ($org->ai_credits_remaining + $org->ai_credits_purchased) : null,
         ]);
+    }
+
+    private function featureToModule(string $featureType): ?string
+    {
+        return match (true) {
+            str_contains($featureType, 'ropa') => 'ropa',
+            str_contains($featureType, 'dpia') => 'dpia',
+            str_contains($featureType, 'breach') => 'breach',
+            str_contains($featureType, 'dsr') => 'dsr',
+            str_contains($featureType, 'consent') => 'consent',
+            str_contains($featureType, 'gap') => 'gap',
+            str_contains($featureType, 'drill') => 'simulation',
+            str_contains($featureType, 'dashboard') => 'dashboard',
+            str_contains($featureType, 'chat') => 'chat',
+            default => null,
+        };
     }
 
     /**
@@ -79,6 +139,8 @@ class AiFeatureController extends Controller
     public function gapRemediation(Request $request, string $id)
     {
         if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'gap_remediation');
+        if ($creditErr) return $creditErr;
 
         $assessment = GapAssessment::findOrFail($id);
         $result = GapAssessment::calculateScore($assessment->answers ?? []);
@@ -109,6 +171,8 @@ class AiFeatureController extends Controller
     public function ropaAnalysis(Request $request, string $id)
     {
         if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'analysis_ropa');
+        if ($creditErr) return $creditErr;
 
         $ropa = Ropa::findOrFail($id);
         $ai = new AiService();
@@ -141,6 +205,8 @@ class AiFeatureController extends Controller
     public function dpiaRiskScoring(Request $request, string $id)
     {
         if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'analysis_dpia');
+        if ($creditErr) return $creditErr;
 
         $dpia = Dpia::findOrFail($id);
         $ai = new AiService();
@@ -173,6 +239,8 @@ class AiFeatureController extends Controller
     public function breachAdvisor(Request $request, string $id)
     {
         if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'analysis_breach');
+        if ($creditErr) return $creditErr;
 
         $breach = BreachIncident::findOrFail($id);
         $ai = new AiService();
@@ -204,6 +272,8 @@ class AiFeatureController extends Controller
     public function dsrDraft(Request $request, string $id)
     {
         if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'analysis_dsr');
+        if ($creditErr) return $creditErr;
 
         $dsr = DsrRequest::findOrFail($id);
         $ai = new AiService();
@@ -231,6 +301,8 @@ class AiFeatureController extends Controller
     public function consentGenerator(Request $request)
     {
         if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'analysis_consent');
+        if ($creditErr) return $creditErr;
 
         $request->validate([
             'purpose' => 'required|string',
@@ -264,6 +336,8 @@ class AiFeatureController extends Controller
     public function dashboardSummary(Request $request)
     {
         if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'dashboard_summary');
+        if ($creditErr) return $creditErr;
 
         $orgId = $request->user()->org_id;
 
@@ -334,5 +408,128 @@ class AiFeatureController extends Controller
         );
 
         return $this->saveAndRespond($request, 'drill_scenario', $response, $inputData);
+    }
+
+    // =============================================
+    // AUTO-FILL ENDPOINTS
+    // =============================================
+
+    public function autofillRopa(Request $request)
+    {
+        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'autofill_ropa');
+        if ($creditErr) return $creditErr;
+
+        $request->validate(['activity_name' => 'required|string|max:500']);
+
+        $ai = new AiService();
+        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+
+        $context = TenantContextService::buildContext($request->user()->org_id);
+        $response = $ai->ropaAutoFill($request->activity_name, $context);
+
+        return $this->saveAndRespond($request, 'autofill_ropa', $response, ['activity_name' => $request->activity_name]);
+    }
+
+    public function autofillDpia(Request $request)
+    {
+        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'autofill_dpia');
+        if ($creditErr) return $creditErr;
+
+        $request->validate(['description' => 'required|string|max:500']);
+
+        $ai = new AiService();
+        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+
+        $context = TenantContextService::buildContext($request->user()->org_id);
+        $response = $ai->dpiaAutoFill($request->description, $context);
+
+        return $this->saveAndRespond($request, 'autofill_dpia', $response, ['description' => $request->description]);
+    }
+
+    public function autofillBreach(Request $request)
+    {
+        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'autofill_breach');
+        if ($creditErr) return $creditErr;
+
+        $request->validate(['incident_title' => 'required|string|max:500']);
+
+        $ai = new AiService();
+        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+
+        $context = TenantContextService::buildContext($request->user()->org_id);
+        $response = $ai->breachAutoFill($request->incident_title, $context);
+
+        return $this->saveAndRespond($request, 'autofill_breach', $response, ['incident_title' => $request->incident_title]);
+    }
+
+    public function autofillDsr(Request $request)
+    {
+        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'autofill_dsr');
+        if ($creditErr) return $creditErr;
+
+        $request->validate([
+            'request_type' => 'required|string',
+            'requester_name' => 'required|string|max:255',
+        ]);
+
+        $ai = new AiService();
+        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+
+        $context = TenantContextService::buildContext($request->user()->org_id);
+        $response = $ai->dsrAutoFill($request->request_type, $request->requester_name, $context);
+
+        return $this->saveAndRespond($request, 'autofill_dsr', $response, [
+            'request_type' => $request->request_type,
+            'requester_name' => $request->requester_name,
+        ]);
+    }
+
+    // =============================================
+    // CREDIT MANAGEMENT ENDPOINTS
+    // =============================================
+
+    public function creditUsage(Request $request)
+    {
+        $orgId = $request->user()->org_id;
+        if (!$orgId && $request->user()->role === 'superadmin') {
+            // Super admin: return all tenants
+            return response()->json(['data' => CreditService::getAllTenantsUsage()]);
+        }
+        CreditService::resetIfNeeded($orgId);
+        return response()->json(['data' => CreditService::getUsage($orgId)]);
+    }
+
+    public function creditTopup(Request $request)
+    {
+        if ($request->user()->role !== 'superadmin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+        $request->validate([
+            'org_id' => 'required|uuid',
+            'amount' => 'required|integer|min:1|max:10000',
+            'type' => 'nullable|string', // 'monthly' or 'purchased'
+        ]);
+
+        $org = Organization::findOrFail($request->org_id);
+        $type = $request->type ?? 'purchased';
+
+        if ($type === 'monthly') {
+            $org->update(['ai_credits_monthly' => $request->amount]);
+        } else {
+            $org->increment('ai_credits_purchased', $request->amount);
+        }
+
+        return response()->json([
+            'message' => "Credit {$type} updated for {$org->name}",
+            'data' => [
+                'monthly_limit' => $org->fresh()->ai_credits_monthly,
+                'remaining' => $org->fresh()->ai_credits_remaining,
+                'purchased' => $org->fresh()->ai_credits_purchased,
+            ],
+        ]);
     }
 }

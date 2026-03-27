@@ -254,4 +254,135 @@ class AiService
 
         return $this->ask($system, $user, 4000);
     }
+
+    // =============================================
+    // AUTO-FILL METHODS (output maps directly to DB columns)
+    // =============================================
+
+    /**
+     * ROPA Auto-Fill: Generate complete ROPA draft from activity name + tenant context
+     */
+    public function ropaAutoFill(string $activityName, string $tenantContext): ?array
+    {
+        $system = "Kamu adalah DPO (Data Protection Officer) ahli UU PDP Indonesia.\n"
+            . "Output WAJIB berupa JSON valid yang bisa langsung disimpan ke database.\n"
+            . "JANGAN tambahkan teks apapun di luar JSON.\n\n"
+            . "KONTEKS ORGANISASI:\n{$tenantContext}\n\n"
+            . "FORMAT OUTPUT YANG DIHARAPKAN (isi setiap field berdasarkan konteks):\n"
+            . json_encode([
+                'processing_activity' => 'string: nama aktivitas pemrosesan',
+                'purpose' => 'string: tujuan pemrosesan data (2-3 kalimat)',
+                'legal_basis' => 'string: dasar hukum sesuai UU PDP (pilih yang paling tepat)',
+                'division' => 'string: divisi/departemen yang bertanggung jawab',
+                'description' => 'string: deskripsi lengkap aktivitas pemrosesan (3-5 kalimat)',
+                'risk_level' => 'enum: low | medium | high',
+                'data_categories' => ['array string: kategori data yang diproses'],
+                'data_subjects' => ['array string: siapa subjek datanya'],
+                'recipients' => ['array string: siapa penerima/pengakses data'],
+                'retention_period' => 'string: periode retensi data',
+                'security_measures' => 'string: langkah keamanan yang diterapkan',
+                'wizard_data' => [
+                    'detail_pemrosesan' => ['processing_activity' => '', 'entity' => '', 'division' => '', 'work_unit' => '', 'description' => '', 'risk_level' => ''],
+                    'dpo_team' => ['kategori_pemrosesan' => '', 'dpo_name' => '', 'dpo_email' => '', 'dpo_phone' => ''],
+                    'informasi_pemrosesan' => ['purpose' => '', 'jenis_pemrosesan' => [], 'sistem_terkait' => [], 'legal_basis' => ''],
+                    'pengumpulan_data' => ['sumber_data' => '', 'kategori_subjek' => [], 'jenis_data' => []],
+                    'penggunaan_penyimpanan' => ['cara_pemrosesan' => '', 'lokasi_penyimpanan' => ''],
+                    'pengiriman_data' => ['transfer_domestik' => '', 'transfer_internasional' => '', 'negara_tujuan' => '', 'safeguards' => ''],
+                    'retensi_keamanan' => ['retention_period' => '', 'prosedur_pemusnahan' => '', 'langkah_keamanan' => ''],
+                ],
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        $user = "Buatkan draft ROPA lengkap untuk aktivitas pemrosesan: \"{$activityName}\".\n"
+            . "Isi SEMUA field berdasarkan konteks organisasi di atas.\n"
+            . "Pastikan dasar hukum mengacu UU PDP Indonesia (UU No. 27 Tahun 2022).\n"
+            . "Jawab HANYA JSON valid, tanpa markdown atau teks tambahan.";
+
+        return $this->ask($system, $user, 4000);
+    }
+
+    /**
+     * DPIA Auto-Fill: Generate complete DPIA draft
+     */
+    public function dpiaAutoFill(string $description, string $tenantContext): ?array
+    {
+        $system = "Kamu adalah ahli penilaian risiko data pribadi UU PDP Indonesia.\n"
+            . "Output WAJIB berupa JSON valid.\n\n"
+            . "KONTEKS ORGANISASI:\n{$tenantContext}\n\n"
+            . "FORMAT OUTPUT:\n"
+            . json_encode([
+                'description' => 'string: deskripsi pemrosesan yang dinilai',
+                'risk_level' => 'enum: low | medium | high',
+                'risk_assessment' => [
+                    'likelihood' => 'integer 1-5',
+                    'impact' => 'integer 1-5',
+                    'risks' => [['category' => 'string', 'likelihood' => '1-5', 'impact' => '1-5', 'description' => 'string', 'mitigation' => 'string']],
+                ],
+                'mitigation_measures' => [['measure' => 'string', 'priority' => 'high|medium|low', 'timeline' => 'string']],
+                'wizard_data' => [
+                    'informasi_dpia' => ['description' => '', 'scope' => '', 'objectives' => ''],
+                    'koneksi_ropa' => ['related_ropa' => '', 'data_flow' => ''],
+                    'potensi_risiko' => ['identified_risks' => [], 'risk_score' => 0],
+                ],
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        $user = "Buatkan draft DPIA lengkap untuk pemrosesan: \"{$description}\".\n"
+            . "Identifikasi minimal 5 risiko spesifik berdasarkan konteks organisasi.\n"
+            . "Jawab HANYA JSON valid.";
+
+        return $this->ask($system, $user, 4000);
+    }
+
+    /**
+     * Breach Auto-Fill: Generate incident report draft
+     */
+    public function breachAutoFill(string $incidentTitle, string $tenantContext): ?array
+    {
+        $system = "Kamu adalah ahli incident response dan breach management UU PDP.\n"
+            . "Output WAJIB berupa JSON valid.\n\n"
+            . "KONTEKS ORGANISASI:\n{$tenantContext}\n\n"
+            . "FORMAT OUTPUT:\n"
+            . json_encode([
+                'title' => 'string: judul insiden',
+                'description' => 'string: deskripsi lengkap insiden (5-7 kalimat)',
+                'severity' => 'enum: low | medium | high | critical',
+                'source' => 'string: sumber insiden',
+                'affected_data_types' => ['array string: jenis data yang terdampak'],
+                'affected_subjects_count' => 'integer: estimasi jumlah subjek terdampak',
+                'root_cause' => 'string: analisis akar masalah',
+                'remediation_plan' => 'string: rencana remediasi',
+                'notification_required' => 'boolean: apakah wajib notifikasi ke KOMDIGI?',
+                'containment_checklist' => [['step' => 'string', 'completed' => false]],
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        $user = "Buatkan draft laporan insiden breach untuk: \"{$incidentTitle}\".\n"
+            . "Sesuaikan severity, dampak, dan remediasi berdasarkan konteks organisasi.\n"
+            . "Jawab HANYA JSON valid.";
+
+        return $this->ask($system, $user, 3000);
+    }
+
+    /**
+     * DSR Auto-Fill: Generate DSR handling draft
+     */
+    public function dsrAutoFill(string $requestType, string $requesterName, string $tenantContext): ?array
+    {
+        $system = "Kamu adalah DPO yang menangani Data Subject Request sesuai UU PDP.\n"
+            . "Output WAJIB berupa JSON valid.\n\n"
+            . "KONTEKS ORGANISASI:\n{$tenantContext}\n\n"
+            . "FORMAT OUTPUT:\n"
+            . json_encode([
+                'request_type' => 'string: tipe request (access/correction/deletion/portability/objection)',
+                'requester_name' => 'string',
+                'description' => 'string: deskripsi permintaan (2-3 kalimat profesional)',
+                'verification_status' => 'string: pending',
+                'response_draft' => 'string: draft surat balasan formal ke pemohon',
+                'internal_checklist' => ['array string: langkah internal yang perlu dilakukan'],
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        $user = "Buatkan draft penanganan DSR tipe \"{$requestType}\" dari pemohon \"{$requesterName}\".\n"
+            . "Sertakan draft surat balasan formal.\n"
+            . "Jawab HANYA JSON valid.";
+
+        return $this->ask($system, $user, 2500);
+    }
 }

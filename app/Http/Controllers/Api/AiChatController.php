@@ -6,6 +6,7 @@ use App\Models\AppSetting;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\KnowledgeBaseSection;
+use App\Services\CreditService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
@@ -26,6 +27,18 @@ class AiChatController extends Controller
         $apiKey = AppSetting::get('deepseek_api_key');
         if (!$apiKey) {
             return response()->json(['message' => 'API key belum dikonfigurasi. Hubungi SuperAdmin.'], 503);
+        }
+
+        // Credit check for chat (0.25 per message)
+        $orgId = $request->user()->org_id;
+        if ($orgId) {
+            CreditService::resetIfNeeded($orgId);
+            if (!CreditService::hasCredit($orgId, 'chat')) {
+                return response()->json([
+                    'message' => 'Quota AI chat Anda habis bulan ini.',
+                    'credits_exhausted' => true,
+                ], 402);
+            }
         }
 
         $userMessage = $request->message;
@@ -162,6 +175,11 @@ PROMPT;
             ]);
 
             $conversation->update(['last_message_at' => now()]);
+
+            // Deduct chat credit on success
+            if ($orgId) {
+                CreditService::deduct($orgId, $user->id, 'chat', 'chat');
+            }
 
             return response()->json([
                 'reply' => $reply,
