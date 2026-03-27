@@ -13,6 +13,17 @@ class ExportController extends Controller
     // =============================================
     // GENERIC CSV EXPORT
     // =============================================
+    private function getQuery(Request $request, string $modelClass)
+    {
+        $query = $modelClass::query();
+        if ($request->user()->role !== 'superadmin') {
+            $query->where('org_id', $request->user()->org_id);
+        } elseif ($request->filled('org_id')) {
+            $query->where('org_id', $request->org_id);
+        }
+        return $query;
+    }
+
     private function streamCsv(string $filename, array $headers, iterable $rows): StreamedResponse
     {
         return response()->streamDownload(function () use ($headers, $rows) {
@@ -35,8 +46,7 @@ class ExportController extends Controller
     // =============================================
     public function ropa(Request $request)
     {
-        $orgId = $request->user()->org_id;
-        $items = Ropa::where('org_id', $orgId)->whereNull('deleted_at')->orderBy('created_at', 'desc')->get();
+        $items = $this->getQuery($request, Ropa::class)->whereNull('deleted_at')->orderBy('created_at', 'desc')->get();
 
         $headers = ['No. Registrasi', 'Aktivitas Pemrosesan', 'Tujuan', 'Dasar Hukum', 'Divisi', 'Kategori Data', 'Subjek Data', 'Penerima', 'Retensi', 'Level Risiko', 'Status', 'Progress', 'Dibuat', 'Diperbarui'];
 
@@ -65,8 +75,7 @@ class ExportController extends Controller
     // =============================================
     public function dpia(Request $request)
     {
-        $orgId = $request->user()->org_id;
-        $items = Dpia::where('org_id', $orgId)->whereNull('deleted_at')->orderBy('created_at', 'desc')->get();
+        $items = $this->getQuery($request, Dpia::class)->whereNull('deleted_at')->orderBy('created_at', 'desc')->get();
 
         $headers = ['No. Registrasi', 'Deskripsi', 'Level Risiko', 'Status', 'ROPA ID', 'Progress', 'Approver', 'Tanggal Approval', 'Dibuat', 'Diperbarui'];
 
@@ -91,8 +100,7 @@ class ExportController extends Controller
     // =============================================
     public function breach(Request $request)
     {
-        $orgId = $request->user()->org_id;
-        $items = BreachIncident::where('org_id', $orgId)->whereNull('deleted_at')->where('is_simulation', false)->orderBy('created_at', 'desc')->get();
+        $items = $this->getQuery($request, BreachIncident::class)->whereNull('deleted_at')->where('is_simulation', false)->orderBy('created_at', 'desc')->get();
 
         $headers = ['Kode Insiden', 'Judul', 'Deskripsi', 'Severity', 'Status', 'Sumber', 'Jumlah Terdampak', 'Wajib Notifikasi', 'Root Cause', 'Rencana Remediasi', 'Terdeteksi', 'Assessed', 'Contained', 'Ditutup', 'Notif KOMDIGI', 'Notif Subjek', 'Deadline Notifikasi'];
 
@@ -124,8 +132,7 @@ class ExportController extends Controller
     // =============================================
     public function dsr(Request $request)
     {
-        $orgId = $request->user()->org_id;
-        $items = DsrRequest::where('org_id', $orgId)->whereNull('deleted_at')->orderBy('created_at', 'desc')->get();
+        $items = $this->getQuery($request, DsrRequest::class)->whereNull('deleted_at')->orderBy('created_at', 'desc')->get();
 
         $headers = ['Request ID', 'Tipe', 'Nama Pemohon', 'Email', 'Deskripsi', 'Status', 'Deadline', 'Dibuat'];
 
@@ -148,8 +155,7 @@ class ExportController extends Controller
     // =============================================
     public function consent(Request $request)
     {
-        $orgId = $request->user()->org_id;
-        $items = ConsentCollectionPoint::where('org_id', $orgId)->whereNull('deleted_at')->orderBy('created_at', 'desc')->get();
+        $items = $this->getQuery($request, ConsentCollectionPoint::class)->whereNull('deleted_at')->orderBy('created_at', 'desc')->get();
 
         $headers = ['Collection ID', 'Nama', 'Domain', 'Redirect URL', 'Jumlah Items', 'Jumlah Records', 'Dibuat'];
 
@@ -171,8 +177,7 @@ class ExportController extends Controller
     // =============================================
     public function gapAssessment(Request $request)
     {
-        $orgId = $request->user()->org_id;
-        $items = GapAssessment::where('org_id', $orgId)->whereNull('deleted_at')->orderBy('created_at', 'desc')->get();
+        $items = $this->getQuery($request, GapAssessment::class)->whereNull('deleted_at')->orderBy('created_at', 'desc')->get();
 
         $headers = ['Assessment ID', 'Skor Keseluruhan', 'Level Kepatuhan', 'Status', 'Dibuat', 'Diperbarui'];
 
@@ -193,8 +198,7 @@ class ExportController extends Controller
     // =============================================
     public function dataDiscovery(Request $request)
     {
-        $orgId = $request->user()->org_id;
-        $items = InformationSystem::where('org_id', $orgId)->whereNull('deleted_at')->orderBy('created_at', 'desc')->get();
+        $items = $this->getQuery($request, InformationSystem::class)->whereNull('deleted_at')->orderBy('created_at', 'desc')->get();
 
         $headers = ['Nama Sistem', 'Tipe Sumber', 'Owner', 'Status Scan', 'Progress Scan', 'PDP Alert', 'PII Alert', 'Last Scanned', 'Dibuat'];
 
@@ -218,8 +222,7 @@ class ExportController extends Controller
     // =============================================
     public function aiResults(Request $request)
     {
-        $orgId = $request->user()->org_id;
-        $query = AiResult::where('org_id', $orgId)->orderBy('created_at', 'desc');
+        $query = $this->getQuery($request, AiResult::class)->orderBy('created_at', 'desc');
 
         if ($request->has('feature_type') && $request->feature_type !== 'all') {
             $query->where('feature_type', $request->feature_type);
@@ -261,8 +264,7 @@ class ExportController extends Controller
     // =============================================
     public function aiResultSingle(Request $request, string $id)
     {
-        $orgId = $request->user()->org_id;
-        $result = AiResult::where('org_id', $orgId)->findOrFail($id);
+        $result = $this->getQuery($request, AiResult::class)->findOrFail($id);
 
         $data = [
             'id' => $result->id,
@@ -286,40 +288,46 @@ class ExportController extends Controller
     // =============================================
     public function complianceReport(Request $request)
     {
-        $orgId = $request->user()->org_id;
+        $ropaQuery = $this->getQuery($request, Ropa::class);
+        $dpiaQuery = $this->getQuery($request, Dpia::class);
+        $breachQuery = $this->getQuery($request, BreachIncident::class);
+        $dsrQuery = $this->getQuery($request, DsrRequest::class);
+        $consentQuery = $this->getQuery($request, ConsentCollectionPoint::class);
+        $gapQuery = $this->getQuery($request, GapAssessment::class);
+        $aiQuery = $this->getQuery($request, AiResult::class);
 
         $data = [
             'generated_at' => now()->toISOString(),
             'ropa' => [
-                'total' => Ropa::where('org_id', $orgId)->whereNull('deleted_at')->count(),
-                'by_status' => Ropa::where('org_id', $orgId)->whereNull('deleted_at')->select('status', DB::raw('count(*) as count'))->groupBy('status')->pluck('count', 'status'),
-                'by_risk' => Ropa::where('org_id', $orgId)->whereNull('deleted_at')->select('risk_level', DB::raw('count(*) as count'))->groupBy('risk_level')->pluck('count', 'risk_level'),
+                'total' => (clone $ropaQuery)->whereNull('deleted_at')->count(),
+                'by_status' => (clone $ropaQuery)->whereNull('deleted_at')->select('status', DB::raw('count(*) as count'))->groupBy('status')->pluck('count', 'status'),
+                'by_risk' => (clone $ropaQuery)->whereNull('deleted_at')->select('risk_level', DB::raw('count(*) as count'))->groupBy('risk_level')->pluck('count', 'risk_level'),
             ],
             'dpia' => [
-                'total' => Dpia::where('org_id', $orgId)->whereNull('deleted_at')->count(),
-                'by_status' => Dpia::where('org_id', $orgId)->whereNull('deleted_at')->select('status', DB::raw('count(*) as count'))->groupBy('status')->pluck('count', 'status'),
-                'approved' => Dpia::where('org_id', $orgId)->whereNull('deleted_at')->where('status', 'approved')->count(),
+                'total' => (clone $dpiaQuery)->whereNull('deleted_at')->count(),
+                'by_status' => (clone $dpiaQuery)->whereNull('deleted_at')->select('status', DB::raw('count(*) as count'))->groupBy('status')->pluck('count', 'status'),
+                'approved' => (clone $dpiaQuery)->whereNull('deleted_at')->where('status', 'approved')->count(),
             ],
             'breach' => [
-                'total' => BreachIncident::where('org_id', $orgId)->whereNull('deleted_at')->where('is_simulation', false)->count(),
-                'active' => BreachIncident::where('org_id', $orgId)->whereNull('deleted_at')->where('is_simulation', false)->whereNotIn('status', ['closed'])->count(),
-                'by_severity' => BreachIncident::where('org_id', $orgId)->whereNull('deleted_at')->where('is_simulation', false)->select('severity', DB::raw('count(*) as count'))->groupBy('severity')->pluck('count', 'severity'),
+                'total' => (clone $breachQuery)->whereNull('deleted_at')->where('is_simulation', false)->count(),
+                'active' => (clone $breachQuery)->whereNull('deleted_at')->where('is_simulation', false)->whereNotIn('status', ['closed'])->count(),
+                'by_severity' => (clone $breachQuery)->whereNull('deleted_at')->where('is_simulation', false)->select('severity', DB::raw('count(*) as count'))->groupBy('severity')->pluck('count', 'severity'),
             ],
             'dsr' => [
-                'total' => DsrRequest::where('org_id', $orgId)->whereNull('deleted_at')->count(),
-                'by_status' => DsrRequest::where('org_id', $orgId)->whereNull('deleted_at')->select('status', DB::raw('count(*) as count'))->groupBy('status')->pluck('count', 'status'),
-                'by_type' => DsrRequest::where('org_id', $orgId)->whereNull('deleted_at')->select('request_type', DB::raw('count(*) as count'))->groupBy('request_type')->pluck('count', 'request_type'),
+                'total' => (clone $dsrQuery)->whereNull('deleted_at')->count(),
+                'by_status' => (clone $dsrQuery)->whereNull('deleted_at')->select('status', DB::raw('count(*) as count'))->groupBy('status')->pluck('count', 'status'),
+                'by_type' => (clone $dsrQuery)->whereNull('deleted_at')->select('request_type', DB::raw('count(*) as count'))->groupBy('request_type')->pluck('count', 'request_type'),
             ],
             'consent' => [
-                'total_points' => ConsentCollectionPoint::where('org_id', $orgId)->whereNull('deleted_at')->count(),
+                'total_points' => (clone $consentQuery)->whereNull('deleted_at')->count(),
             ],
             'gap_assessment' => [
-                'latest_score' => GapAssessment::where('org_id', $orgId)->whereNull('deleted_at')->latest()->value('overall_score') ?? 0,
-                'latest_level' => GapAssessment::where('org_id', $orgId)->whereNull('deleted_at')->latest()->value('compliance_level') ?? '-',
+                'latest_score' => (clone $gapQuery)->whereNull('deleted_at')->latest()->value('overall_score') ?? 0,
+                'latest_level' => (clone $gapQuery)->whereNull('deleted_at')->latest()->value('compliance_level') ?? '-',
             ],
             'ai_analysis' => [
-                'total_runs' => AiResult::where('org_id', $orgId)->count(),
-                'by_feature' => AiResult::where('org_id', $orgId)->select('feature_type', DB::raw('count(*) as count'))->groupBy('feature_type')->pluck('count', 'feature_type'),
+                'total_runs' => (clone $aiQuery)->count(),
+                'by_feature' => (clone $aiQuery)->select('feature_type', DB::raw('count(*) as count'))->groupBy('feature_type')->pluck('count', 'feature_type'),
             ],
         ];
 

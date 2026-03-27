@@ -49,13 +49,26 @@ class ModuleCrudController extends Controller
         return $prefix . '-' . $year . '-' . str_pad($maxNum + 1, 3, '0', STR_PAD_LEFT);
     }
 
+    private function getQuery(Request $request, string $module)
+    {
+        $model = $this->getModel($module);
+        $query = $model->newQuery();
+        
+        if ($request->user()->role !== 'superadmin') {
+            $query->where('org_id', $request->user()->org_id);
+        } elseif ($request->filled('org_id')) {
+            $query->where('org_id', $request->org_id);
+        }
+        
+        return $query;
+    }
+
     /**
      * List records
      */
     public function index(Request $request, string $module)
     {
-        $model = $this->getModel($module);
-        $query = $model->where('org_id', $request->user()->org_id);
+        $query = $this->getQuery($request, $module);
 
         if ($request->get('trash'))
             $query->onlyTrashed();
@@ -78,7 +91,18 @@ class ModuleCrudController extends Controller
         try {
             $model = $this->getModel($module);
             $data = $request->all();
-            $data['org_id'] = $request->user()->org_id;
+            
+            // Allow superadmin to set org_id, otherwise force current user's org_id
+            if ($request->user()->role === 'superadmin' && $request->filled('org_id')) {
+                $data['org_id'] = $request->org_id;
+            } else {
+                $data['org_id'] = $request->user()->org_id;
+            }
+
+            if (empty($data['org_id'])) {
+                return response()->json(['message' => 'Organization ID is required'], 422);
+            }
+
             $data['created_by'] = $request->user()->id;
 
             // Ensure boolean fields are properly cast
@@ -189,10 +213,9 @@ class ModuleCrudController extends Controller
     /**
      * Show record
      */
-    public function show(string $module, string $id)
+    public function show(Request $request, string $module, string $id)
     {
-        $model = $this->getModel($module);
-        $query = $model->withTrashed();
+        $query = $this->getQuery($request, $module)->withTrashed();
 
         if ($module === 'consent') {
             $query->with(['items', 'records']);
@@ -206,8 +229,7 @@ class ModuleCrudController extends Controller
      */
     public function update(Request $request, string $module, string $id)
     {
-        $model = $this->getModel($module);
-        $record = $model->findOrFail($id);
+        $record = $this->getQuery($request, $module)->findOrFail($id);
 
         // Auto-append timeline for breach status changes
         if ($module === 'breach' && $request->has('status') && $record->status !== $request->input('status')) {
@@ -280,20 +302,18 @@ class ModuleCrudController extends Controller
     /**
      * Soft delete
      */
-    public function destroy(string $module, string $id)
+    public function destroy(Request $request, string $module, string $id)
     {
-        $model = $this->getModel($module);
-        $model->findOrFail($id)->delete();
+        $this->getQuery($request, $module)->findOrFail($id)->delete();
         return response()->json(['message' => 'Moved to trash']);
     }
 
     /**
      * Restore
      */
-    public function restore(string $module, string $id)
+    public function restore(Request $request, string $module, string $id)
     {
-        $model = $this->getModel($module);
-        $record = $model->onlyTrashed()->findOrFail($id);
+        $record = $this->getQuery($request, $module)->onlyTrashed()->findOrFail($id);
         $record->restore();
         return response()->json(['message' => 'Restored', 'data' => $record]);
     }
@@ -301,18 +321,20 @@ class ModuleCrudController extends Controller
     /**
      * Force delete
      */
-    public function forceDelete(string $module, string $id)
+    public function forceDelete(Request $request, string $module, string $id)
     {
-        $model = $this->getModel($module);
-        $model->onlyTrashed()->findOrFail($id)->forceDelete();
+        $this->getQuery($request, $module)->onlyTrashed()->findOrFail($id)->forceDelete();
         return response()->json(['message' => 'Permanently deleted']);
     }
 
     /**
      * Get audit history for a record
      */
-    public function history(string $module, string $id)
+    public function history(Request $request, string $module, string $id)
     {
+        // First ensure record belongs to user's org
+        $this->getQuery($request, $module)->withTrashed()->findOrFail($id);
+
         $logs = AuditLog::where('module', $module)
             ->where('record_id', $id)
             ->orderBy('created_at', 'desc')

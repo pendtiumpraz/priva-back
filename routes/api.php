@@ -22,6 +22,9 @@ Route::get('/public/feature-requests', [\App\Http\Controllers\Api\FeatureRequest
 Route::post('/public/feature-requests', [\App\Http\Controllers\Api\FeatureRequestController::class, 'publicStore']);
 Route::post('/public/feature-requests/{id}/upvote', [\App\Http\Controllers\Api\FeatureRequestController::class, 'upvote']);
 
+// Public Consent API (for banner integration)
+Route::post('/public/consent', [\App\Http\Controllers\Api\ConsentLogController::class, 'capture']);
+
 // =============================================
 // Protected Routes (Sanctum)
 // =============================================
@@ -102,6 +105,9 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/{id}/restore', [ModuleCrudController::class , 'restore']);
             Route::delete('/{id}/force', [ModuleCrudController::class , 'forceDelete']);
         });
+        
+        // Consent Logs (View all consent captured)
+        Route::get('/consent-logs', [\App\Http\Controllers\Api\ConsentLogController::class, 'index']);
 
         // =============================================
         // License Management

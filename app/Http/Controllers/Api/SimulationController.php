@@ -8,9 +8,20 @@ use Illuminate\Http\Request;
 
 class SimulationController extends Controller
 {
+    private function getQuery(Request $request)
+    {
+        $query = BreachSimulation::query();
+        if ($request->user()->role !== 'superadmin') {
+            $query->where('org_id', $request->user()->org_id);
+        } elseif ($request->filled('org_id')) {
+            $query->where('org_id', $request->org_id);
+        }
+        return $query;
+    }
+
     public function index(Request $request)
     {
-        $query = BreachSimulation::where('org_id', $request->user()->org_id);
+        $query = $this->getQuery($request);
         if ($request->get('trash'))
             $query->onlyTrashed();
         return response()->json(['data' => $query->orderBy('created_at', 'desc')->get()]);
@@ -50,8 +61,17 @@ class SimulationController extends Controller
         if (!$template)
             return response()->json(['message' => 'Invalid scenario type'], 422);
 
+        $orgId = $request->user()->org_id;
+        if ($request->user()->role === 'superadmin' && $request->filled('org_id')) {
+            $orgId = $request->org_id;
+        }
+
+        if (empty($orgId)) {
+            return response()->json(['message' => 'Organization ID is required'], 422);
+        }
+
         $simulation = BreachSimulation::create([
-            'org_id' => $request->user()->org_id,
+            'org_id' => $orgId,
             'scenario_title' => $request->title,
             'scenario_type' => $request->scenario_type,
             'scenario_description' => $template['description'] ?? '',
@@ -67,18 +87,18 @@ class SimulationController extends Controller
     /**
      * Get drill detail with full scenario
      */
-    public function show(string $id)
+    public function show(Request $request, string $id)
     {
-        $sim = BreachSimulation::withTrashed()->findOrFail($id);
+        $sim = $this->getQuery($request)->withTrashed()->findOrFail($id);
         return response()->json(['data' => $sim]);
     }
 
     /**
      * Start the drill
      */
-    public function start(string $id)
+    public function start(Request $request, string $id)
     {
-        $sim = BreachSimulation::findOrFail($id);
+        $sim = $this->getQuery($request)->findOrFail($id);
         if ($sim->status !== 'draft' && $sim->status !== 'scheduled') {
             return response()->json(['message' => 'Drill already started or completed'], 422);
         }
@@ -116,7 +136,7 @@ class SimulationController extends Controller
             'responses' => 'required|array',
         ]);
 
-        $sim = BreachSimulation::findOrFail($id);
+        $sim = $this->getQuery($request)->findOrFail($id);
         if ($sim->status !== 'in_progress') {
             return response()->json(['message' => 'Drill not in progress'], 422);
         }
