@@ -184,5 +184,11 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/ai-results/{id}', [\App\Http\Controllers\Api\ExportController::class, 'aiResultSingle']);
             Route::get('/compliance-report', [\App\Http\Controllers\Api\ExportController::class, 'complianceReport']);
         });
+
+        // =============================================
+        // System / Superadmin Tools
+        // =============================================
+        Route::post('/system/update-backend', [\App\Http\Controllers\Api\SystemUpdateController::class, 'updateBackend']);
+
     });
 
