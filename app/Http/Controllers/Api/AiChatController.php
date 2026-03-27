@@ -54,7 +54,7 @@ class AiChatController extends Controller
         if (!$conversation) {
             $conversation = ChatConversation::create([
                 'user_id' => $user->id,
-                'org_id' => $user->org_id ?? '',
+                'org_id' => $user->org_id,
                 'user_name' => $user->name,
                 'user_email' => $user->email,
                 'status' => 'open',
