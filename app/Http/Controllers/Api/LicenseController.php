@@ -211,8 +211,33 @@ class LicenseController extends Controller
             $data = $response->json();
 
             if ($response->ok() && ($data['valid'] ?? false)) {
-                // Save license locally
                 $licenseData = $data['license'] ?? [];
+
+                // Check existing active license for this tenant — accumulate remaining time
+                $newExpiresAt = $licenseData['expires_at'] ?? null;
+
+                if ($user->org_id && $newExpiresAt) {
+                    $existingLicense = License::where('org_id', $user->org_id)
+                        ->where('status', 'active')
+                        ->where('license_type', 'saas')
+                        ->whereNotNull('expires_at')
+                        ->where('expires_at', '>', now())
+                        ->orderBy('expires_at', 'desc')
+                        ->first();
+
+                    if ($existingLicense) {
+                        // Calculate remaining days from old license
+                        $remainingDays = (int) now()->diffInDays($existingLicense->expires_at, false);
+                        if ($remainingDays > 0) {
+                            // New expiry = new expires_at + remaining days from old license
+                            $newExpiresAt = \Carbon\Carbon::parse($newExpiresAt)->addDays($remainingDays);
+                        }
+                        // Mark old license as superseded
+                        $existingLicense->update(['status' => 'superseded']);
+                    }
+                }
+
+                // Save license locally
                 $local = License::updateOrCreate(
                 ['license_key' => $request->license_key],
                 [
@@ -222,7 +247,7 @@ class LicenseController extends Controller
                     'features' => $licenseData['features'] ?? [],
                     'org_name' => $licenseData['org_name'] ?? $user->organization->name ?? null,
                     'org_id' => $user->org_id ?? null,
-                    'expires_at' => $licenseData['expires_at'] ?? null,
+                    'expires_at' => $newExpiresAt,
                     'activated_at' => $licenseData['activated_at'] ?? now(),
                     'activation_count' => 1,
                     'max_activations' => 1,
