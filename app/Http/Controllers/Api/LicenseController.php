@@ -305,16 +305,22 @@ class LicenseController extends Controller
         $license = null;
 
         if ($user->role === 'superadmin') {
+            // SuperAdmin: check for ANY platform license (org_id = NULL)
+            // All super admins share ONE platform license
             $license = License::where('status', 'active')
-                ->where(function($q) use ($user) {
-                    $q->whereNull('org_id')
-                      ->orWhere('created_by', $user->id)
-                      ->orWhere('org_id', $user->org_id);
-                })
+                ->whereNull('org_id')
                 ->orderBy('created_at', 'desc')
                 ->first();
         } else {
-            // admin, dpo, maker, viewer
+            // All tenant roles (admin, dpo, maker, viewer):
+            // check their TENANT's license by org_id
+            // If tenant has no license, ALL roles in that tenant are locked
+            if (!$user->org_id) {
+                return response()->json([
+                    'licensed' => false,
+                    'message' => 'Akun tidak terhubung ke organisasi.',
+                ]);
+            }
             $license = License::where('org_id', $user->org_id)
                 ->where('status', 'active')
                 ->orderBy('created_at', 'desc')
@@ -322,19 +328,24 @@ class LicenseController extends Controller
         }
 
         if (!$license) {
+            $msg = $user->role === 'superadmin'
+                ? 'Belum ada platform license. Silahkan aktivasi license.'
+                : 'Tenant ini belum memiliki license aktif. Hubungi administrator.';
             return response()->json([
                 'licensed' => false,
-                'message' => 'Belum ada license aktif. Silahkan masukkan license key.',
+                'message' => $msg,
+                'role' => $user->role,
             ]);
         }
 
-        // Check expiry
+        // Check expiry (SaaS)
         if ($license->isExpired()) {
             $license->update(['status' => 'expired']);
             return response()->json([
                 'licensed' => false,
                 'message' => 'License sudah expired. Silahkan perpanjang.',
                 'expired_at' => $license->expires_at,
+                'role' => $user->role,
             ]);
         }
 
@@ -349,6 +360,7 @@ class LicenseController extends Controller
                 'expires_at' => $license->expires_at,
                 'org_name' => $license->org_name,
             ],
+            'role' => $user->role,
         ]);
     }
 
