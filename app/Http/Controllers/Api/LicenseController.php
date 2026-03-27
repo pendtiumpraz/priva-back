@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\License;
 use App\Models\LicenseActivation;
+use App\Models\Organization;
 use App\Models\PricingPlan;
 use Illuminate\Http\Request;
 
@@ -203,6 +204,20 @@ class LicenseController extends Controller
                     'ip_log' => [['ip' => $ip, 'domain' => $domain, 'at' => now()->toISOString()]],
                 ]
                 );
+
+                // Auto-set AI credits based on package type
+                if ($user->org_id) {
+                    $credits = match ($licenseData['package_type'] ?? 'basic') {
+                        'ai'       => 100,
+                        'ai_agent' => 500,
+                        default    => 0,
+                    };
+                    Organization::where('id', $user->org_id)->update([
+                        'ai_credits_monthly' => $credits,
+                        'ai_credits_remaining' => $credits,
+                        'ai_credits_reset_at' => now()->addMonth(),
+                    ]);
+                }
 
                 return response()->json([
                     'message' => 'License berhasil diaktifkan!',
