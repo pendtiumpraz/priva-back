@@ -27,31 +27,35 @@ class SystemUpdateController extends Controller
             // Get commits that are in origin/main but NOT in our local HEAD
             $logOutput = shell_exec("cd {$basePath} && git log HEAD..origin/main --pretty=format:\"%h|%s|%cd\" --date=short 2>&1");
             
-            if (!$logOutput || trim($logOutput) === '') {
-                return response()->json([
-                    'up_to_date' => true,
-                    'commits' => []
-                ]);
-            }
-
-            // Parse git log output
-            $commits = [];
-            $lines = explode("\n", trim($logOutput));
-            foreach ($lines as $line) {
-                if (empty(trim($line))) continue;
-                $parts = explode('|', $line, 3);
-                if (count($parts) === 3) {
-                    $commits[] = [
-                        'hash' => trim($parts[0]),
-                        'message' => trim($parts[1]),
-                        'date' => trim($parts[2]),
-                    ];
+            // Parse function helper
+            $parseLog = function($out) {
+                $res = [];
+                if (!$out || trim($out) === '') return $res;
+                $lines = explode("\n", trim($out));
+                foreach ($lines as $line) {
+                    if (empty(trim($line))) continue;
+                    $parts = explode('|', $line, 3);
+                    if (count($parts) === 3) {
+                        $res[] = [
+                            'hash' => trim($parts[0]),
+                            'message' => trim($parts[1]),
+                            'date' => trim($parts[2]),
+                        ];
+                    }
                 }
-            }
+                return $res;
+            };
+
+            $pendingCommits = $parseLog($logOutput);
+
+            // Get last 15 commits already installed locally
+            $installedOutput = shell_exec("cd {$basePath} && git log -n 15 --pretty=format:\"%h|%s|%cd\" --date=short 2>&1");
+            $installedCommits = $parseLog($installedOutput);
 
             return response()->json([
-                'up_to_date' => count($commits) === 0,
-                'commits' => $commits
+                'up_to_date' => count($pendingCommits) === 0,
+                'commits' => $pendingCommits,
+                'installed' => $installedCommits
             ]);
 
         } catch (\Exception $e) {
