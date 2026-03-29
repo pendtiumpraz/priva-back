@@ -87,48 +87,57 @@ class AiProviderController extends Controller
             'extra_config' => 'nullable|array',
         ]);
 
-        $orgId = $this->resolveOrgId($request);
+        try {
+            $orgId = $this->resolveOrgId($request);
 
-        if (!$orgId) {
-            return response()->json(['message' => 'Tidak ada organisasi. Buat organisasi terlebih dahulu.'], 400);
-        }
+            if (!$orgId) {
+                return response()->json(['message' => 'Tidak ada organisasi. Buat organisasi terlebih dahulu.'], 400);
+            }
 
-        // Check if exists
-        $existing = DB::table('ai_provider_configs')
-            ->where('org_id', $orgId)
-            ->where('provider_id', $request->provider_id)
-            ->first();
+            // Check if exists
+            $existing = DB::table('ai_provider_configs')
+                ->where('org_id', $orgId)
+                ->where('provider_id', $request->provider_id)
+                ->first();
 
-        if ($existing) {
-            DB::table('ai_provider_configs')
-                ->where('id', $existing->id)
-                ->update([
+            if ($existing) {
+                DB::table('ai_provider_configs')
+                    ->where('id', $existing->id)
+                    ->update([
+                        'api_key_encrypted' => encrypt($request->api_key),
+                        'extra_config' => $request->extra_config ? json_encode($request->extra_config) : null,
+                        'updated_at' => now(),
+                    ]);
+            } else {
+                DB::table('ai_provider_configs')->insert([
+                    'org_id' => $orgId,
+                    'provider_id' => $request->provider_id,
                     'api_key_encrypted' => encrypt($request->api_key),
                     'extra_config' => $request->extra_config ? json_encode($request->extra_config) : null,
+                    'is_verified' => false,
+                    'verified_at' => null,
+                    'created_at' => now(),
                     'updated_at' => now(),
                 ]);
-        } else {
-            DB::table('ai_provider_configs')->insert([
-                'org_id' => $orgId,
-                'provider_id' => $request->provider_id,
-                'api_key_encrypted' => encrypt($request->api_key),
-                'extra_config' => $request->extra_config ? json_encode($request->extra_config) : null,
-                'is_verified' => false,
-                'verified_at' => null,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        }
+            }
 
-        try {
-            \App\Models\AuditLog::log('ai_provider', (string)$request->provider_id, 'api_key_saved', [
-                'provider_id' => $request->provider_id,
-            ], 'manual');
+            try {
+                \App\Models\AuditLog::log('ai_provider', (string)$request->provider_id, 'api_key_saved', [
+                    'provider_id' => $request->provider_id,
+                ], 'manual');
+            } catch (\Exception $e) {
+                // Don't fail the save if audit log fails
+            }
+
+            return response()->json(['message' => 'API key saved successfully']);
         } catch (\Exception $e) {
-            // Don't fail the save if audit log fails
+            \Log::error('AI Provider saveApiKey error: ' . $e->getMessage() . ' | trace: ' . $e->getTraceAsString());
+            return response()->json([
+                'message' => 'Error saving API key: ' . $e->getMessage(),
+                'debug_org_id' => $this->resolveOrgId($request),
+                'debug_provider_id' => $request->provider_id,
+            ], 500);
         }
-
-        return response()->json(['message' => 'API key saved successfully']);
     }
 
     /**
