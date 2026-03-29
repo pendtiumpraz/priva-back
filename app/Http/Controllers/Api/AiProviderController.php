@@ -6,11 +6,25 @@ use App\Http\Controllers\Controller;
 use App\Models\AiProvider;
 use App\Models\AiModel;
 use Illuminate\Http\Request;
+use App\Models\Organization;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
 class AiProviderController extends Controller
 {
+    /**
+     * Resolve org_id — SuperAdmin may not have one, fallback to first org
+     */
+    private function resolveOrgId(Request $request): ?string
+    {
+        $orgId = $request->user()->org_id;
+        if (!$orgId && $request->user()->role === 'superadmin') {
+            $org = Organization::first();
+            return $org?->id;
+        }
+        return $orgId;
+    }
+
     /**
      * List all providers with their models
      */
@@ -31,7 +45,7 @@ class AiProviderController extends Controller
      */
     public function getConfig(Request $request)
     {
-        $orgId = $request->user()->org_id;
+        $orgId = $this->resolveOrgId($request);
 
         if (!$orgId) {
             return response()->json(['configs' => (object)[], 'selection' => null]);
@@ -73,10 +87,10 @@ class AiProviderController extends Controller
             'extra_config' => 'nullable|array',
         ]);
 
-        $orgId = $request->user()->org_id;
+        $orgId = $this->resolveOrgId($request);
 
         if (!$orgId) {
-            return response()->json(['message' => 'SuperAdmin tanpa organisasi tidak bisa simpan API key.'], 400);
+            return response()->json(['message' => 'Tidak ada organisasi. Buat organisasi terlebih dahulu.'], 400);
         }
 
         // Check if exists
@@ -127,7 +141,7 @@ class AiProviderController extends Controller
         ]);
 
         $provider = AiProvider::findOrFail($request->provider_id);
-        $orgId = $request->user()->org_id;
+        $orgId = $this->resolveOrgId($request);
 
         // Get API key: from request body or from saved config
         $apiKey = $request->api_key;
@@ -205,9 +219,9 @@ class AiProviderController extends Controller
             'model_id' => 'required|exists:ai_models,id',
         ]);
 
-        $orgId = $request->user()->org_id;
+        $orgId = $this->resolveOrgId($request);
         if (!$orgId) {
-            return response()->json(['error' => 'SuperAdmin tanpa organisasi'], 400);
+            return response()->json(['error' => 'Tidak ada organisasi.'], 400);
         }
 
         $mode = $request->mode;
@@ -268,7 +282,7 @@ class AiProviderController extends Controller
     {
         $request->validate(['provider_id' => 'required|exists:ai_providers,id']);
 
-        $orgId = $request->user()->org_id;
+        $orgId = $this->resolveOrgId($request);
 
         // Clear active selections if this provider was active
         $selection = DB::table('ai_active_selections')->where('org_id', $orgId)->first();
