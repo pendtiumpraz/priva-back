@@ -81,13 +81,19 @@ class AiProviderController extends Controller
      */
     public function saveApiKey(Request $request)
     {
-        $request->validate([
-            'provider_id' => 'required|exists:ai_providers,id',
-            'api_key' => 'required|string|min:8',
-            'extra_config' => 'nullable|array',
-        ]);
-
         try {
+            $request->validate([
+                'provider_id' => 'required|integer',
+                'api_key' => 'required|string|min:8',
+                'extra_config' => 'nullable|array',
+            ]);
+
+            // Verify provider exists
+            $provider = AiProvider::find($request->provider_id);
+            if (!$provider) {
+                return response()->json(['message' => 'Provider tidak ditemukan. Pastikan migration dan seeder sudah dijalankan.'], 404);
+            }
+
             $orgId = $this->resolveOrgId($request);
 
             if (!$orgId) {
@@ -130,12 +136,13 @@ class AiProviderController extends Controller
             }
 
             return response()->json(['message' => 'API key saved successfully']);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e; // Let Laravel handle validation errors normally
         } catch (\Exception $e) {
-            \Log::error('AI Provider saveApiKey error: ' . $e->getMessage() . ' | trace: ' . $e->getTraceAsString());
+            \Log::error('AI Provider saveApiKey error: ' . $e->getMessage() . ' | File: ' . $e->getFile() . ':' . $e->getLine());
             return response()->json([
-                'message' => 'Error saving API key: ' . $e->getMessage(),
-                'debug_org_id' => $this->resolveOrgId($request),
-                'debug_provider_id' => $request->provider_id,
+                'message' => 'Error: ' . $e->getMessage(),
+                'file' => basename($e->getFile()) . ':' . $e->getLine(),
             ], 500);
         }
     }
@@ -146,7 +153,7 @@ class AiProviderController extends Controller
     public function testConnection(Request $request)
     {
         $request->validate([
-            'provider_id' => 'required|exists:ai_providers,id',
+            'provider_id' => 'required|integer',
         ]);
 
         $provider = AiProvider::findOrFail($request->provider_id);
@@ -224,8 +231,8 @@ class AiProviderController extends Controller
     {
         $request->validate([
             'mode' => 'required|in:chat,agent',
-            'provider_id' => 'required|exists:ai_providers,id',
-            'model_id' => 'required|exists:ai_models,id',
+            'provider_id' => 'required|integer',
+            'model_id' => 'required|integer',
         ]);
 
         $orgId = $this->resolveOrgId($request);
@@ -289,7 +296,7 @@ class AiProviderController extends Controller
      */
     public function removeApiKey(Request $request)
     {
-        $request->validate(['provider_id' => 'required|exists:ai_providers,id']);
+        $request->validate(['provider_id' => 'required|integer']);
 
         $orgId = $this->resolveOrgId($request);
 
