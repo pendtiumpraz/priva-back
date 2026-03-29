@@ -261,72 +261,201 @@ class AiService
 
     /**
      * ROPA Auto-Fill: Generate complete ROPA draft from activity name + tenant context
+     *
+     * IMPORTANT: All checkbox/radio/select values MUST exactly match the frontend constants.
      */
     public function ropaAutoFill(string $activityName, string $tenantContext): ?array
     {
+        // Exact valid option values from frontend
+        $validKategoriPemrosesan = ['Pengendali Data Pribadi', 'Pemroses Data Pribadi'];
+        $validJenisPemrosesan = [
+            'Pemerolehan dan pengumpulan data', 'Pengolahan dan penganalisisan data',
+            'Penyimpanan data', 'Perbaikan dan pembaruan data',
+            'Penampilan, pengumuman, transfer, penyebarluasan, atau pengungkapan data',
+            'Penghapusan atau pemusnahan data',
+        ];
+        $validDasarPemrosesan = [
+            'Persetujuan yang Sah Secara Eksplisit', 'Pemenuhan Kewajiban Perjanjian',
+            'Pemenuhan Kewajiban Hukum', 'Pemenuhan Pelindungan Kepentingan Vital',
+            'Pelaksanaan Tugas dalam Rangka Kepentingan Umum',
+            'Pemenuhan Kepentingan yang Sah (Legitimate Interest)',
+        ];
+        $validJumlahSubjek = ['≤ 1.000 subjek', '> 1.000 subjek'];
+        $validDataSpesifik = [
+            'Data Kesehatan', 'Data Biometrik', 'Data Genetika', 'Data Catatan Kejahatan',
+            'Data Anak', 'Data Keuangan Pribadi', 'Data Ras/Etnis',
+            'Data Pandangan Politik', 'Data Agama/Kepercayaan', 'Data Orientasi Seksual',
+        ];
+        $validDataUmum = [
+            'Nama Lengkap', 'Jenis Kelamin', 'Kewarganegaraan', 'Agama', 'Status Perkawinan',
+            'Alamat', 'Nomor Telepon', 'Email', 'Tanggal Lahir', 'Pendidikan', 'Pekerjaan',
+        ];
+        $validDataPii = [
+            'NIK/KTP', 'Nomor Paspor', 'SIM', 'NPWP', 'Nomor Rekening',
+            'Alamat IP (IP Address)', 'Cookie ID', 'Device ID',
+        ];
+        $validKategoriPihak = [
+            'Pengendali Data (Controller)', 'Pemroses Data (Processor)',
+            'Pengendali Bersama (Joint Controller)', 'Lainnya',
+        ];
+        $validKontrolKeamanan = [
+            'Enkripsi (at-rest & in-transit)', 'Tokenization / Pseudonymization',
+            'Access Control (RBAC)', 'Backup & Disaster Recovery',
+            'Audit Log & Monitoring', 'Vulnerability Assessment', 'Penetration Testing',
+        ];
+
         $system = "Kamu adalah DPO (Data Protection Officer) ahli UU PDP Indonesia.\n"
-            . "Output WAJIB berupa JSON valid yang bisa langsung disimpan ke database.\n"
-            . "JANGAN tambahkan teks apapun di luar JSON.\n\n"
+            . "Output WAJIB berupa JSON valid. JANGAN tambahkan teks apapun di luar JSON.\n\n"
             . "KONTEKS ORGANISASI:\n{$tenantContext}\n\n"
-            . "FORMAT OUTPUT YANG DIHARAPKAN (isi setiap field berdasarkan konteks):\n"
+            . "ATURAN PENTING — NILAI CHECKBOX/RADIO/SELECT:\n"
+            . "Setiap field checkbox, radio, atau select HARUS menggunakan nilai PERSIS dari daftar opsi berikut.\n"
+            . "JANGAN buat nilai sendiri. HANYA pilih dari opsi yang tersedia.\n\n"
+            . "— kategori_pemrosesan (pilih 1): " . json_encode($validKategoriPemrosesan) . "\n"
+            . "— jenis_pemrosesan (pilih beberapa): " . json_encode($validJenisPemrosesan, JSON_UNESCAPED_UNICODE) . "\n"
+            . "— dasar_pemrosesan (pilih 1): " . json_encode($validDasarPemrosesan, JSON_UNESCAPED_UNICODE) . "\n"
+            . "— jumlah_subjek (pilih 1): " . json_encode($validJumlahSubjek, JSON_UNESCAPED_UNICODE) . "\n"
+            . "— jenis_data_spesifik (pilih yg relevan): " . json_encode($validDataSpesifik, JSON_UNESCAPED_UNICODE) . "\n"
+            . "— jenis_data_umum (pilih yg relevan): " . json_encode($validDataUmum, JSON_UNESCAPED_UNICODE) . "\n"
+            . "— jenis_data_pii (pilih yg relevan): " . json_encode($validDataPii, JSON_UNESCAPED_UNICODE) . "\n"
+            . "— kategori_pihak (pilih beberapa): " . json_encode($validKategoriPihak, JSON_UNESCAPED_UNICODE) . "\n"
+            . "— kontrol_keamanan (pilih beberapa): " . json_encode($validKontrolKeamanan, JSON_UNESCAPED_UNICODE) . "\n"
+            . "— pihak_ketiga, ada_penerima, transfer_luar (pilih 1): [\"Ya\", \"Tidak\"]\n\n"
+            . "FORMAT OUTPUT:\n"
             . json_encode([
-                'processing_activity' => 'string: nama aktivitas pemrosesan',
-                'purpose' => 'string: tujuan pemrosesan data (2-3 kalimat)',
-                'legal_basis' => 'string: dasar hukum sesuai UU PDP (pilih yang paling tepat)',
-                'division' => 'string: divisi/departemen yang bertanggung jawab',
-                'description' => 'string: deskripsi lengkap aktivitas pemrosesan (3-5 kalimat)',
-                'risk_level' => 'enum: low | medium | high',
-                'data_categories' => ['array string: kategori data yang diproses'],
-                'data_subjects' => ['array string: siapa subjek datanya'],
-                'recipients' => ['array string: siapa penerima/pengakses data'],
-                'retention_period' => 'string: periode retensi data',
-                'security_measures' => 'string: langkah keamanan yang diterapkan',
+                'processing_activity' => 'string',
+                'purpose' => 'string (2-3 kalimat)',
+                'legal_basis' => 'HARUS dari daftar dasar_pemrosesan di atas',
+                'division' => 'string',
+                'description' => 'string (3-5 kalimat)',
+                'risk_level' => 'low | medium | high',
                 'wizard_data' => [
-                    'detail_pemrosesan' => ['processing_activity' => '', 'entity' => '', 'division' => '', 'work_unit' => '', 'description' => '', 'risk_level' => ''],
-                    'dpo_team' => ['kategori_pemrosesan' => '', 'dpo_name' => '', 'dpo_email' => '', 'dpo_phone' => ''],
-                    'informasi_pemrosesan' => ['purpose' => '', 'jenis_pemrosesan' => [], 'sistem_terkait' => [], 'legal_basis' => ''],
-                    'pengumpulan_data' => ['sumber_data' => '', 'kategori_subjek' => [], 'jenis_data' => []],
-                    'penggunaan_penyimpanan' => ['cara_pemrosesan' => '', 'lokasi_penyimpanan' => ''],
-                    'pengiriman_data' => ['transfer_domestik' => '', 'transfer_internasional' => '', 'negara_tujuan' => '', 'safeguards' => ''],
-                    'retensi_keamanan' => ['retention_period' => '', 'prosedur_pemusnahan' => '', 'langkah_keamanan' => ''],
+                    'detail_pemrosesan' => [
+                        'nama_pemrosesan' => 'string',
+                        'entitas' => 'string',
+                        'divisi' => 'string',
+                        'unit_kerja' => 'string',
+                        'deskripsi' => 'string',
+                        'risk_level' => 'low | medium | high',
+                    ],
+                    'dpo_team' => [
+                        'kategori_pemrosesan' => 'HARUS dari daftar kategori_pemrosesan',
+                        'dpo_name' => 'string',
+                        'dpo_email' => 'string',
+                        'dpo_phone' => 'string',
+                    ],
+                    'informasi_pemrosesan' => [
+                        'tujuan' => 'string',
+                        'penjelasan' => 'string',
+                        'jenis_pemrosesan' => ['HARUS dari daftar jenis_pemrosesan, pilih yg relevan'],
+                        'dasar_pemrosesan' => 'HARUS dari daftar dasar_pemrosesan',
+                        'sistem_terkait' => ['array: nama sistem IT terkait'],
+                    ],
+                    'pengumpulan_data' => [
+                        'sumber_data' => 'string',
+                        'jumlah_subjek' => 'HARUS dari daftar jumlah_subjek',
+                        'kategori_subjek' => ['array string'],
+                        'jenis_data' => ['array string'],
+                        'jenis_data_spesifik' => ['HARUS dari daftar jenis_data_spesifik'],
+                        'jenis_data_umum' => ['HARUS dari daftar jenis_data_umum'],
+                        'jenis_data_pii' => ['HARUS dari daftar jenis_data_pii'],
+                    ],
+                    'penggunaan_penyimpanan' => [
+                        'pihak_pemroses' => 'string',
+                        'kategori_pihak' => ['HARUS dari daftar kategori_pihak'],
+                        'cara_pemrosesan' => 'string',
+                        'lokasi_penyimpanan' => 'string',
+                        'pihak_ketiga' => 'Ya | Tidak',
+                        'nama_pihak_ketiga' => 'string jika pihak_ketiga=Ya',
+                    ],
+                    'pengiriman_data' => [
+                        'ada_penerima' => 'Ya | Tidak',
+                        'penerima_data' => 'string',
+                        'transfer_luar' => 'Ya | Tidak',
+                        'negara_tujuan' => 'string jika transfer_luar=Ya',
+                        'safeguards' => 'string',
+                    ],
+                    'retensi_keamanan' => [
+                        'kontrol_keamanan' => ['HARUS dari daftar kontrol_keamanan, pilih yg relevan'],
+                        'masa_retensi' => 'string',
+                        'prosedur_pemusnahan' => 'string',
+                        'pernah_insiden' => 'Ya, pernah terjadi | Tidak pernah',
+                    ],
                 ],
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
         $user = "Buatkan draft ROPA lengkap untuk aktivitas pemrosesan: \"{$activityName}\".\n"
-            . "Isi SEMUA field berdasarkan konteks organisasi di atas.\n"
-            . "Pastikan dasar hukum mengacu UU PDP Indonesia (UU No. 27 Tahun 2022).\n"
-            . "Jawab HANYA JSON valid, tanpa markdown atau teks tambahan.";
+            . "Isi SEMUA field wizard_data berdasarkan konteks organisasi.\n"
+            . "PENTING: Untuk checkbox/radio/select, HANYA gunakan nilai PERSIS dari daftar opsi yang sudah diberikan.\n"
+            . "Pilih minimal 2-3 jenis_pemrosesan, 3-5 jenis_data_umum, 2-4 jenis_data_pii, dan 3-5 kontrol_keamanan.\n"
+            . "Jawab HANYA JSON valid.";
 
         return $this->ask($system, $user, 4000);
     }
 
     /**
      * DPIA Auto-Fill: Generate complete DPIA draft
+     *
+     * IMPORTANT: potensi_risiko keys MUST exactly match RISK_CATEGORIES,
+     * answer values MUST be exactly: sudah | sebagian | belum | tidak_berlaku
      */
     public function dpiaAutoFill(string $description, string $tenantContext): ?array
     {
+        $riskCategories = [
+            'Dasar Hukum Pemrosesan', 'Pemrosesan Data Pribadi yang Sah',
+            'Kesesuaian Tujuan Pemrosesan', 'Minimisasi Data', 'Keakuratan Data',
+            'Pembatasan Penyimpanan', 'Integritas dan Kerahasiaan', 'Akuntabilitas',
+            'Hak Subjek Data - Akses', 'Hak Subjek Data - Koreksi',
+            'Hak Subjek Data - Hapus', 'Hak Subjek Data - Portabilitas',
+            'Persetujuan dan Consent', 'Transfer Data Lintas Batas',
+            'Enkripsi dan Pseudonymization', 'Kontrol Akses', 'Monitoring dan Logging',
+            'Retensi Data', 'Manajemen Insiden', 'Pelatihan dan Kesadaran',
+            'Penilaian Dampak Berkala',
+        ];
+
+        // Build example potensi_risiko with all 21 categories
+        $potensiRisikoExample = [];
+        foreach ($riskCategories as $cat) {
+            $potensiRisikoExample[$cat] = [
+                'answer' => 'sudah | sebagian | belum | tidak_berlaku (pilih 1)',
+                'description' => 'string: penjelasan singkat kondisi saat ini (1-2 kalimat)',
+            ];
+        }
+
         $system = "Kamu adalah ahli penilaian risiko data pribadi UU PDP Indonesia.\n"
-            . "Output WAJIB berupa JSON valid.\n\n"
+            . "Output WAJIB berupa JSON valid. JANGAN tambahkan teks apapun di luar JSON.\n\n"
             . "KONTEKS ORGANISASI:\n{$tenantContext}\n\n"
+            . "ATURAN PENTING — POTENSI RISIKO:\n"
+            . "Field 'potensi_risiko' HARUS berisi SEMUA 21 kategori risiko berikut sebagai KEY:\n"
+            . json_encode($riskCategories, JSON_UNESCAPED_UNICODE) . "\n\n"
+            . "Nilai 'answer' untuk setiap kategori HARUS PERSIS salah satu dari:\n"
+            . "- \"sudah\" = Sudah Memenuhi\n"
+            . "- \"sebagian\" = Memenuhi Sebagian\n"
+            . "- \"belum\" = Belum Memenuhi\n"
+            . "- \"tidak_berlaku\" = Tidak Berlaku\n\n"
             . "FORMAT OUTPUT:\n"
             . json_encode([
-                'description' => 'string: deskripsi pemrosesan yang dinilai',
-                'risk_level' => 'enum: low | medium | high',
+                'description' => 'string: deskripsi pemrosesan yang dinilai (2-3 kalimat)',
+                'risk_level' => 'low | medium | high',
                 'risk_assessment' => [
                     'likelihood' => 'integer 1-5',
                     'impact' => 'integer 1-5',
-                    'risks' => [['category' => 'string', 'likelihood' => '1-5', 'impact' => '1-5', 'description' => 'string', 'mitigation' => 'string']],
                 ],
-                'mitigation_measures' => [['measure' => 'string', 'priority' => 'high|medium|low', 'timeline' => 'string']],
                 'wizard_data' => [
-                    'informasi_dpia' => ['description' => '', 'scope' => '', 'objectives' => ''],
-                    'koneksi_ropa' => ['related_ropa' => '', 'data_flow' => ''],
-                    'potensi_risiko' => ['identified_risks' => [], 'risk_score' => 0],
+                    'informasi_dpia' => [
+                        'deskripsi_pemrosesan' => 'string: deskripsi pemrosesan',
+                        'pic_name' => 'string: nama PIC (Person In Charge)',
+                        'dpo_name' => 'string: nama DPO',
+                    ],
+                    'koneksi_ropa' => ['connected_ropas' => []],
+                    'potensi_risiko' => '(object dengan 21 kategori sebagai KEY, lihat aturan di atas)',
                 ],
-            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . "\n\n"
+            . "CONTOH potensi_risiko (isi SEMUA 21 kategori):\n"
+            . json_encode(array_slice($potensiRisikoExample, 0, 3, true), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
         $user = "Buatkan draft DPIA lengkap untuk pemrosesan: \"{$description}\".\n"
-            . "Identifikasi minimal 5 risiko spesifik berdasarkan konteks organisasi.\n"
+            . "WAJIB isi SEMUA 21 kategori di potensi_risiko berdasarkan konteks organisasi.\n"
+            . "Untuk setiap kategori, evaluasi apakah sudah/sebagian/belum/tidak_berlaku dan beri 'description' penjelasan singkat.\n"
             . "Jawab HANYA JSON valid.";
 
         return $this->ask($system, $user, 4000);
