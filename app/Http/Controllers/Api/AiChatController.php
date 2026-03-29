@@ -173,7 +173,7 @@ PROMPT;
 
             if ($response->failed()) {
                 \Log::error('AI Provider API error [' . $chatModel . ']: ' . $response->body());
-                return response()->json(['message' => 'AI sedang tidak tersedia. Coba lagi nanti.', 'conversation_id' => $conversation->id], 502);
+                return response()->json(['message' => 'AI API Error [' . $chatModel . ']: ' . substr($response->body(), 0, 500), 'conversation_id' => $conversation->id], 502);
             }
 
             $data = $response->json();

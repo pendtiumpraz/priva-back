@@ -191,7 +191,7 @@ PROMPT;
 
                     if ($response->failed()) {
                         \Log::error('AI Agent error [' . $agentModel . ']: ' . $response->body());
-                        echo json_encode(['type' => 'error', 'message' => 'AI Agent sedang tidak tersedia.']) . "\n";
+                        echo json_encode(['type' => 'error', 'message' => 'AI Agent API Error [' . $agentModel . ']: ' . substr($response->body(), 0, 500)]) . "\n";
                         if (ob_get_level() > 0) ob_flush(); flush();
                         break;
                     }
