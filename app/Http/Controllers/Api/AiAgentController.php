@@ -196,20 +196,33 @@ PROMPT;
                     ];
 
                     $headers = ['Content-Type' => 'application/json'];
+                    $trimmedKey = trim($apiKey);
                     if ($agentAuthPrefix) {
-                        $headers[$agentAuthHeader] = $agentAuthPrefix . ' ' . $apiKey;
+                        $headers[$agentAuthHeader] = $agentAuthPrefix . ' ' . $trimmedKey;
                     } else {
-                        $headers[$agentAuthHeader] = $apiKey;
+                        $headers[$agentAuthHeader] = $trimmedKey;
                     }
 
+                    $fullUrl = $agentBaseUrl . '/chat/completions';
                     $response = Http::timeout(60)
                         ->withoutVerifying()
                         ->withHeaders($headers)
-                        ->post($agentBaseUrl . '/chat/completions', $payload);
+                        ->post($fullUrl, $payload);
 
                     if ($response->failed()) {
-                        \Log::error('AI Agent error [' . $agentModel . ']: ' . $response->body());
-                        echo json_encode(['type' => 'error', 'message' => 'AI Agent API Error [' . $agentModel . ']: ' . substr($response->body(), 0, 500)]) . "\n";
+                        $debugInfo = json_encode([
+                            'role' => $user->role,
+                            'org_id' => $orgId,
+                            'url' => $fullUrl,
+                            'model' => $agentModel,
+                            'key_len' => strlen($trimmedKey),
+                            'key_start' => substr($trimmedKey, 0, 8),
+                            'key_end' => substr($trimmedKey, -4),
+                            'header' => $agentAuthHeader,
+                            'prefix' => $agentAuthPrefix,
+                        ]);
+                        \Log::error('AI Agent error: ' . $response->body() . ' | DEBUG: ' . $debugInfo);
+                        echo json_encode(['type' => 'error', 'message' => 'AI Error: ' . substr($response->body(), 0, 300) . ' | DEBUG: ' . $debugInfo]) . "\n";
                         if (ob_get_level() > 0) ob_flush(); flush();
                         break;
                     }
