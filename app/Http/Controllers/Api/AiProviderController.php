@@ -13,16 +13,11 @@ use Illuminate\Support\Facades\Http;
 class AiProviderController extends Controller
 {
     /**
-     * Resolve org_id — SuperAdmin may not have one, fallback to first org
+     * Get org_id from user
      */
     private function resolveOrgId(Request $request): ?string
     {
-        $orgId = $request->user()->org_id;
-        if (!$orgId && $request->user()->role === 'superadmin') {
-            $org = Organization::first();
-            return $org?->id;
-        }
-        return $orgId;
+        return $request->user()->org_id;
     }
 
     /**

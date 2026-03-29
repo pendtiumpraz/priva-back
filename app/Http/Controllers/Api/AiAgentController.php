@@ -39,7 +39,7 @@ class AiAgentController extends Controller
         $orgId = $user->org_id;
         $isSuperAdmin = $user->role === 'superadmin';
 
-        // SuperAdmin doesn't need org_id, regular users do
+        // Regular users must have org_id
         if (!$orgId && !$isSuperAdmin) {
             return response()->json(['message' => 'Organisasi tidak ditemukan.'], 400);
         }
