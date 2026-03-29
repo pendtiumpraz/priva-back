@@ -7,6 +7,7 @@ use App\Models\AiProvider;
 use App\Models\AiModel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 
 class AiProviderController extends Controller
 {
@@ -32,13 +33,21 @@ class AiProviderController extends Controller
     {
         $orgId = $request->user()->org_id;
 
+        if (!$orgId) {
+            return response()->json(['configs' => (object)[], 'selection' => null]);
+        }
+
         // Get saved provider configs (API keys — masked)
         $configs = DB::table('ai_provider_configs')
             ->where('org_id', $orgId)
             ->get()
             ->map(function ($c) {
-                $key = decrypt($c->api_key_encrypted);
-                $c->api_key_masked = substr($key, 0, 8) . str_repeat('•', 20) . substr($key, -4);
+                try {
+                    $key = decrypt($c->api_key_encrypted);
+                    $c->api_key_masked = substr($key, 0, 8) . str_repeat('•', 20) . substr($key, -4);
+                } catch (\Exception $e) {
+                    $c->api_key_masked = '••••••••••••••••••••';
+                }
                 unset($c->api_key_encrypted);
                 return $c;
             })
@@ -66,76 +75,115 @@ class AiProviderController extends Controller
 
         $orgId = $request->user()->org_id;
 
-        DB::table('ai_provider_configs')->updateOrInsert(
-            ['org_id' => $orgId, 'provider_id' => $request->provider_id],
-            [
+        if (!$orgId) {
+            return response()->json(['message' => 'SuperAdmin tanpa organisasi tidak bisa simpan API key.'], 400);
+        }
+
+        // Check if exists
+        $existing = DB::table('ai_provider_configs')
+            ->where('org_id', $orgId)
+            ->where('provider_id', $request->provider_id)
+            ->first();
+
+        if ($existing) {
+            DB::table('ai_provider_configs')
+                ->where('id', $existing->id)
+                ->update([
+                    'api_key_encrypted' => encrypt($request->api_key),
+                    'extra_config' => $request->extra_config ? json_encode($request->extra_config) : null,
+                    'updated_at' => now(),
+                ]);
+        } else {
+            DB::table('ai_provider_configs')->insert([
+                'org_id' => $orgId,
+                'provider_id' => $request->provider_id,
                 'api_key_encrypted' => encrypt($request->api_key),
                 'extra_config' => $request->extra_config ? json_encode($request->extra_config) : null,
+                'is_verified' => false,
+                'verified_at' => null,
+                'created_at' => now(),
                 'updated_at' => now(),
-                'created_at' => DB::raw('COALESCE(created_at, NOW())'),
-            ]
-        );
+            ]);
+        }
 
-        \App\Models\AuditLog::log('ai_provider', $request->provider_id, 'api_key_saved', [
-            'provider_id' => $request->provider_id,
-        ], 'manual');
+        try {
+            \App\Models\AuditLog::log('ai_provider', (string)$request->provider_id, 'api_key_saved', [
+                'provider_id' => $request->provider_id,
+            ], 'manual');
+        } catch (\Exception $e) {
+            // Don't fail the save if audit log fails
+        }
 
         return response()->json(['message' => 'API key saved successfully']);
     }
 
     /**
-     * Test API key for a provider (try a minimal request)
+     * Test API key for a provider
      */
     public function testConnection(Request $request)
     {
         $request->validate([
             'provider_id' => 'required|exists:ai_providers,id',
-            'api_key' => 'required|string',
         ]);
 
         $provider = AiProvider::findOrFail($request->provider_id);
+        $orgId = $request->user()->org_id;
+
+        // Get API key: from request body or from saved config
         $apiKey = $request->api_key;
+        if (!$apiKey || $apiKey === 'saved') {
+            // Load saved key
+            $config = DB::table('ai_provider_configs')
+                ->where('org_id', $orgId)
+                ->where('provider_id', $request->provider_id)
+                ->first();
+            if (!$config) {
+                return response()->json(['success' => false, 'message' => 'API key belum disimpan'], 400);
+            }
+            try {
+                $apiKey = decrypt($config->api_key_encrypted);
+            } catch (\Exception $e) {
+                return response()->json(['success' => false, 'message' => 'Gagal decrypt API key'], 500);
+            }
+        }
 
         try {
-            // Try listing models to verify the key works
-            $url = rtrim($provider->api_base_url, '/') . '/models';
-
-            $headers = [];
+            // Try a minimal chat completion to verify
+            $headers = ['Content-Type' => 'application/json'];
             if ($provider->auth_prefix) {
-                $headers[] = "{$provider->auth_header}: {$provider->auth_prefix} {$apiKey}";
+                $headers[$provider->auth_header] = $provider->auth_prefix . ' ' . $apiKey;
             } else {
-                $headers[] = "{$provider->auth_header}: {$apiKey}";
+                $headers[$provider->auth_header] = $apiKey;
             }
-            $headers[] = 'Content-Type: application/json';
 
-            $ch = curl_init($url);
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_HTTPHEADER => $headers,
-                CURLOPT_TIMEOUT => 10,
-                CURLOPT_SSL_VERIFYPEER => true,
-            ]);
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
+            $baseUrl = rtrim($provider->api_base_url, '/');
 
-            if ($httpCode >= 200 && $httpCode < 300) {
+            $response = Http::timeout(15)
+                ->withoutVerifying()
+                ->withHeaders($headers)
+                ->post($baseUrl . '/chat/completions', [
+                    'model' => $provider->models()->where('is_active', true)->first()?->model_id ?? 'gpt-4o',
+                    'messages' => [['role' => 'user', 'content' => 'hi']],
+                    'max_tokens' => 5,
+                ]);
+
+            if ($response->successful()) {
                 // Mark as verified
                 DB::table('ai_provider_configs')
-                    ->where('org_id', $request->user()->org_id)
+                    ->where('org_id', $orgId)
                     ->where('provider_id', $request->provider_id)
                     ->update(['is_verified' => true, 'verified_at' => now()]);
 
                 return response()->json([
                     'success' => true,
-                    'message' => "Berhasil terhubung ke {$provider->name}",
-                    'http_code' => $httpCode,
+                    'message' => "Berhasil terhubung ke {$provider->name} ✓",
                 ]);
             } else {
+                $errBody = $response->json();
+                $errMsg = $errBody['error']['message'] ?? $response->body();
                 return response()->json([
                     'success' => false,
-                    'message' => "Gagal koneksi ke {$provider->name} (HTTP {$httpCode})",
-                    'http_code' => $httpCode,
+                    'message' => "Gagal: " . substr($errMsg, 0, 200),
                 ]);
             }
         } catch (\Exception $e) {
@@ -158,6 +206,10 @@ class AiProviderController extends Controller
         ]);
 
         $orgId = $request->user()->org_id;
+        if (!$orgId) {
+            return response()->json(['error' => 'SuperAdmin tanpa organisasi'], 400);
+        }
+
         $mode = $request->mode;
 
         // Verify the model belongs to the provider
@@ -179,20 +231,32 @@ class AiProviderController extends Controller
             ? ['chat_provider_id' => $request->provider_id, 'chat_model_id' => $request->model_id]
             : ['agent_provider_id' => $request->provider_id, 'agent_model_id' => $request->model_id];
 
-        DB::table('ai_active_selections')->updateOrInsert(
-            ['org_id' => $orgId],
-            array_merge($fields, ['updated_at' => now(), 'created_at' => DB::raw('COALESCE(created_at, NOW())')])
-        );
+        // Check if exists
+        $existing = DB::table('ai_active_selections')->where('org_id', $orgId)->first();
 
-        \App\Models\AuditLog::log('ai_provider', $request->provider_id, "active_{$mode}_model_set", [
-            'provider' => $model->provider->name,
-            'model' => $model->name,
-        ], 'manual');
+        if ($existing) {
+            DB::table('ai_active_selections')
+                ->where('org_id', $orgId)
+                ->update(array_merge($fields, ['updated_at' => now()]));
+        } else {
+            DB::table('ai_active_selections')->insert(
+                array_merge(['org_id' => $orgId], $fields, ['created_at' => now(), 'updated_at' => now()])
+            );
+        }
+
+        try {
+            \App\Models\AuditLog::log('ai_provider', (string)$request->provider_id, "active_{$mode}_model_set", [
+                'provider' => $model->provider->name,
+                'model' => $model->name,
+            ], 'manual');
+        } catch (\Exception $e) {
+            // Don't fail if audit log fails
+        }
 
         return response()->json([
             'message' => "Model {$model->name} aktif untuk mode {$mode}",
             'mode' => $mode,
-            'provider' => $model->provider->name,
+            'provider' => $model->provider->name ?? '',
             'model' => $model->name,
         ]);
     }
@@ -235,7 +299,7 @@ class AiProviderController extends Controller
      * Get the active model config for internal use (returns decrypted key)
      * Used by AiService internally — not exposed as API route
      */
-    public static function getActiveConfig(int $orgId, string $mode = 'chat'): ?array
+    public static function getActiveConfig(string $orgId, string $mode = 'chat'): ?array
     {
         $selection = DB::table('ai_active_selections')->where('org_id', $orgId)->first();
         if (!$selection) return null;

@@ -18,10 +18,10 @@ class AiService
 
     /**
      * Initialize AiService with the active provider config.
-     * @param int|null $orgId  Tenant org_id (null = use legacy DeepSeek)
+     * @param string|null $orgId  Tenant org_id UUID (null = use legacy DeepSeek)
      * @param string $mode     'chat' or 'agent'
      */
-    public function __construct(?int $orgId = null, string $mode = 'chat')
+    public function __construct(?string $orgId = null, string $mode = 'chat')
     {
         // Try multi-provider config first
         $config = null;
