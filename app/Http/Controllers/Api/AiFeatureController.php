@@ -532,4 +532,64 @@ class AiFeatureController extends Controller
             ],
         ]);
     }
+
+    // =============================================
+    // CONTRACT REVIEW — AI Privacy Contract Analyzer
+    // =============================================
+    public function contractReview(Request $request)
+    {
+        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'contract_review');
+        if ($creditErr) return $creditErr;
+
+        $request->validate([
+            'contract_text' => 'required|string|min:50',
+            'contract_type' => 'nullable|string',
+        ]);
+
+        $ai = new AiService();
+        if (!$ai->isAvailable()) {
+            return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        }
+
+        $contractType = $request->contract_type ?? 'vendor';
+        $prompt = "Kamu adalah Data Protection Officer ahli UU PDP Indonesia (UU No. 27/2022).
+Analisis kontrak/perjanjian berikut dan berikan review dari perspektif perlindungan data pribadi.
+
+Tipe Kontrak: {$contractType}
+
+=== ISI KONTRAK ===
+{$request->contract_text}
+=== END ===
+
+Berikan analisis dalam format JSON:
+{
+  \"overall_rating\": \"baik/perlu_perbaikan/buruk\",
+  \"risk_score\": 0-100,
+  \"findings\": [
+    {\"clause\": \"...\", \"issue\": \"...\", \"risk_level\": \"high/medium/low\", \"recommendation\": \"...\", \"uu_pdp_reference\": \"Pasal X\"}
+  ],
+  \"missing_clauses\": [\"klausul yang seharusnya ada tapi tidak ditemukan\"],
+  \"summary\": \"ringkasan keseluruhan\",
+  \"compliance_checklist\": {
+    \"klausul_tujuan_pemrosesan\": true/false,
+    \"hak_subjek_data\": true/false,
+    \"kewajiban_pengendali\": true/false,
+    \"transfer_lintas_negara\": true/false,
+    \"masa_retensi\": true/false,
+    \"mekanisme_pemusnahan\": true/false,
+    \"klausul_kerahasiaan\": true/false,
+    \"klausul_pelanggaran_data\": true/false
+  }
+}";
+
+        $response = $ai->chat($prompt);
+
+        $inputData = [
+            'contract_type' => $contractType,
+            'text_length' => strlen($request->contract_text),
+        ];
+
+        return $this->saveAndRespond($request, 'contract_review', $response, $inputData);
+    }
 }

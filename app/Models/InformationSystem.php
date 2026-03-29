@@ -10,7 +10,7 @@ class InformationSystem extends Model
     use HasUuids, SoftDeletes;
 
     protected $fillable = [
-        'org_id', 'name', 'owner_id', 'source_type', 'connection_config',
+        'org_id', 'name', 'owner', 'owner_id', 'source_type', 'connection_config',
         'scanning_status', 'scanning_progress', 'pdp_alert_count', 'pii_alert_count',
         'scan_results', 'last_scanned_at', 'created_by',
     ];

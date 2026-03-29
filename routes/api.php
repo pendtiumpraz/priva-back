@@ -105,6 +105,17 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/{id}/restore', [ModuleCrudController::class , 'restore']);
             Route::delete('/{id}/force', [ModuleCrudController::class , 'forceDelete']);
         });
+
+        // =============================================
+        // Data Discovery — Advanced Endpoints
+        // =============================================
+        Route::prefix('data-discovery')->group(function () {
+            Route::post('/{id}/test-connection', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'testConnection']);
+            Route::post('/{id}/scan', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'triggerScan']);
+            Route::get('/{id}/scan-details', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'scanDetails']);
+            Route::put('/{id}/classify-column', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'updateColumnClassification']);
+            Route::get('/{id}/ropa-links', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'ropaLinks']);
+        });
         
         // Consent Logs (View all consent captured)
         Route::get('/consent-logs', [\App\Http\Controllers\Api\ConsentLogController::class, 'index']);
@@ -157,6 +168,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/dashboard/summary', [\App\Http\Controllers\Api\AiFeatureController::class, 'dashboardSummary']);
             Route::post('/drill/scenario', [\App\Http\Controllers\Api\AiFeatureController::class, 'drillScenario']);
             Route::get('/history/{featureType}/{recordId}', [\App\Http\Controllers\Api\AiFeatureController::class, 'history']);
+            Route::post('/contract/review', [\App\Http\Controllers\Api\AiFeatureController::class, 'contractReview']);
 
             // Auto-Fill endpoints
             Route::post('/autofill/ropa', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillRopa']);
