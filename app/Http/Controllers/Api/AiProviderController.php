@@ -367,18 +367,40 @@ class AiProviderController extends Controller
     }
 
     /**
-     * Get the active model config for internal use (returns decrypted key)
-     * Used by AiService internally — not exposed as API route
+     * Get the active model config for internal use.
+     * Used by AiService internally — not exposed as API route.
+     * 
+     * Lookup order:
+     * 1. Tenant-specific config (org_id = $orgId)
+     * 2. Global/SuperAdmin config (org_id = NULL) as fallback
      */
     public static function getActiveConfig(?string $orgId, string $mode = 'chat'): ?array
     {
-        $query = DB::table('ai_active_selections');
+        // 1. Try tenant-specific config first
+        $result = self::loadConfigForOrg($orgId, $mode);
+        if ($result) return $result;
+
+        // 2. Fallback to global config (org_id = NULL) if tenant has no own config
         if ($orgId) {
-            $query->where('org_id', $orgId);
-        } else {
-            $query->whereNull('org_id');
+            $result = self::loadConfigForOrg(null, $mode);
+            if ($result) return $result;
         }
-        $selection = $query->first();
+
+        return null;
+    }
+
+    /**
+     * Load config for a specific org_id (or NULL for global).
+     */
+    private static function loadConfigForOrg(?string $orgId, string $mode): ?array
+    {
+        $selQuery = DB::table('ai_active_selections');
+        if ($orgId) {
+            $selQuery->where('org_id', $orgId);
+        } else {
+            $selQuery->whereNull('org_id');
+        }
+        $selection = $selQuery->first();
 
         if (!$selection) return null;
 
@@ -389,16 +411,24 @@ class AiProviderController extends Controller
 
         $provider = AiProvider::find($providerId);
         $model = AiModel::find($modelId);
-        
+
+        // Try tenant-specific API key first, then global
         $configQuery = DB::table('ai_provider_configs')
             ->where('provider_id', $providerId);
-            
         if ($orgId) {
             $configQuery->where('org_id', $orgId);
         } else {
             $configQuery->whereNull('org_id');
         }
         $config = $configQuery->first();
+
+        // If tenant has no API key for this provider, try global key
+        if (!$config && $orgId) {
+            $config = DB::table('ai_provider_configs')
+                ->where('provider_id', $providerId)
+                ->whereNull('org_id')
+                ->first();
+        }
 
         if (!$provider || !$model || !$config) return null;
 
