@@ -61,6 +61,23 @@ class AiAgentController extends Controller
         $agentAuthHeader = $providerConfig['auth_header'] ?? 'Authorization';
         $agentAuthPrefix = $providerConfig['auth_prefix'] ?? 'Bearer';
 
+        // DEBUG: Log exact config used (temporary)
+        \Log::info('AI Agent Config Debug', [
+            'user_id' => $user->id,
+            'user_role' => $user->role,
+            'org_id' => $orgId,
+            'provider' => $providerConfig['provider']->name ?? 'unknown',
+            'model' => $agentModel,
+            'base_url' => $agentBaseUrl,
+            'auth_header' => $agentAuthHeader,
+            'auth_prefix' => $agentAuthPrefix,
+            'api_key_first8' => substr($apiKey, 0, 8),
+            'api_key_last4' => substr($apiKey, -4),
+            'api_key_length' => strlen($apiKey),
+            'full_url' => $agentBaseUrl . '/chat/completions',
+            'full_auth_value' => $agentAuthPrefix ? ($agentAuthPrefix . ' ' . substr($apiKey, 0, 8) . '...' . substr($apiKey, -4)) : (substr($apiKey, 0, 8) . '...' . substr($apiKey, -4)),
+        ]);
+
         // Credit check (skip for SuperAdmin — no org to bill)
         if ($orgId && !$isSuperAdmin) {
             CreditService::resetIfNeeded($orgId);
