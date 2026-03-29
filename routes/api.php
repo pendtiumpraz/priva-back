@@ -190,8 +190,11 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/breach', [\App\Http\Controllers\Api\ExportController::class, 'breach']);
             Route::get('/dsr', [\App\Http\Controllers\Api\ExportController::class, 'dsr']);
             Route::get('/consent', [\App\Http\Controllers\Api\ExportController::class, 'consent']);
+            Route::get('/consent-records', [\App\Http\Controllers\Api\ExportController::class, 'consentRecords']);
             Route::get('/gap-assessment', [\App\Http\Controllers\Api\ExportController::class, 'gapAssessment']);
             Route::get('/data-discovery', [\App\Http\Controllers\Api\ExportController::class, 'dataDiscovery']);
+            Route::get('/data-discovery-columns', [\App\Http\Controllers\Api\ExportController::class, 'dataDiscoveryColumns']);
+            Route::get('/simulation', [\App\Http\Controllers\Api\ExportController::class, 'simulation']);
             Route::get('/ai-results', [\App\Http\Controllers\Api\ExportController::class, 'aiResults']);
             Route::get('/ai-results/{id}', [\App\Http\Controllers\Api\ExportController::class, 'aiResultSingle']);
             Route::get('/compliance-report', [\App\Http\Controllers\Api\ExportController::class, 'complianceReport']);

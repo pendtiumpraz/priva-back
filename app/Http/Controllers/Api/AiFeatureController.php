@@ -114,6 +114,8 @@ class AiFeatureController extends Controller
             str_contains($featureType, 'drill') => 'simulation',
             str_contains($featureType, 'dashboard') => 'dashboard',
             str_contains($featureType, 'chat') => 'chat',
+            str_contains($featureType, 'contract') => 'contract-review',
+            str_contains($featureType, 'discovery') => 'data-discovery',
             default => null,
         };
     }
@@ -553,37 +555,38 @@ class AiFeatureController extends Controller
         }
 
         $contractType = $request->contract_type ?? 'vendor';
-        $prompt = "Kamu adalah Data Protection Officer ahli UU PDP Indonesia (UU No. 27/2022).
-Analisis kontrak/perjanjian berikut dan berikan review dari perspektif perlindungan data pribadi.
 
-Tipe Kontrak: {$contractType}
+        $systemPrompt = "Kamu adalah Data Protection Officer ahli UU PDP Indonesia (UU No. 27/2022). "
+            . "Output WAJIB berupa JSON valid. JANGAN tambahkan teks apapun di luar JSON.\n\n"
+            . "Format output:\n"
+            . json_encode([
+                'overall_rating' => 'baik/perlu_perbaikan/buruk',
+                'risk_score' => '0-100 (integer)',
+                'findings' => [['clause' => '...', 'issue' => '...', 'risk_level' => 'high/medium/low', 'recommendation' => '...', 'uu_pdp_reference' => 'Pasal X']],
+                'missing_clauses' => ['klausul yang seharusnya ada tapi tidak ditemukan'],
+                'summary' => 'ringkasan keseluruhan analisis (2-3 kalimat)',
+                'compliance_checklist' => [
+                    'klausul_tujuan_pemrosesan' => 'boolean',
+                    'hak_subjek_data' => 'boolean',
+                    'kewajiban_pengendali' => 'boolean',
+                    'transfer_lintas_negara' => 'boolean',
+                    'masa_retensi' => 'boolean',
+                    'mekanisme_pemusnahan' => 'boolean',
+                    'klausul_kerahasiaan' => 'boolean',
+                    'klausul_pelanggaran_data' => 'boolean',
+                ],
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
-=== ISI KONTRAK ===
-{$request->contract_text}
-=== END ===
+        $userPrompt = "Analisis kontrak/perjanjian berikut dari perspektif perlindungan data pribadi UU PDP.\n\n"
+            . "Tipe Kontrak: {$contractType}\n\n"
+            . "=== ISI KONTRAK ===\n"
+            . mb_substr($request->contract_text, 0, 8000)
+            . "\n=== END ===\n\n"
+            . "Berikan analisis LENGKAP dalam format JSON yang diminta. "
+            . "Identifikasi semua temuan, klausul yang hilang, dan skor risiko 0-100. "
+            . "Jawab HANYA JSON valid.";
 
-Berikan analisis dalam format JSON:
-{
-  \"overall_rating\": \"baik/perlu_perbaikan/buruk\",
-  \"risk_score\": 0-100,
-  \"findings\": [
-    {\"clause\": \"...\", \"issue\": \"...\", \"risk_level\": \"high/medium/low\", \"recommendation\": \"...\", \"uu_pdp_reference\": \"Pasal X\"}
-  ],
-  \"missing_clauses\": [\"klausul yang seharusnya ada tapi tidak ditemukan\"],
-  \"summary\": \"ringkasan keseluruhan\",
-  \"compliance_checklist\": {
-    \"klausul_tujuan_pemrosesan\": true/false,
-    \"hak_subjek_data\": true/false,
-    \"kewajiban_pengendali\": true/false,
-    \"transfer_lintas_negara\": true/false,
-    \"masa_retensi\": true/false,
-    \"mekanisme_pemusnahan\": true/false,
-    \"klausul_kerahasiaan\": true/false,
-    \"klausul_pelanggaran_data\": true/false
-  }
-}";
-
-        $response = $ai->chat($prompt);
+        $response = $ai->ask($systemPrompt, $userPrompt, 4000);
 
         $inputData = [
             'contract_type' => $contractType,
