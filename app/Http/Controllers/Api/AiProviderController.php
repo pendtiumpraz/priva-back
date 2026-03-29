@@ -143,7 +143,7 @@ class AiProviderController extends Controller
                 DB::table('ai_provider_configs')->insert([
                     'org_id' => $orgId,
                     'provider_id' => $request->provider_id,
-                    'api_key_encrypted' => encrypt($request->api_key),
+                    'api_key_encrypted' => self::safeEncrypt($request->api_key),
                     'extra_config' => $request->extra_config ? json_encode($request->extra_config) : null,
                     'is_verified' => false,
                     'verified_at' => null,
