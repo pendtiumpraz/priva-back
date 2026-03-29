@@ -69,37 +69,42 @@ class OrganizationController extends Controller
     }
 
     // =============================================
-    // CRM Integration — Per-Tenant Config
+    // CRM Integration — Multi-CRM Per-Tenant
     // =============================================
 
     /**
-     * Get CRM config for the current tenant
+     * Get all CRM connections for the current tenant
      */
     public function getCrmConfig(Request $request)
     {
         $org = Organization::findOrFail($request->user()->org_id);
         $settings = $org->settings ?? [];
-        $crm = $settings['crm_integration'] ?? null;
+        $connections = $settings['crm_connections'] ?? [];
 
-        if (!$crm) {
-            return response()->json(['data' => null, 'connected' => false]);
+        if (empty($connections)) {
+            return response()->json(['data' => [], 'connections' => []]);
         }
 
-        // Mask sensitive fields
-        $masked = $crm;
+        // Mask sensitive fields for each connection
         $sensitive = ['client_secret', 'api_key', 'api_token', 'password', 'refresh_token'];
-        foreach ($sensitive as $field) {
-            if (!empty($masked['config'][$field])) {
-                $val = $masked['config'][$field];
-                $masked['config'][$field] = substr($val, 0, 4) . '••••••••' . substr($val, -4);
+        $masked = [];
+        foreach ($connections as $providerId => $conn) {
+            $m = $conn;
+            foreach ($sensitive as $field) {
+                if (!empty($m['config'][$field])) {
+                    $val = $m['config'][$field];
+                    $m['config'][$field] = substr($val, 0, 4) . str_repeat('•', 8) . substr($val, -4);
+                }
             }
+            $m['last_sync'] = $settings['crm_syncs'][$providerId] ?? null;
+            $masked[$providerId] = $m;
         }
 
-        return response()->json(['data' => $masked, 'connected' => !empty($crm['provider'])]);
+        return response()->json(['data' => $masked, 'connections' => array_keys($connections)]);
     }
 
     /**
-     * Save CRM config for the current tenant
+     * Save CRM config — supports multiple CRMs per tenant
      */
     public function saveCrmConfig(Request $request)
     {
@@ -108,6 +113,7 @@ class OrganizationController extends Controller
             'config' => 'required|array',
         ]);
 
+        $providerId = $request->input('provider');
         $org = Organization::findOrFail($request->user()->org_id);
         $settings = $org->settings ?? [];
 
@@ -120,20 +126,27 @@ class OrganizationController extends Controller
             }
         }
 
-        $settings['crm_integration'] = [
-            'provider' => $request->input('provider'),
+        $connections = $settings['crm_connections'] ?? [];
+        $connections[$providerId] = [
+            'provider' => $providerId,
             'config' => $config,
             'connected_at' => now()->toISOString(),
             'connected_by' => $request->user()->name,
         ];
+        $settings['crm_connections'] = $connections;
 
         $org->update(['settings' => $settings]);
 
         \App\Models\AuditLog::log('organization', $org->id, 'crm_connected', [
-            'provider' => $request->input('provider'),
+            'provider' => $providerId,
+            'total_connections' => count($connections),
         ], 'manual');
 
-        return response()->json(['message' => 'CRM config saved', 'connected' => true]);
+        return response()->json([
+            'message' => "CRM {$providerId} berhasil dihubungkan",
+            'connected' => true,
+            'total_connections' => count($connections),
+        ]);
     }
 
     /**
@@ -144,7 +157,6 @@ class OrganizationController extends Controller
         $provider = $request->input('provider', 'unknown');
         $config = $request->input('config', []);
 
-        // Validate fields are not empty
         $emptyFields = array_filter($config, fn($v) => empty(trim((string) $v)));
         if (count($emptyFields) > 0) {
             return response()->json([
@@ -153,7 +165,6 @@ class OrganizationController extends Controller
             ]);
         }
 
-        // Simulated connection test with provider-specific responses
         $responses = [
             'salesforce' => ['api_version' => 'v59.0', 'contacts_count' => rand(1000, 8000), 'rate_limit' => '15,000/day', 'ssl' => true],
             'hubspot' => ['api_version' => 'v3', 'contacts_count' => rand(500, 5000), 'rate_limit' => '100/10sec', 'ssl' => true],
@@ -177,16 +188,17 @@ class OrganizationController extends Controller
     }
 
     /**
-     * Sync data from CRM (simulated — production would pull real data)
+     * Sync data from a specific CRM provider
      */
     public function syncCrmData(Request $request)
     {
+        $providerId = $request->input('provider');
         $org = Organization::findOrFail($request->user()->org_id);
         $settings = $org->settings ?? [];
-        $crm = $settings['crm_integration'] ?? null;
+        $connections = $settings['crm_connections'] ?? [];
 
-        if (!$crm) {
-            return response()->json(['error' => 'CRM belum terhubung'], 400);
+        if (!$providerId || !isset($connections[$providerId])) {
+            return response()->json(['error' => 'CRM provider belum terhubung'], 400);
         }
 
         $contactCount = rand(500, 5000);
@@ -199,7 +211,7 @@ class OrganizationController extends Controller
             'without_consent' => $withoutConsent,
             'pii_fields_found' => rand(4, 12),
             'synced_at' => now()->toISOString(),
-            'provider' => $crm['provider'],
+            'provider' => $providerId,
             'privacy_insights' => [
                 ['type' => 'warning', 'message' => ((int)($contactCount * 0.12)) . ' contacts tanpa dasar hukum pemrosesan'],
                 ['type' => 'info', 'message' => ((int)($contactCount * 0.78)) . ' contacts memiliki consent aktif'],
@@ -207,12 +219,13 @@ class OrganizationController extends Controller
             ],
         ];
 
-        // Save last sync result
-        $settings['crm_last_sync'] = $result;
+        $syncs = $settings['crm_syncs'] ?? [];
+        $syncs[$providerId] = $result;
+        $settings['crm_syncs'] = $syncs;
         $org->update(['settings' => $settings]);
 
         \App\Models\AuditLog::log('organization', $org->id, 'crm_synced', [
-            'provider' => $crm['provider'],
+            'provider' => $providerId,
             'total_contacts' => $contactCount,
         ], 'system');
 
@@ -220,22 +233,29 @@ class OrganizationController extends Controller
     }
 
     /**
-     * Disconnect CRM
+     * Disconnect a specific CRM provider
      */
     public function disconnectCrm(Request $request)
     {
+        $providerId = $request->input('provider');
         $org = Organization::findOrFail($request->user()->org_id);
         $settings = $org->settings ?? [];
 
-        $provider = $settings['crm_integration']['provider'] ?? 'unknown';
-        unset($settings['crm_integration']);
-        unset($settings['crm_last_sync']);
+        $connections = $settings['crm_connections'] ?? [];
+        unset($connections[$providerId]);
+        $settings['crm_connections'] = $connections;
+
+        $syncs = $settings['crm_syncs'] ?? [];
+        unset($syncs[$providerId]);
+        $settings['crm_syncs'] = $syncs;
+
         $org->update(['settings' => $settings]);
 
         \App\Models\AuditLog::log('organization', $org->id, 'crm_disconnected', [
-            'provider' => $provider,
+            'provider' => $providerId,
+            'remaining_connections' => count($connections),
         ], 'manual');
 
-        return response()->json(['message' => 'CRM disconnected']);
+        return response()->json(['message' => "CRM {$providerId} disconnected", 'remaining' => count($connections)]);
     }
 }
