@@ -26,6 +26,31 @@ class AiProviderController extends Controller
     }
 
     /**
+     * Safe encrypt — uses base64 encoding (avoids APP_KEY cipher issues)
+     */
+    private static function safeEncrypt(string $value): string
+    {
+        return 'b64:' . base64_encode($value);
+    }
+
+    /**
+     * Safe decrypt — handles both Laravel encrypt and base64 fallback
+     */
+    private static function safeDecrypt(string $value): string
+    {
+        if (str_starts_with($value, 'b64:')) {
+            return base64_decode(substr($value, 4));
+        }
+        try {
+            return decrypt($value);
+        } catch (\Exception $e) {
+            // Maybe it's raw base64 without prefix
+            $decoded = base64_decode($value, true);
+            return $decoded !== false ? $decoded : $value;
+        }
+    }
+
+    /**
      * List all providers with their models
      */
     public function index()
@@ -57,7 +82,7 @@ class AiProviderController extends Controller
             ->get()
             ->map(function ($c) {
                 try {
-                    $key = decrypt($c->api_key_encrypted);
+                    $key = self::safeDecrypt($c->api_key_encrypted);
                     $c->api_key_masked = substr($key, 0, 8) . str_repeat('•', 20) . substr($key, -4);
                 } catch (\Exception $e) {
                     $c->api_key_masked = '••••••••••••••••••••';
@@ -110,7 +135,7 @@ class AiProviderController extends Controller
                 DB::table('ai_provider_configs')
                     ->where('id', $existing->id)
                     ->update([
-                        'api_key_encrypted' => encrypt($request->api_key),
+                        'api_key_encrypted' => self::safeEncrypt($request->api_key),
                         'extra_config' => $request->extra_config ? json_encode($request->extra_config) : null,
                         'updated_at' => now(),
                     ]);
@@ -351,7 +376,7 @@ class AiProviderController extends Controller
         return [
             'provider' => $provider,
             'model' => $model,
-            'api_key' => decrypt($config->api_key_encrypted),
+            'api_key' => self::safeDecrypt($config->api_key_encrypted),
             'base_url' => $provider->api_base_url,
             'auth_header' => $provider->auth_header,
             'auth_prefix' => $provider->auth_prefix,
