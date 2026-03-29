@@ -10,6 +10,7 @@ use App\Services\CreditService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
+use App\Http\Controllers\Api\AiProviderController;
 
 class AiChatController extends Controller
 {
@@ -24,9 +25,17 @@ class AiChatController extends Controller
             'conversation_id' => 'nullable|string',
         ]);
 
-        $apiKey = AppSetting::get('deepseek_api_key');
+        // Get active provider config (chat mode), fallback to legacy DeepSeek
+        $orgId = $request->user()->org_id;
+        $providerConfig = $orgId ? AiProviderController::getActiveConfig($orgId, 'chat') : null;
+        $apiKey = $providerConfig ? $providerConfig['api_key'] : AppSetting::get('deepseek_api_key');
+        $chatModel = $providerConfig ? $providerConfig['model']->model_id : 'deepseek-chat';
+        $chatBaseUrl = $providerConfig ? rtrim($providerConfig['base_url'], '/') : 'https://api.deepseek.com';
+        $chatAuthHeader = $providerConfig ? $providerConfig['auth_header'] : 'Authorization';
+        $chatAuthPrefix = $providerConfig ? $providerConfig['auth_prefix'] : 'Bearer';
+
         if (!$apiKey) {
-            return response()->json(['message' => 'API key belum dikonfigurasi. Hubungi SuperAdmin.'], 503);
+            return response()->json(['message' => 'API key belum dikonfigurasi. Hubungi SuperAdmin untuk set AI Provider.'], 503);
         }
 
         // Credit check for chat (0.25 per message)
@@ -145,21 +154,25 @@ PROMPT;
         $messages[] = ['role' => 'user', 'content' => $userMessage];
 
         try {
+            $headers = ['Content-Type' => 'application/json'];
+            if ($chatAuthPrefix) {
+                $headers[$chatAuthHeader] = $chatAuthPrefix . ' ' . $apiKey;
+            } else {
+                $headers[$chatAuthHeader] = $apiKey;
+            }
+
             $response = Http::timeout(30)
                 ->withoutVerifying()
-                ->withHeaders([
-                    'Authorization' => 'Bearer ' . $apiKey,
-                    'Content-Type' => 'application/json',
-                ])
-                ->post('https://api.deepseek.com/chat/completions', [
-                    'model' => 'deepseek-chat',
+                ->withHeaders($headers)
+                ->post($chatBaseUrl . '/chat/completions', [
+                    'model' => $chatModel,
                     'messages' => $messages,
                     'temperature' => 0.3,
                     'max_tokens' => 1500,
                 ]);
 
             if ($response->failed()) {
-                \Log::error('DeepSeek API error: ' . $response->body());
+                \Log::error('AI Provider API error [' . $chatModel . ']: ' . $response->body());
                 return response()->json(['message' => 'AI sedang tidak tersedia. Coba lagi nanti.', 'conversation_id' => $conversation->id], 502);
             }
 

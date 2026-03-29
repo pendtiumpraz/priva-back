@@ -16,6 +16,7 @@ use App\Models\ConsentCollectionPoint;
 use App\Models\InformationSystem;
 use App\Services\AiAgentToolExecutor;
 use App\Services\CreditService;
+use App\Http\Controllers\Api\AiProviderController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
@@ -43,9 +44,20 @@ class AiAgentController extends Controller
             return response()->json(['message' => 'Organisasi tidak ditemukan.'], 400);
         }
 
-        $apiKey = AppSetting::get('deepseek_api_key');
+        // Get active provider config (agent mode), fallback to legacy DeepSeek
+        $providerConfig = $orgId ? AiProviderController::getActiveConfig($orgId, 'agent') : null;
+        if (!$providerConfig) {
+            // Try chat mode as fallback
+            $providerConfig = $orgId ? AiProviderController::getActiveConfig($orgId, 'chat') : null;
+        }
+        $apiKey = $providerConfig ? $providerConfig['api_key'] : AppSetting::get('deepseek_api_key');
+        $agentModel = $providerConfig ? $providerConfig['model']->model_id : 'deepseek-chat';
+        $agentBaseUrl = $providerConfig ? rtrim($providerConfig['base_url'], '/') : 'https://api.deepseek.com';
+        $agentAuthHeader = $providerConfig ? $providerConfig['auth_header'] : 'Authorization';
+        $agentAuthPrefix = $providerConfig ? $providerConfig['auth_prefix'] : 'Bearer';
+
         if (!$apiKey) {
-            return response()->json(['message' => 'API key belum dikonfigurasi. Hubungi SuperAdmin.'], 503);
+            return response()->json(['message' => 'API key belum dikonfigurasi. Hubungi SuperAdmin untuk set AI Provider.'], 503);
         }
 
         // Credit check (skip for SuperAdmin — no org to bill)
@@ -149,7 +161,7 @@ PROMPT;
         }
 
         // Function calling loop
-        return response()->stream(function () use ($messages, $tools, $apiKey, $executor, $conversation, $user, $orgId, $isSuperAdmin) {
+        return response()->stream(function () use ($messages, $tools, $apiKey, $agentModel, $agentBaseUrl, $agentAuthHeader, $agentAuthPrefix, $executor, $conversation, $user, $orgId, $isSuperAdmin) {
             $steps = [];
             $iteration = 0;
 
@@ -158,23 +170,27 @@ PROMPT;
                     $iteration++;
 
                     $payload = [
-                        'model' => 'deepseek-chat',
+                        'model' => $agentModel,
                         'messages' => $messages,
                         'tools' => $tools,
                         'temperature' => 0.2,
                         'max_tokens' => 3000,
                     ];
 
+                    $headers = ['Content-Type' => 'application/json'];
+                    if ($agentAuthPrefix) {
+                        $headers[$agentAuthHeader] = $agentAuthPrefix . ' ' . $apiKey;
+                    } else {
+                        $headers[$agentAuthHeader] = $apiKey;
+                    }
+
                     $response = Http::timeout(60)
                         ->withoutVerifying()
-                        ->withHeaders([
-                            'Authorization' => 'Bearer ' . $apiKey,
-                            'Content-Type' => 'application/json',
-                        ])
-                        ->post('https://api.deepseek.com/chat/completions', $payload);
+                        ->withHeaders($headers)
+                        ->post($agentBaseUrl . '/chat/completions', $payload);
 
                     if ($response->failed()) {
-                        \Log::error('AI Agent DeepSeek error: ' . $response->body());
+                        \Log::error('AI Agent error [' . $agentModel . ']: ' . $response->body());
                         echo json_encode(['type' => 'error', 'message' => 'AI Agent sedang tidak tersedia.']) . "\n";
                         if (ob_get_level() > 0) ob_flush(); flush();
                         break;

@@ -4,17 +4,45 @@ namespace App\Services;
 
 use App\Models\AppSetting;
 use App\Models\KnowledgeBaseSection;
+use App\Http\Controllers\Api\AiProviderController;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class AiService
 {
     private string $apiKey;
-    private string $model = 'deepseek-chat';
+    private string $model;
+    private string $baseUrl;
+    private string $authHeader;
+    private string $authPrefix;
 
-    public function __construct()
+    /**
+     * Initialize AiService with the active provider config.
+     * @param int|null $orgId  Tenant org_id (null = use legacy DeepSeek)
+     * @param string $mode     'chat' or 'agent'
+     */
+    public function __construct(?int $orgId = null, string $mode = 'chat')
     {
-        $this->apiKey = AppSetting::get('deepseek_api_key', '');
+        // Try multi-provider config first
+        $config = null;
+        if ($orgId) {
+            $config = AiProviderController::getActiveConfig($orgId, $mode);
+        }
+
+        if ($config) {
+            $this->apiKey = $config['api_key'];
+            $this->model = $config['model']->model_id;
+            $this->baseUrl = rtrim($config['base_url'], '/');
+            $this->authHeader = $config['auth_header'];
+            $this->authPrefix = $config['auth_prefix'];
+        } else {
+            // Fallback: legacy DeepSeek from app_settings
+            $this->apiKey = AppSetting::get('deepseek_api_key', '');
+            $this->model = 'deepseek-chat';
+            $this->baseUrl = 'https://api.deepseek.com';
+            $this->authHeader = 'Authorization';
+            $this->authPrefix = 'Bearer';
+        }
     }
 
     public function isAvailable(): bool
@@ -23,7 +51,7 @@ class AiService
     }
 
     /**
-     * Send a prompt to DeepSeek and get structured JSON response
+     * Send a prompt to the active LLM provider and get structured JSON response
      */
     public function ask(string $systemPrompt, string $userPrompt, int $maxTokens = 2000): ?array
     {
@@ -32,13 +60,17 @@ class AiService
         }
 
         try {
+            $headers = ['Content-Type' => 'application/json'];
+            if ($this->authPrefix) {
+                $headers[$this->authHeader] = $this->authPrefix . ' ' . $this->apiKey;
+            } else {
+                $headers[$this->authHeader] = $this->apiKey;
+            }
+
             $response = Http::timeout(60)
                 ->withoutVerifying()
-                ->withHeaders([
-                    'Authorization' => 'Bearer ' . $this->apiKey,
-                    'Content-Type' => 'application/json',
-                ])
-                ->post('https://api.deepseek.com/chat/completions', [
+                ->withHeaders($headers)
+                ->post($this->baseUrl . '/chat/completions', [
                     'model' => $this->model,
                     'messages' => [
                         ['role' => 'system', 'content' => $systemPrompt],
@@ -49,7 +81,7 @@ class AiService
                 ]);
 
             if ($response->failed()) {
-                Log::error('DeepSeek API error: ' . $response->body());
+                Log::error('AI Provider API error [' . $this->model . ']: ' . $response->body());
                 return null;
             }
 
@@ -71,7 +103,7 @@ class AiService
             // Return as raw text
             return ['raw' => $content];
         } catch (\Exception $e) {
-            Log::error('AI Service error: ' . $e->getMessage());
+            Log::error('AI Service error [' . $this->model . ']: ' . $e->getMessage());
             return null;
         }
     }
