@@ -125,6 +125,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/organization', [\App\Http\Controllers\Api\OrganizationController::class, 'show']);
         Route::put('/organization', [\App\Http\Controllers\Api\OrganizationController::class, 'update']);
 
+        // CRM Integration
+        Route::prefix('crm')->group(function () {
+            Route::get('/config', [\App\Http\Controllers\Api\OrganizationController::class, 'getCrmConfig']);
+            Route::put('/config', [\App\Http\Controllers\Api\OrganizationController::class, 'saveCrmConfig']);
+            Route::post('/test-connection', [\App\Http\Controllers\Api\OrganizationController::class, 'testCrmConnection']);
+            Route::post('/sync', [\App\Http\Controllers\Api\OrganizationController::class, 'syncCrmData']);
+            Route::delete('/disconnect', [\App\Http\Controllers\Api\OrganizationController::class, 'disconnectCrm']);
+        });
+
         // =============================================
         // License Management
         // =============================================
