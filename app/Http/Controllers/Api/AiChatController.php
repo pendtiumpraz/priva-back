@@ -27,18 +27,19 @@ class AiChatController extends Controller
 
         // Get active provider config (chat mode), fallback to legacy DeepSeek
         $orgId = $request->user()->org_id;
-        $providerConfig = $orgId ? AiProviderController::getActiveConfig($orgId, 'chat') : null;
-        $apiKey = $providerConfig ? $providerConfig['api_key'] : AppSetting::get('deepseek_api_key');
-        $chatModel = $providerConfig ? $providerConfig['model']->model_id : 'deepseek-chat';
-        $chatBaseUrl = $providerConfig ? rtrim($providerConfig['base_url'], '/') : 'https://api.deepseek.com';
-        $chatAuthHeader = $providerConfig ? $providerConfig['auth_header'] : 'Authorization';
-        $chatAuthPrefix = $providerConfig ? $providerConfig['auth_prefix'] : 'Bearer';
-
-        if (!$apiKey) {
-            return response()->json(['message' => 'API key belum dikonfigurasi. Hubungi SuperAdmin untuk set AI Provider.'], 503);
+        $providerConfig = AiProviderController::getActiveConfig($orgId, 'chat');
+        
+        if (!$providerConfig || empty($providerConfig['api_key'])) {
+            return response()->json(['message' => 'API key belum dikonfigurasi. Silahkan set AI Provider terlebih dahulu.'], 503);
         }
 
-        // Credit check for chat (0.25 per message)
+        $apiKey = $providerConfig['api_key'];
+        $chatModel = $providerConfig['model']->model_id;
+        $chatBaseUrl = rtrim($providerConfig['base_url'], '/');
+        $chatAuthHeader = $providerConfig['auth_header'] ?? 'Authorization';
+        $chatAuthPrefix = $providerConfig['auth_prefix'] ?? 'Bearer';
+
+        // Credit check (skip for SuperAdmin — no org to bill)
         $orgId = $request->user()->org_id;
         if ($orgId) {
             CreditService::resetIfNeeded($orgId);

@@ -24,24 +24,21 @@ class AiService
     public function __construct(?string $orgId = null, string $mode = 'chat')
     {
         // Try multi-provider config first
-        $config = null;
-        if ($orgId) {
-            $config = AiProviderController::getActiveConfig($orgId, $mode);
-        }
+        $config = AiProviderController::getActiveConfig($orgId, $mode);
 
-        if ($config) {
+        if ($config && !empty($config['api_key'])) {
             $this->apiKey = $config['api_key'];
             $this->model = $config['model']->model_id;
             $this->baseUrl = rtrim($config['base_url'], '/');
-            $this->authHeader = $config['auth_header'];
-            $this->authPrefix = $config['auth_prefix'];
+            $this->authHeader = $config['auth_header'] ?? 'Authorization';
+            $this->authPrefix = $config['auth_prefix'] ?? 'Bearer';
         } else {
-            // Fallback: legacy DeepSeek from app_settings
-            $this->apiKey = AppSetting::get('deepseek_api_key', '');
-            $this->model = 'deepseek-chat';
-            $this->baseUrl = 'https://api.deepseek.com';
-            $this->authHeader = 'Authorization';
-            $this->authPrefix = 'Bearer';
+            // Null state, will fail cleanly in isAvailable() checking
+            $this->apiKey = '';
+            $this->model = '';
+            $this->baseUrl = '';
+            $this->authHeader = '';
+            $this->authPrefix = '';
         }
     }
 

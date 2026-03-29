@@ -45,20 +45,21 @@ class AiAgentController extends Controller
         }
 
         // Get active provider config (agent mode), fallback to legacy DeepSeek
-        $providerConfig = $orgId ? AiProviderController::getActiveConfig($orgId, 'agent') : null;
+        $providerConfig = AiProviderController::getActiveConfig($orgId, 'agent');
         if (!$providerConfig) {
             // Try chat mode as fallback
-            $providerConfig = $orgId ? AiProviderController::getActiveConfig($orgId, 'chat') : null;
+            $providerConfig = AiProviderController::getActiveConfig($orgId, 'chat');
         }
-        $apiKey = $providerConfig ? $providerConfig['api_key'] : AppSetting::get('deepseek_api_key');
-        $agentModel = $providerConfig ? $providerConfig['model']->model_id : 'deepseek-chat';
-        $agentBaseUrl = $providerConfig ? rtrim($providerConfig['base_url'], '/') : 'https://api.deepseek.com';
-        $agentAuthHeader = $providerConfig ? $providerConfig['auth_header'] : 'Authorization';
-        $agentAuthPrefix = $providerConfig ? $providerConfig['auth_prefix'] : 'Bearer';
 
-        if (!$apiKey) {
-            return response()->json(['message' => 'API key belum dikonfigurasi. Hubungi SuperAdmin untuk set AI Provider.'], 503);
+        if (!$providerConfig || empty($providerConfig['api_key'])) {
+            return response()->json(['message' => 'API key belum dikonfigurasi. Silahkan set AI Provider terlebih dahulu.'], 503);
         }
+
+        $apiKey = $providerConfig['api_key'];
+        $agentModel = $providerConfig['model']->model_id;
+        $agentBaseUrl = rtrim($providerConfig['base_url'], '/');
+        $agentAuthHeader = $providerConfig['auth_header'] ?? 'Authorization';
+        $agentAuthPrefix = $providerConfig['auth_prefix'] ?? 'Bearer';
 
         // Credit check (skip for SuperAdmin — no org to bill)
         if ($orgId && !$isSuperAdmin) {
