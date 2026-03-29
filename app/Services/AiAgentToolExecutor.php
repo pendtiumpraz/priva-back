@@ -140,15 +140,26 @@ class AiAgentToolExecutor
         $data = array_diff_key($args, array_flip($forbidden));
         $data['org_id'] = $this->orgId;
         $data['registration_number'] = $data['registration_number'] ?? 'ROPA-AI-' . date('Y') . '-' . rand(100, 999);
+        
+        // Extract wizard_data before creating (it's a JSON column)
+        $wizardData = $data['wizard_data'] ?? null;
+        unset($data['wizard_data']);
+        
         $r = Ropa::create($data);
         
-        $this->syncRopaWizardData($r, $data);
+        // If agent provided wizard_data, write it directly
+        if ($wizardData && is_array($wizardData)) {
+            $r->wizard_data = $wizardData;
+            $r->save();
+        } else {
+            $this->syncRopaWizardData($r, $data);
+        }
 
         try { 
             AuditLog::create(['module' => 'ropa', 'record_id' => $r->id, 'action' => 'created', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'Automated AI Creation']); 
         } catch(\Exception $e) {}
         
-        return [$r->toArray(), "✏️ Membuat ROPA baru: {$r->processing_activity}"];
+        return [$r->fresh()->toArray(), "✏️ Membuat ROPA baru: {$r->processing_activity}"];
     }
 
     private function updateRopa(array $args): array
@@ -157,9 +168,21 @@ class AiAgentToolExecutor
         if (!$r) return [['error' => 'ROPA tidak ditemukan'], "❌ ROPA tidak ditemukan untuk diupdate"];
         $forbidden = ['org_id', 'id'];
         $data = array_diff_key($args, array_flip($forbidden));
+        
+        // Extract wizard_data before updating
+        $wizardData = $data['wizard_data'] ?? null;
+        unset($data['wizard_data']);
+        
         $r->update($data);
         
-        $this->syncRopaWizardData($r, $data);
+        // If agent provided wizard_data, merge with existing
+        if ($wizardData && is_array($wizardData)) {
+            $existing = $r->wizard_data ?? [];
+            $r->wizard_data = array_replace_recursive($existing, $wizardData);
+            $r->save();
+        } else {
+            $this->syncRopaWizardData($r, $data);
+        }
 
         try { 
             AuditLog::create(['module' => 'ropa', 'record_id' => $r->id, 'action' => 'updated', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'AI Automated Edit', 'changes' => array_keys($data)]); 
@@ -213,15 +236,26 @@ class AiAgentToolExecutor
         $data = array_diff_key($args, array_flip(['org_id', 'id']));
         $data['org_id'] = $this->orgId;
         $data['registration_number'] = $data['registration_number'] ?? 'DPIA-AI-' . date('Y') . '-' . rand(100, 999);
+        
+        // Extract wizard_data before creating
+        $wizardData = $data['wizard_data'] ?? null;
+        unset($data['wizard_data']);
+        
         $r = Dpia::create($data);
         
-        $this->syncDpiaWizardData($r, $data);
+        // If agent provided wizard_data (with potensi_risiko), write directly
+        if ($wizardData && is_array($wizardData)) {
+            $r->wizard_data = $wizardData;
+            $r->save();
+        } else {
+            $this->syncDpiaWizardData($r, $data);
+        }
 
         try { 
             AuditLog::create(['module' => 'dpia', 'record_id' => $r->id, 'action' => 'created', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'Automated AI Creation']); 
         } catch(\Exception $e) {}
         
-        return [$r->toArray(), "✏️ Membuat DPIA baru: {$r->registration_number}"];
+        return [$r->fresh()->toArray(), "✏️ Membuat DPIA baru: {$r->registration_number}"];
     }
 
     private function updateDpia(array $args): array
@@ -229,9 +263,21 @@ class AiAgentToolExecutor
         $r = Dpia::where('org_id', $this->orgId)->find($args['id'] ?? '');
         if (!$r) return [['error' => 'DPIA tidak ditemukan'], "❌ DPIA tidak ditemukan"];
         $data = array_diff_key($args, array_flip(['org_id', 'id']));
+        
+        // Extract wizard_data before updating
+        $wizardData = $data['wizard_data'] ?? null;
+        unset($data['wizard_data']);
+        
         $r->update($data);
         
-        $this->syncDpiaWizardData($r, $data);
+        // If agent provided wizard_data, merge with existing
+        if ($wizardData && is_array($wizardData)) {
+            $existing = $r->wizard_data ?? [];
+            $r->wizard_data = array_replace_recursive($existing, $wizardData);
+            $r->save();
+        } else {
+            $this->syncDpiaWizardData($r, $data);
+        }
 
         try { 
             AuditLog::create(['module' => 'dpia', 'record_id' => $r->id, 'action' => 'updated', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'AI Automated Edit', 'changes' => array_keys($data)]); 
@@ -471,14 +517,28 @@ class AiAgentToolExecutor
             // ROPA
             ['type' => 'function', 'function' => ['name' => 'list_ropa', 'description' => 'List semua ROPA (Records of Processing Activities) milik organisasi. Tidak butuh parameter.', 'parameters' => ['type' => 'object', 'properties' => (object)[], 'required' => []]]],
             ['type' => 'function', 'function' => ['name' => 'get_ropa_detail', 'description' => 'Ambil detail lengkap dari satu ROPA berdasarkan ID.', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string', 'description' => 'UUID dari ROPA']], 'required' => ['id']]]],
-            ['type' => 'function', 'function' => ['name' => 'create_ropa', 'description' => 'Buat ROPA baru. Field: processing_activity (wajib), entity, division, work_unit, description, risk_level (low/medium/high/critical), purpose, legal_basis, status (draft/active/archived).', 'parameters' => ['type' => 'object', 'properties' => ['processing_activity' => ['type' => 'string'], 'entity' => ['type' => 'string'], 'division' => ['type' => 'string'], 'work_unit' => ['type' => 'string'], 'description' => ['type' => 'string'], 'risk_level' => ['type' => 'string'], 'purpose' => ['type' => 'string'], 'legal_basis' => ['type' => 'string'], 'status' => ['type' => 'string']], 'required' => ['processing_activity']]]],
-            ['type' => 'function', 'function' => ['name' => 'update_ropa', 'description' => 'Update field di ROPA yang sudah ada. Harus sertakan id.', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string'], 'processing_activity' => ['type' => 'string'], 'description' => ['type' => 'string'], 'risk_level' => ['type' => 'string'], 'status' => ['type' => 'string'], 'purpose' => ['type' => 'string'], 'legal_basis' => ['type' => 'string']], 'required' => ['id']]]],
+            ['type' => 'function', 'function' => ['name' => 'create_ropa', 'description' => 'Buat ROPA baru. PENTING: risk_level harus low/medium/high. status harus draft/active/archived. Sertakan wizard_data jika ingin mengisi form wizard.', 'parameters' => ['type' => 'object', 'properties' => [
+                'processing_activity' => ['type' => 'string', 'description' => 'Nama aktivitas pemrosesan (wajib)'],
+                'entity' => ['type' => 'string'], 'division' => ['type' => 'string'], 'work_unit' => ['type' => 'string'],
+                'description' => ['type' => 'string'], 'purpose' => ['type' => 'string'], 'legal_basis' => ['type' => 'string'],
+                'risk_level' => ['type' => 'string', 'description' => 'HARUS: low | medium | high'],
+                'status' => ['type' => 'string', 'description' => 'HARUS: draft | active | archived'],
+                'wizard_data' => ['type' => 'object', 'description' => 'Data wizard 7 section. Gunakan FIELD-FIELD BERIKUT:\n'
+                    . 'detail_pemrosesan: {nama_pemrosesan, entitas, divisi, unit_kerja, deskripsi, risk_level}\n'
+                    . 'dpo_team: {kategori_pemrosesan: "Pengendali Data Pribadi"|"Pemroses Data Pribadi", dpo_name, dpo_email, dpo_phone}\n'
+                    . 'informasi_pemrosesan: {tujuan, penjelasan, jenis_pemrosesan: array dari ["Pemerolehan dan pengumpulan data","Pengolahan dan penganalisisan data","Penyimpanan data","Perbaikan dan pembaruan data","Penampilan, pengumuman, transfer, penyebarluasan, atau pengungkapan data","Penghapusan atau pemusnahan data"], dasar_pemrosesan: pilih 1 dari ["Persetujuan yang Sah Secara Eksplisit","Pemenuhan Kewajiban Perjanjian","Pemenuhan Kewajiban Hukum","Pemenuhan Pelindungan Kepentingan Vital","Pelaksanaan Tugas dalam Rangka Kepentingan Umum","Pemenuhan Kepentingan yang Sah (Legitimate Interest)"], sistem_terkait: array}\n'
+                    . 'pengumpulan_data: {sumber_data, jumlah_subjek: "≤ 1.000 subjek"|"> 1.000 subjek", kategori_subjek: array, jenis_data_spesifik: array dari ["Data Kesehatan","Data Biometrik","Data Genetika","Data Catatan Kejahatan","Data Anak","Data Keuangan Pribadi","Data Ras/Etnis","Data Pandangan Politik","Data Agama/Kepercayaan","Data Orientasi Seksual"], jenis_data_umum: array dari ["Nama Lengkap","Jenis Kelamin","Kewarganegaraan","Agama","Status Perkawinan","Alamat","Nomor Telepon","Email","Tanggal Lahir","Pendidikan","Pekerjaan"], jenis_data_pii: array dari ["NIK/KTP","Nomor Paspor","SIM","NPWP","Nomor Rekening","Alamat IP (IP Address)","Cookie ID","Device ID"]}\n'
+                    . 'penggunaan_penyimpanan: {pihak_pemroses, kategori_pihak: array dari ["Pengendali Data (Controller)","Pemroses Data (Processor)","Pengendali Bersama (Joint Controller)","Lainnya"], cara_pemrosesan, lokasi_penyimpanan, pihak_ketiga: "Ya"|"Tidak"}\n'
+                    . 'pengiriman_data: {ada_penerima: "Ya"|"Tidak", penerima_data, transfer_luar: "Ya"|"Tidak", negara_tujuan, safeguards}\n'
+                    . 'retensi_keamanan: {kontrol_keamanan: array dari ["Enkripsi (at-rest & in-transit)","Tokenization / Pseudonymization","Access Control (RBAC)","Backup & Disaster Recovery","Audit Log & Monitoring","Vulnerability Assessment","Penetration Testing"], masa_retensi, prosedur_pemusnahan}'],
+            ], 'required' => ['processing_activity']]]],
+            ['type' => 'function', 'function' => ['name' => 'update_ropa', 'description' => 'Update field di ROPA yang sudah ada. Harus sertakan id. Bisa sertakan wizard_data untuk update form wizard.', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string'], 'processing_activity' => ['type' => 'string'], 'description' => ['type' => 'string'], 'risk_level' => ['type' => 'string', 'description' => 'HARUS: low | medium | high'], 'status' => ['type' => 'string', 'description' => 'HARUS: draft | active | archived'], 'purpose' => ['type' => 'string'], 'legal_basis' => ['type' => 'string'], 'wizard_data' => ['type' => 'object', 'description' => 'Sama format dengan create_ropa wizard_data']], 'required' => ['id']]]],
 
             // DPIA
             ['type' => 'function', 'function' => ['name' => 'list_dpia', 'description' => 'List semua DPIA milik organisasi.', 'parameters' => ['type' => 'object', 'properties' => (object)[], 'required' => []]]],
             ['type' => 'function', 'function' => ['name' => 'get_dpia_detail', 'description' => 'Ambil detail lengkap DPIA berdasarkan ID.', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string']], 'required' => ['id']]]],
-            ['type' => 'function', 'function' => ['name' => 'create_dpia', 'description' => 'Buat DPIA baru. Field: description, risk_level, status, ropa_id (optional link ke ROPA).', 'parameters' => ['type' => 'object', 'properties' => ['description' => ['type' => 'string'], 'risk_level' => ['type' => 'string'], 'status' => ['type' => 'string'], 'ropa_id' => ['type' => 'string']], 'required' => []]]],
-            ['type' => 'function', 'function' => ['name' => 'update_dpia', 'description' => 'Update DPIA.', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string'], 'description' => ['type' => 'string'], 'risk_level' => ['type' => 'string'], 'status' => ['type' => 'string']], 'required' => ['id']]]],
+            ['type' => 'function', 'function' => ['name' => 'create_dpia', 'description' => 'Buat DPIA baru. risk_level HARUS low/medium/high. status HARUS draft/in_progress/approved. Bisa sertakan wizard_data dengan potensi_risiko = object 21 kategori, setiap kategori: {answer: "sudah"|"sebagian"|"belum"|"tidak_berlaku", description: "..."}. Kategori: Dasar Hukum Pemrosesan, Pemrosesan Data Pribadi yang Sah, Kesesuaian Tujuan Pemrosesan, Minimisasi Data, Keakuratan Data, Pembatasan Penyimpanan, Integritas dan Kerahasiaan, Akuntabilitas, Hak Subjek Data - Akses, Hak Subjek Data - Koreksi, Hak Subjek Data - Hapus, Hak Subjek Data - Portabilitas, Persetujuan dan Consent, Transfer Data Lintas Batas, Enkripsi dan Pseudonymization, Kontrol Akses, Monitoring dan Logging, Retensi Data, Manajemen Insiden, Pelatihan dan Kesadaran, Penilaian Dampak Berkala.', 'parameters' => ['type' => 'object', 'properties' => ['description' => ['type' => 'string'], 'risk_level' => ['type' => 'string', 'description' => 'HARUS: low | medium | high'], 'status' => ['type' => 'string', 'description' => 'HARUS: draft | in_progress | approved'], 'ropa_id' => ['type' => 'string'], 'wizard_data' => ['type' => 'object']], 'required' => []]]],
+            ['type' => 'function', 'function' => ['name' => 'update_dpia', 'description' => 'Update DPIA. Bisa sertakan wizard_data.', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string'], 'description' => ['type' => 'string'], 'risk_level' => ['type' => 'string', 'description' => 'HARUS: low | medium | high'], 'status' => ['type' => 'string'], 'wizard_data' => ['type' => 'object']], 'required' => ['id']]]],
 
             // GAP
             ['type' => 'function', 'function' => ['name' => 'list_gap', 'description' => 'List semua GAP Assessment milik organisasi.', 'parameters' => ['type' => 'object', 'properties' => (object)[], 'required' => []]]],
@@ -495,12 +555,12 @@ class AiAgentToolExecutor
             // DSR
             ['type' => 'function', 'function' => ['name' => 'list_dsr', 'description' => 'List semua DSR (Data Subject Request).', 'parameters' => ['type' => 'object', 'properties' => (object)[], 'required' => []]]],
             ['type' => 'function', 'function' => ['name' => 'get_dsr_detail', 'description' => 'Detail DSR Request.', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string']], 'required' => ['id']]]],
-            ['type' => 'function', 'function' => ['name' => 'update_dsr', 'description' => 'Update status DSR. Field: status (pending/in_progress/completed/rejected), response, rejection_reason.', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string'], 'status' => ['type' => 'string'], 'response' => ['type' => 'string']], 'required' => ['id']]]],
+            ['type' => 'function', 'function' => ['name' => 'update_dsr', 'description' => 'Update status DSR. status HARUS: new | new_reply | replied | rejected | closed. request_type HARUS: access | rectification | erasure | portability | restriction | objection.', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string'], 'status' => ['type' => 'string', 'description' => 'HARUS: new | new_reply | replied | rejected | closed'], 'response' => ['type' => 'string']], 'required' => ['id']]]],
 
             // Breach
             ['type' => 'function', 'function' => ['name' => 'list_breach', 'description' => 'List semua Breach Incidents.', 'parameters' => ['type' => 'object', 'properties' => (object)[], 'required' => []]]],
             ['type' => 'function', 'function' => ['name' => 'get_breach_detail', 'description' => 'Detail Breach Incident.', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string']], 'required' => ['id']]]],
-            ['type' => 'function', 'function' => ['name' => 'create_breach', 'description' => 'Catat breach incident baru. Field: title (wajib), description, severity (low/medium/high/critical), source, status.', 'parameters' => ['type' => 'object', 'properties' => ['title' => ['type' => 'string'], 'description' => ['type' => 'string'], 'severity' => ['type' => 'string'], 'source' => ['type' => 'string']], 'required' => ['title']]]],
+            ['type' => 'function', 'function' => ['name' => 'create_breach', 'description' => 'Catat breach incident baru. severity HARUS: low | medium | high | critical. status HARUS: detected | assessing | containment | notification | closed. source HARUS: manual | automated | external_report | monitoring.', 'parameters' => ['type' => 'object', 'properties' => ['title' => ['type' => 'string'], 'description' => ['type' => 'string'], 'severity' => ['type' => 'string', 'description' => 'HARUS: low | medium | high | critical'], 'source' => ['type' => 'string', 'description' => 'HARUS: manual | automated | external_report | monitoring'], 'status' => ['type' => 'string', 'description' => 'HARUS: detected | assessing | containment | notification | closed'], 'affected_subjects_count' => ['type' => 'integer'], 'notification_required' => ['type' => 'boolean']], 'required' => ['title']]]],
 
             // Drill
             ['type' => 'function', 'function' => ['name' => 'list_drill', 'description' => 'List semua Fire Drill / Breach Simulation.', 'parameters' => ['type' => 'object', 'properties' => (object)[], 'required' => []]]],

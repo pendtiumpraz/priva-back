@@ -466,25 +466,41 @@ class AiService
      */
     public function breachAutoFill(string $incidentTitle, string $tenantContext): ?array
     {
+        $validChecklist = [
+            'Isolasi sistem yang terdampak', 'Blokir akses yang tidak sah',
+            'Preserve evidence (backup log)', 'Ubah credentials yang compromised',
+            'Aktifkan firewall rules tambahan', 'Identifikasi root cause',
+            'Hapus malware / tutup vulnerability', 'Patch sistem yang terdampak',
+            'Restore data dari backup', 'Verifikasi integritas data',
+        ];
+
         $system = "Kamu adalah ahli incident response dan breach management UU PDP.\n"
-            . "Output WAJIB berupa JSON valid.\n\n"
+            . "Output WAJIB berupa JSON valid. JANGAN tambahkan teks di luar JSON.\n\n"
             . "KONTEKS ORGANISASI:\n{$tenantContext}\n\n"
+            . "ATURAN PENTING:\n"
+            . "— severity HARUS salah satu: low | medium | high | critical\n"
+            . "— source HARUS salah satu: manual | automated | external_report | monitoring\n"
+            . "— affected_subjects_count HARUS integer (angka bulat, bukan string)\n"
+            . "— notification_required HARUS boolean true/false\n"
+            . "— containment_checklist: gunakan PERSIS step dari daftar berikut:\n"
+            . json_encode($validChecklist, JSON_UNESCAPED_UNICODE) . "\n\n"
             . "FORMAT OUTPUT:\n"
             . json_encode([
-                'title' => 'string: judul insiden',
-                'description' => 'string: deskripsi lengkap insiden (5-7 kalimat)',
-                'severity' => 'enum: low | medium | high | critical',
-                'source' => 'string: sumber insiden',
-                'affected_data_types' => ['array string: jenis data yang terdampak'],
-                'affected_subjects_count' => 'integer: estimasi jumlah subjek terdampak',
-                'root_cause' => 'string: analisis akar masalah',
-                'remediation_plan' => 'string: rencana remediasi',
-                'notification_required' => 'boolean: apakah wajib notifikasi ke KOMDIGI?',
-                'containment_checklist' => [['step' => 'string', 'completed' => false]],
+                'title' => 'string',
+                'description' => 'string (5-7 kalimat)',
+                'severity' => 'low | medium | high | critical',
+                'source' => 'manual | automated | external_report | monitoring',
+                'affected_data_types' => ['array string: jenis data terdampak'],
+                'affected_subjects_count' => 'integer',
+                'root_cause' => 'string',
+                'remediation_plan' => 'string',
+                'notification_required' => 'boolean',
+                'containment_checklist' => 'object {"step_name": true/false} dari daftar di atas',
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
         $user = "Buatkan draft laporan insiden breach untuk: \"{$incidentTitle}\".\n"
             . "Sesuaikan severity, dampak, dan remediasi berdasarkan konteks organisasi.\n"
+            . "Untuk containment_checklist, set step yang sudah seharusnya dilakukan pertama kali ke true.\n"
             . "Jawab HANYA JSON valid.";
 
         return $this->ask($system, $user, 3000);
@@ -496,20 +512,24 @@ class AiService
     public function dsrAutoFill(string $requestType, string $requesterName, string $tenantContext): ?array
     {
         $system = "Kamu adalah DPO yang menangani Data Subject Request sesuai UU PDP.\n"
-            . "Output WAJIB berupa JSON valid.\n\n"
+            . "Output WAJIB berupa JSON valid. JANGAN tambahkan teks di luar JSON.\n\n"
             . "KONTEKS ORGANISASI:\n{$tenantContext}\n\n"
+            . "ATURAN PENTING:\n"
+            . "— request_type HARUS PERSIS salah satu: access | rectification | erasure | portability | restriction | objection\n"
+            . "— requester_email: jika tidak ada info, gunakan format nama@example.com\n\n"
             . "FORMAT OUTPUT:\n"
             . json_encode([
-                'request_type' => 'string: tipe request (access/correction/deletion/portability/objection)',
+                'request_type' => 'access | rectification | erasure | portability | restriction | objection',
                 'requester_name' => 'string',
+                'requester_email' => 'string (email format)',
                 'description' => 'string: deskripsi permintaan (2-3 kalimat profesional)',
-                'verification_status' => 'string: pending',
-                'response_draft' => 'string: draft surat balasan formal ke pemohon',
+                'verification_status' => 'pending',
+                'response_draft' => 'string: draft surat balasan formal ke pemohon (minimal 3 paragraf)',
                 'internal_checklist' => ['array string: langkah internal yang perlu dilakukan'],
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
         $user = "Buatkan draft penanganan DSR tipe \"{$requestType}\" dari pemohon \"{$requesterName}\".\n"
-            . "Sertakan draft surat balasan formal.\n"
+            . "Sertakan draft surat balasan formal dan checklist internal.\n"
             . "Jawab HANYA JSON valid.";
 
         return $this->ask($system, $user, 2500);
