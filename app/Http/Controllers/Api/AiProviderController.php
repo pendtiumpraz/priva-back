@@ -41,15 +41,20 @@ class AiProviderController extends Controller
     public function getConfig(Request $request)
     {
         $orgId = $this->resolveOrgId($request);
+        $isSuperAdmin = $request->user()->role === 'superadmin';
 
-        if (!$orgId) {
+        if (!$orgId && !$isSuperAdmin) {
             return response()->json(['configs' => (object)[], 'selection' => null]);
         }
 
         // Get saved provider configs (API keys — masked)
-        $configs = DB::table('ai_provider_configs')
-            ->where('org_id', $orgId)
-            ->get()
+        $configsQuery = DB::table('ai_provider_configs');
+        if ($orgId) {
+            $configsQuery->where('org_id', $orgId);
+        } else {
+            $configsQuery->whereNull('org_id');
+        }
+        $configs = $configsQuery->get()
             ->map(function ($c) {
                 $key = $c->api_key_encrypted;
                 $c->api_key_masked = substr($key, 0, 8) . str_repeat('•', max(0, strlen($key) - 12)) . substr($key, -4);
@@ -59,7 +64,13 @@ class AiProviderController extends Controller
             ->keyBy('provider_id');
 
         // Get active selections
-        $selection = DB::table('ai_active_selections')->where('org_id', $orgId)->first();
+        $selectionQuery = DB::table('ai_active_selections');
+        if ($orgId) {
+            $selectionQuery->where('org_id', $orgId);
+        } else {
+            $selectionQuery->whereNull('org_id');
+        }
+        $selection = $selectionQuery->first();
 
         return response()->json([
             'configs' => $configs,
@@ -86,16 +97,21 @@ class AiProviderController extends Controller
             }
 
             $orgId = $this->resolveOrgId($request);
+            $isSuperAdmin = $request->user()->role === 'superadmin';
 
-            if (!$orgId) {
-                return response()->json(['message' => 'Tidak ada organisasi. Buat organisasi terlebih dahulu.'], 400);
+            if (!$orgId && !$isSuperAdmin) {
+                return response()->json(['message' => 'Tidak ada organisasi.'], 400);
             }
 
             // Check if exists
-            $existing = DB::table('ai_provider_configs')
-                ->where('org_id', $orgId)
-                ->where('provider_id', $request->provider_id)
-                ->first();
+            $query = DB::table('ai_provider_configs')
+                ->where('provider_id', $request->provider_id);
+            if ($orgId) {
+                $query->where('org_id', $orgId);
+            } else {
+                $query->whereNull('org_id');
+            }
+            $existing = $query->first();
 
             if ($existing) {
                 DB::table('ai_provider_configs')
@@ -154,10 +170,14 @@ class AiProviderController extends Controller
         $apiKey = $request->api_key;
         if (!$apiKey || $apiKey === 'saved') {
             // Load saved key
-            $config = DB::table('ai_provider_configs')
-                ->where('org_id', $orgId)
-                ->where('provider_id', $request->provider_id)
-                ->first();
+            $configQuery = DB::table('ai_provider_configs')
+                ->where('provider_id', $request->provider_id);
+            if ($orgId) {
+                $configQuery->where('org_id', $orgId);
+            } else {
+                $configQuery->whereNull('org_id');
+            }
+            $config = $configQuery->first();
             if (!$config) {
                 return response()->json(['success' => false, 'message' => 'API key belum disimpan'], 400);
             }
@@ -223,7 +243,9 @@ class AiProviderController extends Controller
         ]);
 
         $orgId = $this->resolveOrgId($request);
-        if (!$orgId) {
+        $isSuperAdmin = $request->user()->role === 'superadmin';
+        
+        if (!$orgId && !$isSuperAdmin) {
             return response()->json(['error' => 'Tidak ada organisasi.'], 400);
         }
 
@@ -235,10 +257,15 @@ class AiProviderController extends Controller
             ->firstOrFail();
 
         // Verify tenant has API key for this provider
-        $hasKey = DB::table('ai_provider_configs')
-            ->where('org_id', $orgId)
-            ->where('provider_id', $request->provider_id)
-            ->exists();
+        $hasKeyQuery = DB::table('ai_provider_configs')
+            ->where('provider_id', $request->provider_id);
+            
+        if ($orgId) {
+            $hasKeyQuery->where('org_id', $orgId);
+        } else {
+            $hasKeyQuery->whereNull('org_id');
+        }
+        $hasKey = $hasKeyQuery->exists();
 
         if (!$hasKey) {
             return response()->json(['error' => 'API key belum disimpan untuk provider ini'], 400);
@@ -249,12 +276,22 @@ class AiProviderController extends Controller
             : ['agent_provider_id' => $request->provider_id, 'agent_model_id' => $request->model_id];
 
         // Check if exists
-        $existing = DB::table('ai_active_selections')->where('org_id', $orgId)->first();
+        $selQuery = DB::table('ai_active_selections');
+        if ($orgId) {
+            $selQuery->where('org_id', $orgId);
+        } else {
+            $selQuery->whereNull('org_id');
+        }
+        $existing = $selQuery->first();
 
         if ($existing) {
-            DB::table('ai_active_selections')
-                ->where('org_id', $orgId)
-                ->update(array_merge($fields, ['updated_at' => now()]));
+            $updateQuery = DB::table('ai_active_selections');
+            if ($orgId) {
+                $updateQuery->where('org_id', $orgId);
+            } else {
+                $updateQuery->whereNull('org_id');
+            }
+            $updateQuery->update(array_merge($fields, ['updated_at' => now()]));
         } else {
             DB::table('ai_active_selections')->insert(
                 array_merge(['org_id' => $orgId], $fields, ['created_at' => now(), 'updated_at' => now()])
@@ -288,7 +325,14 @@ class AiProviderController extends Controller
         $orgId = $this->resolveOrgId($request);
 
         // Clear active selections if this provider was active
-        $selection = DB::table('ai_active_selections')->where('org_id', $orgId)->first();
+        $selectionQuery = DB::table('ai_active_selections');
+        if ($orgId) {
+            $selectionQuery->where('org_id', $orgId);
+        } else {
+            $selectionQuery->whereNull('org_id');
+        }
+        $selection = $selectionQuery->first();
+
         if ($selection) {
             $updates = [];
             if ($selection->chat_provider_id == $request->provider_id) {
@@ -300,14 +344,24 @@ class AiProviderController extends Controller
                 $updates['agent_model_id'] = null;
             }
             if (!empty($updates)) {
-                DB::table('ai_active_selections')->where('org_id', $orgId)->update($updates);
+                $updateQuery = DB::table('ai_active_selections');
+                if ($orgId) {
+                    $updateQuery->where('org_id', $orgId);
+                } else {
+                    $updateQuery->whereNull('org_id');
+                }
+                $updateQuery->update($updates);
             }
         }
 
-        DB::table('ai_provider_configs')
-            ->where('org_id', $orgId)
-            ->where('provider_id', $request->provider_id)
-            ->delete();
+        $deleteQuery = DB::table('ai_provider_configs')
+            ->where('provider_id', $request->provider_id);
+        if ($orgId) {
+            $deleteQuery->where('org_id', $orgId);
+        } else {
+            $deleteQuery->whereNull('org_id');
+        }
+        $deleteQuery->delete();
 
         return response()->json(['message' => 'API key removed']);
     }
@@ -316,9 +370,16 @@ class AiProviderController extends Controller
      * Get the active model config for internal use (returns decrypted key)
      * Used by AiService internally — not exposed as API route
      */
-    public static function getActiveConfig(string $orgId, string $mode = 'chat'): ?array
+    public static function getActiveConfig(?string $orgId, string $mode = 'chat'): ?array
     {
-        $selection = DB::table('ai_active_selections')->where('org_id', $orgId)->first();
+        $query = DB::table('ai_active_selections');
+        if ($orgId) {
+            $query->where('org_id', $orgId);
+        } else {
+            $query->whereNull('org_id');
+        }
+        $selection = $query->first();
+
         if (!$selection) return null;
 
         $providerId = $mode === 'agent' ? $selection->agent_provider_id : $selection->chat_provider_id;
@@ -328,10 +389,16 @@ class AiProviderController extends Controller
 
         $provider = AiProvider::find($providerId);
         $model = AiModel::find($modelId);
-        $config = DB::table('ai_provider_configs')
-            ->where('org_id', $orgId)
-            ->where('provider_id', $providerId)
-            ->first();
+        
+        $configQuery = DB::table('ai_provider_configs')
+            ->where('provider_id', $providerId);
+            
+        if ($orgId) {
+            $configQuery->where('org_id', $orgId);
+        } else {
+            $configQuery->whereNull('org_id');
+        }
+        $config = $configQuery->first();
 
         if (!$provider || !$model || !$config) return null;
 
