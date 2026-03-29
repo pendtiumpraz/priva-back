@@ -356,6 +356,7 @@ class DatabaseSeeder extends Seeder
         // Knowledge Base
         // =============================================
         $this->call(KnowledgeBaseSectionsSeeder::class);
+        $this->call(AiProviderSeeder::class);
 
         $this->command->info('🎉 PRIVASIMU seed data created successfully!');
         $this->command->info('👑 Platform: 1 SuperAdmin (org_id = NULL)');

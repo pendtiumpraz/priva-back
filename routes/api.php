@@ -134,6 +134,16 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::delete('/disconnect', [\App\Http\Controllers\Api\OrganizationController::class, 'disconnectCrm']);
         });
 
+        // AI Provider Management (Multi-Provider LLM)
+        Route::prefix('ai-providers')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\AiProviderController::class, 'index']);
+            Route::get('/config', [\App\Http\Controllers\Api\AiProviderController::class, 'getConfig']);
+            Route::post('/api-key', [\App\Http\Controllers\Api\AiProviderController::class, 'saveApiKey']);
+            Route::post('/test', [\App\Http\Controllers\Api\AiProviderController::class, 'testConnection']);
+            Route::post('/set-active', [\App\Http\Controllers\Api\AiProviderController::class, 'setActiveModel']);
+            Route::delete('/api-key', [\App\Http\Controllers\Api\AiProviderController::class, 'removeApiKey']);
+        });
+
         // =============================================
         // License Management
         // =============================================
