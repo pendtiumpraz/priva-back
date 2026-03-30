@@ -11,6 +11,39 @@ use Illuminate\Support\Facades\Log;
 class IntegrationController extends Controller
 {
     /**
+     * Get integration settings for current organization
+     */
+    public function getSettings(Request $request)
+    {
+        $org = $request->user()->organization;
+        $settings = $org->settings ?? [];
+        return response()->json([
+            'data' => [
+                'telegram_bot_token' => $settings['telegram_bot_token'] ?? '',
+                'telegram_chat_id' => $settings['telegram_chat_id'] ?? '',
+                'siem_webhook_url' => $settings['siem_webhook_url'] ?? '',
+            ]
+        ]);
+    }
+
+    /**
+     * Update integration settings for current organization
+     */
+    public function updateSettings(Request $request)
+    {
+        $org = $request->user()->organization;
+        $settings = $org->settings ?? [];
+        
+        if ($request->has('telegram_bot_token')) $settings['telegram_bot_token'] = $request->telegram_bot_token;
+        if ($request->has('telegram_chat_id')) $settings['telegram_chat_id'] = $request->telegram_chat_id;
+        if ($request->has('siem_webhook_url')) $settings['siem_webhook_url'] = $request->siem_webhook_url;
+
+        $org->update(['settings' => $settings]);
+        
+        return response()->json(['success' => true, 'message' => 'Integration settings saved.']);
+    }
+
+    /**
      * Send breach incident detail to Telegram 
      */
     public function syncBreachTelegram(Request $request, $id)
@@ -22,9 +55,19 @@ class IntegrationController extends Controller
                 return response()->json(['error' => 'Breach record not found'], 404);
             }
 
-            // In a real app the token/chat_id might come from the organization settings or .env
-            $token = env('TELEGRAM_BOT_TOKEN', 'mock_token');
-            $chatId = env('TELEGRAM_CHAT_ID', 'mock_chat_id');
+            // Fetch from tenant level settings
+            $org = $request->user()->organization;
+            $settings = $org->settings ?? [];
+            $token = $settings['telegram_bot_token'] ?? null;
+            $chatId = $settings['telegram_chat_id'] ?? null;
+
+            if (empty($token) || empty($chatId)) {
+                return response()->json([
+                    'success' => false,
+                    'is_missing_config' => true,
+                    'message' => 'Telegram Bot Token & Chat ID belum dikonfigurasi. Silahkan atur di integrasi terlebih dahulu.',
+                ], 400);
+            }
 
             // Format message
             $message = "🚨 *INCIDENT ALERT: " . mb_strtoupper((string) $breach->severity) . "* 🚨\n\n";
@@ -34,15 +77,6 @@ class IntegrationController extends Controller
             $message .= "*Detected At:* " . $breach->detected_at . "\n\n";
             $message .= "*Description:*\n" . $breach->description . "\n\n";
             $message .= "🔒 _Please check the Privasimu Dashboard for more details._";
-
-            // If we don't have real credentials, just mock the success!
-            if ($token === 'mock_token') {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Telegram message generated successfully (Mock mode). Add TELEGRAM_BOT_TOKEN in .env for real sending.',
-                    'sent_payload' => $message
-                ]);
-            }
 
             // Send to Telegram
             $response = Http::post("https://api.telegram.org/bot{$token}/sendMessage", [
@@ -79,7 +113,17 @@ class IntegrationController extends Controller
                 return response()->json(['error' => 'Breach record not found'], 404);
             }
 
-            $webhookUrl = env('SIEM_WEBHOOK_URL', 'mock_webhook');
+            $org = $request->user()->organization;
+            $settings = $org->settings ?? [];
+            $webhookUrl = $settings['siem_webhook_url'] ?? null;
+
+            if (empty($webhookUrl)) {
+                return response()->json([
+                    'success' => false,
+                    'is_missing_config' => true,
+                    'message' => 'SIEM Webhook URL belum dikonfigurasi. Silahkan atur di integrasi terlebih dahulu.',
+                ], 400);
+            }
             
             $payload = [
                 'event_source' => 'PRIVASIMU',
@@ -93,14 +137,6 @@ class IntegrationController extends Controller
                 'timestamp' => now()->toIso8601String(),
                 'original_detected_at' => $breach->detected_at,
             ];
-
-            if ($webhookUrl === 'mock_webhook') {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'SIEM IOC Payload generated successfully (Mock mode). Add SIEM_WEBHOOK_URL in .env to broadcast.',
-                    'sent_payload' => $payload
-                ]);
-            }
 
             $response = Http::post($webhookUrl, $payload);
 
