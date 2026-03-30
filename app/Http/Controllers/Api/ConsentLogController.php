@@ -120,6 +120,13 @@ class ConsentLogController extends Controller
             }
         }
 
+        // Forward to Connected CRMs
+        $org = \App\Models\Organization::find($collection->org_id);
+        $crms = $org->settings['crm_connections'] ?? [];
+        foreach ($crms as $providerId => $config) {
+            \App\Services\CrmService::pushConsent($providerId, $config, $log);
+        }
+
         return response()->json([
             'message' => 'Consent captured successfully',
             'log_id' => $log->id,

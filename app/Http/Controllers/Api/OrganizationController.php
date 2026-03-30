@@ -168,6 +168,7 @@ class OrganizationController extends Controller
         $responses = [
             'salesforce' => ['api_version' => 'v59.0', 'contacts_count' => rand(1000, 8000), 'rate_limit' => '15,000/day', 'ssl' => true],
             'hubspot' => ['api_version' => 'v3', 'contacts_count' => rand(500, 5000), 'rate_limit' => '100/10sec', 'ssl' => true],
+            'odoo' => ['api_version' => 'xmlrpc/2', 'contacts_count' => rand(1500, 9000), 'rate_limit' => '5,000/min', 'ssl' => true],
             'zoho' => ['api_version' => 'v2.1', 'contacts_count' => rand(300, 4000), 'rate_limit' => '60/min', 'ssl' => true],
             'freshsales' => ['api_version' => 'v1', 'contacts_count' => rand(200, 3000), 'rate_limit' => '100/min', 'ssl' => true],
             'pipedrive' => ['api_version' => 'v1', 'contacts_count' => rand(100, 2000), 'rate_limit' => '80/2sec', 'ssl' => true],
