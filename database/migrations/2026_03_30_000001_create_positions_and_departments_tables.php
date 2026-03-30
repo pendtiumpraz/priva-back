@@ -21,10 +21,13 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
 
+            $table->index(['org_id', 'is_active']);
+        });
+
+        Schema::table('departments', function (Blueprint $table) {
             $table->foreign('org_id')->references('id')->on('organizations')->onDelete('cascade');
             $table->foreign('parent_id')->references('id')->on('departments')->onDelete('set null');
             $table->foreign('head_user_id')->references('id')->on('users')->onDelete('set null');
-            $table->index(['org_id', 'is_active']);
         });
 
         // Positions (jabatan per tenant)
