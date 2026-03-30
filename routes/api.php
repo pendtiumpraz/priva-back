@@ -139,6 +139,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/consent-items', [\App\Http\Controllers\Api\ConsentItemController::class, 'store']);
         Route::put('/consent-items/{id}', [\App\Http\Controllers\Api\ConsentItemController::class, 'update']);
         Route::delete('/consent-items/{id}', [\App\Http\Controllers\Api\ConsentItemController::class, 'destroy']);
+        Route::post('/consent/{id}/webhook', [\App\Http\Controllers\Api\ConsentLogController::class, 'saveWebhook']);
 
         // Organization Profile (Onboarding)
         Route::get('/organizations', [\App\Http\Controllers\Api\OrganizationController::class, 'index']); // Super Admin: list all

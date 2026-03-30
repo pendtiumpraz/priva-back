@@ -11,7 +11,7 @@ class ConsentCollectionPoint extends Model
 
     protected $fillable = [
         'org_id', 'collection_id', 'name', 'domain', 'redirect_url',
-        'settings', 'created_by',
+        'settings', 'webhook_url', 'created_by',
     ];
 
     protected $casts = ['settings' => 'array'];
