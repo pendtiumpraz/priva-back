@@ -15,7 +15,7 @@ class BreachIncident extends Model
         'root_cause', 'containment_actions', 'containment_checklist', 'remediation_plan',
         'notification_required', 'notification_deadline', 'notified_komdigi_at',
         'notified_subjects_at', 'notification_template', 'detected_by',
-        'incident_commander', 'dpo_id', 'detected_at', 'assessed_at',
+        'incident_commander', 'dpo_id', 'pic_id', 'pic_name', 'detected_at', 'assessed_at',
         'contained_at', 'closed_at', 'timeline_log', 'created_by',
     ];
 
