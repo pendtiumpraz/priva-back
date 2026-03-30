@@ -37,6 +37,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Dashboard
     Route::get('/dashboard/stats', [DashboardController::class , 'stats']);
     Route::get('/dashboard/charts', [DashboardController::class , 'charts']);
+    Route::get('/dashboard/risk-analytics', [DashboardController::class , 'riskAnalytics']);
 
     // Organization
     Route::get('/organization', [OrganizationController::class , 'show']);
