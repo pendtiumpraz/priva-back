@@ -33,18 +33,56 @@ class ConsentLogController extends Controller
     }
 
     /**
+     * Public API to get consent configuration (banner settings and items)
+     */
+    public function config(Request $request)
+    {
+        $request->validate([
+            'collection_id' => 'required|string',
+        ]);
+
+        $collection = ConsentCollectionPoint::with(['items' => function ($query) {
+            $query->where('is_active', true);
+        }])->where('collection_id', $request->collection_id)
+          ->orWhere('id', $request->collection_id)
+          ->firstOrFail();
+
+        return response()->json([
+            'data' => [
+                'collection' => [
+                    'name' => $collection->name,
+                    'domain' => $collection->domain,
+                    'settings' => $collection->settings,
+                ],
+                'items' => $collection->items->map(function ($item) {
+                    return [
+                        'id' => $item->id,
+                        'title' => $item->title,
+                        'description' => $item->description,
+                        'full_text' => $item->full_text,
+                        'version' => $item->version,
+                        'is_required' => $item->is_required,
+                    ];
+                }),
+            ]
+        ]);
+    }
+
+    /**
      * Public API to capture user consent from external websites
      */
     public function capture(Request $request)
     {
         $request->validate([
-            'collection_id' => 'required|uuid',
+            'collection_id' => 'required|string',
             'user_identifier' => 'required|string',
             'consented_items' => 'required|array',
             'policy_version' => 'nullable|string',
         ]);
 
-        $collection = ConsentCollectionPoint::findOrFail($request->collection_id);
+        $collection = ConsentCollectionPoint::where('collection_id', $request->collection_id)
+            ->orWhere('id', $request->collection_id)
+            ->firstOrFail();
 
         $log = ConsentLog::create([
             'org_id' => $collection->org_id,

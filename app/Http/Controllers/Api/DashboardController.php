@@ -237,7 +237,7 @@ class DashboardController extends Controller
                 ->where('org_id', $orgId)->whereNull('deleted_at')
                 ->whereNotNull('responded_at')
                 ->whereBetween('responded_at', [$start, $end])
-                ->selectRaw('AVG(TIMESTAMPDIFF(DAY, created_at, responded_at)) as avg_days')
+                ->selectRaw('AVG(EXTRACT(EPOCH FROM (responded_at - created_at)) / 86400) as avg_days')
                 ->value('avg_days');
 
             $dsrResponseTimes[] = [

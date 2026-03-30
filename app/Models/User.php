@@ -29,6 +29,8 @@ class User extends Authenticatable
         'phone',
         'avatar_url',
         'position',
+        'department_id',
+        'position_id',
         'is_active',
     ];
 
@@ -62,5 +64,15 @@ class User extends Authenticatable
     public function organization()
     {
         return $this->belongsTo(Organization::class , 'org_id');
+    }
+
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    public function positionRef()
+    {
+        return $this->belongsTo(Position::class, 'position_id');
     }
 }

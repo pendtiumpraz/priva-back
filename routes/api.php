@@ -24,6 +24,7 @@ Route::post('/public/feature-requests/{id}/upvote', [\App\Http\Controllers\Api\F
 
 // Public Consent API (for banner integration)
 Route::post('/public/consent', [\App\Http\Controllers\Api\ConsentLogController::class, 'capture']);
+Route::get('/public/consent/config', [\App\Http\Controllers\Api\ConsentLogController::class, 'config']);
 
 // =============================================
 // Protected Routes (Sanctum)
@@ -47,6 +48,21 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('/users', UserController::class);
     Route::post('/users/{id}/restore', [UserController::class, 'restore']);
 
+    // Departments
+    Route::get('/departments', [\App\Http\Controllers\Api\DepartmentController::class, 'index']);
+    Route::post('/departments', [\App\Http\Controllers\Api\DepartmentController::class, 'store']);
+    Route::put('/departments/{id}', [\App\Http\Controllers\Api\DepartmentController::class, 'update']);
+    Route::delete('/departments/{id}', [\App\Http\Controllers\Api\DepartmentController::class, 'destroy']);
+
+    // Positions
+    Route::get('/positions', [\App\Http\Controllers\Api\PositionController::class, 'index']);
+    Route::post('/positions', [\App\Http\Controllers\Api\PositionController::class, 'store']);
+    Route::put('/positions/{id}', [\App\Http\Controllers\Api\PositionController::class, 'update']);
+    Route::delete('/positions/{id}', [\App\Http\Controllers\Api\PositionController::class, 'destroy']);
+
+    // DPO Users (for auto-fill in ROPA/DPIA)
+    Route::get('/dpo-users', [\App\Http\Controllers\Api\PositionController::class, 'dpoUsers']);
+
     // =============================================
     // GAP Assessment — Real Compliance Engine
     // =============================================
@@ -66,7 +82,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Fire Drill Simulation — Interactive Scenarios
         // =============================================
         Route::prefix('simulations')->group(function () {
-            Route::get('/', [SimulationController::class , 'index']);
+
             Route::get('/scenarios', [SimulationController::class , 'scenarios']);
             Route::post('/', [SimulationController::class , 'store']);
             Route::get('/{id}', [SimulationController::class , 'show']);
@@ -118,8 +134,11 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/{id}/ropa-links', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'ropaLinks']);
         });
         
-        // Consent Logs (View all consent captured)
+        // Consent Logs & Items
         Route::get('/consent-logs', [\App\Http\Controllers\Api\ConsentLogController::class, 'index']);
+        Route::post('/consent-items', [\App\Http\Controllers\Api\ConsentItemController::class, 'store']);
+        Route::put('/consent-items/{id}', [\App\Http\Controllers\Api\ConsentItemController::class, 'update']);
+        Route::delete('/consent-items/{id}', [\App\Http\Controllers\Api\ConsentItemController::class, 'destroy']);
 
         // Organization Profile (Onboarding)
         Route::get('/organizations', [\App\Http\Controllers\Api\OrganizationController::class, 'index']); // Super Admin: list all
