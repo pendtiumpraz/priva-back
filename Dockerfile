@@ -15,6 +15,7 @@ RUN apk add --no-cache \
     libxml2-dev \
     icu-dev \
     linux-headers \
+    postgresql-dev \
     $PHPIZE_DEPS
 
 # Install PHP extensions
@@ -22,6 +23,8 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install \
     pdo \
     pdo_mysql \
+    pdo_pgsql \
+    pgsql \
     mbstring \
     exif \
     pcntl \
@@ -30,6 +33,9 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     xml \
     intl \
     opcache
+
+# Install Redis
+RUN pecl install redis && docker-php-ext-enable redis
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
