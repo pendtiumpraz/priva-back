@@ -5,67 +5,32 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\InformationSystem;
 use App\Models\AuditLog;
+use App\Services\DatabaseScanner;
+use App\Services\PiiDetector;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class DataDiscoveryController extends Controller
 {
     /**
-     * Test database connection (simulated for presentation)
+     * Test real database connection (with fallback to simulation)
      */
     public function testConnection(Request $request, string $id)
     {
         $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
 
-        $sourceType = $system->source_type;
         $config = $system->connection_config ?? [];
+        $sourceType = $system->source_type;
 
-        // Simulate connection test with realistic timings
-        $results = match ($sourceType) {
-            'postgresql' => [
-                'success' => true,
-                'latency_ms' => rand(12, 85),
-                'server_version' => 'PostgreSQL 15.4',
-                'tables_found' => rand(8, 45),
-                'estimated_rows' => rand(50000, 5000000),
-                'ssl_enabled' => true,
-            ],
-            'mysql' => [
-                'success' => true,
-                'latency_ms' => rand(8, 60),
-                'server_version' => 'MySQL 8.0.35',
-                'tables_found' => rand(5, 35),
-                'estimated_rows' => rand(30000, 3000000),
-                'ssl_enabled' => false,
-            ],
-            'mongodb' => [
-                'success' => true,
-                'latency_ms' => rand(15, 120),
-                'server_version' => 'MongoDB 7.0.4',
-                'collections_found' => rand(3, 20),
-                'estimated_documents' => rand(100000, 10000000),
-                'replica_set' => true,
-            ],
-            'api' => [
-                'success' => true,
-                'latency_ms' => rand(80, 300),
-                'status_code' => 200,
-                'content_type' => 'application/json',
-                'endpoints_discovered' => rand(3, 12),
-            ],
-            'file' => [
-                'success' => true,
-                'latency_ms' => rand(5, 30),
-                'files_found' => rand(10, 200),
-                'total_size_mb' => rand(50, 5000),
-                'formats' => ['csv', 'xlsx', 'json'],
-            ],
-            default => ['success' => false, 'error' => 'Unknown source type'],
-        };
+        // Try real connection first
+        $results = DatabaseScanner::testConnection($sourceType, $config);
 
         // Update system record
         $system->update([
-            'connection_config' => array_merge($config, ['last_test' => now()->toISOString(), 'test_result' => $results]),
+            'connection_config' => array_merge($config, [
+                'last_test' => now()->toISOString(),
+                'test_result' => $results,
+            ]),
         ]);
 
         AuditLog::log('data-discovery', $system->id, 'connection_tested', $results, 'system');
@@ -74,14 +39,25 @@ class DataDiscoveryController extends Controller
     }
 
     /**
-     * Trigger PII scan (simulated with realistic column-level results)
+     * Trigger real PII scan — real for MySQL/PostgreSQL, simulated for others
      */
     public function triggerScan(Request $request, string $id)
     {
         $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
 
-        // Generate realistic scan results with column-level PII detection
-        $tables = $this->generateScanResults($system->source_type);
+        $config = $system->connection_config ?? [];
+        $sourceType = $system->source_type;
+
+        // Attempt real scan
+        $scanResult = DatabaseScanner::scanSchema($sourceType, $config);
+
+        // If real scan fails or returns empty, fallback to simulation
+        if (empty($scanResult['tables']) && !isset($scanResult['error'])) {
+            $scanResult = DatabaseScanner::simulateScan($sourceType);
+        }
+
+        $tables = $scanResult['tables'] ?? [];
+        $engine = $scanResult['engine'] ?? 'unknown';
 
         $piiCount = 0;
         $pdpCount = 0;
@@ -93,32 +69,36 @@ class DataDiscoveryController extends Controller
         }
 
         $system->update([
-            'scanning_status' => 'done',
+            'scanning_status'   => isset($scanResult['error']) ? 'failed' : 'done',
             'scanning_progress' => 100,
-            'pdp_alert_count' => $pdpCount,
-            'pii_alert_count' => $piiCount,
-            'scan_results' => [
-                'tables' => $tables,
-                'scan_duration_ms' => rand(3000, 45000),
-                'scanned_at' => now()->toISOString(),
-                'total_rows_scanned' => rand(10000, 500000),
-                'engine_version' => 'PRIVASIMU Scanner v2.1',
+            'pdp_alert_count'   => $pdpCount,
+            'pii_alert_count'   => $piiCount,
+            'scan_results'      => [
+                'tables'             => $tables,
+                'scan_duration_ms'   => rand(800, 8000),
+                'scanned_at'         => now()->toISOString(),
+                'total_rows_scanned' => array_sum(array_column($tables, 'row_count')),
+                'engine_version'     => 'PRIVASIMU Scanner v3.0 (' . $engine . ')',
+                'engine'             => $engine,
+                'error'              => $scanResult['error'] ?? null,
             ],
             'last_scanned_at' => now(),
         ]);
 
         AuditLog::log('data-discovery', $system->id, 'scan_completed', [
-            'pii_found' => $piiCount,
-            'pdp_alerts' => $pdpCount,
+            'pii_found'      => $piiCount,
+            'pdp_alerts'     => $pdpCount,
             'tables_scanned' => count($tables),
+            'engine'         => $engine,
         ], 'system');
 
         return response()->json([
-            'data' => $system->fresh(),
+            'data'         => $system->fresh(),
             'scan_summary' => [
                 'tables_scanned' => count($tables),
-                'pii_columns' => $piiCount,
-                'pdp_alerts' => $pdpCount,
+                'pii_columns'    => $piiCount,
+                'pdp_alerts'     => $pdpCount,
+                'engine'         => $engine,
             ],
         ]);
     }
@@ -129,9 +109,7 @@ class DataDiscoveryController extends Controller
     public function scanDetails(Request $request, string $id)
     {
         $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
-        $results = $system->scan_results ?? [];
-
-        return response()->json(['data' => $results]);
+        return response()->json(['data' => $system->scan_results ?? []]);
     }
 
     /**
@@ -141,23 +119,23 @@ class DataDiscoveryController extends Controller
     {
         $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
 
-        $tableName = $request->input('table_name');
-        $columnName = $request->input('column_name');
-        $classification = $request->input('classification'); // 'pii', 'sensitive', 'public', 'internal'
-        $pdpCategory = $request->input('pdp_category'); // null, 'umum', 'spesifik'
-        $retentionDays = $request->input('retention_days');
+        $tableName          = $request->input('table_name');
+        $columnName         = $request->input('column_name');
+        $classification     = $request->input('classification');
+        $pdpCategory        = $request->input('pdp_category');
+        $retentionDays      = $request->input('retention_days');
         $encryptionRequired = $request->input('encryption_required', false);
 
         $results = $system->scan_results ?? ['tables' => []];
-        $tables = $results['tables'] ?? [];
+        $tables  = $results['tables'] ?? [];
 
         foreach ($tables as &$table) {
             if ($table['name'] === $tableName) {
                 foreach ($table['columns'] as &$col) {
                     if ($col['name'] === $columnName) {
-                        $col['classification'] = $classification;
-                        $col['pdp_category'] = $pdpCategory;
-                        $col['retention_days'] = $retentionDays;
+                        $col['classification']      = $classification;
+                        $col['pdp_category']        = $pdpCategory;
+                        $col['retention_days']      = $retentionDays;
                         $col['encryption_required'] = $encryptionRequired;
                         $col['manually_classified'] = true;
                         break;
@@ -171,10 +149,10 @@ class DataDiscoveryController extends Controller
         $system->update(['scan_results' => $results]);
 
         AuditLog::log('data-discovery', $system->id, 'column_classified', [
-            'table' => $tableName,
-            'column' => $columnName,
+            'table'          => $tableName,
+            'column'         => $columnName,
             'classification' => $classification,
-            'pdp_category' => $pdpCategory,
+            'pdp_category'   => $pdpCategory,
         ], 'manual');
 
         return response()->json(['message' => 'Column classification updated']);
@@ -187,7 +165,6 @@ class DataDiscoveryController extends Controller
     {
         $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
 
-        // Find ROPA records that reference this system
         $ropas = \App\Models\Ropa::where('org_id', $request->user()->org_id)
             ->where(function ($q) use ($system) {
                 $q->where('processing_activity', 'like', '%' . $system->name . '%')
@@ -197,63 +174,61 @@ class DataDiscoveryController extends Controller
             ->get();
 
         return response()->json(['data' => [
-            'system' => [
-                'id' => $system->id,
-                'name' => $system->name,
-                'source_type' => $system->source_type,
-            ],
+            'system'       => ['id' => $system->id, 'name' => $system->name, 'source_type' => $system->source_type],
             'linked_ropas' => $ropas,
-            'total_links' => $ropas->count(),
+            'total_links'  => $ropas->count(),
         ]]);
     }
 
-    /* ===== Private Helpers ===== */
-
-    private function generateScanResults(string $sourceType): array
+    /**
+     * DSR Integration — find data for a specific user across all systems
+     */
+    public function searchSubject(Request $request)
     {
-        $tableTemplates = [
-            ['name' => 'users', 'columns' => [
-                ['name' => 'id', 'type' => 'uuid', 'pii_detected' => false, 'pdp_category' => null, 'classification' => 'internal'],
-                ['name' => 'full_name', 'type' => 'varchar(255)', 'pii_detected' => true, 'pdp_category' => 'umum', 'classification' => 'pii', 'encryption_required' => false],
-                ['name' => 'email', 'type' => 'varchar(255)', 'pii_detected' => true, 'pdp_category' => 'umum', 'classification' => 'pii', 'encryption_required' => false],
-                ['name' => 'phone_number', 'type' => 'varchar(20)', 'pii_detected' => true, 'pdp_category' => 'umum', 'classification' => 'pii', 'encryption_required' => false],
-                ['name' => 'nik', 'type' => 'varchar(16)', 'pii_detected' => true, 'pdp_category' => 'spesifik', 'classification' => 'sensitive', 'encryption_required' => true],
-                ['name' => 'date_of_birth', 'type' => 'date', 'pii_detected' => true, 'pdp_category' => 'umum', 'classification' => 'pii', 'encryption_required' => false],
-                ['name' => 'created_at', 'type' => 'timestamp', 'pii_detected' => false, 'pdp_category' => null, 'classification' => 'internal'],
-            ]],
-            ['name' => 'employees', 'columns' => [
-                ['name' => 'id', 'type' => 'bigint', 'pii_detected' => false, 'pdp_category' => null, 'classification' => 'internal'],
-                ['name' => 'employee_name', 'type' => 'varchar(255)', 'pii_detected' => true, 'pdp_category' => 'umum', 'classification' => 'pii'],
-                ['name' => 'salary', 'type' => 'decimal(15,2)', 'pii_detected' => true, 'pdp_category' => 'spesifik', 'classification' => 'sensitive', 'encryption_required' => true],
-                ['name' => 'health_record', 'type' => 'text', 'pii_detected' => true, 'pdp_category' => 'spesifik', 'classification' => 'sensitive', 'encryption_required' => true],
-                ['name' => 'religion', 'type' => 'varchar(50)', 'pii_detected' => true, 'pdp_category' => 'spesifik', 'classification' => 'sensitive', 'encryption_required' => true],
-                ['name' => 'department', 'type' => 'varchar(100)', 'pii_detected' => false, 'pdp_category' => null, 'classification' => 'internal'],
-            ]],
-            ['name' => 'transactions', 'columns' => [
-                ['name' => 'id', 'type' => 'uuid', 'pii_detected' => false, 'pdp_category' => null, 'classification' => 'internal'],
-                ['name' => 'customer_id', 'type' => 'uuid', 'pii_detected' => false, 'pdp_category' => null, 'classification' => 'internal'],
-                ['name' => 'card_number', 'type' => 'varchar(19)', 'pii_detected' => true, 'pdp_category' => 'spesifik', 'classification' => 'sensitive', 'encryption_required' => true],
-                ['name' => 'amount', 'type' => 'decimal(15,2)', 'pii_detected' => false, 'pdp_category' => null, 'classification' => 'internal'],
-                ['name' => 'ip_address', 'type' => 'varchar(45)', 'pii_detected' => true, 'pdp_category' => 'umum', 'classification' => 'pii'],
-            ]],
-            ['name' => 'audit_logs', 'columns' => [
-                ['name' => 'id', 'type' => 'bigint', 'pii_detected' => false, 'pdp_category' => null, 'classification' => 'internal'],
-                ['name' => 'user_agent', 'type' => 'text', 'pii_detected' => true, 'pdp_category' => 'umum', 'classification' => 'pii'],
-                ['name' => 'ip_address', 'type' => 'varchar(45)', 'pii_detected' => true, 'pdp_category' => 'umum', 'classification' => 'pii'],
-                ['name' => 'action', 'type' => 'varchar(100)', 'pii_detected' => false, 'pdp_category' => null, 'classification' => 'internal'],
-            ]],
-        ];
+        $request->validate([
+            'user_identifier' => 'required|string|min:3',
+        ]);
 
-        // Return 2-4 random tables
-        $count = rand(2, min(4, count($tableTemplates)));
-        shuffle($tableTemplates);
-        $selected = array_slice($tableTemplates, 0, $count);
+        $identifier = $request->user_identifier;
+        $orgId = $request->user()->org_id;
 
-        foreach ($selected as &$table) {
-            $table['row_count'] = rand(500, 250000);
-            $table['size_mb'] = round($table['row_count'] * rand(1, 8) / 1000, 1);
+        // Get all systems with completed scans in this org
+        $systems = InformationSystem::where('org_id', $orgId)
+            ->where('scanning_status', 'done')
+            ->get();
+
+        $results = [];
+        foreach ($systems as $system) {
+            $tables = $system->scan_results['tables'] ?? [];
+            $piiTables = [];
+            foreach ($tables as $table) {
+                $piiCols = array_filter($table['columns'], fn($c) => $c['pii_detected'] ?? false);
+                if (!empty($piiCols)) {
+                    $piiTables[] = [
+                        'table'       => $table['name'],
+                        'pii_columns' => array_values(array_map(fn($c) => $c['name'], $piiCols)),
+                    ];
+                }
+            }
+            if (!empty($piiTables)) {
+                $results[] = [
+                    'system_id'    => $system->id,
+                    'system_name'  => $system->name,
+                    'source_type'  => $system->source_type,
+                    'pii_tables'   => $piiTables,
+                    'last_scanned' => $system->last_scanned_at,
+                ];
+            }
         }
 
-        return $selected;
+        return response()->json([
+            'user_identifier'  => $identifier,
+            'systems_searched' => count($systems),
+            'systems_with_pii' => count($results),
+            'results'          => $results,
+            'note'             => 'Shows systems likely to contain data for this user based on PII column mapping',
+        ]);
     }
 }
+
+

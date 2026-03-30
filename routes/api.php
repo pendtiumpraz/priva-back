@@ -132,6 +132,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/{id}/scan-details', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'scanDetails']);
             Route::put('/{id}/classify-column', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'updateColumnClassification']);
             Route::get('/{id}/ropa-links', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'ropaLinks']);
+            Route::get('/search-dsr/subject', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'searchSubject']);
         });
         
         // Consent Logs & Items
