@@ -14,8 +14,9 @@ use Illuminate\Support\Facades\Route;
 // =============================================
 // Public Routes
 // =============================================
-Route::post('/auth/register', [AuthController::class , 'register']);
-Route::post('/auth/login', [AuthController::class , 'login']);
+Route::middleware('throttle:api')->group(function () {
+    Route::post('/auth/register', [AuthController::class , 'register']);
+    Route::post('/auth/login', [AuthController::class , 'login']);
 
 // Public Feature Requests (read-only + upvote)
 Route::get('/public/feature-requests', [\App\Http\Controllers\Api\FeatureRequestController::class, 'publicIndex']);
@@ -26,10 +27,12 @@ Route::post('/public/feature-requests/{id}/upvote', [\App\Http\Controllers\Api\F
 Route::post('/public/consent', [\App\Http\Controllers\Api\ConsentLogController::class, 'capture']);
 Route::get('/public/consent/config', [\App\Http\Controllers\Api\ConsentLogController::class, 'config']);
 
+});
+
 // =============================================
 // Protected Routes (Sanctum)
 // =============================================
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
     // Auth
     Route::get('/auth/me', [AuthController::class , 'me']);
