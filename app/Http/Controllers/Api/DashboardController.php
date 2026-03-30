@@ -293,4 +293,41 @@ class DashboardController extends Controller
             'consent_adoption' => $consentAdoption,
         ]);
     }
+
+    /**
+     * Download Excel/CSV Template for DPIA
+     */
+    public function downloadDpiaTemplate(Request $request)
+    {
+        $headers = [
+            'Content-type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="Template_DPIA_PIC.csv"',
+            'Pragma' => 'no-cache',
+            'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
+            'Expires' => '0'
+        ];
+
+        $columns = [
+            'NAMA_SISTEM', 'DESKRIPSI_SISTEM', 'TUJUAN_PEMROSESAN', 'KATEGORI_DATA', 
+            'SUBJEK_DATA_TERDAMPAK', 'RISIKO_AWAL_LIKELIHOOD(1-5)', 'RISIKO_AWAL_IMPACT(1-5)',
+            'MITIGASI_YANG_DILAKUKAN', 'PIC_NAMA', 'PIC_EMAIL'
+        ];
+
+        $callback = function () use ($columns) {
+            $file = fopen('php://output', 'w');
+            fputcsv($file, $columns);
+            
+            // Example Row
+            fputcsv($file, [
+                'Sistem HRIS Terpadu', 'Sistem utama pencatatan presensi dan cuti pegawai',
+                'Mengelola data SDM dan penggajian', 'Nama, NIK, No Rekening, Gaji',
+                'Pegawai Internal', '3', '4',
+                'Enkripsi kolom spesifik (NIK, No Rekening) pada database',
+                'Budi Santoso', 'budi.it@perusahaan.com'
+            ]);
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
 }

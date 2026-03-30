@@ -159,6 +159,9 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::delete('/disconnect', [\App\Http\Controllers\Api\OrganizationController::class, 'disconnectCrm']);
         });
 
+        // Templates
+        Route::get('/templates/dpia', [\App\Http\Controllers\Api\DashboardController::class, 'downloadDpiaTemplate']);
+
         // AI Provider Management (Multi-Provider LLM)
         Route::prefix('ai-providers')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\AiProviderController::class, 'index']);

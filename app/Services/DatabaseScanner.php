@@ -261,7 +261,69 @@ class DatabaseScanner
 
     private static function scanFile(array $config): array
     {
-        return self::simulateScan('file');
+        $path = $config['path'] ?? '';
+        if (!$path || !is_dir($path)) {
+            return ['tables' => [], 'error' => 'Path is invalid or not a directory.'];
+        }
+
+        $files = glob($path . '/*.{csv,json}', GLOB_BRACE);
+        $tables = [];
+
+        foreach ($files as $file) {
+            $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+            $filename = basename($file);
+            $columns = [];
+            $rowCount = 0;
+            $sizeMb = round(filesize($file) / 1048576, 2);
+
+            try {
+                if ($ext === 'csv') {
+                    if (($handle = fopen($file, "r")) !== FALSE) {
+                        $headers = fgetcsv($handle, 1000, ",");
+                        if ($headers) {
+                            foreach ($headers as $h) {
+                                $piiResult = PiiDetector::analyze($h, 'varchar');
+                                $columns[] = array_merge([
+                                    'name' => $h, 'type' => 'varchar', 'nullable' => true,
+                                    'manually_classified' => false
+                                ], $piiResult);
+                            }
+                        }
+                        while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
+                            $rowCount++;
+                        }
+                        fclose($handle);
+                    }
+                } elseif ($ext === 'json') {
+                    $content = json_decode(file_get_contents($file), true);
+                    if (is_array($content)) {
+                        $rowCount = count($content);
+                        if ($rowCount > 0 && is_array($content[0])) {
+                            foreach (array_keys($content[0]) as $h) {
+                                $piiResult = PiiDetector::analyze($h, 'json_field');
+                                $columns[] = array_merge([
+                                    'name' => $h, 'type' => 'json_field', 'nullable' => true,
+                                    'manually_classified' => false
+                                ], $piiResult);
+                            }
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::error("Failed to scan file {$filename}: " . $e->getMessage());
+            }
+
+            if (!empty($columns)) {
+                $tables[] = [
+                    'name' => $filename,
+                    'columns' => $columns,
+                    'row_count' => $rowCount,
+                    'size_mb' => $sizeMb,
+                ];
+            }
+        }
+
+        return ['tables' => $tables, 'engine' => 'real_file_scanner'];
     }
 
     // =============================================
