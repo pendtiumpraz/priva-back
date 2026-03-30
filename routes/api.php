@@ -127,6 +127,14 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         });
 
         // =============================================
+        // Breach Integrations (Telegram War Room, SIEM/SOAR)
+        // =============================================
+        Route::prefix('breach')->group(function () {
+            Route::post('/{id}/notify-telegram', [\App\Http\Controllers\Api\IntegrationController::class, 'syncBreachTelegram']);
+            Route::post('/{id}/notify-siem', [\App\Http\Controllers\Api\IntegrationController::class, 'syncBreachSiem']);
+        });
+
+        // =============================================
         // Data Discovery — Advanced Endpoints
         // =============================================
         Route::prefix('data-discovery')->group(function () {
