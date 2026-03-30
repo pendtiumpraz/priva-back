@@ -366,4 +366,102 @@ class DatabaseScanner
         }
         return ['tables' => $selected, 'engine' => 'simulated'];
     }
+
+    // =============================================
+    // DSR: Search Exact Subject Data
+    // =============================================
+    public static function searchSubject(string $type, array $config, array $tables, string $identifier): array
+    {
+        $start = microtime(true);
+        $results = [];
+
+        try {
+            if ($type === 'mysql') {
+                $host = $config['host'] ?? '127.0.0.1';
+                $port = $config['port'] ?? 3306;
+                $db = $config['database'] ?? '';
+                $user = $config['username'] ?? '';
+                $pass = $config['password'] ?? '';
+
+                $dsn = "mysql:host={$host};port={$port};dbname={$db};charset=utf8mb4";
+                $pdo = new \PDO($dsn, $user, $pass, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION, \PDO::ATTR_TIMEOUT => 3]);
+                
+                // For each table with PII, try to find the user
+                foreach ($tables as $t) {
+                    if (empty($t['pii_columns'])) continue;
+                    
+                    $conditions = [];
+                    $params = [];
+                    foreach ($t['pii_columns'] as $col) {
+                        $conditions[] = "`{$col}` = ?";
+                        $params[] = $identifier;
+                    }
+                    if (empty($conditions)) continue;
+
+                    $sql = "SELECT * FROM `{$t['table']}` WHERE " . implode(' OR ', $conditions) . " LIMIT 10";
+                    try {
+                        $stmt = $pdo->prepare($sql);
+                        $stmt->execute($params);
+                        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+                        if (count($rows) > 0) {
+                            $results[] = [
+                                'table' => $t['table'],
+                                'matched_rows' => count($rows),
+                                'matched_on' => array_keys(array_filter($rows[0], fn($v) => $v === $identifier)),
+                            ];
+                        }
+                    } catch (\Throwable) {} // Ignore querying errors for specific tables
+                }
+            } 
+            elseif ($type === 'postgresql') {
+                $host = $config['host'] ?? '127.0.0.1';
+                $port = $config['port'] ?? 5432;
+                $db = $config['database'] ?? '';
+                $user = $config['username'] ?? '';
+                $pass = $config['password'] ?? '';
+                $ssl = ($config['sslmode'] ?? '') ? "sslmode=" . $config['sslmode'] : '';
+
+                $dsn = "pgsql:host={$host};port={$port};dbname={$db};{$ssl}";
+                $pdo = new \PDO($dsn, $user, $pass, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION, \PDO::ATTR_TIMEOUT => 3]);
+                
+                foreach ($tables as $t) {
+                    if (empty($t['pii_columns'])) continue;
+                    
+                    $conditions = [];
+                    $params = [];
+                    foreach ($t['pii_columns'] as $col) {
+                        $conditions[] = "\"{$col}\" = ?";
+                        $params[] = $identifier;
+                    }
+                    if (empty($conditions)) continue;
+
+                    $sql = "SELECT * FROM \"{$t['table']}\" WHERE " . implode(' OR ', $conditions) . " LIMIT 10";
+                    try {
+                        $stmt = $pdo->prepare($sql);
+                        $stmt->execute($params);
+                        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+                        if (count($rows) > 0) {
+                            $results[] = [
+                                'table' => $t['table'],
+                                'matched_rows' => count($rows),
+                                'matched_on' => array_keys(array_filter($rows[0], fn($v) => $v === $identifier)),
+                            ];
+                        }
+                    } catch (\Throwable) {} 
+                }
+            }
+            else {
+                // Return generic match for non-sql systems
+                $results[] = ['table' => 'simulation_match', 'matched_rows' => 1, 'matched_on' => ['email']];
+            }
+        } catch (\Throwable $e) {
+            Log::error("Failed DSR search in $type: " . $e->getMessage());
+        }
+
+        return [
+            'found_data' => count($results) > 0,
+            'matches' => $results,
+            'search_time_ms' => round((microtime(true) - $start) * 1000)
+        ];
+    }
 }

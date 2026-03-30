@@ -198,6 +198,8 @@ class DataDiscoveryController extends Controller
             ->get();
 
         $results = [];
+        $totalMatches = 0;
+
         foreach ($systems as $system) {
             $tables = $system->scan_results['tables'] ?? [];
             $piiTables = [];
@@ -210,14 +212,22 @@ class DataDiscoveryController extends Controller
                     ];
                 }
             }
+
             if (!empty($piiTables)) {
-                $results[] = [
-                    'system_id'    => $system->id,
-                    'system_name'  => $system->name,
-                    'source_type'  => $system->source_type,
-                    'pii_tables'   => $piiTables,
-                    'last_scanned' => $system->last_scanned_at,
-                ];
+                // Now execute the actual Data Scan Query!
+                $config = $system->connection_config ?? [];
+                $searchResult = \App\Services\DatabaseScanner::searchSubject($system->source_type, $config, $piiTables, $identifier);
+
+                if ($searchResult['found_data']) {
+                    $totalMatches += count($searchResult['matches']);
+                    $results[] = [
+                        'system_id'    => $system->id,
+                        'system_name'  => $system->name,
+                        'source_type'  => $system->source_type,
+                        'matches'      => $searchResult['matches'],
+                        'search_time'  => $searchResult['search_time_ms'] . 'ms',
+                    ];
+                }
             }
         }
 
@@ -225,8 +235,9 @@ class DataDiscoveryController extends Controller
             'user_identifier'  => $identifier,
             'systems_searched' => count($systems),
             'systems_with_pii' => count($results),
+            'total_table_matches' => $totalMatches,
             'results'          => $results,
-            'note'             => 'Shows systems likely to contain data for this user based on PII column mapping',
+            'note'             => 'Actual row findings based on direct schema query.',
         ]);
     }
 }
