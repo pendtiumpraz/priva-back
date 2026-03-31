@@ -57,7 +57,7 @@ class OrganizationController extends Controller
 
         $fields = $request->only([
             'name', 'industry', 'logo_url', 'privacy_policy_url',
-            'website', 'address', 'phone', 'email', 'idle_timeout_minutes',
+            'website', 'address', 'phone', 'email', 'idle_timeout_minutes', 'idle_timeout_enabled',
             // Onboarding fields
             'business_model', 'company_size', 'data_subjects_type', 'core_systems',
             'has_dpo', 'onboarding_completed',

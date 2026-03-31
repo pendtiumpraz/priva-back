@@ -37,6 +37,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     // Auth
     Route::get('/auth/me', [AuthController::class , 'me']);
     Route::post('/auth/logout', [AuthController::class , 'logout']);
+    Route::put('/user/settings', [AuthController::class, 'updateSettings']);
 
     // Dashboard
     Route::get('/dashboard/stats', [DashboardController::class , 'stats']);

@@ -14,6 +14,11 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        if (User::where('email', 'superadmin@privasimu.com')->exists()) {
+            $this->command->info('Database is already seeded. Skipping to avoid duplicates.');
+            return;
+        }
+
         // =============================================
         // Organization
         // =============================================

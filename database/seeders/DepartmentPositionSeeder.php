@@ -12,6 +12,10 @@ class DepartmentPositionSeeder extends Seeder
 {
     public function run(): void
     {
+        if (Department::count() > 0) {
+            $this->command->info('Departments already seeded. Skipping to avoid duplicates.');
+            return;
+        }
         // Get organizations
         $org = Organization::where('slug', 'pt-tester-indonesia')->first();
         $org2 = Organization::where('slug', 'pt-sainskerta-solusi-nusantara')->first();

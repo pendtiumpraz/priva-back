@@ -115,4 +115,28 @@ class AuthController extends Controller
             'message' => 'Berhasil logout.',
         ]);
     }
+
+    /**
+     * Update user-specific settings (e.g. idle timeout for SA).
+     */
+    public function updateSettings(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $fields = $request->validate([
+            'idle_timeout_enabled' => 'nullable|boolean',
+            'idle_timeout_minutes' => 'nullable|integer|min:1',
+        ]);
+
+        $settings = $user->settings ?? [];
+        if (isset($fields['idle_timeout_enabled'])) $settings['idle_timeout_enabled'] = (bool) $fields['idle_timeout_enabled'];
+        if (isset($fields['idle_timeout_minutes'])) $settings['idle_timeout_minutes'] = (int) $fields['idle_timeout_minutes'];
+
+        $user->update(['settings' => $settings]);
+
+        return response()->json([
+            'message' => 'Settings updated successfully.',
+            'user' => $user->load('organization'),
+            'settings' => $settings,
+        ]);
+    }
 }
