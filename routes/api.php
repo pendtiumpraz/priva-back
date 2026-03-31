@@ -47,6 +47,9 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/system-logs', [\App\Http\Controllers\Api\LogAnalyzerController::class, 'index']);
     Route::post('/system-logs/analyze', [\App\Http\Controllers\Api\LogAnalyzerController::class, 'analyze']);
 
+    // Terminal / Maintenance Core
+    Route::post('/maintenance/execute', [\App\Http\Controllers\Api\MaintenanceController::class, 'execute']);
+
     // Organization
     Route::get('/organization', [OrganizationController::class , 'show']);
     Route::put('/organization', [OrganizationController::class , 'update']);
