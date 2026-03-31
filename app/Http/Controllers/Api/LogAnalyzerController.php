@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\SystemLogAnalysis;
-use App\Services\AiOrchestratorService;
+use App\Services\AiService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 
@@ -84,17 +84,21 @@ class LogAnalyzerController extends Controller
                       "\n4. 'file_yang_harus_diperiksa' (array of strings - path/nama file yang kemungkinan menyebabkan error jika ada)." .
                       "\n\nBerikut lognya:\n" . substr($rawLogs, -5000); // Send the last 5000 chars roughly
 
-            $aiService = new AiOrchestratorService();
+            $aiService = new AiService();
             // Assuming tenant configuration does not strictly apply to superadmin, but we need an active provider
-            $response = $aiService->generateText($prompt, null, 'chat');
+            $response = $aiService->ask($prompt, "", 2000);
 
-            // Find JSON inside response
-            $jsonStr = $response;
-            if (preg_match('/\{.*\}/s', $response, $matches)) {
-                $jsonStr = $matches[0];
+            // AiService returns parsed array or raw text in ['raw' => ...]
+            if (isset($response['raw'])) {
+                // Manually parse if it didn't
+                $jsonStr = $response['raw'];
+                if (preg_match('/\{.*\}/s', $response['raw'], $matches)) {
+                    $jsonStr = $matches[0];
+                }
+                $analysisData = json_decode($jsonStr, true);
+            } else {
+                $analysisData = $response;
             }
-
-            $analysisData = json_decode($jsonStr, true);
 
             // Create record
             $analysis = SystemLogAnalysis::create([
