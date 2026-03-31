@@ -76,10 +76,19 @@ class UserController extends Controller
             'position' => 'nullable|string|max:255',
         ];
 
-        // Superadmin can assign to any org + create superadmin role
+        // Role restriction modification
         if ($auth->role === 'superadmin') {
-            $rules['org_id'] = 'required|exists:organizations,id';
             $rules['role'] = ['required', Rule::in(['superadmin', 'admin', 'dpo', 'maker', 'viewer'])];
+            
+            // If superadmin creates dpo/maker/viewer, org_id is required
+            if (in_array($request->input('role'), ['dpo', 'maker', 'viewer'])) {
+                $rules['org_id'] = 'required|exists:organizations,id';
+            } else {
+                // If superadmin or admin, org_id is not required
+                $rules['org_id'] = 'nullable|exists:organizations,id';
+            }
+        } else {
+            // Admin users will automatically get the org_id from their parent
         }
 
         $validated = $request->validate($rules);
@@ -88,6 +97,16 @@ class UserController extends Controller
         // Admin can only create users in their own org
         if ($auth->role !== 'superadmin') {
             $validated['org_id'] = $auth->org_id;
+        }
+
+        // Auto-create Organization if superadmin creates an 'admin' and no org_id is passed
+        if ($auth->role === 'superadmin' && $validated['role'] === 'admin' && empty($validated['org_id'])) {
+            $org = \App\Models\Organization::create([
+                'name' => $validated['name'] . "'s Organization",
+                'industry' => 'Other',
+                'is_active' => true,
+            ]);
+            $validated['org_id'] = $org->id;
         }
 
         $validated['is_active'] = true;

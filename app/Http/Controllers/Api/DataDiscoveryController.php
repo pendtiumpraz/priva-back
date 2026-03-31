@@ -68,6 +68,40 @@ class DataDiscoveryController extends Controller
             }
         }
 
+        // ==========================================
+        // SCAN RESULT DIFF (CHANGE DETECTION)
+        // ==========================================
+        $oldScan = $system->scan_results ?? [];
+        $oldTables = $oldScan['tables'] ?? [];
+        $diffAlerts = [];
+
+        if (!empty($oldTables)) {
+            $oldTableMap = collect($oldTables)->keyBy('name');
+            foreach ($tables as $newTable) {
+                $tableName = $newTable['name'];
+                if (!$oldTableMap->has($tableName)) {
+                    $diffAlerts[] = "Found new table: {$tableName}";
+                    continue;
+                }
+                
+                $oldColMap = collect($oldTableMap->get($tableName)['columns'])->keyBy('name');
+                foreach ($newTable['columns'] as $newCol) {
+                    $colName = $newCol['name'];
+                    if (!$oldColMap->has($colName)) {
+                        $diffAlerts[] = "New column '{$colName}' added to table '{$tableName}'";
+                        if ($newCol['pii_detected']) {
+                            $diffAlerts[] = "WARNING: New PII detected in {$tableName}.{$colName}";
+                        }
+                    } elseif (!$oldColMap->get($colName)['pii_detected'] && $newCol['pii_detected']) {
+                        $diffAlerts[] = "WARNING: Column {$tableName}.{$colName} is now classified as PII";
+                    }
+                }
+            }
+            if (!empty($diffAlerts)) {
+                AuditLog::log('data-discovery', $system->id, 'schema_diff_detected', ['alerts' => $diffAlerts], 'system');
+            }
+        }
+
         $system->update([
             'scanning_status'   => isset($scanResult['error']) ? 'failed' : 'done',
             'scanning_progress' => 100,
@@ -81,6 +115,7 @@ class DataDiscoveryController extends Controller
                 'engine_version'     => 'PRIVASIMU Scanner v3.0 (' . $engine . ')',
                 'engine'             => $engine,
                 'error'              => $scanResult['error'] ?? null,
+                'diff_alerts'        => $diffAlerts,
             ],
             'last_scanned_at' => now(),
         ]);
