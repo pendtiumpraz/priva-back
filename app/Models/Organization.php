@@ -11,7 +11,7 @@ class Organization extends Model
     use HasUuids, SoftDeletes;
 
     protected $fillable = [
-        'name', 'slug', 'industry', 'logo_url', 'privacy_policy_url',
+        'idle_timeout_minutes', 'name', 'slug', 'industry', 'logo_url', 'privacy_policy_url',
         'website', 'address', 'phone', 'email', 'settings',
         // Onboarding
         'business_model', 'company_size', 'data_subjects_type', 'core_systems',
