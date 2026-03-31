@@ -101,10 +101,11 @@ class UserController extends Controller
 
         // Auto-create Organization if superadmin creates an 'admin' and no org_id is passed
         if ($auth->role === 'superadmin' && $validated['role'] === 'admin' && empty($validated['org_id'])) {
+            $orgName = $validated['name'] . "'s Organization";
             $org = \App\Models\Organization::create([
-                'name' => $validated['name'] . "'s Organization",
+                'name' => $orgName,
+                'slug' => \Illuminate\Support\Str::slug($orgName . '-' . uniqid()),
                 'industry' => 'Other',
-                'is_active' => true,
             ]);
             $validated['org_id'] = $org->id;
         }
@@ -181,10 +182,11 @@ class UserController extends Controller
 
         if ($auth->role === 'superadmin') {
             if ($newRole === 'admin' && empty($newOrgId)) {
+                $orgName = ($validated['name'] ?? $user->name) . "'s Organization";
                 $org = \App\Models\Organization::create([
-                    'name' => ($validated['name'] ?? $user->name) . "'s Organization",
+                    'name' => $orgName,
+                    'slug' => \Illuminate\Support\Str::slug($orgName . '-' . uniqid()),
                     'industry' => 'Other',
-                    'is_active' => true,
                 ]);
                 $validated['org_id'] = $org->id;
             } elseif ($newRole === 'superadmin') {
