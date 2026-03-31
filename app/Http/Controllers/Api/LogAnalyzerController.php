@@ -39,8 +39,7 @@ class LogAnalyzerController extends Controller
 
         $history = SystemLogAnalysis::with('user:id,name')
             ->orderBy('created_at', 'desc')
-            ->limit(10)
-            ->get();
+            ->paginate(10);
 
         return response()->json([
             'raw_logs' => $rawLogs,
