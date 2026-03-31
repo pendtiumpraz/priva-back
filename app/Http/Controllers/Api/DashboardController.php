@@ -233,12 +233,22 @@ class DashboardController extends Controller
             $start = $date->copy()->startOfMonth();
             $end = $date->copy()->endOfMonth();
 
-            $avg = DB::table('dsr_requests')
+            $record = DB::table('dsr_requests')
                 ->where('org_id', $orgId)->whereNull('deleted_at')
                 ->whereNotNull('responded_at')
                 ->whereBetween('responded_at', [$start, $end])
-                ->selectRaw('AVG(EXTRACT(EPOCH FROM (responded_at - created_at)) / 86400) as avg_days')
-                ->value('avg_days');
+                // Using DATEDIFF (MySQL) or simply grabbing them and computing in PHP to be safe across DBs
+                ->get(['created_at', 'responded_at']);
+
+            $sumDays = 0;
+            $count = $record->count();
+            foreach ($record as $row) {
+                // Carbon parse
+                $createDate = \Carbon\Carbon::parse($row->created_at);
+                $respDate = \Carbon\Carbon::parse($row->responded_at);
+                $sumDays += $createDate->diffInDays($respDate);
+            }
+            $avg = $count > 0 ? ($sumDays / $count) : 0;
 
             $dsrResponseTimes[] = [
                 'month' => $date->format('M'),

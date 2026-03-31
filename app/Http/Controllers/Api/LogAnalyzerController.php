@@ -7,6 +7,7 @@ use App\Models\SystemLogAnalysis;
 use App\Services\AiService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Cache;
 
 class LogAnalyzerController extends Controller
 {
@@ -54,6 +55,15 @@ class LogAnalyzerController extends Controller
     {
         if ($request->user()->role !== 'superadmin') {
             return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        // Lock to prevent duplicate requests from proxy retries (e.g. Cloudflare / Nginx timeouts)
+        $lockKey = 'log_analyze_lock_' . $request->user()->id;
+        if (!Cache::add($lockKey, true, 30)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Terlalu banyak permintaan atau AI sedang memproses. Tunggu beberapa detik.'
+            ], 429);
         }
 
         $logPath = storage_path('logs/laravel.log');
@@ -109,11 +119,13 @@ class LogAnalyzerController extends Controller
                 'created_by' => $request->user()->id,
             ]);
 
+            Cache::forget($lockKey);
             return response()->json([
                 'status' => 'success',
                 'data' => $analysis
             ]);
         } catch (\Exception $e) {
+            Cache::forget($lockKey);
             return response()->json([
                 'status' => 'error',
                 'message' => $e->getMessage()
