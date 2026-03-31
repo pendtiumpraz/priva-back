@@ -27,7 +27,7 @@ class LogAnalyzerController extends Controller
             $file = new \SplFileObject($logPath, 'r');
             $file->seek(PHP_INT_MAX);
             $totalLines = $file->key();
-            $startLine = max(0, $totalLines - 50);
+            $startLine = max(0, $totalLines - 200);
 
             $file->seek($startLine);
             while (!$file->eof()) {
@@ -66,7 +66,7 @@ class LogAnalyzerController extends Controller
         $file = new \SplFileObject($logPath, 'r');
         $file->seek(PHP_INT_MAX);
         $totalLines = $file->key();
-        $startLine = max(0, $totalLines - 50);
+        $startLine = max(0, $totalLines - 200);
 
         $file->seek($startLine);
         while (!$file->eof()) {
@@ -75,14 +75,14 @@ class LogAnalyzerController extends Controller
         }
 
         try {
-            $prompt = "Tolong periksa cuplikan Laravel backend log terbaru (50 baris terakhir) di bawah ini. " .
+            $prompt = "Tolong periksa cuplikan Laravel backend log terbaru (beberapa ratus baris terakhir) di bawah ini. " .
                       "Buatkan analisa mendalam menggunakan bahasa Indonesia, formatlah balasan kamu murni dalam JSON (HANYA JSON OBJECT, tidak ada markdown codeblock). " .
                       "Penting: Return harus memiliki 4 field berikut: " .
                       "\n1. 'kesimpulan' (string - kesimpulan riwayat error)," .
                       "\n2. 'status' (string - 'sehat', 'peringatan', atau 'kritis')," .
                       "\n3. 'solusi_langkah_langkah' (array of strings - langkah penyelesaian masalah)," .
                       "\n4. 'file_yang_harus_diperiksa' (array of strings - path/nama file yang kemungkinan menyebabkan error jika ada)." .
-                      "\n\nBerikut lognya:\n" . substr($rawLogs, -5000); // Send the last 5000 chars roughly
+                      "\n\nBerikut lognya:\n" . substr($rawLogs, -15000); // Send the last 15000 chars roughly
 
             $aiService = new AiService();
             // Assuming tenant configuration does not strictly apply to superadmin, but we need an active provider
