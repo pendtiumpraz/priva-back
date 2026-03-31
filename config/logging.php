@@ -54,8 +54,17 @@ return [
 
         'stack' => [
             'driver' => 'stack',
-            'channels' => explode(',', (string) env('LOG_STACK', 'single')),
+            'channels' => array_filter(array_merge(
+                explode(',', (string) env('LOG_STACK', 'single')),
+                ['ai_analyzer'] // Add our AI log listener
+            )),
             'ignore_exceptions' => false,
+        ],
+
+        'ai_analyzer' => [
+            'driver' => 'custom',
+            'via' => \App\Logging\AiAnalyzerLogger::class,
+            'level' => 'error', // Only listen for errors
         ],
 
         'single' => [
