@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('organizations', function (Blueprint $table) {
-            $table->integer('idle_timeout_minutes')->default(30)->after('domain');
+            $table->integer('idle_timeout_minutes')->default(30);
         });
     }
 
