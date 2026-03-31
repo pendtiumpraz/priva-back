@@ -58,6 +58,10 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
     // Users
     Route::apiResource('/users', UserController::class);
+
+    // Tenant Roles & Apps (On-Premise Beli Putus)
+    Route::apiResource('/tenant-roles', \App\Http\Controllers\Api\TenantRoleController::class);
+    Route::apiResource('/organization-apps', \App\Http\Controllers\Api\OrganizationAppController::class);
     Route::post('/users/{id}/restore', [UserController::class, 'restore']);
 
     // Departments

@@ -33,6 +33,7 @@ class User extends Authenticatable
         'position_id',
         'is_active',
         'settings',
+        'tenant_role_id',
     ];
 
     /**
@@ -76,5 +77,10 @@ class User extends Authenticatable
     public function positionRef()
     {
         return $this->belongsTo(Position::class, 'position_id');
+    }
+
+    public function tenantRole()
+    {
+        return $this->belongsTo(TenantRole::class, 'tenant_role_id');
     }
 }
