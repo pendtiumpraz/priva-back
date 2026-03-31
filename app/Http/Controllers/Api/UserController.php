@@ -162,7 +162,7 @@ class UserController extends Controller
 
         if ($auth->role === 'superadmin') {
             $rules['role'] = ['sometimes', Rule::in(['superadmin', 'admin', 'dpo', 'maker', 'viewer'])];
-            $rules['org_id'] = 'sometimes|exists:organizations,id';
+            $rules['org_id'] = 'nullable|exists:organizations,id';
         }
 
         if ($request->filled('password')) {
@@ -173,6 +173,23 @@ class UserController extends Controller
 
         if (isset($validated['password'])) {
             $validated['password'] = Hash::make($validated['password']);
+        }
+
+        // Auto-create Organization if superadmin changes a role to 'admin' and no org_id is present
+        $newRole = $validated['role'] ?? $user->role;
+        $newOrgId = array_key_exists('org_id', $validated) ? $validated['org_id'] : $user->org_id;
+
+        if ($auth->role === 'superadmin') {
+            if ($newRole === 'admin' && empty($newOrgId)) {
+                $org = \App\Models\Organization::create([
+                    'name' => ($validated['name'] ?? $user->name) . "'s Organization",
+                    'industry' => 'Other',
+                    'is_active' => true,
+                ]);
+                $validated['org_id'] = $org->id;
+            } elseif ($newRole === 'superadmin') {
+                $validated['org_id'] = null; // Ensure superadmins have no org_id
+            }
         }
 
         $user->update($validated);
