@@ -6,10 +6,36 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Symfony\Component\Process\Process;
-use Symfony\Component\Process\Exception\ProcessFailedException;
+use Illuminate\Support\Facades\File;
 
 class MaintenanceController extends Controller
 {
+    /**
+     * Get all available seeeder files
+     */
+    public function getSeeders(Request $request)
+    {
+        $user = $request->user();
+        if ($user->role !== 'superadmin') {
+            return response()->json(['message' => 'Forbidden Access.'], 403);
+        }
+
+        $seederPath = database_path('seeders');
+        $seeders = [];
+
+        if (File::exists($seederPath)) {
+            $files = File::files($seederPath);
+            foreach ($files as $file) {
+                // Ignore DatabaseSeeder.php since it's the root/default, but we can include it actually.
+                $filename = $file->getFilenameWithoutExtension();
+                $seeders[] = $filename;
+            }
+        }
+
+        return response()->json([
+            'seeders' => $seeders
+        ]);
+    }
     /**
      * Execute a shell command via SuperAdmin authentication
      */
