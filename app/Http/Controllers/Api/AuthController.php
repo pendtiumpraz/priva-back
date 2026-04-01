@@ -29,7 +29,6 @@ class AuthController extends Controller
             'slug' => \Illuminate\Support\Str::slug($request->organization_name) . '-' . uniqid(),
         ]);
 
-        // Create user as admin of the org
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
@@ -37,6 +36,12 @@ class AuthController extends Controller
             'org_id' => $org->id,
             'role' => 'admin',
         ]);
+
+        $tenantRole = \App\Models\TenantRole::where('org_id', $org->id)->where('name', 'Admin')->first();
+        if ($tenantRole) {
+            $user->tenant_role_id = $tenantRole->id;
+            $user->save();
+        }
 
         $token = $user->createToken('auth-token')->plainTextToken;
 

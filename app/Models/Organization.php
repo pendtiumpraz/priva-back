@@ -41,4 +41,26 @@ class Organization extends Model
     {
         return $this->hasMany(AiCreditLog::class, 'org_id');
     }
+
+    protected static function booted()
+    {
+        static::created(function ($organization) {
+            $presets = [
+                'admin' => ['name' => 'Admin', 'desc' => 'Administrator dengan full akses konfigurasi'],
+                'dpo'   => ['name' => 'DPO', 'desc' => 'Data Protection Officer untuk review dan approval'],
+                'maker' => ['name' => 'Maker', 'desc' => 'User operasional yang input data ROPA/DPIA'],
+                'viewer'=> ['name' => 'Viewer', 'desc' => 'Akses hanya baca (read-only)'],
+            ];
+
+            foreach ($presets as $code => $data) {
+                \App\Models\TenantRole::create([
+                    'org_id' => $organization->id,
+                    'name' => $data['name'],
+                    'is_system' => true,
+                    'description' => $data['desc'],
+                    'permissions' => ['*'],
+                ]);
+            }
+        });
+    }
 }

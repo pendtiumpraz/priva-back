@@ -113,6 +113,17 @@ class UserController extends Controller
         $validated['is_active'] = true;
 
         $user = User::create($validated);
+
+        if ($user->role !== 'superadmin' && $user->org_id) {
+            $tenantRole = \App\Models\TenantRole::where('org_id', $user->org_id)
+                ->where('name', ucfirst($user->role))
+                ->first();
+            if ($tenantRole) {
+                $user->tenant_role_id = $tenantRole->id;
+                $user->save();
+            }
+        }
+
         $user->load('organization');
 
         return response()->json(['data' => $user, 'message' => 'User created'], 201);
@@ -195,6 +206,17 @@ class UserController extends Controller
         }
 
         $user->update($validated);
+
+        if ($user->role !== 'superadmin' && $user->org_id) {
+            $tenantRole = \App\Models\TenantRole::where('org_id', $user->org_id)
+                ->where('name', ucfirst($user->role))
+                ->first();
+            if ($tenantRole) {
+                $user->tenant_role_id = $tenantRole->id;
+                $user->save();
+            }
+        }
+
         $user->load('organization');
 
         return response()->json(['data' => $user, 'message' => 'User updated']);

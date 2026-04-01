@@ -11,6 +11,7 @@ class TenantRole extends Model
     protected $fillable = [
         'org_id',
         'name',
+        'is_system',
         'description',
         'permissions',
     ];

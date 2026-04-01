@@ -67,6 +67,10 @@ class TenantRoleController extends Controller
     {
         $role = TenantRole::where('org_id', auth()->user()->org_id)->findOrFail($id);
         
+        if ($role->is_system) {
+            return response()->json(['message' => 'Tidak dapat menghapus System Role bawan.'], 400);
+        }
+
         if ($role->users()->count() > 0) {
             return response()->json(['message' => 'Tidak dapat menghapus role karena masih digunakan oleh user.'], 400);
         }
