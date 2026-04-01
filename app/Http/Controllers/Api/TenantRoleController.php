@@ -10,8 +10,17 @@ class TenantRoleController extends Controller
 {
     public function index(Request $request)
     {
-        $orgId = $request->user()->org_id;
-        $roles = TenantRole::where('org_id', $orgId)->withCount('users')->get();
+        $user = $request->user();
+        if ($user->role === 'superadmin') {
+            $query = TenantRole::query();
+            if ($request->filled('org_id')) {
+                $query->where('org_id', $request->org_id);
+            }
+            $roles = $query->withCount('users')->get();
+            return response()->json(['data' => $roles]);
+        }
+
+        $roles = TenantRole::where('org_id', $user->org_id)->withCount('users')->get();
         return response()->json(['data' => $roles]);
     }
 

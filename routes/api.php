@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\GapAssessmentController;
 use App\Http\Controllers\Api\SimulationController;
 use App\Http\Controllers\Api\ModuleCrudController;
+use App\Http\Middleware\CheckPermission;
 use Illuminate\Support\Facades\Route;
 
 /* |-------------------------------------------------------------------------- | PRIVASIMU API Routes |-------------------------------------------------------------------------- */
@@ -91,14 +92,14 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     // GAP Assessment — Real Compliance Engine
     // =============================================
     Route::prefix('gap')->group(function () {
-            Route::get('/', [GapAssessmentController::class , 'index']);
-            Route::get('/questions', [GapAssessmentController::class , 'questions']);
-            Route::post('/', [GapAssessmentController::class , 'store']);
-            Route::get('/{id}', [GapAssessmentController::class , 'show']);
-            Route::post('/{id}/submit', [GapAssessmentController::class , 'submitAnswers']);
-            Route::delete('/{id}', [GapAssessmentController::class , 'destroy']);
-            Route::post('/{id}/restore', [GapAssessmentController::class , 'restore']);
-            Route::delete('/{id}/force', [GapAssessmentController::class , 'forceDelete']);
+            Route::get('/', [GapAssessmentController::class , 'index'])->middleware('permission:gap_assessment,read');
+            Route::get('/questions', [GapAssessmentController::class , 'questions'])->middleware('permission:gap_assessment,read');
+            Route::post('/', [GapAssessmentController::class , 'store'])->middleware('permission:gap_assessment,write');
+            Route::get('/{id}', [GapAssessmentController::class , 'show'])->middleware('permission:gap_assessment,read');
+            Route::post('/{id}/submit', [GapAssessmentController::class , 'submitAnswers'])->middleware('permission:gap_assessment,write');
+            Route::delete('/{id}', [GapAssessmentController::class , 'destroy'])->middleware('permission:gap_assessment,write');
+            Route::post('/{id}/restore', [GapAssessmentController::class , 'restore'])->middleware('permission:gap_assessment,write');
+            Route::delete('/{id}/force', [GapAssessmentController::class , 'forceDelete'])->middleware('permission:gap_assessment,write');
         }
         );
 
@@ -107,14 +108,14 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         // =============================================
         Route::prefix('simulations')->group(function () {
 
-            Route::get('/scenarios', [SimulationController::class , 'scenarios']);
-            Route::post('/', [SimulationController::class , 'store']);
-            Route::get('/{id}', [SimulationController::class , 'show']);
-            Route::post('/{id}/start', [SimulationController::class , 'start']);
-            Route::post('/{id}/submit', [SimulationController::class , 'submitResponses']);
-            Route::delete('/{id}', [SimulationController::class , 'destroy']);
-            Route::post('/{id}/restore', [SimulationController::class , 'restore']);
-            Route::delete('/{id}/force', [SimulationController::class , 'forceDelete']);
+            Route::get('/scenarios', [SimulationController::class , 'scenarios'])->middleware('permission:simulation,read');
+            Route::post('/', [SimulationController::class , 'store'])->middleware('permission:simulation,write');
+            Route::get('/{id}', [SimulationController::class , 'show'])->middleware('permission:simulation,read');
+            Route::post('/{id}/start', [SimulationController::class , 'start'])->middleware('permission:simulation,write');
+            Route::post('/{id}/submit', [SimulationController::class , 'submitResponses'])->middleware('permission:simulation,write');
+            Route::delete('/{id}', [SimulationController::class , 'destroy'])->middleware('permission:simulation,write');
+            Route::post('/{id}/restore', [SimulationController::class , 'restore'])->middleware('permission:simulation,write');
+            Route::delete('/{id}/force', [SimulationController::class , 'forceDelete'])->middleware('permission:simulation,write');
         }
         );
 
@@ -137,6 +138,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         // Universal Module CRUD (ROPA, DPIA, DSR, Consent, Breach, Data Discovery)
         // =============================================
         Route::prefix('m/{module}')->where(['module' => 'ropa|dpia|dsr|consent|breach|data-discovery'])->group(function () {
+            // Module name mapping for permission check (URL slug -> permission module_id)
+            // ropa->ropa, dpia->dpia, dsr->dsr, consent->consent, breach->breach, data-discovery->data_discovery
             Route::get('/', [ModuleCrudController::class , 'index']);
             Route::post('/', [ModuleCrudController::class , 'store']);
             Route::get('/{id}', [ModuleCrudController::class , 'show']);
@@ -161,20 +164,20 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         // Data Discovery — Advanced Endpoints
         // =============================================
         Route::prefix('data-discovery')->group(function () {
-            Route::post('/{id}/test-connection', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'testConnection']);
-            Route::post('/{id}/scan', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'triggerScan']);
-            Route::get('/{id}/scan-details', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'scanDetails']);
-            Route::put('/{id}/classify-column', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'updateColumnClassification']);
-            Route::get('/{id}/ropa-links', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'ropaLinks']);
-            Route::get('/search-dsr/subject', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'searchSubject']);
+            Route::post('/{id}/test-connection', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'testConnection'])->middleware('permission:data_discovery,read');
+            Route::post('/{id}/scan', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'triggerScan'])->middleware('permission:data_discovery,write');
+            Route::get('/{id}/scan-details', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'scanDetails'])->middleware('permission:data_discovery,read');
+            Route::put('/{id}/classify-column', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'updateColumnClassification'])->middleware('permission:data_discovery,write');
+            Route::get('/{id}/ropa-links', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'ropaLinks'])->middleware('permission:data_discovery,read');
+            Route::get('/search-dsr/subject', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'searchSubject'])->middleware('permission:data_discovery,read');
         });
         
         // Consent Logs & Items
-        Route::get('/consent-logs', [\App\Http\Controllers\Api\ConsentLogController::class, 'index']);
-        Route::post('/consent-items', [\App\Http\Controllers\Api\ConsentItemController::class, 'store']);
-        Route::put('/consent-items/{id}', [\App\Http\Controllers\Api\ConsentItemController::class, 'update']);
-        Route::delete('/consent-items/{id}', [\App\Http\Controllers\Api\ConsentItemController::class, 'destroy']);
-        Route::post('/consent/{id}/webhook', [\App\Http\Controllers\Api\ConsentLogController::class, 'saveWebhook']);
+        Route::get('/consent-logs', [\App\Http\Controllers\Api\ConsentLogController::class, 'index'])->middleware('permission:consent,read');
+        Route::post('/consent-items', [\App\Http\Controllers\Api\ConsentItemController::class, 'store'])->middleware('permission:consent,write');
+        Route::put('/consent-items/{id}', [\App\Http\Controllers\Api\ConsentItemController::class, 'update'])->middleware('permission:consent,write');
+        Route::delete('/consent-items/{id}', [\App\Http\Controllers\Api\ConsentItemController::class, 'destroy'])->middleware('permission:consent,write');
+        Route::post('/consent/{id}/webhook', [\App\Http\Controllers\Api\ConsentLogController::class, 'saveWebhook'])->middleware('permission:consent,write');
 
         // Organization Profile (Onboarding)
         Route::get('/organizations', [\App\Http\Controllers\Api\OrganizationController::class, 'index']); // Super Admin: list all

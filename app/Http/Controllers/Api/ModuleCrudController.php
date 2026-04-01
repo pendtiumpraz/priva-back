@@ -8,6 +8,59 @@ use Illuminate\Http\Request;
 
 class ModuleCrudController extends Controller
 {
+    /**
+     * Map URL slug to permission module ID.
+     */
+    private function permissionModuleId(string $module): string
+    {
+        return match ($module) {
+            'data-discovery' => 'data_discovery',
+            default => $module,
+        };
+    }
+
+    /**
+     * Check if the current user has permission for the given module + action.
+     * Returns null if allowed, or a 403 JsonResponse if denied.
+     */
+    private function checkPermission(Request $request, string $module, string $action = 'read')
+    {
+        $user = $request->user();
+        if (!$user) return response()->json(['message' => 'Unauthenticated.'], 401);
+        if ($user->role === 'superadmin') return null;
+
+        if (!$user->relationLoaded('tenantRole')) {
+            $user->load('tenantRole');
+        }
+
+        $permissions = $user->tenantRole?->permissions ?? null;
+        $moduleId = $this->permissionModuleId($module);
+
+        if (!is_array($permissions)) {
+            // Legacy fallback
+            if ($action === 'write' && !in_array($user->role, ['admin', 'dpo', 'maker'])) {
+                return response()->json(['message' => 'Akses ditolak — role Anda tidak memiliki izin write untuk modul ini.'], 403);
+            }
+            return null;
+        }
+
+        if (in_array('*', $permissions)) return null;
+
+        if ($action === 'write') {
+            if (!in_array("{$moduleId}:write", $permissions)) {
+                return response()->json(['message' => 'Akses ditolak — role Anda tidak memiliki izin write untuk modul ini.'], 403);
+            }
+            return null;
+        }
+
+        // Read
+        if (in_array($moduleId, $permissions) || in_array("{$moduleId}:read", $permissions) || in_array("{$moduleId}:write", $permissions)) {
+            return null;
+        }
+
+        return response()->json(['message' => 'Akses ditolak — role Anda tidak memiliki izin untuk modul ini.'], 403);
+    }
+
     private function getModel(string $module)
     {
         return match ($module) {
@@ -68,6 +121,7 @@ class ModuleCrudController extends Controller
      */
     public function index(Request $request, string $module)
     {
+        if ($denied = $this->checkPermission($request, $module, 'read')) return $denied;
         $query = $this->getQuery($request, $module);
 
         if ($request->get('trash'))
@@ -88,6 +142,7 @@ class ModuleCrudController extends Controller
      */
     public function store(Request $request, string $module)
     {
+        if ($denied = $this->checkPermission($request, $module, 'write')) return $denied;
         try {
             $model = $this->getModel($module);
             $data = $request->all();
@@ -215,6 +270,7 @@ class ModuleCrudController extends Controller
      */
     public function show(Request $request, string $module, string $id)
     {
+        if ($denied = $this->checkPermission($request, $module, 'read')) return $denied;
         $query = $this->getQuery($request, $module)->withTrashed();
 
         if ($module === 'consent') {
@@ -229,6 +285,7 @@ class ModuleCrudController extends Controller
      */
     public function update(Request $request, string $module, string $id)
     {
+        if ($denied = $this->checkPermission($request, $module, 'write')) return $denied;
         $record = $this->getQuery($request, $module)->findOrFail($id);
 
         // Auto-append timeline for breach status changes
@@ -304,6 +361,7 @@ class ModuleCrudController extends Controller
      */
     public function destroy(Request $request, string $module, string $id)
     {
+        if ($denied = $this->checkPermission($request, $module, 'write')) return $denied;
         $this->getQuery($request, $module)->findOrFail($id)->delete();
         return response()->json(['message' => 'Moved to trash']);
     }
@@ -313,6 +371,7 @@ class ModuleCrudController extends Controller
      */
     public function restore(Request $request, string $module, string $id)
     {
+        if ($denied = $this->checkPermission($request, $module, 'write')) return $denied;
         $record = $this->getQuery($request, $module)->onlyTrashed()->findOrFail($id);
         $record->restore();
         return response()->json(['message' => 'Restored', 'data' => $record]);
@@ -323,6 +382,7 @@ class ModuleCrudController extends Controller
      */
     public function forceDelete(Request $request, string $module, string $id)
     {
+        if ($denied = $this->checkPermission($request, $module, 'write')) return $denied;
         $this->getQuery($request, $module)->onlyTrashed()->findOrFail($id)->forceDelete();
         return response()->json(['message' => 'Permanently deleted']);
     }
@@ -332,6 +392,7 @@ class ModuleCrudController extends Controller
      */
     public function history(Request $request, string $module, string $id)
     {
+        if ($denied = $this->checkPermission($request, $module, 'read')) return $denied;
         // First ensure record belongs to user's org
         $this->getQuery($request, $module)->withTrashed()->findOrFail($id);
 

@@ -11,12 +11,51 @@ use Illuminate\Validation\Rule;
 class UserController extends Controller
 {
     /**
+     * Check dynamic tenant_role permission.
+     * Returns 403 response if denied, null if allowed.
+     */
+    private function checkPerm(Request $request, string $action = 'read')
+    {
+        $user = $request->user();
+        if (!$user || $user->role === 'superadmin') return null;
+
+        if (!$user->relationLoaded('tenantRole')) {
+            $user->load('tenantRole');
+        }
+
+        $permissions = $user->tenantRole?->permissions ?? null;
+
+        if (!is_array($permissions)) {
+            // Legacy fallback
+            if ($action === 'write' && !in_array($user->role, ['admin', 'dpo', 'maker'])) {
+                return response()->json(['message' => 'Akses ditolak — role Anda tidak memiliki izin write untuk modul ini.'], 403);
+            }
+            return null;
+        }
+
+        if (in_array('*', $permissions)) return null;
+
+        if ($action === 'write') {
+            if (!in_array('users:write', $permissions)) {
+                return response()->json(['message' => 'Akses ditolak — role Anda tidak memiliki izin write untuk User Management.'], 403);
+            }
+            return null;
+        }
+
+        if (in_array('users', $permissions) || in_array('users:read', $permissions) || in_array('users:write', $permissions)) {
+            return null;
+        }
+
+        return response()->json(['message' => 'Akses ditolak — role Anda tidak memiliki izin untuk User Management.'], 403);
+    }
+    /**
      * List users.
      * - superadmin: sees ALL users across ALL tenants (+ optional org_id filter)
      * - admin: sees only users within their own org
      */
     public function index(Request $request)
     {
+        if ($denied = $this->checkPerm($request, 'read')) return $denied;
         $auth = $request->user();
         $query = User::with(['organization', 'tenantRole']);
 
@@ -60,6 +99,7 @@ class UserController extends Controller
      */
     public function store(Request $request)
     {
+        if ($denied = $this->checkPerm($request, 'write')) return $denied;
         $auth = $request->user();
 
         // Only superadmin and admin can create users
@@ -71,14 +111,16 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:8',
-            'role' => ['required', Rule::in(['admin', 'dpo', 'maker', 'viewer'])],
+            'role' => ['sometimes', 'nullable'], // Keep as optional legacy fallback
+            'tenant_role_id' => 'required|exists:tenant_roles,id',
             'phone' => 'nullable|string|max:20',
             'position' => 'nullable|string|max:255',
         ];
 
         // Role restriction modification
         if ($auth->role === 'superadmin') {
-            $rules['role'] = ['required', Rule::in(['superadmin', 'admin', 'dpo', 'maker', 'viewer'])];
+            $rules['role'] = ['sometimes'];
+            $rules['tenant_role_id'] = ['nullable', 'exists:tenant_roles,id'];
             
             // If superadmin creates dpo/maker/viewer, org_id is required
             if (in_array($request->input('role'), ['dpo', 'maker', 'viewer'])) {
@@ -112,17 +154,19 @@ class UserController extends Controller
 
         $validated['is_active'] = true;
 
-        $user = User::create($validated);
-
-        if ($user->role !== 'superadmin' && $user->org_id) {
-            $tenantRole = \App\Models\TenantRole::where('org_id', $user->org_id)
-                ->where('name', ucfirst($user->role))
-                ->first();
-            if ($tenantRole) {
-                $user->tenant_role_id = $tenantRole->id;
-                $user->save();
+        if (!isset($validated['role']) && !empty($validated['tenant_role_id'])) {
+            $tr = \App\Models\TenantRole::find($validated['tenant_role_id']);
+            if ($tr) {
+                // Map the name loosely to legacy role for backward compatibility
+                $n = strtolower($tr->name);
+                if (str_contains($n, 'admin')) $validated['role'] = 'admin';
+                elseif (str_contains($n, 'dpo')) $validated['role'] = 'dpo';
+                elseif (str_contains($n, 'viewer')) $validated['role'] = 'viewer';
+                else $validated['role'] = 'maker';
             }
         }
+
+        $user = User::create($validated);
 
         $user->load(['organization', 'tenantRole']);
 
@@ -150,6 +194,7 @@ class UserController extends Controller
      */
     public function update(Request $request, string $id)
     {
+        if ($denied = $this->checkPerm($request, 'write')) return $denied;
         $auth = $request->user();
         $user = User::findOrFail($id);
 
@@ -166,14 +211,15 @@ class UserController extends Controller
         $rules = [
             'name' => 'sometimes|string|max:255',
             'email' => ['sometimes', 'email', Rule::unique('users')->ignore($user->id)],
-            'role' => ['sometimes', Rule::in(['admin', 'dpo', 'maker', 'viewer'])],
+            'role' => ['sometimes', 'nullable'],
+            'tenant_role_id' => 'sometimes|nullable|exists:tenant_roles,id',
             'phone' => 'nullable|string|max:20',
             'position' => 'nullable|string|max:255',
             'is_active' => 'sometimes|boolean',
         ];
 
         if ($auth->role === 'superadmin') {
-            $rules['role'] = ['sometimes', Rule::in(['superadmin', 'admin', 'dpo', 'maker', 'viewer'])];
+            $rules['role'] = ['sometimes'];
             $rules['org_id'] = 'nullable|exists:organizations,id';
         }
 
@@ -205,17 +251,18 @@ class UserController extends Controller
             }
         }
 
-        $user->update($validated);
-
-        if ($user->role !== 'superadmin' && $user->org_id) {
-            $tenantRole = \App\Models\TenantRole::where('org_id', $user->org_id)
-                ->where('name', ucfirst($user->role))
-                ->first();
-            if ($tenantRole) {
-                $user->tenant_role_id = $tenantRole->id;
-                $user->save();
+        if (isset($validated['tenant_role_id'])) {
+            $tr = \App\Models\TenantRole::find($validated['tenant_role_id']);
+            if ($tr && !isset($validated['role'])) {
+                $n = strtolower($tr->name);
+                if (str_contains($n, 'admin')) $validated['role'] = 'admin';
+                elseif (str_contains($n, 'dpo')) $validated['role'] = 'dpo';
+                elseif (str_contains($n, 'viewer')) $validated['role'] = 'viewer';
+                else $validated['role'] = 'maker';
             }
         }
+
+        $user->update($validated);
 
         $user->load(['organization', 'tenantRole']);
 
@@ -227,6 +274,7 @@ class UserController extends Controller
      */
     public function destroy(Request $request, string $id)
     {
+        if ($denied = $this->checkPerm($request, 'write')) return $denied;
         $auth = $request->user();
         $user = User::findOrFail($id);
 
@@ -252,6 +300,7 @@ class UserController extends Controller
      */
     public function restore(Request $request, string $id)
     {
+        if ($denied = $this->checkPerm($request, 'write')) return $denied;
         $auth = $request->user();
         $user = User::onlyTrashed()->findOrFail($id);
 
