@@ -17,7 +17,6 @@ class TenantRoleSeeder extends Seeder
             'users', 'settings'
         ];
 
-        // Explicit all write/read for easy mapping
         $allWrite = [];
         foreach ($allModules as $mod) {
             $allWrite[] = "$mod:read";
@@ -46,40 +45,48 @@ class TenantRoleSeeder extends Seeder
         $organizations = Organization::all();
         
         foreach ($organizations as $org) {
-            // Admin
-            $adminRole = TenantRole::firstOrCreate(
-                ['org_id' => $org->id, 'name' => 'Admin / C-Level'],
-                ['is_system' => true, 'description' => 'Akses penuh ke semua modul tenant', 'permissions' => ['*']]
+            // -------------------------------------------------------
+            // Clean up duplicate roles from old migration/seeder mismatch
+            // Old migration created: Admin, DPO, Maker, Viewer
+            // Old seeder created: Admin / C-Level, DPO (Data Protection Officer), Data Operator / Maker, Viewer / Auditor
+            // We keep the migration ones (Admin, DPO, Maker, Viewer) and delete the seeder duplicates
+            // -------------------------------------------------------
+            $duplicateNames = ['Admin / C-Level', 'DPO (Data Protection Officer)', 'Data Operator / Maker', 'Viewer / Auditor'];
+            TenantRole::where('org_id', $org->id)
+                ->whereIn('name', $duplicateNames)
+                ->each(function ($dupeRole) {
+                    // Reassign users from this duplicate to the canonical role before deleting
+                    User::where('tenant_role_id', $dupeRole->id)->update(['tenant_role_id' => null]);
+                    $dupeRole->delete();
+                });
+
+            // Now upsert the canonical roles (matching migration names)
+            $adminRole = TenantRole::updateOrCreate(
+                ['org_id' => $org->id, 'name' => 'Admin'],
+                ['is_system' => true, 'description' => 'Administrator dengan full akses konfigurasi', 'permissions' => ['*']]
             );
             
-            // DPO
-            $dpoRole = TenantRole::firstOrCreate(
-                ['org_id' => $org->id, 'name' => 'DPO (Data Protection Officer)'],
-                ['is_system' => true, 'description' => 'Akses penuh & manajemen privasi, tanpa pengaturan teknis', 'permissions' => $dpoPerms]
+            $dpoRole = TenantRole::updateOrCreate(
+                ['org_id' => $org->id, 'name' => 'DPO'],
+                ['is_system' => true, 'description' => 'Data Protection Officer untuk review dan approval', 'permissions' => $dpoPerms]
             );
 
-            // Maker
-            $makerRole = TenantRole::firstOrCreate(
-                ['org_id' => $org->id, 'name' => 'Data Operator / Maker'],
-                ['is_system' => true, 'description' => 'Bisa input dan edit data operasional', 'permissions' => $makerPerms]
+            $makerRole = TenantRole::updateOrCreate(
+                ['org_id' => $org->id, 'name' => 'Maker'],
+                ['is_system' => true, 'description' => 'User operasional yang input data', 'permissions' => $makerPerms]
             );
 
-            // Viewer
-            $viewerRole = TenantRole::firstOrCreate(
-                ['org_id' => $org->id, 'name' => 'Viewer / Auditor'],
-                ['is_system' => true, 'description' => 'Hanya bisa melihat data (Read Only)', 'permissions' => $allRead]
+            $viewerRole = TenantRole::updateOrCreate(
+                ['org_id' => $org->id, 'name' => 'Viewer'],
+                ['is_system' => true, 'description' => 'Akses hanya baca (read-only)', 'permissions' => $allRead]
             );
             
-            // Migrate users
-            $users = User::where('org_id', $org->id)->get();
-            foreach ($users as $u) {
-                if ($u->role === 'admin') $u->tenant_role_id = $adminRole->id;
-                elseif ($u->role === 'dpo') $u->tenant_role_id = $dpoRole->id;
-                elseif ($u->role === 'maker') $u->tenant_role_id = $makerRole->id;
-                elseif ($u->role === 'viewer') $u->tenant_role_id = $viewerRole->id;
-                
-                if ($u->isDirty()) $u->save();
-            }
+            // Re-link users that got orphaned
+            User::where('org_id', $org->id)->where('role', 'admin')->whereNull('tenant_role_id')->update(['tenant_role_id' => $adminRole->id]);
+            User::where('org_id', $org->id)->where('role', 'dpo')->whereNull('tenant_role_id')->update(['tenant_role_id' => $dpoRole->id]);
+            User::where('org_id', $org->id)->where('role', 'maker')->whereNull('tenant_role_id')->update(['tenant_role_id' => $makerRole->id]);
+            User::where('org_id', $org->id)->where('role', 'viewer')->whereNull('tenant_role_id')->update(['tenant_role_id' => $viewerRole->id]);
         }
     }
 }
+
