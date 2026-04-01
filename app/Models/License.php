@@ -99,8 +99,9 @@ class License extends Model
         if ($verified && isset($verified['expires_at']) && $verified['expires_at']) {
             return \Carbon\Carbon::parse($verified['expires_at']);
         }
-        // Legacy fallback (unsigned — for old licenses before this feature)
-        return $this->expires_at;
+        
+        // SECURE STRICT MODE: If token verify fails or missing, pretend it's expired immediately to prevent bypass
+        return \Carbon\Carbon::now()->subDay();
     }
 
     /**
@@ -112,7 +113,8 @@ class License extends Model
         if ($verified && isset($verified['package_type'])) {
             return $verified['package_type'];
         }
-        return $this->package_type;
+        // SECURE STRICT MODE: Never trust the DB package_type if signature fails. Demote to basic.
+        return 'basic';
     }
 
     /**
@@ -120,7 +122,7 @@ class License extends Model
      */
     public function isSignatureValid(): bool
     {
-        if (!$this->signed_payload) return true; // Legacy: no signature = OK
+        if (!$this->signed_payload) return false; // STRICT: ALL licenses MUST have a signature now
         return self::verifySignedPayload($this->signed_payload) !== null;
     }
 
@@ -130,8 +132,8 @@ class License extends Model
 
     public function isExpired(): bool
     {
-        // If signature is invalid → treat as expired (tampered!)
-        if ($this->signed_payload && !$this->isSignatureValid()) {
+        // STRICT: If no payload or tampered signature → treat as expired immediately
+        if (!$this->signed_payload || !$this->isSignatureValid()) {
             return true;
         }
 
@@ -144,8 +146,8 @@ class License extends Model
 
     public function isActive(): bool
     {
-        // If tampered → not active
-        if ($this->signed_payload && !$this->isSignatureValid()) {
+        // STRICT: If no payload or tampered → not active
+        if (!$this->signed_payload || !$this->isSignatureValid()) {
             return false;
         }
         return $this->status === 'active' && !$this->isExpired();
