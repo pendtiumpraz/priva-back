@@ -508,6 +508,53 @@ class AiFeatureController extends Controller
         return $this->saveAndRespond($request, 'autofill_consent', $response, ['point_name' => $point->name]);
     }
 
+    public function consentAudit(Request $request, $id)
+    {
+        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        
+        $creditErr = $this->checkCredit($request, 'consent_audit');
+        if ($creditErr) return $creditErr;
+
+        $point = \App\Models\CollectionPoint::where('org_id', $request->user()->org_id)->with('items')->find($id);
+        if (!$point) return response()->json(['message' => 'Collection point not found'], 404);
+
+        $items = $point->items->map(function ($i) { 
+            return "ID: {$i->id} | Title: {$i->title} | Required: " . ($i->is_required ? 'Yes' : 'No') . " | Text: {$i->description} {$i->full_text}"; 
+        })->implode("\n");
+
+        if (empty($items)) {
+            return response()->json(['message' => 'Tidak ada consent items untuk diaudit. Silakan tambahkan minimal satu item.', 'status' => 'error'], 400);
+        }
+
+        $ai = new AiService($request->user()->org_id);
+        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+
+        $context = TenantContextService::buildContext($request->user()->org_id);
+        
+        $systemPrompt = "Kamu adalah auditor kepatuhan UU PDP (No. 27/2022). Jabaran tugas:\n"
+            . "Audit item persetujuan (consent items) untuk titik pengumpulan data. Berikan evaluasi komprehensif terkait transparansi, spesifikitas, dan kepatuhan.\n"
+            . "Konteks Tenant:\n$context\n\n"
+            . "Format respons WAJIB JSON:\n"
+            . json_encode([
+                "overall_risk" => "High/Medium/Low",
+                "score" => 85,
+                "summary" => "Ringkasan hasil audit...",
+                "findings" => [
+                    ["issue" => "Deskripsi masalah...", "impact" => "Dampak...", "recommendation" => "Saran perbaikan...", "severity" => "high/medium/low"]
+                ],
+                "missing_elements" => ["Elemen krusial yang seharusnya ada..."]
+            ]);
+
+        $userPrompt = "Evaluasi consent items berikut untuk domain {$point->domain} (Tujuan: {$point->name}):\n\n$items";
+
+        $response = $ai->ask([
+            ['role' => 'system', 'content' => $systemPrompt],
+            ['role' => 'user', 'content' => $userPrompt]
+        ]);
+
+        return $this->saveAndRespond($request, 'consent_audit', $response, ['point_name' => $point->name]);
+    }
+
     // =============================================
     // CREDIT MANAGEMENT ENDPOINTS
     // =============================================
