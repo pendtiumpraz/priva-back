@@ -534,22 +534,117 @@ class AiFeatureController extends Controller
         $systemPrompt = "Kamu adalah auditor kepatuhan UU PDP (No. 27/2022). Jabaran tugas:\n"
             . "Audit item persetujuan (consent items) untuk titik pengumpulan data. Berikan evaluasi komprehensif terkait transparansi, spesifikitas, dan kepatuhan.\n"
             . "Konteks Tenant:\n$context\n\n"
-            . "Format respons WAJIB JSON:\n"
-            . json_encode([
-                "overall_risk" => "High/Medium/Low",
-                "score" => 85,
-                "summary" => "Ringkasan hasil audit...",
-                "findings" => [
-                    ["issue" => "Deskripsi masalah...", "impact" => "Dampak...", "recommendation" => "Saran perbaikan...", "severity" => "high/medium/low"]
-                ],
-                "missing_elements" => ["Elemen krusial yang seharusnya ada..."]
-            ]);
+            . "Output WAJIB JSON valid.\n"
+            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info\",\"title\":\"...\",\"content\":\"...\",\"items\":[]}],\"closing\":\"...\"}";
 
-        $userPrompt = "Evaluasi consent items berikut untuk domain {$point->domain} (Tujuan: {$point->name}):\n\n$items";
+        $userPrompt = "Audit consent items berikut untuk domain {$point->domain} (Tujuan: {$point->name}):\n\n$items\n\n"
+            . "Berikan:\n"
+            . "1. Risk assessment keseluruhan (overall risk: High/Medium/Low) dan skor 0-100\n"
+            . "2. Evaluasi per-item: apakah sudah transparan, spesifik, dan comply UU PDP\n"
+            . "3. Temuan masalah beserta dampak dan rekomendasi perbaikan\n"
+            . "4. Elemen krusial yang hilang atau perlu ditambahkan\n"
+            . "5. Warning jika ada potensi pelanggaran UU PDP\n"
+            . "Jawab HANYA dalam JSON format yang diminta.";
 
         $response = $ai->ask($systemPrompt, $userPrompt, 2500);
 
         return $this->saveAndRespond($request, 'consent_audit', $response, ['point_name' => $point->name]);
+    }
+
+    // =============================================
+    // SIMULATION — AI Performance Analysis
+    // =============================================
+    public function simulationAnalysis(Request $request, string $id)
+    {
+        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'simulation_analysis');
+        if ($creditErr) return $creditErr;
+
+        $sim = BreachSimulation::findOrFail($id);
+        $ai = new AiService($request->user()->org_id);
+        if (!$ai->isAvailable()) {
+            return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        }
+
+        $inputData = [
+            'scenario_title' => $sim->scenario_title,
+            'scenario_type' => $sim->scenario_type,
+            'overall_score' => $sim->overall_score,
+            'score_breakdown' => $sim->score_breakdown,
+            'findings' => $sim->findings,
+            'started_at' => $sim->started_at,
+            'ended_at' => $sim->ended_at,
+        ];
+
+        $systemPrompt = "Kamu adalah cybersecurity trainer dan DPO senior. Output WAJIB JSON valid.\n"
+            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info\",\"title\":\"...\",\"content\":\"...\",\"items\":[]}],\"closing\":\"...\"}";
+
+        $userPrompt = "Analisis performa drill simulasi berikut:\n" . json_encode($inputData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . "\n\n"
+            . "Berikan:\n"
+            . "1. Evaluasi kinerja overall (skor, rating, area kuat)\n"
+            . "2. Kelemahan dan blind spots yang terdeteksi\n"
+            . "3. Rekomendasi pelatihan spesifik per kelemahan\n"
+            . "4. Comparison dengan standar UU PDP\n"
+            . "5. Tips untuk drill berikutnya\n"
+            . "Jawab HANYA dalam JSON format yang diminta.";
+
+        $response = $ai->ask($systemPrompt, $userPrompt, 2500);
+
+        return $this->saveAndRespond($request, 'simulation_analysis', $response, $inputData, $id, 'BreachSimulation');
+    }
+
+    // =============================================
+    // DATA DISCOVERY — AI PII Classification
+    // =============================================
+    public function dataDiscoveryClassification(Request $request, string $id)
+    {
+        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'discovery_classification');
+        if ($creditErr) return $creditErr;
+
+        $system = DB::table('data_discovery_systems')->where('id', $id)->where('org_id', $request->user()->org_id)->first();
+        if (!$system) return response()->json(['message' => 'System not found'], 404);
+
+        $ai = new AiService($request->user()->org_id);
+        if (!$ai->isAvailable()) {
+            return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        }
+
+        $scanResults = is_string($system->scan_results) ? json_decode($system->scan_results, true) : ($system->scan_results ?? []);
+
+        $inputData = [
+            'system_name' => $system->name,
+            'source_type' => $system->source_type,
+            'tables_count' => count($scanResults['tables'] ?? []),
+        ];
+
+        $context = TenantContextService::buildContext($request->user()->org_id);
+
+        // Build column summary for AI
+        $columnSummary = '';
+        foreach (($scanResults['tables'] ?? []) as $table) {
+            $cols = collect($table['columns'] ?? [])->pluck('name')->implode(', ');
+            $columnSummary .= "Table: {$table['name']} — Columns: {$cols}\n";
+        }
+
+        $systemPrompt = "Kamu adalah ahli data governance dan perlindungan data pribadi UU PDP. Output WAJIB JSON valid.\n"
+            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info\",\"title\":\"...\",\"content\":\"...\",\"items\":[]}],\"closing\":\"...\"}\n"
+            . "Konteks Tenant:\n$context";
+
+        $userPrompt = "Klasifikasikan kolom-kolom database berikut berdasarkan UU PDP Indonesia:\n\n"
+            . "Sistem: {$system->name} ({$system->source_type})\n\n"
+            . $columnSummary . "\n"
+            . "Berikan:\n"
+            . "1. Klasifikasi setiap kolom yang terdeteksi sebagai PII (Data Pribadi Umum / Spesifik)\n"
+            . "2. Rekomendasi enkripsi untuk kolom sensitif\n"
+            . "3. Rekomendasi masa retensi per kategori data\n"
+            . "4. Warning untuk kolom yang mungkin melanggar prinsip minimisasi data\n"
+            . "5. Saran tindakan perbaikan\n"
+            . "Jawab HANYA dalam JSON format yang diminta.";
+
+        $response = $ai->ask($systemPrompt, $userPrompt, 3000);
+
+        return $this->saveAndRespond($request, 'discovery_classification', $response, $inputData, $id, 'DataDiscoverySystem');
     }
 
     // =============================================
