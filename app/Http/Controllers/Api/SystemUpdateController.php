@@ -148,4 +148,84 @@ class SystemUpdateController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Checkout / switch to a specific version (commit) safely.
+     */
+    public function checkoutVersion(Request $request)
+    {
+        $user = $request->user();
+        if ($user->role !== 'superadmin') {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $request->validate([
+            'password' => 'required|string',
+            'commit_hash' => 'required|string|min:7|max:40'
+        ]);
+
+        // Verifikasi password superadmin
+        if (!\Illuminate\Support\Facades\Hash::check($request->password, $user->password)) {
+            return response()->json([
+                'message' => 'Password Superadmin salah.'
+            ], 401);
+        }
+
+        $basePath = base_path();
+        
+        try {
+            $hash = escapeshellarg($request->commit_hash); // secure hash
+            
+            // Verifikasi bahwa hash ada dalam 10 history terakhir (page 1) untuk safety
+            $recentCommitsStr = shell_exec("cd {$basePath} && git log -n 10 --pretty=format:\"%h\" 2>&1");
+            $recentCommits = explode("\n", trim($recentCommitsStr));
+            
+            $isSafe = false;
+            foreach ($recentCommits as $h) {
+                if (str_starts_with(trim($h), $request->commit_hash) || str_starts_with($request->commit_hash, trim($h))) {
+                    $isSafe = true;
+                    break;
+                }
+            }
+
+            if (!$isSafe) {
+                return response()->json([
+                    'message' => 'Downgrade terlalu jauh tidak diizinkan. Hanya bisa berpindah di antara 10 update terakhir untuk mencegah kerusakan database.'
+                ], 403);
+            }
+
+            set_time_limit(300);
+            $output = [];
+
+            // Execute reset hard ke commit tertentu
+            // Supaya tidak detached HEAD dan tetap di branch aktif, pakai git reset --hard
+            $resetOutput = shell_exec("cd {$basePath} && git reset --hard {$hash} 2>&1");
+            $output[] = "--- GIT RESET TO {$request->commit_hash} ---";
+            $output[] = $resetOutput ?? "No output";
+
+            $composerOutput = shell_exec("cd {$basePath} && composer install --no-dev --optimize-autoloader 2>&1");
+            $output[] = "\n--- COMPOSER INSTALL ---";
+            $output[] = $composerOutput ?? "No output";
+
+            // Optimize clear
+            $optimizeOutput = shell_exec("cd {$basePath} && php artisan optimize:clear 2>&1");
+            $output[] = "\n--- OPTIMIZE CLEAR ---";
+            $output[] = $optimizeOutput ?? "No output";
+
+            Log::info("System Switched Version to {$request->commit_hash} by {$user->email}");
+            Log::info(implode("\n", $output));
+
+            return response()->json([
+                'message' => "Berhasil berpindah ke versi {$request->commit_hash}",
+                'log' => implode("\n", $output)
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Checkout version failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Gagal berpindah versi',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

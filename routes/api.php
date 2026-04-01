@@ -301,6 +301,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         // =============================================
         Route::get('/system/check-update', [\App\Http\Controllers\Api\SystemUpdateController::class, 'checkUpdate']);
         Route::post('/system/update-backend', [\App\Http\Controllers\Api\SystemUpdateController::class, 'updateBackend']);
+        Route::post('/system/checkout-version', [\App\Http\Controllers\Api\SystemUpdateController::class, 'checkoutVersion']);
 
     });
 
