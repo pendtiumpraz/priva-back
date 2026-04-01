@@ -85,15 +85,16 @@ class AiService
             $data = $response->json();
             $content = $data['choices'][0]['message']['content'] ?? '';
 
-            // Try parse JSON
+            // Extract JSON block aggressively
             $cleaned = trim($content);
-            if (str_starts_with($cleaned, '```')) {
-                $cleaned = preg_replace('/^```(?:json)?\s*/', '', $cleaned);
-                $cleaned = preg_replace('/\s*```$/', '', $cleaned);
+            if (preg_match('/\{.*\}/s', $cleaned, $matches)) {
+                $cleaned = $matches[0];
+            } elseif (preg_match('/\[.*\]/s', $cleaned, $matches)) {
+                $cleaned = $matches[0];
             }
 
             $parsed = json_decode($cleaned, true);
-            if ($parsed) {
+            if ($parsed !== null) {
                 return $parsed;
             }
 

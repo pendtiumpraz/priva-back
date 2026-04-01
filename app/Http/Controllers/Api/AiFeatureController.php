@@ -547,10 +547,7 @@ class AiFeatureController extends Controller
 
         $userPrompt = "Evaluasi consent items berikut untuk domain {$point->domain} (Tujuan: {$point->name}):\n\n$items";
 
-        $response = $ai->ask([
-            ['role' => 'system', 'content' => $systemPrompt],
-            ['role' => 'user', 'content' => $userPrompt]
-        ]);
+        $response = $ai->ask($systemPrompt, $userPrompt, 2500);
 
         return $this->saveAndRespond($request, 'consent_audit', $response, ['point_name' => $point->name]);
     }
