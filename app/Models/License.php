@@ -38,79 +38,51 @@ class License extends Model
     }
 
     // =============================================
-    // SIGNED PAYLOAD — Tamper-proof license data
+    // SIGNED PAYLOAD — Asymmetric Tamper-proof license data (RS256 JWT)
     // =============================================
 
     /**
-     * Get the HMAC secret key from env.
-     * This MUST match the key used by the License Manager.
-     */
-    private static function getSigningKey(): string
-    {
-        return env('LICENSE_SIGNING_KEY', env('APP_KEY', 'fallback-insecure-key'));
-    }
-
-    /**
-     * Create a signed payload containing all critical license data.
-     * Returns a base64-encoded JSON string with embedded HMAC signature.
-     */
-    public static function createSignedPayload(array $data): string
-    {
-        $payload = [
-            'license_key'   => $data['license_key'],
-            'package_type'  => $data['package_type'],
-            'license_type'  => $data['license_type'] ?? 'saas',
-            'expires_at'    => $data['expires_at'] ?? null,
-            'features'      => $data['features'] ?? [],
-            'org_id'        => $data['org_id'] ?? null,
-            'max_activations' => $data['max_activations'] ?? 1,
-            'issued_at'     => now()->toISOString(),
-        ];
-
-        // Sort keys for consistent hashing
-        ksort($payload);
-        $payloadJson = json_encode($payload, JSON_UNESCAPED_SLASHES);
-
-        // HMAC-SHA256 signature
-        $signature = hash_hmac('sha256', $payloadJson, self::getSigningKey());
-
-        return base64_encode(json_encode([
-            'payload' => $payload,
-            'signature' => $signature,
-        ]));
-    }
-
-    /**
-     * Verify and decode a signed payload.
+     * Verify and decode a signed RS256 JWT payload from the License Manager.
      * Returns the payload data if valid, null if tampered/invalid.
      */
-    public static function verifySignedPayload(?string $signedPayload): ?array
+    public static function verifySignedPayload(?string $jwt): ?array
     {
-        if (!$signedPayload) return null;
+        if (!$jwt) return null;
+
+        $parts = explode('.', $jwt);
+        if (count($parts) !== 3) return null;
 
         try {
-            $decoded = json_decode(base64_decode($signedPayload), true);
-            if (!$decoded || !isset($decoded['payload']) || !isset($decoded['signature'])) {
+            $payloadStr = base64_decode(strtr($parts[1], '-_', '+/'));
+            $signature = base64_decode(strtr($parts[2], '-_', '+/'));
+            
+            $publicKeyB64 = env('LICENSE_PUBLIC_KEY');
+            if (!$publicKeyB64) {
+                \Log::error('LICENSE_PUBLIC_KEY is not set in .env');
                 return null;
             }
 
-            $payload = $decoded['payload'];
-            $signature = $decoded['signature'];
-
-            // Recreate signature from payload
-            ksort($payload);
-            $payloadJson = json_encode($payload, JSON_UNESCAPED_SLASHES);
-            $expectedSignature = hash_hmac('sha256', $payloadJson, self::getSigningKey());
-
-            // Constant-time comparison to prevent timing attacks
-            if (!hash_equals($expectedSignature, $signature)) {
-                \Log::warning('License signed payload TAMPERED', [
-                    'license_key' => $payload['license_key'] ?? 'unknown',
-                ]);
-                return null;
+            // Decode the base64 public key back to standard PEM text format
+            $pem = base64_decode($publicKeyB64);
+            
+            // For RS256, the data signed is the first two parts of the JWT separated by a dot
+            $dataToSign = $parts[0] . '.' . $parts[1];
+            
+            // Verify RSA-SHA256 signature
+            $valid = openssl_verify($dataToSign, $signature, $pem, OPENSSL_ALGO_SHA256);
+            
+            if ($valid === 1) {
+                $payloadData = json_decode($payloadStr, true);
+                // The Node.js License Manager nested the actual license data under 'payload'
+                if ($payloadData && isset($payloadData['payload'])) {
+                     return $payloadData['payload'];
+                }
             }
-
-            return $payload;
+            
+            \Log::warning('License signed payload TAMPERED or INVALID', [
+                'reason' => 'Asymmetric signature verification failed',
+            ]);
+            return null;
         } catch (\Exception $e) {
             \Log::error('License signed payload decode error: ' . $e->getMessage());
             return null;

@@ -136,15 +136,8 @@ class LicenseController extends Controller
         }
 
         // Save locally & assign to tenant
-        $signedPayload = License::createSignedPayload([
-            'license_key' => $request->license_key,
-            'package_type' => $packageType,
-            'license_type' => $licenseType,
-            'expires_at' => $expiresAt ? (string) $expiresAt : null,
-            'features' => $features,
-            'org_id' => $org->id,
-            'max_activations' => $maxActivations,
-        ]);
+        // Use the signed payload from License Manager
+        $signedPayload = $licenseData['signed_payload'] ?? null;
 
         $local = License::updateOrCreate(
             ['license_key' => $request->license_key, 'org_id' => $org->id],
@@ -302,15 +295,8 @@ class LicenseController extends Controller
                 }
 
                 // Save license locally (match by key + org so same key can serve SA + tenant)
-                $signedPayload = License::createSignedPayload([
-                    'license_key' => $request->license_key,
-                    'package_type' => $licenseData['package_type'] ?? 'basic',
-                    'license_type' => $licenseData['license_type'] ?? 'perpetual',
-                    'expires_at' => $newExpiresAt ? (string) $newExpiresAt : null,
-                    'features' => $licenseData['features'] ?? [],
-                    'org_id' => $user->org_id ?? null,
-                    'max_activations' => $licenseData['max_activations'] ?? 1,
-                ]);
+                // Use the signed payload from License Manager
+                $signedPayload = $licenseData['signed_payload'] ?? null;
 
                 $local = License::updateOrCreate(
                 ['license_key' => $request->license_key, 'org_id' => $user->org_id ?? null],
