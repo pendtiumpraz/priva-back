@@ -12,15 +12,15 @@ class TenantRoleController extends Controller
     {
         $user = $request->user();
         if ($user->role === 'superadmin') {
-            $query = TenantRole::query();
+            $query = TenantRole::with('organization:id,name');
             if ($request->filled('org_id')) {
                 $query->where('org_id', $request->org_id);
             }
-            $roles = $query->withCount('users')->get();
+            $roles = $query->withCount('users')->orderBy('org_id')->orderBy('name')->get();
             return response()->json(['data' => $roles]);
         }
 
-        $roles = TenantRole::where('org_id', $user->org_id)->withCount('users')->get();
+        $roles = TenantRole::where('org_id', $user->org_id)->withCount('users')->orderBy('name')->get();
         return response()->json(['data' => $roles]);
     }
 
