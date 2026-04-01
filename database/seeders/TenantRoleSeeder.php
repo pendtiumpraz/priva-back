@@ -12,8 +12,8 @@ class TenantRoleSeeder extends Seeder
     public function run(): void
     {
         $allModules = [
-            'dashboard', 'gap-assessment', 'ropa', 'dpia', 'data-discovery',
-            'contract-review', 'dsr', 'consent', 'breach', 'simulation',
+            'dashboard', 'gap_assessment', 'ropa', 'dpia', 'data_discovery',
+            'contract_review', 'dsr', 'consent', 'breach', 'simulation',
             'users', 'settings'
         ];
 
@@ -32,14 +32,15 @@ class TenantRoleSeeder extends Seeder
         
         $makerPerms = [
             'dashboard:read',
-            'gap-assessment:read', 'gap-assessment:write',
+            'gap_assessment:read', 'gap_assessment:write',
             'ropa:read', 'ropa:write',
             'dpia:read', 'dpia:write',
-            'data-discovery:read', 'data-discovery:write',
-            'contract-review:read', 'contract-review:write',
+            'data_discovery:read', 'data_discovery:write',
+            'contract_review:read', 'contract_review:write',
             'dsr:read', 'dsr:write',
             'consent:read', 'consent:write',
-            'breach:read', 'breach:write'
+            'breach:read', 'breach:write',
+            'simulation:read', 'simulation:write',
         ];
 
         $organizations = Organization::all();
