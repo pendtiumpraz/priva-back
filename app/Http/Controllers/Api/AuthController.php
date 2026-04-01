@@ -78,7 +78,7 @@ class AuthController extends Controller
         $token = $user->createToken('auth-token')->plainTextToken;
 
         return response()->json([
-            'user' => $user->load('organization'),
+            'user' => $user->load('organization', 'tenantRole'),
             'token' => $token,
         ]);
     }
@@ -88,7 +88,7 @@ class AuthController extends Controller
      */
     public function me(Request $request): JsonResponse
     {
-        $user = $request->user()->load('organization');
+        $user = $request->user()->load('organization', 'tenantRole');
 
         // Attach active license package_type for frontend feature gating
         $packageType = null;

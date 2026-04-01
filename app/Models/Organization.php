@@ -46,10 +46,26 @@ class Organization extends Model
     {
         static::created(function ($organization) {
             $presets = [
-                'admin' => ['name' => 'Admin', 'desc' => 'Administrator dengan full akses konfigurasi'],
-                'dpo'   => ['name' => 'DPO', 'desc' => 'Data Protection Officer untuk review dan approval'],
-                'maker' => ['name' => 'Maker', 'desc' => 'User operasional yang input data ROPA/DPIA'],
-                'viewer'=> ['name' => 'Viewer', 'desc' => 'Akses hanya baca (read-only)'],
+                'admin' => [
+                    'name' => 'Admin', 
+                    'desc' => 'Administrator dengan full akses konfigurasi',
+                    'permissions' => ['*']
+                ],
+                'dpo'   => [
+                    'name' => 'DPO', 
+                    'desc' => 'Data Protection Officer untuk review dan approval',
+                    'permissions' => ['dashboard', 'ropa', 'dpia', 'dsr', 'breach', 'simulation', 'consent', 'contract-review', 'data-discovery', 'gap-assessment', 'settings']
+                ],
+                'maker' => [
+                    'name' => 'Maker', 
+                    'desc' => 'User operasional yang input data ROPA/DPIA',
+                    'permissions' => ['dashboard', 'ropa', 'dpia', 'dsr', 'breach', 'consent', 'contract-review', 'data-discovery', 'gap-assessment']
+                ],
+                'viewer'=> [
+                    'name' => 'Viewer', 
+                    'desc' => 'Akses hanya baca (read-only)',
+                    'permissions' => ['dashboard', 'ropa', 'dpia']
+                ],
             ];
 
             foreach ($presets as $code => $data) {
@@ -58,7 +74,7 @@ class Organization extends Model
                     'name' => $data['name'],
                     'is_system' => true,
                     'description' => $data['desc'],
-                    'permissions' => ['*'],
+                    'permissions' => $data['permissions'],
                 ]);
             }
         });

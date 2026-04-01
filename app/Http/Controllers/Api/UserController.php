@@ -18,7 +18,7 @@ class UserController extends Controller
     public function index(Request $request)
     {
         $auth = $request->user();
-        $query = User::with('organization');
+        $query = User::with(['organization', 'tenantRole']);
 
         if ($auth->role === 'superadmin') {
             // Superadmin can filter by org_id optionally
@@ -124,7 +124,7 @@ class UserController extends Controller
             }
         }
 
-        $user->load('organization');
+        $user->load(['organization', 'tenantRole']);
 
         return response()->json(['data' => $user, 'message' => 'User created'], 201);
     }
@@ -135,7 +135,7 @@ class UserController extends Controller
     public function show(Request $request, string $id)
     {
         $auth = $request->user();
-        $user = User::with('organization')->findOrFail($id);
+        $user = User::with(['organization', 'tenantRole'])->findOrFail($id);
 
         // Scope check
         if ($auth->role !== 'superadmin' && $user->org_id !== $auth->org_id) {
@@ -217,7 +217,7 @@ class UserController extends Controller
             }
         }
 
-        $user->load('organization');
+        $user->load(['organization', 'tenantRole']);
 
         return response()->json(['data' => $user, 'message' => 'User updated']);
     }
@@ -264,7 +264,7 @@ class UserController extends Controller
         }
 
         $user->restore();
-        $user->load('organization');
+        $user->load(['organization', 'tenantRole']);
 
         return response()->json(['data' => $user, 'message' => 'User restored']);
     }
