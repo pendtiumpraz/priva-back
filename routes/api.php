@@ -27,6 +27,10 @@ Route::post('/public/feature-requests/{id}/upvote', [\App\Http\Controllers\Api\F
 Route::post('/public/consent', [\App\Http\Controllers\Api\ConsentLogController::class, 'capture']);
 Route::get('/public/consent/config', [\App\Http\Controllers\Api\ConsentLogController::class, 'config']);
 
+// SSO Public Routes
+Route::get('/sso/redirect', [\App\Http\Controllers\Api\SsoLoginController::class, 'redirect']);
+Route::get('/sso/callback', [\App\Http\Controllers\Api\SsoLoginController::class, 'callback']);
+
 });
 
 // =============================================
@@ -55,6 +59,10 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     // Organization
     Route::get('/organization', [OrganizationController::class , 'show']);
     Route::put('/organization', [OrganizationController::class , 'update']);
+
+    // Organization Configuration (Enterprise SSO)
+    Route::get('/tenant-ssos', [\App\Http\Controllers\Api\TenantSsoController::class, 'show']);
+    Route::put('/tenant-ssos', [\App\Http\Controllers\Api\TenantSsoController::class, 'update']);
 
     // Users
     Route::apiResource('/users', UserController::class);

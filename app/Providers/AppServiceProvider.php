@@ -26,5 +26,14 @@ class AppServiceProvider extends ServiceProvider
         \Illuminate\Support\Facades\RateLimiter::for('api', function (\Illuminate\Http\Request $request) {
             return \Illuminate\Cache\RateLimiting\Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
         });
+
+        // 3. Register Socialite Providers
+        \Illuminate\Support\Facades\Event::listen(
+            \SocialiteProviders\Manager\SocialiteWasCalled::class,
+            function (\SocialiteProviders\Manager\SocialiteWasCalled $event) {
+                $event->extendSocialite('azure', \SocialiteProviders\Azure\Provider::class);
+                $event->extendSocialite('keycloak', \SocialiteProviders\Keycloak\Provider::class);
+            }
+        );
     }
 }
