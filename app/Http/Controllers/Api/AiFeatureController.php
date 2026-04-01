@@ -496,7 +496,7 @@ class AiFeatureController extends Controller
         $creditErr = $this->checkCredit($request, 'autofill_consent');
         if ($creditErr) return $creditErr;
 
-        $point = DB::table('collection_points')->where('id', $id)->first();
+        $point = DB::table('consent_collection_points')->where('id', $id)->first();
         if (!$point) return response()->json(['message' => 'Collection point not found'], 404);
 
         $ai = new AiService($request->user()->org_id);
@@ -515,7 +515,7 @@ class AiFeatureController extends Controller
         $creditErr = $this->checkCredit($request, 'consent_audit');
         if ($creditErr) return $creditErr;
 
-        $point = \App\Models\CollectionPoint::where('org_id', $request->user()->org_id)->with('items')->find($id);
+        $point = \App\Models\ConsentCollectionPoint::where('org_id', $request->user()->org_id)->with('items')->find($id);
         if (!$point) return response()->json(['message' => 'Collection point not found'], 404);
 
         $items = $point->items->map(function ($i) { 
