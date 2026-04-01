@@ -12,9 +12,13 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('breach_incidents', function (Blueprint $table) {
-            $table->uuid('pic_id')->nullable()->after('dpo_id');
-            $table->string('pic_name')->nullable()->after('pic_id');
-            $table->foreign('pic_id')->references('id')->on('users')->onDelete('set null');
+            if (!Schema::hasColumn('breach_incidents', 'pic_id')) {
+                $table->uuid('pic_id')->nullable()->after('dpo_id');
+                $table->foreign('pic_id')->references('id')->on('users')->onDelete('set null');
+            }
+            if (!Schema::hasColumn('breach_incidents', 'pic_name')) {
+                $table->string('pic_name')->nullable()->after('pic_id');
+            }
         });
     }
 
