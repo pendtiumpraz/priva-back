@@ -136,6 +136,16 @@ class LicenseController extends Controller
         }
 
         // Save locally & assign to tenant
+        $signedPayload = License::createSignedPayload([
+            'license_key' => $request->license_key,
+            'package_type' => $packageType,
+            'license_type' => $licenseType,
+            'expires_at' => $expiresAt ? (string) $expiresAt : null,
+            'features' => $features,
+            'org_id' => $org->id,
+            'max_activations' => $maxActivations,
+        ]);
+
         $local = License::updateOrCreate(
             ['license_key' => $request->license_key, 'org_id' => $org->id],
             [
@@ -149,6 +159,7 @@ class LicenseController extends Controller
                 'activation_count' => 1,
                 'max_activations' => $maxActivations,
                 'created_by' => $user->id,
+                'signed_payload' => $signedPayload,
                 'ip_log' => [['ip' => $ip, 'domain' => $domain, 'at' => now()->toISOString(),
                     'source' => $licenseData ? 'license_manager' : 'sa_direct']],
             ]
@@ -291,6 +302,16 @@ class LicenseController extends Controller
                 }
 
                 // Save license locally (match by key + org so same key can serve SA + tenant)
+                $signedPayload = License::createSignedPayload([
+                    'license_key' => $request->license_key,
+                    'package_type' => $licenseData['package_type'] ?? 'basic',
+                    'license_type' => $licenseData['license_type'] ?? 'perpetual',
+                    'expires_at' => $newExpiresAt ? (string) $newExpiresAt : null,
+                    'features' => $licenseData['features'] ?? [],
+                    'org_id' => $user->org_id ?? null,
+                    'max_activations' => $licenseData['max_activations'] ?? 1,
+                ]);
+
                 $local = License::updateOrCreate(
                 ['license_key' => $request->license_key, 'org_id' => $user->org_id ?? null],
                 [
@@ -303,6 +324,7 @@ class LicenseController extends Controller
                     'activated_at' => $licenseData['activated_at'] ?? now(),
                     'activation_count' => 1,
                     'max_activations' => $licenseData['max_activations'] ?? 1,
+                    'signed_payload' => $signedPayload,
                     'ip_log' => [['ip' => $ip, 'domain' => $domain, 'at' => now()->toISOString()]],
                 ]
                 );
@@ -342,77 +364,10 @@ class LicenseController extends Controller
                 'error' => $e->getMessage(),
             ]);
 
-            // FALLBACK: If License Manager unreachable, check if key already exists locally
-            try {
-                $existingKey = License::where('license_key', $request->license_key)
-                    ->where('status', 'active')
-                    ->first();
-
-                if ($existingKey) {
-                    // Check if THIS org already has this key activated
-                    $alreadyActivated = License::where('license_key', $request->license_key)
-                        ->where('org_id', $user->org_id)
-                        ->where('status', 'active')
-                        ->exists();
-
-                    if ($alreadyActivated) {
-                        return response()->json([
-                            'message' => 'License key ini sudah aktif untuk tenant Anda.',
-                        ], 422);
-                    }
-
-                    // Get org name safely
-                    $orgName = null;
-                    if ($user->org_id) {
-                        $org = Organization::find($user->org_id);
-                        $orgName = $org?->name;
-                    }
-
-                    // Key exists & is valid locally — activate for this tenant
-                    $local = License::updateOrCreate(
-                        ['license_key' => $request->license_key, 'org_id' => $user->org_id ?? null],
-                        [
-                            'package_type' => $existingKey->package_type,
-                            'license_type' => $existingKey->license_type,
-                            'status' => 'active',
-                            'features' => $existingKey->features,
-                            'org_name' => $orgName,
-                            'expires_at' => $existingKey->expires_at,
-                            'activated_at' => now(),
-                            'activation_count' => ($existingKey->activation_count ?? 0) + 1,
-                            'max_activations' => $existingKey->max_activations,
-                            'ip_log' => [['ip' => $ip, 'domain' => $domain, 'at' => now()->toISOString(), 'mode' => 'offline']],
-                        ]
-                    );
-
-                    // Set AI credits
-                    if ($user->org_id) {
-                        $credits = match ($existingKey->package_type) {
-                            'ai'       => 100,
-                            'ai_agent' => 500,
-                            default    => 0,
-                        };
-                        Organization::where('id', $user->org_id)->update([
-                            'ai_credits_monthly' => $credits,
-                            'ai_credits_remaining' => $credits,
-                            'ai_credits_reset_at' => now()->addMonth(),
-                        ]);
-                    }
-
-                    return response()->json([
-                        'message' => 'License berhasil diaktifkan!',
-                        'data' => $local,
-                        'status' => 'active',
-                    ]);
-                }
-            } catch (\Exception $fallbackError) {
-                \Log::error('License offline fallback error', [
-                    'error' => $fallbackError->getMessage(),
-                ]);
-            }
-
+            // NO OFFLINE FALLBACK — License Manager verification is MANDATORY
+            // This prevents users from bypassing LM by editing the local database
             return response()->json([
-                'message' => 'Gagal menghubungi License Manager dan key tidak ditemukan di database lokal.',
+                'message' => 'Gagal menghubungi License Manager. Aktivasi memerlukan koneksi ke server lisensi.',
                 'debug' => app()->hasDebugModeEnabled() ? $e->getMessage() : null,
             ], 502);
         }
@@ -465,13 +420,28 @@ class LicenseController extends Controller
             ]);
         }
 
-        // Check expiry (SaaS)
+        // Check expiry (SaaS) — uses signed payload for trusted expiry
         if ($license->isExpired()) {
             $license->update(['status' => 'expired']);
             return response()->json([
                 'licensed' => false,
                 'message' => 'License sudah expired. Silahkan perpanjang.',
-                'expired_at' => $license->expires_at,
+                'expired_at' => $license->getTrustedExpiresAt(),
+                'role' => $user->role,
+            ]);
+        }
+
+        // Check signature integrity
+        if ($license->signed_payload && !$license->isSignatureValid()) {
+            $license->update(['status' => 'tampered']);
+            \Log::critical('LICENSE TAMPERED DETECTED', [
+                'license_id' => $license->id,
+                'license_key' => $license->license_key,
+                'org_id' => $license->org_id,
+            ]);
+            return response()->json([
+                'licensed' => false,
+                'message' => 'License tidak valid — terdeteksi modifikasi ilegal. Hubungi administrator.',
                 'role' => $user->role,
             ]);
         }
@@ -481,11 +451,12 @@ class LicenseController extends Controller
             'license' => [
                 'id' => $license->id,
                 'key' => $license->license_key,
-                'package_type' => $license->package_type,
+                'package_type' => $license->getTrustedPackageType(),
                 'license_type' => $license->license_type,
                 'features' => $license->features,
-                'expires_at' => $license->expires_at,
+                'expires_at' => $license->getTrustedExpiresAt(),
                 'org_name' => $license->org_name,
+                'signature_valid' => $license->isSignatureValid(),
             ],
             'role' => $user->role,
         ]);

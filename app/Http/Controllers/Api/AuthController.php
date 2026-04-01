@@ -96,7 +96,9 @@ class AuthController extends Controller
             $license = \App\Models\License::where('org_id', $user->org_id)
                 ->where('status', 'active')
                 ->first();
-            $packageType = $license?->package_type;
+            if ($license && $license->isActive()) {
+                $packageType = $license->getTrustedPackageType();
+            }
         } elseif ($user->role === 'superadmin') {
             $packageType = 'ai_agent'; // SA always has full access
         }
