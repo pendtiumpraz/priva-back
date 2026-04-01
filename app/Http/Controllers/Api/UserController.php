@@ -141,15 +141,30 @@ class UserController extends Controller
             $validated['org_id'] = $auth->org_id;
         }
 
-        // Auto-create Organization if superadmin creates an 'admin' and no org_id is passed
+        // Auto-create Organization if superadmin creates an 'admin' with org creation data
         if ($auth->role === 'superadmin' && $validated['role'] === 'admin' && empty($validated['org_id'])) {
-            $orgName = $validated['name'] . "'s Organization";
+            $orgName = $request->input('org_name', $validated['name'] . "'s Organization");
+            $orgSlug = $request->input('org_slug', \Illuminate\Support\Str::slug($orgName . '-' . uniqid()));
+            $orgIndustry = $request->input('org_industry', 'Other');
+            
             $org = \App\Models\Organization::create([
                 'name' => $orgName,
-                'slug' => \Illuminate\Support\Str::slug($orgName . '-' . uniqid()),
-                'industry' => 'Other',
+                'slug' => $orgSlug,
+                'industry' => $orgIndustry,
             ]);
             $validated['org_id'] = $org->id;
+
+            // Create default system roles for the new org
+            $allModules = ['dashboard', 'gap_assessment', 'ropa', 'dpia', 'data_discovery', 'contract_review', 'dsr', 'consent', 'breach', 'simulation', 'users', 'settings'];
+            $allWrite = []; $allRead = [];
+            foreach ($allModules as $mod) { $allWrite[] = "$mod:read"; $allWrite[] = "$mod:write"; $allRead[] = "$mod:read"; }
+
+            $adminRole = \App\Models\TenantRole::create(['org_id' => $org->id, 'name' => 'Admin', 'is_system' => true, 'description' => 'Administrator dengan full akses konfigurasi', 'permissions' => ['*']]);
+            \App\Models\TenantRole::create(['org_id' => $org->id, 'name' => 'DPO', 'is_system' => true, 'description' => 'Data Protection Officer', 'permissions' => $allWrite]);
+            \App\Models\TenantRole::create(['org_id' => $org->id, 'name' => 'Maker', 'is_system' => true, 'description' => 'User operasional yang input data', 'permissions' => array_filter($allWrite, fn($p) => !str_contains($p, 'users') && !str_contains($p, 'settings'))]);
+            \App\Models\TenantRole::create(['org_id' => $org->id, 'name' => 'Viewer', 'is_system' => true, 'description' => 'Akses hanya baca (read-only)', 'permissions' => $allRead]);
+            
+            $validated['tenant_role_id'] = $adminRole->id;
         }
 
         $validated['is_active'] = true;
