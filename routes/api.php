@@ -253,6 +253,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::post('/autofill/dpia', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillDpia']);
             Route::post('/autofill/breach', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillBreach']);
             Route::post('/autofill/dsr', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillDsr']);
+            Route::post('/autofill/consent-items/{id}', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillConsentItems']);
         });
 
         // AI Credit Management

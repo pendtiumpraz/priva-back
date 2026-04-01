@@ -490,6 +490,24 @@ class AiFeatureController extends Controller
         ]);
     }
 
+    public function autofillConsentItems(Request $request, string $id)
+    {
+        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'autofill_consent');
+        if ($creditErr) return $creditErr;
+
+        $point = DB::table('collection_points')->where('id', $id)->first();
+        if (!$point) return response()->json(['message' => 'Collection point not found'], 404);
+
+        $ai = new AiService($request->user()->org_id);
+        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+
+        $context = TenantContextService::buildContext($request->user()->org_id);
+        $response = $ai->consentItemsGenerator($context, $point->name, $point->domain);
+
+        return $this->saveAndRespond($request, 'autofill_consent', $response, ['point_name' => $point->name]);
+    }
+
     // =============================================
     // CREDIT MANAGEMENT ENDPOINTS
     // =============================================
