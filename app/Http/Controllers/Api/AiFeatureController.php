@@ -552,6 +552,76 @@ class AiFeatureController extends Controller
     }
 
     // =============================================
+    // FIRE DRILL — AI Custom Scenario Generator
+    // =============================================
+    public function drillScenarioGenerator(Request $request)
+    {
+        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'drill_scenario');
+        if ($creditErr) return $creditErr;
+
+        $mode = $request->input('mode', 'quiz'); // quiz | tabletop | walkthrough
+        $industry = $request->input('industry', 'Teknologi');
+        $riskProfile = $request->input('risk_profile', 'medium');
+        $questionCount = min((int) $request->input('question_count', 5), 10);
+
+        $ai = new AiService($request->user()->org_id);
+        if (!$ai->isAvailable()) {
+            return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        }
+
+        if ($mode === 'quiz') {
+            $result = $ai->customDrillScenario($industry, $riskProfile, $questionCount);
+        } elseif ($mode === 'tabletop') {
+            $systemPrompt = "Kamu adalah cybersecurity incident response trainer. Output WAJIB JSON valid.\n"
+                . "Format KHUSUS tabletop exercise:\n"
+                . "{\"title\":\"...\",\"emoji\":\"...\",\"description\":\"...\","
+                . "\"steps\":[{\"phase\":\"...\",\"situation\":\"...\",\"prompt\":\"...\",\"time_limit\":300,"
+                . "\"guidance\":\"...\",\"ideal_response\":\"...\"}]}";
+
+            $userPrompt = "Generate skenario tabletop exercise kustom:\n"
+                . "- Industri: {$industry}\n- Risk profile: {$riskProfile}\n- Jumlah tahap: {$questionCount}\n\n"
+                . "Buat skenario realistis dengan:\n"
+                . "1. Setiap step berupa situasi naratif yang harus direspon secara tertulis\n"
+                . "2. Phase: Detection, Assessment, Containment, Notification, Recovery\n"
+                . "3. time_limit dalam detik (300-600)\n"
+                . "4. guidance: petunjuk pemikiran (tampil opsional)\n"
+                . "5. ideal_response: jawaban ideal untuk evaluasi\n"
+                . "6. Bahasa Indonesia\n"
+                . "Output JSON mentah saja.";
+
+            $result = $ai->ask($systemPrompt, $userPrompt, 4000);
+        } else { // walkthrough
+            $systemPrompt = "Kamu adalah cybersecurity SOP trainer. Output WAJIB JSON valid.\n"
+                . "Format KHUSUS walkthrough exercise:\n"
+                . "{\"title\":\"...\",\"emoji\":\"...\",\"description\":\"...\","
+                . "\"steps\":[{\"phase\":\"...\",\"title\":\"...\",\"description\":\"...\",\"time_limit\":300,"
+                . "\"checklist\":[{\"id\":\"...\",\"label\":\"...\",\"critical\":true/false}],"
+                . "\"success_criteria\":\"...\"}]}";
+
+            $userPrompt = "Generate skenario SOP walkthrough kustom:\n"
+                . "- Industri: {$industry}\n- Risk profile: {$riskProfile}\n- Jumlah fase: {$questionCount}\n\n"
+                . "Buat SOP walkthrough realistis dengan:\n"
+                . "1. Setiap step = fase SOP dengan checklist items\n"
+                . "2. Phase: Detection, Assessment, Containment, Notification, Recovery\n"
+                . "3. 3-5 checklist items per step\n"
+                . "4. critical: true untuk item yang HARUS dicentang\n"
+                . "5. success_criteria: kondisi keberhasilan fase\n"
+                . "6. time_limit dalam detik (300-600)\n"
+                . "7. Bahasa Indonesia\n"
+                . "Output JSON mentah saja.";
+
+            $result = $ai->ask($systemPrompt, $userPrompt, 4000);
+        }
+
+        if (!$result) {
+            return response()->json(['message' => 'AI gagal generate skenario'], 500);
+        }
+
+        return response()->json(['data' => $result]);
+    }
+
+    // =============================================
     // SIMULATION — AI Performance Analysis
     // =============================================
     public function simulationAnalysis(Request $request, string $id)

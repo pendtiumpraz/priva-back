@@ -249,6 +249,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::post('/contract/review', [\App\Http\Controllers\Api\AiFeatureController::class, 'contractReview']);
             Route::post('/consent/{id}/audit', [\App\Http\Controllers\Api\AiFeatureController::class, 'consentAudit']);
             Route::post('/simulation/{id}/analysis', [\App\Http\Controllers\Api\AiFeatureController::class, 'simulationAnalysis']);
+            Route::post('/drill/scenario', [\App\Http\Controllers\Api\AiFeatureController::class, 'drillScenarioGenerator']);
             Route::post('/data-discovery/{id}/classification', [\App\Http\Controllers\Api\AiFeatureController::class, 'dataDiscoveryClassification']);
 
             // Auto-Fill endpoints
