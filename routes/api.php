@@ -53,6 +53,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/holding/org-tree', [\App\Http\Controllers\Api\HoldingDashboardController::class, 'orgTree']);
     Route::get('/holding/dashboard', [\App\Http\Controllers\Api\HoldingDashboardController::class, 'dashboard']);
     Route::get('/holding/compliance-matrix', [\App\Http\Controllers\Api\HoldingDashboardController::class, 'complianceMatrix']);
+    Route::get('/holding/sub-holding-breakdown', [\App\Http\Controllers\Api\HoldingDashboardController::class, 'subHoldingBreakdown']);
 
     // Log Analyzer
     Route::get('/system-logs', [\App\Http\Controllers\Api\LogAnalyzerController::class, 'index']);
@@ -188,6 +189,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/organizations', [\App\Http\Controllers\Api\OrganizationController::class, 'index']); // Super Admin: list all
         Route::get('/organization', [\App\Http\Controllers\Api\OrganizationController::class, 'show']);
         Route::put('/organization', [\App\Http\Controllers\Api\OrganizationController::class, 'update']);
+        Route::post('/organizations/create-child', [\App\Http\Controllers\Api\OrganizationController::class, 'createChild']);
+        Route::put('/organizations/{id}/hierarchy', [\App\Http\Controllers\Api\OrganizationController::class, 'updateHierarchy']);
         Route::post('/organizations/{id}/deactivate', [\App\Http\Controllers\Api\OrganizationController::class, 'deactivate']);
         Route::post('/organizations/{id}/restore', [\App\Http\Controllers\Api\OrganizationController::class, 'restore']);
 

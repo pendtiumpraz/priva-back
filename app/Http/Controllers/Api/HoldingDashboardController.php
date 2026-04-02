@@ -79,7 +79,7 @@ class HoldingDashboardController extends Controller
         }
 
         $matrix = [];
-        $orgs = Organization::whereIn('id', $orgIds)->get(['id', 'name', 'slug', 'org_level', 'industry']);
+        $orgs = Organization::whereIn('id', $orgIds)->get(['id', 'name', 'slug', 'org_level', 'industry', 'parent_id']);
 
         foreach ($orgs as $org) {
             $id = $org->id;
@@ -95,6 +95,7 @@ class HoldingDashboardController extends Controller
                 'slug'          => $org->slug,
                 'org_level'     => $org->org_level,
                 'industry'      => $org->industry,
+                'parent_id'     => $org->parent_id,
                 'gap_score'     => $gap->overall_score ?? 0,
                 'compliance_level' => $gap->compliance_level ?? 'belum_dinilai',
                 'ropa_count'    => DB::table('ropas')->where('org_id', $id)->whereNull('deleted_at')->count(),
@@ -129,5 +130,51 @@ class HoldingDashboardController extends Controller
         $ids = $org->getDescendantIds();
         $ids[] = $org->id;
         return $ids;
+    }
+
+    /**
+     * Per-sub-holding breakdown — each sub_holding with aggregated stats of its children.
+     */
+    public function subHoldingBreakdown(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if ($user->role !== 'superadmin') {
+            $org = Organization::find($user->org_id);
+            if (!$org || !$org->isHolding()) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+        }
+
+        $subHoldings = Organization::where('org_level', 'sub_holding')->get();
+        $breakdown = [];
+
+        foreach ($subHoldings as $sh) {
+            $childIds = $sh->getDescendantIds();
+            $allIds = array_merge([$sh->id], $childIds);
+
+            $gap = DB::table('gap_assessments')
+                ->where('org_id', $sh->id)->whereNull('deleted_at')
+                ->latest('created_at')->first();
+
+            $breakdown[] = [
+                'id'          => $sh->id,
+                'name'        => $sh->name,
+                'slug'        => $sh->slug,
+                'industry'    => $sh->industry,
+                'parent_id'   => $sh->parent_id,
+                'gap_score'   => $gap->overall_score ?? 0,
+                'subsidiaries'=> count($childIds),
+                'total_users' => DB::table('users')->whereIn('org_id', $allIds)->whereNull('deleted_at')->count(),
+                'total_ropa'  => DB::table('ropas')->whereIn('org_id', $allIds)->whereNull('deleted_at')->count(),
+                'total_dpia'  => DB::table('dpias')->whereIn('org_id', $allIds)->whereNull('deleted_at')->count(),
+                'total_dsr'   => DB::table('dsr_requests')->whereIn('org_id', $allIds)->whereNull('deleted_at')->count(),
+                'total_breaches' => DB::table('breach_incidents')->whereIn('org_id', $allIds)->where('is_simulation', false)->whereNull('deleted_at')->count(),
+                'active_breaches' => DB::table('breach_incidents')->whereIn('org_id', $allIds)->where('is_simulation', false)->whereNotIn('status', ['closed'])->whereNull('deleted_at')->count(),
+                'data_sources' => DB::table('information_systems')->whereIn('org_id', $allIds)->whereNull('deleted_at')->count(),
+                'children' => Organization::where('parent_id', $sh->id)->get(['id', 'name', 'slug', 'industry'])->toArray(),
+            ];
+        }
+
+        return response()->json(['data' => $breakdown]);
     }
 }

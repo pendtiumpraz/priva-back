@@ -113,6 +113,66 @@ class OrganizationController extends Controller
         return response()->json(['message' => "Tenant {$org->name} berhasil direstore. Silakan assign ulang license jika diperlukan."]);
     }
 
+    /**
+     * Create a new child organization under a parent (superadmin only).
+     */
+    public function createChild(Request $request)
+    {
+        if ($request->user()->role !== 'superadmin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $request->validate([
+            'name'      => 'required|string|max:255',
+            'slug'      => 'required|string|max:100|unique:organizations,slug',
+            'industry'  => 'nullable|string|max:100',
+            'org_level' => 'required|in:holding,sub_holding,subsidiary',
+            'parent_id' => 'nullable|uuid|exists:organizations,id',
+        ]);
+
+        $org = Organization::create([
+            'name'      => $request->name,
+            'slug'      => $request->slug,
+            'industry'  => $request->industry,
+            'org_level' => $request->org_level,
+            'parent_id' => $request->parent_id ?: null,
+            'onboarding_completed' => true,
+            'ai_credits_monthly'   => 100,
+            'ai_credits_remaining' => 100,
+        ]);
+
+        return response()->json(['message' => "Organisasi {$org->name} berhasil dibuat.", 'data' => $org], 201);
+    }
+
+    /**
+     * Update hierarchy fields of an organization (superadmin only).
+     */
+    public function updateHierarchy(Request $request, $id)
+    {
+        if ($request->user()->role !== 'superadmin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $request->validate([
+            'name'      => 'sometimes|string|max:255',
+            'slug'      => 'sometimes|string|max:100',
+            'industry'  => 'nullable|string|max:100',
+            'org_level' => 'sometimes|in:holding,sub_holding,subsidiary',
+            'parent_id' => 'nullable|uuid',
+        ]);
+
+        $org = Organization::findOrFail($id);
+
+        // Prevent circular parent reference
+        if ($request->parent_id === $id) {
+            return response()->json(['message' => 'Organisasi tidak bisa menjadi parent dari dirinya sendiri.'], 422);
+        }
+
+        $org->update($request->only(['name', 'slug', 'industry', 'org_level', 'parent_id']));
+
+        return response()->json(['message' => "Organisasi {$org->name} berhasil diperbarui.", 'data' => $org->fresh()]);
+    }
+
     // =============================================
     // CRM Integration — Multi-CRM Per-Tenant
     // =============================================
