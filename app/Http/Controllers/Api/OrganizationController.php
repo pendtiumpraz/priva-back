@@ -18,7 +18,8 @@ class OrganizationController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $orgs = Organization::withCount('users')
+        $orgs = Organization::withTrashed()
+            ->withCount('users')
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($org) {
@@ -94,6 +95,19 @@ class OrganizationController extends Controller
         $org->delete();
 
         return response()->json(['message' => "Tenant {$org->name} berhasil dinonaktifkan dan seluruh license dicabut."]);
+    }
+
+    public function restore(Request $request, $id)
+    {
+        $user = $request->user();
+        if ($user->role !== 'superadmin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $org = Organization::withTrashed()->findOrFail($id);
+        $org->restore();
+
+        return response()->json(['message' => "Tenant {$org->name} berhasil direstore. Silakan assign ulang license jika diperlukan."]);
     }
 
     // =============================================

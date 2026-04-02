@@ -184,6 +184,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/organization', [\App\Http\Controllers\Api\OrganizationController::class, 'show']);
         Route::put('/organization', [\App\Http\Controllers\Api\OrganizationController::class, 'update']);
         Route::post('/organizations/{id}/deactivate', [\App\Http\Controllers\Api\OrganizationController::class, 'deactivate']);
+        Route::post('/organizations/{id}/restore', [\App\Http\Controllers\Api\OrganizationController::class, 'restore']);
 
         // CRM Integration
         Route::prefix('crm')->group(function () {
