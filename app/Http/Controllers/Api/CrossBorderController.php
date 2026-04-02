@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CrossBorderTransfer;
 use Illuminate\Http\Request;
-use OpenAI\Laravel\Facades\OpenAI;
+use App\Services\AiService;
 
 class CrossBorderController extends Controller
 {
@@ -73,29 +73,31 @@ class CrossBorderController extends Controller
         $score = 50;
         $riskLevel = 'medium';
         $summary = 'TIA dilakukan secara manual atau tanpa asisten AI.';
+        $safeguards = [];
+        $legalBasisRecommended = null;
 
         if ($hasAi) {
             try {
-                $prompt = "Lakukan Transfer Impact Assessment (TIA) atas transfer data ke negara {$transfer->destination_country} berdasarkan jawaban berikut: " . json_encode($answers) . "\nBerikan skor risiko komprehensif (0-100), level risiko (low, medium, high, critical), dan ringkasan eksekutif (TIA Summary) dalam format JSON: {\"score\": int, \"risk_level\": \"string\", \"tia_summary\": \"string\"}";
-                
-                $response = OpenAI::chat()->create([
-                    'model' => 'gpt-4o-mini',
-                    'messages' => [
-                        ['role' => 'system', 'content' => 'You are a legal privacy expert handling cross-border data transfer assessments. Output purely JSON.'],
-                        ['role' => 'user', 'content' => $prompt],
-                    ],
-                    'response_format' => ['type' => 'json_object'],
-                    'temperature' => 0.2,
-                ]);
+                $vendorData = ['tia_answers' => $answers, 'transfer_purpose' => $transfer->transfer_purpose];
+                $aiService = new AiService($user->org_id);
+                $result = $aiService->vendorTia($vendorData, $transfer->destination_country);
 
-                $result = json_decode($response->choices[0]->message->content, true);
-                $score = $result['score'] ?? 50;
-                $riskLevel = $result['risk_level'] ?? 'medium';
-                $summary = $result['tia_summary'] ?? 'Analisis selesai.';
+                if ($result) {
+                    $score = isset($result['tia_score']) ? (int)$result['tia_score'] : 50;
+                    
+                    if ($score >= 85) $riskLevel = 'low';
+                    elseif ($score >= 65) $riskLevel = 'medium';
+                    elseif ($score >= 40) $riskLevel = 'high';
+                    else $riskLevel = 'critical';
 
-                $user->organization->decrement('ai_credits_remaining', 1);
+                    $legalBasisRecommended = $result['legal_basis_recommended'] ?? null;
+                    $safeguards = $result['safeguard_recommendations'] ?? [];
+                    $summary = json_encode(['legal_basis' => $legalBasisRecommended, 'safeguards' => $safeguards]);
+
+                    $user->organization->decrement('ai_credits_remaining', 1);
+                }
             } catch (\Exception $e) {
-                \Log::error('AI TIA Assessment failed: ' . $e->getMessage());
+                \Illuminate\Support\Facades\Log::error('AI TIA Assessment failed: ' . $e->getMessage());
             }
         }
 
@@ -104,8 +106,10 @@ class CrossBorderController extends Controller
             'risk_score' => $score,
             'risk_level' => $riskLevel,
             'tia_summary' => $summary,
-            'status' => $riskLevel === 'high' || $riskLevel === 'critical' ? 'pending' : 'approved',
-            'approved_at' => $riskLevel === 'low' || $riskLevel === 'medium' ? now() : null,
+            'safeguards' => !empty($safeguards) ? $safeguards : $transfer->safeguards,
+            'legal_basis' => $legalBasisRecommended ?: $transfer->legal_basis,
+            'status' => ($riskLevel === 'high' || $riskLevel === 'critical') ? 'pending' : 'approved',
+            'approved_at' => ($riskLevel === 'low' || $riskLevel === 'medium') ? now() : null,
             'review_due_at' => now()->addYear(),
         ]);
 
