@@ -11,6 +11,7 @@ class Organization extends Model
     use HasUuids, SoftDeletes;
 
     protected $fillable = [
+        'parent_id', 'org_level',
         'idle_timeout_enabled', 'idle_timeout_minutes', 'name', 'slug', 'industry', 'logo_url', 'privacy_policy_url',
         'website', 'address', 'phone', 'email', 'settings',
         // Onboarding
@@ -35,6 +36,48 @@ class Organization extends Model
     public function users()
     {
         return $this->hasMany(User::class , 'org_id');
+    }
+
+    // ============ Holding Hierarchy ============
+
+    public function parent()
+    {
+        return $this->belongsTo(Organization::class, 'parent_id');
+    }
+
+    public function children()
+    {
+        return $this->hasMany(Organization::class, 'parent_id');
+    }
+
+    /**
+     * Recursively get all descendants (children, grandchildren, etc.)
+     */
+    public function descendants()
+    {
+        return $this->children()->with('descendants');
+    }
+
+    /**
+     * Get all descendant IDs (flat array) for querying.
+     */
+    public function getDescendantIds(): array
+    {
+        $ids = [];
+        $children = Organization::where('parent_id', $this->id)->get();
+        foreach ($children as $child) {
+            $ids[] = $child->id;
+            $ids = array_merge($ids, $child->getDescendantIds());
+        }
+        return $ids;
+    }
+
+    /**
+     * Check if this org is a holding or sub_holding.
+     */
+    public function isHolding(): bool
+    {
+        return in_array($this->org_level, ['holding', 'sub_holding']);
     }
 
     public function creditLogs()

@@ -19,7 +19,8 @@ class OrganizationController extends Controller
         }
 
         $orgs = Organization::withTrashed()
-            ->withCount('users')
+            ->with('parent:id,name')
+            ->withCount(['users', 'children'])
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($org) {
@@ -62,6 +63,8 @@ class OrganizationController extends Controller
             // Onboarding fields
             'business_model', 'company_size', 'data_subjects_type', 'core_systems',
             'has_dpo', 'onboarding_completed',
+            // Holding hierarchy
+            'parent_id', 'org_level',
         ]);
 
         $org->update($fields);

@@ -49,6 +49,11 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/dashboard/charts', [DashboardController::class , 'charts']);
     Route::get('/dashboard/risk-analytics', [DashboardController::class , 'riskAnalytics']);
 
+    // Holding Dashboard (Hierarchical)
+    Route::get('/holding/org-tree', [\App\Http\Controllers\Api\HoldingDashboardController::class, 'orgTree']);
+    Route::get('/holding/dashboard', [\App\Http\Controllers\Api\HoldingDashboardController::class, 'dashboard']);
+    Route::get('/holding/compliance-matrix', [\App\Http\Controllers\Api\HoldingDashboardController::class, 'complianceMatrix']);
+
     // Log Analyzer
     Route::get('/system-logs', [\App\Http\Controllers\Api\LogAnalyzerController::class, 'index']);
     Route::post('/system-logs/analyze', [\App\Http\Controllers\Api\LogAnalyzerController::class, 'analyze']);
