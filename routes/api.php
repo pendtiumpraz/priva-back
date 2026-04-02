@@ -157,6 +157,34 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         });
 
         // =============================================
+        // Phase 2: Vendor Risk Management
+        // =============================================
+        Route::prefix('vendor-risk')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\VendorRiskController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\VendorRiskController::class, 'store']);
+            Route::get('/{id}', [\App\Http\Controllers\Api\VendorRiskController::class, 'show']);
+            Route::put('/{id}', [\App\Http\Controllers\Api\VendorRiskController::class, 'update']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\VendorRiskController::class, 'destroy']);
+            
+            // AI Assessment
+            Route::post('/{id}/assess', [\App\Http\Controllers\Api\VendorRiskController::class, 'assess']);
+        });
+
+        // =============================================
+        // Phase 2: Cross Border Data Transfer
+        // =============================================
+        Route::prefix('cross-border')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\CrossBorderController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\CrossBorderController::class, 'store']);
+            Route::get('/{id}', [\App\Http\Controllers\Api\CrossBorderController::class, 'show']);
+            Route::put('/{id}', [\App\Http\Controllers\Api\CrossBorderController::class, 'update']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\CrossBorderController::class, 'destroy']);
+            
+            // AI Transfer Impact Assessment (TIA)
+            Route::post('/{id}/tia', [\App\Http\Controllers\Api\CrossBorderController::class, 'assessTIA']);
+        });
+
+        // =============================================
         // Breach Integrations (Telegram War Room, SIEM/SOAR)
         // =============================================
         Route::prefix('integrations')->group(function () {
