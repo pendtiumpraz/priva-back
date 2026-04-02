@@ -255,6 +255,30 @@ class LicenseController extends Controller
         return response()->json(['message' => 'Restored']);
     }
 
+    public function revoke(Request $request, string $id)
+    {
+        $user = $request->user();
+        if ($user->role !== 'superadmin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $request->validate([
+            'password' => 'required|string',
+        ]);
+
+        if (!\Illuminate\Support\Facades\Hash::check($request->password, $user->password)) {
+            return response()->json(['message' => 'Password salah! Tindakan dibatalkan.'], 403);
+        }
+
+        $license = License::findOrFail($id);
+        $license->update(['status' => 'revoked']);
+
+        // Since it's a SaaS platform, we might optionally want to communicate this back to License Manager
+        // But local revocation is the most important part to cut access immediately.
+
+        return response()->json(['message' => "License {$license->license_key} berhasil dicabut."]);
+    }
+
     // =============================================
     // ACTIVATION & VERIFICATION
     // =============================================

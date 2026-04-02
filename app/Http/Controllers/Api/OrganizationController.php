@@ -68,6 +68,34 @@ class OrganizationController extends Controller
         return response()->json(['message' => 'Organization updated', 'data' => $org->fresh()]);
     }
 
+    public function deactivate(Request $request, $id)
+    {
+        $user = $request->user();
+        if ($user->role !== 'superadmin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $request->validate([
+            'password' => 'required|string',
+        ]);
+
+        if (!\Illuminate\Support\Facades\Hash::check($request->password, $user->password)) {
+            return response()->json(['message' => 'Password salah! Tindakan dibatalkan.'], 403);
+        }
+
+        $org = Organization::findOrFail($id);
+        
+        // Revoke active licenses
+        \App\Models\License::where('org_id', $org->id)
+            ->where('status', 'active')
+            ->update(['status' => 'revoked']);
+
+        // Soft delete the organization
+        $org->delete();
+
+        return response()->json(['message' => "Tenant {$org->name} berhasil dinonaktifkan dan seluruh license dicabut."]);
+    }
+
     // =============================================
     // CRM Integration — Multi-CRM Per-Tenant
     // =============================================

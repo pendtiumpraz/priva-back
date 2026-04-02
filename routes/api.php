@@ -183,6 +183,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/organizations', [\App\Http\Controllers\Api\OrganizationController::class, 'index']); // Super Admin: list all
         Route::get('/organization', [\App\Http\Controllers\Api\OrganizationController::class, 'show']);
         Route::put('/organization', [\App\Http\Controllers\Api\OrganizationController::class, 'update']);
+        Route::post('/organizations/{id}/deactivate', [\App\Http\Controllers\Api\OrganizationController::class, 'deactivate']);
 
         // CRM Integration
         Route::prefix('crm')->group(function () {
@@ -220,6 +221,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::put('/{id}', [\App\Http\Controllers\Api\LicenseController::class, 'update']);
             Route::delete('/{id}', [\App\Http\Controllers\Api\LicenseController::class, 'destroy']);
             Route::post('/{id}/restore', [\App\Http\Controllers\Api\LicenseController::class, 'restore']);
+            Route::post('/{id}/revoke', [\App\Http\Controllers\Api\LicenseController::class, 'revoke']);
         });
 
         // =============================================
