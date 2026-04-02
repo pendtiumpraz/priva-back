@@ -93,6 +93,7 @@ class LicenseController extends Controller
                 'license_key' => $request->license_key,
                 'domain' => $domain,
                 'ip' => $ip,
+                'tenant_id' => $org->id,
             ]);
 
             $data = $response->json();
@@ -309,6 +310,7 @@ class LicenseController extends Controller
                 'license_key' => $request->license_key,
                 'domain' => $domain,
                 'ip' => $ip,
+                'tenant_id' => $user->org_id ?? 'platform',
             ]);
 
             $data = $response->json();
