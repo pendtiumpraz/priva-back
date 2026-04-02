@@ -582,4 +582,101 @@ class AiService
 
         return $this->ask($system, $user, 2500);
     }
+
+    // =============================================
+    // VENDOR RISK ASSESSMENT AI HUB
+    // =============================================
+
+    /**
+     * 1. AI Vendor Auto-Form (Policy/DPA Extractor)
+     */
+    public function vendorExtractor(string $inputUrlOrText): ?array
+    {
+        $system = "Kamu adalah AI Auditor Spesialis Vendor Risk Management EU GDPR & UU PDP.\n"
+                . "Tugasmu membaca URL, nama, atau cuplikan privacy policy vendor dan mengekstrak profil mereka.\n"
+                . "Output WAJIB berupa JSON valid. JANGAN tambahkan teks apapun di luar JSON.\n\n"
+                . "FORMAT OUTPUT JSON:\n"
+                . json_encode([
+                    'name' => 'Nama entitas vendor / perusahaan',
+                    'services_provided' => ['Layanan 1', 'Layanan 2'],
+                    'data_shared' => ['Nama', 'Email', 'IP Address'],
+                    'summary' => 'Rangkuman aktivitas pemrosesan vendor (2 kalimat)'
+                ], JSON_PRETTY_PRINT);
+
+        $user = "Ekstrak konteks privasi dari input vendor berikut:\n\n{$inputUrlOrText}\n\n"
+              . "Buat profilnya HANYA dalam JSON format yang diminta.";
+
+        return $this->ask($system, $user, 2000);
+    }
+
+    /**
+     * 2. AI Dynamic Questionnaire Generator
+     */
+    public function vendorQuestionnaire(array $extractedData): ?array
+    {
+        $system = "Kamu adalah AI Risk Assessor Ahli ISO 27001.\n"
+                . "Tugasmu membuat 4-5 pertanyaan kuesioner kritis berdasarkan profil vendor yang diberikan.\n"
+                . "Output WAJIB berupa JSON valid.\n\n"
+                . "FORMAT OUTPUT JSON:\n"
+                . json_encode([
+                    'questions' => [
+                        ['id' => 'q1', 'text' => 'Pertanyaan 1', 'type' => 'boolean|text']
+                    ]
+                ], JSON_PRETTY_PRINT);
+        
+        $dataStr = json_encode($extractedData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        $user = "Buat kuesioner security audit spesifik untuk vendor ini:\n{$dataStr}\n\n"
+              . "Fokus pada risiko perlindungan data sesuai UU PDP terkait layanan yang mereka tawarkan.\n"
+              . "Keluarkan HANYA output JSON valid.";
+
+        return $this->ask($system, $user, 2000);
+    }
+
+    /**
+     * 3. AI Vendor Risk Assessor
+     */
+    public function vendorRiskAssessor(array $questionsAndAnswers): ?array
+    {
+        $system = "Kamu adalah AI Lead Auditor.\n"
+                . "Tugasmu mengevaluasi risiko pihak ketiga berdasarkan jawaban kuesioner.\n"
+                . "Output WAJIB berupa JSON valid.\n\n"
+                . "FORMAT OUTPUT JSON:\n"
+                . json_encode([
+                    'score' => 'Integer antara 0 sampai 100. (100 = Sangat Aman, 0 = Berbahaya)',
+                    'risk_level' => 'low|medium|high|critical',
+                    'red_flags' => ['Daftar poin bahaya yang ditemukan'],
+                    'recommendations' => ['Daftar mitigasi klausul kontrak/SCCs']
+                ], JSON_PRETTY_PRINT);
+
+        $dataStr = json_encode($questionsAndAnswers, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        $user = "Berikan penilaian objektif atas jawaban kuesioner vendor ini:\n{$dataStr}\n\n"
+              . "Hitung score dan berikan red flags jika ada kelalaian kontrol keamanan atau transfer tanpa SCC.\n"
+              . "Keluarkan HANYA output JSON valid.";
+
+        return $this->ask($system, $user, 2500);
+    }
+
+    /**
+     * 4. AI TIA (Transfer Impact Assessment) untuk Cross-Border
+     */
+    public function vendorTia(array $vendorData, string $destinationCountry): ?array
+    {
+        $system = "Kamu adalah Privacy Lawyer Internasional ahli Adequacy Decision.\n"
+                . "Tugasmu menilai risiko yurisdiksi negara tujuan dalam Cross-Border Data Transfer.\n"
+                . "Output WAJIB berupa JSON valid.\n\n"
+                . "FORMAT OUTPUT JSON:\n"
+                . json_encode([
+                    'tia_score' => 'Integer 0 sampai 100',
+                    'legal_basis_recommended' => 'SCCs | Binding Corporate Rules | Adequacy Decision',
+                    'safeguard_recommendations' => ['Technical safeguard', 'Organizational safeguard']
+                ], JSON_PRETTY_PRINT);
+
+        $dataStr = json_encode($vendorData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        $user = "Lakukan Transfer Impact Assessment (TIA) untuk mentransfer data ke negara: {$destinationCountry}.\n"
+              . "Profil vendor: {$dataStr}\n\n"
+              . "Bandingkan regulasi negara tersebut dengan standar UU PDP/GDPR dan rekomendasikan legal safeguards.\n"
+              . "Keluarkan HANYA output JSON valid.";
+
+        return $this->ask($system, $user, 2500);
+    }
 }

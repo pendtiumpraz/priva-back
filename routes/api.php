@@ -165,9 +165,10 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::get('/{id}', [\App\Http\Controllers\Api\VendorRiskController::class, 'show']);
             Route::put('/{id}', [\App\Http\Controllers\Api\VendorRiskController::class, 'update']);
             Route::delete('/{id}', [\App\Http\Controllers\Api\VendorRiskController::class, 'destroy']);
-            
             // AI Assessment
-            Route::post('/{id}/assess', [\App\Http\Controllers\Api\VendorRiskController::class, 'assess']);
+            Route::post('/extract', [\App\Http\Controllers\Api\VendorRiskController::class, 'extract']);
+            Route::post('/generate-questions', [\App\Http\Controllers\Api\VendorRiskController::class, 'generateQuestions']);
+            Route::post('/assess', [\App\Http\Controllers\Api\VendorRiskController::class, 'assess']);
         });
 
         // =============================================

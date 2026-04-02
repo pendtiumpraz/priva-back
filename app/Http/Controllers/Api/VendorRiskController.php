@@ -5,150 +5,172 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Vendor;
 use App\Models\VendorAssessment;
+use App\Services\AiService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
-use OpenAI\Laravel\Facades\OpenAI;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class VendorRiskController extends Controller
 {
+    /**
+     * List all vendors for the organization
+     */
     public function index(Request $request)
     {
         $orgId = $request->user()->org_id;
+
         $vendors = Vendor::where('org_id', $orgId)
             ->with(['assessments' => function($q) {
-                $q->orderBy('created_at', 'desc')->take(1);
+                $q->orderBy('created_at', 'desc')->limit(1);
             }])
             ->orderBy('created_at', 'desc')
-            ->paginate(15);
-            
-        return response()->json($vendors);
-    }
+            ->get()
+            ->map(function ($vendor) {
+                $assessment = $vendor->assessments->first();
+                return [
+                    'id' => $vendor->id,
+                    'name' => $vendor->name,
+                    'service' => empty($vendor->services_provided) ? 'Unknown' : implode(', ', $vendor->services_provided),
+                    'risk_level' => $vendor->risk_level,
+                    'score' => $vendor->risk_score,
+                    'last_assessed' => $vendor->last_assessed_at ? $vendor->last_assessed_at->format('Y-m-d') : '-',
+                ];
+            });
 
-    public function store(Request $request)
-    {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'type' => 'nullable|string',
-            'country' => 'nullable|string',
-        ]);
-
-        $vendor = Vendor::create(array_merge($request->all(), [
-            'org_id' => $request->user()->org_id,
-        ]));
-
-        return response()->json(['message' => 'Vendor berhasil ditambahkan', 'data' => $vendor], 201);
-    }
-
-    public function show(Request $request, $id)
-    {
-        $vendor = Vendor::where('org_id', $request->user()->org_id)->with('assessments')->findOrFail($id);
-        return response()->json(['data' => $vendor]);
-    }
-
-    public function update(Request $request, $id)
-    {
-        $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($id);
-        $vendor->update($request->all());
-        return response()->json(['message' => 'Vendor berhasil diperbarui', 'data' => $vendor]);
-    }
-
-    public function destroy(Request $request, $id)
-    {
-        $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($id);
-        $vendor->delete();
-        return response()->json(['message' => 'Vendor berhasil dihapus']);
+        return response()->json(['data' => $vendors]);
     }
 
     /**
-     * Submit assessment questionnaire and generate risk score via AI
+     * 1. AI Auto-Form (Extractor)
      */
-    public function assess(Request $request, $id)
+    public function extract(Request $request)
     {
-        $user = $request->user();
-        $vendor = Vendor::where('org_id', $user->org_id)->findOrFail($id);
-
-        $request->validate([
-            'answers' => 'required|array',
-        ]);
-
-        $answers = $request->answers;
-
-        // Generate Risk Score via deterministic logic or AI
-        // If they have AI enabled and features allowed:
-        $hasAi = $user->organization->ai_credits_remaining > 0;
+        $request->validate(['url' => 'required|string']);
         
-        $score = 50;
-        $riskLevel = 'medium';
-        $recommendations = [];
-
-        if ($hasAi) {
-            try {
-                $prompt = "Tolong analisis jawaban assessment vendor ini terkait privasi data dan berikan skor risiko (0-100, dimana 100 sangat berisiko) serta level (low, medium, high, critical) dan daftar rekomendasi perbaikan. \nJawaban: " . json_encode($answers) . "\nFormat JSON: {\"score\": int, \"risk_level\": \"string\", \"recommendations\": []}";
-                
-                $response = OpenAI::chat()->create([
-                    'model' => 'gpt-4o-mini',
-                    'messages' => [
-                        ['role' => 'system', 'content' => 'You are a Data Privacy Officer expert assistant. Output purely JSON.'],
-                        ['role' => 'user', 'content' => $prompt],
-                    ],
-                    'response_format' => ['type' => 'json_object'],
-                    'temperature' => 0.2,
-                ]);
-
-                $result = json_decode($response->choices[0]->message->content, true);
-                $score = $result['score'] ?? 50;
-                $riskLevel = $result['risk_level'] ?? 'medium';
-                $recommendations = $result['recommendations'] ?? ['Lakukan review berkala.'];
-
-                // deduct credit
-                $user->organization->decrement('ai_credits_remaining', 1);
-            } catch (\Exception $e) {
-                \Log::error('AI Vendor Assessment failed: ' . $e->getMessage());
-                // Fallback deterministic
-                $score = $this->calculateDeterministicScore($answers);
-                $riskLevel = $this->getRiskLevel($score);
-            }
-        } else {
-             $score = $this->calculateDeterministicScore($answers);
-             $riskLevel = $this->getRiskLevel($score);
+        $org = $request->user()->organization;
+        if ($org->ai_credits_remaining < 1) {
+            return response()->json(['message' => 'AI Credits tidak mencukupi'], 402);
         }
 
-        $assessment = VendorAssessment::create([
-            'vendor_id' => $vendor->id,
-            'org_id' => $user->org_id,
-            'assessed_by' => $user->id,
-            'answers' => $answers,
-            'score' => $score,
-            'risk_level' => $riskLevel,
-            'recommendations' => $recommendations,
-        ]);
+        try {
+            $aiService = new AiService($org->id);
+            $response = $aiService->vendorExtractor($request->url);
 
-        // Update vendor main stats
-        $vendor->update([
-            'risk_score' => $score,
-            'risk_level' => $riskLevel,
-            'last_assessed_at' => now(),
-        ]);
+            if (!$response) {
+                throw new \Exception("AI gagal merespons dengan JSON valid");
+            }
 
-        return response()->json([
-            'message' => 'Assessment berhasil disimpan dan dianalisis.',
-            'data' => $assessment,
-            'vendor' => $vendor
-        ]);
+            // Deduct exactly after success
+            $org->decrement('ai_credits_remaining', 1);
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $response
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('VendorRisk Extract Error: '.$e->getMessage());
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
+        }
     }
 
-    private function calculateDeterministicScore($answers)
+    /**
+     * 2. AI Questionnaire Generator
+     */
+    public function generateQuestions(Request $request)
     {
-        // Simple logic base
-        // Assume default medium risk
-        return 45; 
+        $request->validate(['extracted_data' => 'required|array']);
+        
+        $org = $request->user()->organization;
+        if ($org->ai_credits_remaining < 1) {
+            return response()->json(['message' => 'AI Credits tidak mencukupi'], 402);
+        }
+
+        try {
+            $aiService = new AiService($org->id);
+            $response = $aiService->vendorQuestionnaire($request->extracted_data);
+
+            if (!$response || !isset($response['questions'])) {
+                throw new \Exception("AI gagal generate pertanyaan");
+            }
+
+            $org->decrement('ai_credits_remaining', 1);
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $response['questions']
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('VendorRisk QGen Error: '.$e->getMessage());
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
+        }
     }
 
-    private function getRiskLevel($score)
+    /**
+     * 3. AI Vendor Risk Assessor
+     */
+    public function assess(Request $request)
     {
-        if ($score >= 80) return 'critical';
-        if ($score >= 60) return 'high';
-        if ($score >= 30) return 'medium';
-        return 'low';
+        $request->validate([
+            'extracted_data' => 'required|array',
+            'answers' => 'required|array'
+        ]);
+        
+        $orgId = $request->user()->org_id;
+        $org = $request->user()->organization;
+        if ($org->ai_credits_remaining < 1) {
+            return response()->json(['message' => 'AI Credits tidak mencukupi'], 402);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $aiService = new AiService($orgId);
+            $response = $aiService->vendorRiskAssessor($request->answers);
+
+            if (!$response || !isset($response['score'])) {
+                throw new \Exception("AI gagal men-scoring risiko");
+            }
+
+            $extracted = $request->extracted_data;
+
+            // Save to DB
+            $vendor = Vendor::create([
+                'org_id' => $orgId,
+                'name' => $extracted['name'] ?? 'Unknown Vendor',
+                'services_provided' => $extracted['services_provided'] ?? [],
+                'data_shared' => $extracted['data_shared'] ?? [],
+                'description' => $extracted['summary'] ?? null,
+                'risk_score' => $response['score'],
+                'risk_level' => $response['risk_level'],
+                'last_assessed_at' => now(),
+            ]);
+
+            $assessment = VendorAssessment::create([
+                'vendor_id' => $vendor->id,
+                'org_id' => $orgId,
+                'assessed_by' => $request->user()->id,
+                'answers' => $request->answers,
+                'score' => $response['score'],
+                'risk_level' => $response['risk_level'],
+                'recommendations' => $response['recommendations'] ?? [],
+                'notes' => json_encode($response['red_flags'] ?? []),
+            ]);
+
+            $org->decrement('ai_credits_remaining', 1);
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $response
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('VendorRisk Assess Error: '.$e->getMessage());
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
+        }
     }
 }
