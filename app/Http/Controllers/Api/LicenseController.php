@@ -59,24 +59,27 @@ class LicenseController extends Controller
         return response()->json($licenses);
     }
 
-    /**
-     * Assign a license key to a tenant.
-     * SA is trusted — try LM verification first, fallback to direct assignment.
-     */
     public function store(Request $request)
     {
         $user = $request->user();
-        if ($user->role !== 'superadmin') {
+        if (!in_array($user->role, ['superadmin', 'admin'])) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
         $request->validate([
             'license_key' => 'required|string',
-            'org_id' => 'required|uuid',
-            'package_type' => 'nullable|in:basic,ai,ai_agent',
-            'license_type' => 'nullable|in:perpetual,saas',
-            'duration_days' => 'nullable|integer|min:1',
+            'org_id'      => 'required|uuid',
+            'package_type'=> 'nullable|in:basic,ai,ai_agent',
+            'license_type'=> 'nullable|in:perpetual,saas',
+            'duration_days'=> 'nullable|integer|min:1',
         ]);
+
+        if ($user->role === 'admin') {
+            $adminOrg = Organization::find($user->org_id);
+            if (!$adminOrg || !in_array($request->org_id, $adminOrg->getDescendantIds())) {
+                return response()->json(['message' => 'Unauthorized org scope. Anda hanya dapat assign license ke anak perusahaan Anda.'], 403);
+            }
+        }
 
         $org = Organization::findOrFail($request->org_id);
         $domain = $request->getHost();
