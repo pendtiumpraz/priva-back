@@ -146,12 +146,15 @@ class UserController extends Controller
             $orgName = $request->input('org_name', $validated['name'] . "'s Organization");
             $orgSlug = $request->input('org_slug', \Illuminate\Support\Str::slug($orgName . '-' . uniqid()));
             $orgIndustry = $request->input('org_industry', 'Other');
+            $orgLevel = $request->input('org_level', 'holding');
+            $parentId = $request->input('parent_id');
             
             $org = \App\Models\Organization::create([
                 'name' => $orgName,
                 'slug' => $orgSlug,
                 'industry' => $orgIndustry,
-                'org_level' => 'holding',
+                'org_level' => $orgLevel,
+                'parent_id' => $parentId ?: null,
             ]);
             $validated['org_id'] = $org->id;
 
@@ -259,8 +262,9 @@ class UserController extends Controller
                 $org = \App\Models\Organization::create([
                     'name' => $orgName,
                     'slug' => \Illuminate\Support\Str::slug($orgName . '-' . uniqid()),
-                    'industry' => 'Other',
-                    'org_level' => 'holding',
+                    'industry' => $request->input('org_industry', 'Other'),
+                    'org_level' => $request->input('org_level', 'holding'),
+                    'parent_id' => $request->input('parent_id') ?: null,
                 ]);
                 $validated['org_id'] = $org->id;
             } elseif ($newRole === 'superadmin') {
