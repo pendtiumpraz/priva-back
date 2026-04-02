@@ -218,8 +218,13 @@ class UserController extends Controller
         $user = User::with(['organization', 'tenantRole'])->findOrFail($id);
 
         // Scope check
+        $descendantIds = ($auth->role === 'admin' && $auth->organization) ? $auth->organization->getDescendantIds() : [];
         if ($auth->role !== 'superadmin' && $user->org_id !== $auth->org_id) {
-            return response()->json(['message' => 'Forbidden'], 403);
+            if ($auth->role === 'admin' && in_array($user->org_id, $descendantIds) && $user->role === 'admin') {
+                // Allowed
+            } else {
+                return response()->json(['message' => 'Forbidden'], 403);
+            }
         }
 
         return response()->json(['data' => $user]);
@@ -235,8 +240,13 @@ class UserController extends Controller
         $user = User::findOrFail($id);
 
         // Scope check
+        $descendantIds = ($auth->role === 'admin' && $auth->organization) ? $auth->organization->getDescendantIds() : [];
         if ($auth->role !== 'superadmin' && $user->org_id !== $auth->org_id) {
-            return response()->json(['message' => 'Forbidden'], 403);
+            if ($auth->role === 'admin' && in_array($user->org_id, $descendantIds) && $user->role === 'admin') {
+                // Allowed
+            } else {
+                return response()->json(['message' => 'Forbidden'], 403);
+            }
         }
 
         // Only superadmin/admin can update other users
@@ -257,6 +267,11 @@ class UserController extends Controller
         if ($auth->role === 'superadmin') {
             $rules['role'] = ['sometimes'];
             $rules['org_id'] = 'nullable|exists:organizations,id';
+        }
+        
+        // Allowed org update fields for passing to organization model
+        if ($request->has('org_name')) {
+            $rules['org_name'] = 'sometimes|string|max:255';
         }
 
         if ($request->filled('password')) {
@@ -300,15 +315,25 @@ class UserController extends Controller
             }
         }
 
-        // Update User's Organization if Superadmin passes org_level/parent_id
-        if ($auth->role === 'superadmin' && $user->org_id && ($request->has('org_level') || $request->has('parent_id'))) {
-            $orgLevelUpdate = $request->input('org_level');
-            $parentIdUpdate = $request->input('parent_id');
+        // Update User's Organization Name/Level/Parent
+        if (($auth->role === 'superadmin' || ($auth->role === 'admin' && in_array($user->org_id, $descendantIds))) && $user->org_id) {
+            $orgUpdateData = [];
             
-            $user->organization->update([
-                'org_level' => $orgLevelUpdate ?: $user->organization->org_level,
-                'parent_id' => $parentIdUpdate === 'null' ? null : ($parentIdUpdate ?: $user->organization->parent_id),
-            ]);
+            if ($request->has('org_name')) {
+                $orgUpdateData['name'] = $request->input('org_name');
+            }
+
+            if ($auth->role === 'superadmin' && ($request->has('org_level') || $request->has('parent_id'))) {
+                $orgLevelUpdate = $request->input('org_level');
+                $parentIdUpdate = $request->input('parent_id');
+                
+                $orgUpdateData['org_level'] = $orgLevelUpdate ?: $user->organization->org_level;
+                $orgUpdateData['parent_id'] = $parentIdUpdate === 'null' ? null : ($parentIdUpdate ?: $user->organization->parent_id);
+            }
+
+            if (!empty($orgUpdateData)) {
+                $user->organization->update($orgUpdateData);
+            }
         }
 
         $user->update($validated);
