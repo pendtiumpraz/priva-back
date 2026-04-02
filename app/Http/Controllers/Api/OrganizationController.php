@@ -14,14 +14,23 @@ class OrganizationController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        if ($user->role !== 'superadmin') {
+        if (!in_array($user->role, ['superadmin', 'admin'])) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $orgs = Organization::withTrashed()
-            ->with('parent:id,name')
-            ->withCount(['users', 'children'])
-            ->orderBy('created_at', 'desc')
+        $query = Organization::withTrashed()->with('parent:id,name')->withCount(['users', 'children']);
+
+        if ($user->role !== 'superadmin') {
+            $org = Organization::find($user->org_id);
+            if (!$org || !$org->isHolding()) {
+                return response()->json(['message' => 'Hanya admin holding yang bisa mengakses ini.'], 403);
+            }
+            $descendantIds = $org->getDescendantIds();
+            $descendantIds[] = $org->id; // include self, or only children? Usually including self is good.
+            $query->whereIn('id', $descendantIds);
+        }
+
+        $orgs = $query->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($org) {
                 // Also get active license for each org
@@ -75,8 +84,15 @@ class OrganizationController extends Controller
     public function deactivate(Request $request, $id)
     {
         $user = $request->user();
-        if ($user->role !== 'superadmin') {
+        if (!in_array($user->role, ['superadmin', 'admin'])) {
             return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        if ($user->role !== 'superadmin') {
+            $org = Organization::find($user->org_id);
+            if (!$org || !$org->isHolding() || !in_array($id, $org->getDescendantIds())) {
+                return response()->json(['message' => 'Unauthorized or out of scope'], 403);
+            }
         }
 
         $request->validate([
@@ -103,8 +119,15 @@ class OrganizationController extends Controller
     public function restore(Request $request, $id)
     {
         $user = $request->user();
-        if ($user->role !== 'superadmin') {
+        if (!in_array($user->role, ['superadmin', 'admin'])) {
             return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        if ($user->role !== 'superadmin') {
+            $org = Organization::find($user->org_id);
+            if (!$org || !$org->isHolding() || !in_array($id, $org->getDescendantIds())) {
+                return response()->json(['message' => 'Unauthorized or out of scope'], 403);
+            }
         }
 
         $org = Organization::withTrashed()->findOrFail($id);
@@ -118,8 +141,17 @@ class OrganizationController extends Controller
      */
     public function createChild(Request $request)
     {
-        if ($request->user()->role !== 'superadmin') {
+        $user = $request->user();
+        if (!in_array($user->role, ['superadmin', 'admin'])) {
             return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $adminOrg = null;
+        if ($user->role !== 'superadmin') {
+            $adminOrg = Organization::find($user->org_id);
+            if (!$adminOrg || !$adminOrg->isHolding()) {
+                return response()->json(['message' => 'Bukan admin holding'], 403);
+            }
         }
 
         $request->validate([
@@ -127,15 +159,23 @@ class OrganizationController extends Controller
             'slug'      => 'required|string|max:100|unique:organizations,slug',
             'industry'  => 'nullable|string|max:100',
             'org_level' => 'required|in:holding,sub_holding,subsidiary',
-            'parent_id' => 'nullable|uuid|exists:organizations,id',
+            'parent_id' => ($user->role === 'superadmin' ? 'nullable' : 'required') . '|uuid|exists:organizations,id',
         ]);
+
+        if ($user->role !== 'superadmin') {
+            // Must attach to admin's org or its descendants
+            $allowedParents = array_merge([$adminOrg->id], $adminOrg->getDescendantIds());
+            if (!in_array($request->parent_id, $allowedParents)) {
+                return response()->json(['message' => 'Parent ID tidak berada dalam hierarki Anda.'], 403);
+            }
+        }
 
         $org = Organization::create([
             'name'      => $request->name,
             'slug'      => $request->slug,
             'industry'  => $request->industry,
             'org_level' => $request->org_level,
-            'parent_id' => $request->parent_id ?: null,
+            'parent_id' => $request->parent_id,
             'onboarding_completed' => true,
             'ai_credits_monthly'   => 100,
             'ai_credits_remaining' => 100,
@@ -149,8 +189,17 @@ class OrganizationController extends Controller
      */
     public function updateHierarchy(Request $request, $id)
     {
-        if ($request->user()->role !== 'superadmin') {
+        $user = $request->user();
+        if (!in_array($user->role, ['superadmin', 'admin'])) {
             return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $adminOrg = null;
+        if ($user->role !== 'superadmin') {
+            $adminOrg = Organization::find($user->org_id);
+            if (!$adminOrg || !$adminOrg->isHolding() || !in_array($id, $adminOrg->getDescendantIds())) {
+                return response()->json(['message' => 'Organisasi ini bukan di bawah hierarki Anda'], 403);
+            }
         }
 
         $request->validate([
@@ -158,8 +207,16 @@ class OrganizationController extends Controller
             'slug'      => 'sometimes|string|max:100',
             'industry'  => 'nullable|string|max:100',
             'org_level' => 'sometimes|in:holding,sub_holding,subsidiary',
-            'parent_id' => 'nullable|uuid',
+            'parent_id' => ($user->role === 'superadmin' ? 'nullable' : 'required') . '|uuid|exists:organizations,id',
         ]);
+
+        if ($user->role !== 'superadmin') {
+            // Must attach to admin's org or its descendants
+            $allowedParents = array_merge([$adminOrg->id], $adminOrg->getDescendantIds());
+            if (!in_array($request->parent_id, $allowedParents)) {
+                return response()->json(['message' => 'Parent ID tidak berada dalam hierarki Anda.'], 403);
+            }
+        }
 
         $org = Organization::findOrFail($id);
 
