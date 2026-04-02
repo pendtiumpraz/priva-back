@@ -135,36 +135,43 @@ class UserController extends Controller
         ];
 
         // Role restriction modification
-        if ($auth->role === 'superadmin') {
+        $isCreatingNewOrg = $request->input('role') === 'admin' && empty($request->input('org_id'));
+        
+        if ($auth->role === 'superadmin' || ($auth->role === 'admin' && $isCreatingNewOrg)) {
             $rules['role'] = ['sometimes'];
             $rules['tenant_role_id'] = ['nullable', 'exists:tenant_roles,id'];
             
-            // If superadmin creates dpo/maker/viewer, org_id is required
-            if (in_array($request->input('role'), ['dpo', 'maker', 'viewer'])) {
-                $rules['org_id'] = 'required|exists:organizations,id';
+            if ($auth->role === 'superadmin') {
+                if (in_array($request->input('role'), ['dpo', 'maker', 'viewer'])) {
+                    $rules['org_id'] = 'required|exists:organizations,id';
+                } else {
+                    $rules['org_id'] = 'nullable|exists:organizations,id';
+                }
             } else {
-                // If superadmin or admin, org_id is not required
                 $rules['org_id'] = 'nullable|exists:organizations,id';
             }
         } else {
-            // Admin users will automatically get the org_id from their parent
+            // Admin users creating staff will automatically get the org_id from their parent
+            if ($auth->role !== 'superadmin') {
+                $rules['org_id'] = 'nullable';
+            }
         }
 
         $validated = $request->validate($rules);
         $validated['password'] = Hash::make($validated['password']);
 
-        // Admin can only create users in their own org
-        if ($auth->role !== 'superadmin') {
-            $validated['org_id'] = $auth->org_id;
-        }
-
-        // Auto-create Organization if superadmin creates an 'admin' with org creation data
-        if ($auth->role === 'superadmin' && $validated['role'] === 'admin' && empty($validated['org_id'])) {
+        // Auto-create Organization if admin creates an 'admin' with org creation data
+        if (($auth->role === 'superadmin' || $auth->role === 'admin') && $validated['role'] === 'admin' && empty($validated['org_id'])) {
             $orgName = $request->input('org_name', $validated['name'] . "'s Organization");
             $orgSlug = $request->input('org_slug', \Illuminate\Support\Str::slug($orgName . '-' . uniqid()));
             $orgIndustry = $request->input('org_industry', 'Other');
             $orgLevel = $request->input('org_level', 'holding');
             $parentId = $request->input('parent_id');
+            
+            // If the creator is an admin of a holding company, ensure parent_id is under their control
+            if ($auth->role === 'admin') {
+                if (!$parentId) $parentId = $auth->org_id; // Default to their org
+            }
             
             $org = \App\Models\Organization::create([
                 'name' => $orgName,
@@ -176,16 +183,18 @@ class UserController extends Controller
             $validated['org_id'] = $org->id;
 
             // Create default system roles for the new org
-            $allModules = ['dashboard', 'gap_assessment', 'ropa', 'dpia', 'data_discovery', 'contract_review', 'dsr', 'consent', 'breach', 'simulation', 'users', 'settings'];
+            $allModules = ['dashboard', 'gap_assessment', 'ropa', 'dpia', 'data_discovery', 'contract_review', 'vendor_risk', 'cross_border', 'dsr', 'consent', 'breach', 'simulation', 'users', 'settings'];
             $allWrite = []; $allRead = [];
             foreach ($allModules as $mod) { $allWrite[] = "$mod:read"; $allWrite[] = "$mod:write"; $allRead[] = "$mod:read"; }
 
-            $adminRole = \App\Models\TenantRole::create(['org_id' => $org->id, 'name' => 'Admin', 'is_system' => true, 'description' => 'Administrator dengan full akses konfigurasi', 'permissions' => ['*']]);
+            $adminRole = \App\Models\TenantRole::create(['org_id' => $org->id, 'name' => 'Admin', 'is_system' => true, 'description' => 'Administrator dengan full akses', 'permissions' => ['*']]);
             \App\Models\TenantRole::create(['org_id' => $org->id, 'name' => 'DPO', 'is_system' => true, 'description' => 'Data Protection Officer', 'permissions' => $allWrite]);
-            \App\Models\TenantRole::create(['org_id' => $org->id, 'name' => 'Maker', 'is_system' => true, 'description' => 'User operasional yang input data', 'permissions' => array_filter($allWrite, fn($p) => !str_contains($p, 'users') && !str_contains($p, 'settings'))]);
-            \App\Models\TenantRole::create(['org_id' => $org->id, 'name' => 'Viewer', 'is_system' => true, 'description' => 'Akses hanya baca (read-only)', 'permissions' => $allRead]);
+            \App\Models\TenantRole::create(['org_id' => $org->id, 'name' => 'Maker', 'is_system' => true, 'description' => 'User operasional', 'permissions' => array_filter($allWrite, fn($p) => !str_contains($p, 'users') && !str_contains($p, 'settings'))]);
+            \App\Models\TenantRole::create(['org_id' => $org->id, 'name' => 'Viewer', 'is_system' => true, 'description' => 'Akses read-only', 'permissions' => $allRead]);
             
             $validated['tenant_role_id'] = $adminRole->id;
+        } else if ($auth->role !== 'superadmin' && empty($validated['org_id'])) {
+            $validated['org_id'] = $auth->org_id;
         }
 
         $validated['is_active'] = true;
