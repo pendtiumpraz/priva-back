@@ -65,8 +65,25 @@ class UserController extends Controller
                 $query->where('org_id', $request->org_id);
             }
         } else {
-            // Everyone else only sees their own org
-            $query->where('org_id', $auth->org_id);
+            // Include their own org users
+            // AND the admin users of their descendant organizations ONLY (not staff)
+            if (in_array($auth->role, ['admin']) && $auth->org_id) {
+                // Determine descendant org IDs via Organization model (assuming getDescendantIds exists)
+                $descendantIds = $auth->organization ? $auth->organization->getDescendantIds() : [];
+                
+                if (!empty($descendantIds)) {
+                    $query->where(function ($q) use ($auth, $descendantIds) {
+                        $q->where('org_id', $auth->org_id) // My own org's users
+                          ->orWhere(function ($subQ) use ($descendantIds) {
+                              $subQ->whereIn('org_id', $descendantIds)->where('role', 'admin'); // Only admins of descendants
+                          });
+                    });
+                } else {
+                    $query->where('org_id', $auth->org_id);
+                }
+            } else {
+                $query->where('org_id', $auth->org_id);
+            }
         }
 
         // Search
@@ -281,6 +298,17 @@ class UserController extends Controller
                 elseif (str_contains($n, 'viewer')) $validated['role'] = 'viewer';
                 else $validated['role'] = 'maker';
             }
+        }
+
+        // Update User's Organization if Superadmin passes org_level/parent_id
+        if ($auth->role === 'superadmin' && $user->org_id && ($request->has('org_level') || $request->has('parent_id'))) {
+            $orgLevelUpdate = $request->input('org_level');
+            $parentIdUpdate = $request->input('parent_id');
+            
+            $user->organization->update([
+                'org_level' => $orgLevelUpdate ?: $user->organization->org_level,
+                'parent_id' => $parentIdUpdate === 'null' ? null : ($parentIdUpdate ?: $user->organization->parent_id),
+            ]);
         }
 
         $user->update($validated);
