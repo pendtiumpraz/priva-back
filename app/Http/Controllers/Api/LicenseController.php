@@ -135,6 +135,29 @@ class LicenseController extends Controller
             $expiresAt = now()->addDays($request->duration_days);
         }
 
+        // --- ENFORCE MAX ACTIVATION ACROSS TENANTS LOCALLY ---
+        // Verify how many other orgs locally are already using this key
+        $currentlyUsedBy = License::where('license_key', $request->license_key)
+            ->whereNotNull('org_id')
+            ->where('org_id', '!=', $org->id)
+            ->where('status', 'active')
+            ->count();
+
+        // Plus check if superadmin platform license is using it (org_id is null)
+        $isUsedByPlatform = License::where('license_key', $request->license_key)
+            ->whereNull('org_id')
+            ->where('status', 'active')
+            ->exists() ? 1 : 0;
+            
+        $totalLocalUsage = $currentlyUsedBy + $isUsedByPlatform;
+
+        if ($totalLocalUsage >= $maxActivations) {
+            return response()->json([
+                'message' => "Gagal: License ini memiliki limit $maxActivations aktivasi, dan sudah digunakan penuh oleh tenant/platform lain.",
+                'status' => 'exceeded'
+            ], 403);
+        }
+
         // Save locally & assign to tenant
         // Use the signed payload from License Manager
         $signedPayload = $licenseData['signed_payload'] ?? null;
@@ -292,6 +315,41 @@ class LicenseController extends Controller
                         // Mark old license as superseded
                         $existingLicense->update(['status' => 'superseded']);
                     }
+                }
+
+                // --- ENFORCE MAX ACTIVATION ACROSS TENANTS LOCALLY ---
+                $maxActivations = $licenseData['max_activations'] ?? 1;
+                $targetOrgId = $user->org_id ?? null;
+
+                $currentlyUsedBy = License::where('license_key', $request->license_key)
+                    ->where(function($q) use ($targetOrgId) {
+                        if ($targetOrgId) {
+                            $q->where('org_id', '!=', $targetOrgId)->whereNotNull('org_id');
+                        } else {
+                            $q->whereNotNull('org_id');
+                        }
+                    })
+                    ->where('status', 'active')
+                    ->count();
+
+                $isUsedByPlatform = License::where('license_key', $request->license_key)
+                    ->whereNull('org_id')
+                    ->where(function($q) use ($targetOrgId) {
+                        if (!$targetOrgId) {
+                            // Being activated FOR platform right now, so we exclude the same exact context
+                            $q->where('id', '<', 0); // Always false, just to skip
+                        }
+                    })
+                    ->where('status', 'active')
+                    ->exists() ? 1 : 0;
+                    
+                $totalLocalUsage = $currentlyUsedBy + $isUsedByPlatform;
+
+                if ($totalLocalUsage >= $maxActivations) {
+                    return response()->json([
+                        'message' => "License sudah mencapai kuota aktivasi maksimal ($maxActivations) dan sedang dipakai oleh tenant/platform lain.",
+                        'status' => 'exceeded'
+                    ], 403);
                 }
 
                 // Save license locally (match by key + org so same key can serve SA + tenant)
