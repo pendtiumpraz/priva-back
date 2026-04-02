@@ -27,6 +27,7 @@ class AuthController extends Controller
         $org = \App\Models\Organization::create([
             'name' => $request->organization_name,
             'slug' => \Illuminate\Support\Str::slug($request->organization_name) . '-' . uniqid(),
+            'org_level' => 'holding',
         ]);
 
         $user = User::create([

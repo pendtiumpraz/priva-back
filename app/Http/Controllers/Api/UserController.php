@@ -151,6 +151,7 @@ class UserController extends Controller
                 'name' => $orgName,
                 'slug' => $orgSlug,
                 'industry' => $orgIndustry,
+                'org_level' => 'holding',
             ]);
             $validated['org_id'] = $org->id;
 
@@ -259,6 +260,7 @@ class UserController extends Controller
                     'name' => $orgName,
                     'slug' => \Illuminate\Support\Str::slug($orgName . '-' . uniqid()),
                     'industry' => 'Other',
+                    'org_level' => 'holding',
                 ]);
                 $validated['org_id'] = $org->id;
             } elseif ($newRole === 'superadmin') {
