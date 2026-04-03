@@ -160,11 +160,14 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         // Phase 2: Vendor Risk Management
         // =============================================
         Route::prefix('vendor-risk')->group(function () {
+            Route::get('/trashed', [\App\Http\Controllers\Api\VendorRiskController::class, 'trashed']);
             Route::get('/', [\App\Http\Controllers\Api\VendorRiskController::class, 'index']);
             Route::post('/', [\App\Http\Controllers\Api\VendorRiskController::class, 'store']);
             Route::get('/{id}', [\App\Http\Controllers\Api\VendorRiskController::class, 'show']);
             Route::put('/{id}', [\App\Http\Controllers\Api\VendorRiskController::class, 'update']);
             Route::delete('/{id}', [\App\Http\Controllers\Api\VendorRiskController::class, 'destroy']);
+            Route::post('/{id}/restore', [\App\Http\Controllers\Api\VendorRiskController::class, 'restore']);
+            Route::delete('/{id}/force', [\App\Http\Controllers\Api\VendorRiskController::class, 'forceDelete']);
             // AI Assessment
             Route::post('/extract', [\App\Http\Controllers\Api\VendorRiskController::class, 'extract']);
             Route::post('/generate-questions', [\App\Http\Controllers\Api\VendorRiskController::class, 'generateQuestions']);

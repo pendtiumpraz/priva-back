@@ -40,6 +40,76 @@ class VendorRiskController extends Controller
         return response()->json(['data' => $vendors]);
     }
 
+    public function store(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'services_provided' => 'nullable|array',
+            'data_shared' => 'nullable|array',
+            'risk_level' => 'nullable|string',
+            'risk_score' => 'nullable|integer'
+        ]);
+
+        $vendor = Vendor::create(array_merge(
+            $request->all(),
+            ['org_id' => $request->user()->org_id]
+        ));
+
+        return response()->json(['message' => 'Vendor berhasil ditambahkan', 'data' => $vendor], 201);
+    }
+
+    public function show(Request $request, $id)
+    {
+        $vendor = Vendor::where('org_id', $request->user()->org_id)->with('assessments')->findOrFail($id);
+        return response()->json(['data' => $vendor]);
+    }
+
+    public function update(Request $request, $id)
+    {
+        $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($id);
+        
+        $request->validate([
+            'name' => 'string|max:255',
+            'services_provided' => 'nullable|array',
+            'data_shared' => 'nullable|array',
+        ]);
+
+        $vendor->update($request->all());
+
+        return response()->json(['message' => 'Vendor berhasil diupdate', 'data' => $vendor]);
+    }
+
+    public function destroy(Request $request, $id)
+    {
+        $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $vendor->delete();
+
+        return response()->json(['message' => 'Vendor dipindahkan ke tempat sampah']);
+    }
+
+    public function trashed(Request $request)
+    {
+        $vendors = Vendor::onlyTrashed()->where('org_id', $request->user()->org_id)
+            ->orderBy('deleted_at', 'desc')->get();
+        return response()->json(['data' => $vendors]);
+    }
+
+    public function restore(Request $request, $id)
+    {
+        $vendor = Vendor::onlyTrashed()->where('org_id', $request->user()->org_id)->findOrFail($id);
+        $vendor->restore();
+
+        return response()->json(['message' => 'Vendor berhasil dipulihkan']);
+    }
+
+    public function forceDelete(Request $request, $id)
+    {
+        $vendor = Vendor::onlyTrashed()->where('org_id', $request->user()->org_id)->findOrFail($id);
+        $vendor->forceDelete();
+
+        return response()->json(['message' => 'Vendor dihapus permanen']);
+    }
+
     /**
      * 1. AI Auto-Form (Extractor)
      */
