@@ -10,138 +10,41 @@ class RegulationFrameworkSeeder extends Seeder
 {
     public function run(): void
     {
-        DB::table('regulation_frameworks')->insert([
+        DB::table('regulation_frameworks')->truncate();
+        DB::table('regulation_frameworks')->updateOrInsert(
+            ['code' => 'uupdp'],
             [
                 'id' => Str::uuid()->toString(),
-                'code' => 'uupdp',
                 'name' => 'UU No. 27 Tahun 2022 (UU PDP)',
                 'country' => 'Indonesia',
-                'articles' => json_encode([
-                    [
-                        "id" => "pdp_1",
-                        "topic" => "Dasar Pemrosesan",
-                        "question" => "Apakah setiap pemrosesan Data Pribadi telah memiliki dasar pemrosesan yang sah (misal: Persetujuan, Perjanjian, Kewajiban Hukum)?",
-                        "article" => "Pasal 20",
-                        "score_weight" => 15
-                    ],
-                    [
-                        "id" => "pdp_2",
-                        "topic" => "Hak Subjek Data",
-                        "question" => "Apakah telah tersedia mekanisme untuk subjek data mengakses, mengubah, menghapus, atau menarik persetujuan pemrosesan datanya?",
-                        "article" => "Pasal 5 - Pasal 11",
-                        "score_weight" => 15
-                    ],
-                    [
-                        "id" => "pdp_3",
-                        "topic" => "Keamanan Data",
-                        "question" => "Apakah telah diterapkan sistem keamanan memadai untuk mencegah akses tidak sah, kebocoran, atau kerusakan Data Pribadi?",
-                        "article" => "Pasal 35",
-                        "score_weight" => 20
-                    ],
-                    [
-                        "id" => "pdp_4",
-                        "topic" => "Notifikasi Insiden",
-                        "question" => "Apakah ada prosedur pelaporan Kegagalan Pelindungan Data Pribadi secara tertulis maksimal 3x24 jam?",
-                        "article" => "Pasal 46",
-                        "score_weight" => 15
-                    ],
-                    [
-                        "id" => "pdp_5",
-                        "topic" => "Pejabat PDP (DPO)",
-                        "question" => "Apakah perusahaan telah menunjuk Pejabat Pelindungan Data Pribadi (DPO) untuk mengawasi kepatuhan privasi?",
-                        "article" => "Pasal 53",
-                        "score_weight" => 10
-                    ]
-                ]),
                 'is_active' => true,
-                'created_at' => now(),
-                'updated_at' => now()
-            ],
-            [
-                'id' => Str::uuid()->toString(),
-                'code' => 'gdpr',
-                'name' => 'General Data Protection Regulation (GDPR)',
-                'country' => 'European Union',
-                'articles' => json_encode([
-                    [
-                        "id" => "gdpr_1",
-                        "topic" => "Lawfulness & Transparency",
-                        "question" => "Is personal data processed lawfully, fairly, and in a transparent manner in relation to the data subject?",
-                        "article" => "Article 5(1)(a)",
-                        "score_weight" => 15
-                    ],
-                    [
-                        "id" => "gdpr_2",
-                        "topic" => "Data Minimisation",
-                        "question" => "Is the data collection adequate, relevant and limited to what is necessary?",
-                        "article" => "Article 5(1)(c)",
-                        "score_weight" => 15
-                    ],
-                    [
-                        "id" => "gdpr_3",
-                        "topic" => "Right to be Forgotten",
-                        "question" => "Can data subjects easily request erasure of their personal data without undue delay?",
-                        "article" => "Article 17",
-                        "score_weight" => 20
-                    ],
-                    [
-                        "id" => "gdpr_4",
-                        "topic" => "Data Portability",
-                        "question" => "Can data subjects receive their data in a structured, commonly used and machine-readable format?",
-                        "article" => "Article 20",
-                        "score_weight" => 10
-                    ],
-                    [
-                        "id" => "gdpr_5",
-                        "topic" => "Breach Notification",
-                        "question" => "Is there a 72-hour reporting mechanism to the supervisory authority regarding data breaches?",
-                        "article" => "Article 33",
-                        "score_weight" => 15
-                    ]
-                ]),
-                'is_active' => true,
-                'created_at' => now(),
-                'updated_at' => now()
-            ],
-            [
-                'id' => Str::uuid()->toString(),
-                'code' => 'pdpa',
-                'name' => 'Personal Data Protection Act (PDPA)',
-                'country' => 'Singapore',
-                'articles' => json_encode([
-                    [
-                        "id" => "pdpa_1",
-                        "topic" => "Consent Obligation",
-                        "question" => "Is consent obtained before collecting, using, or disclosing personal data?",
-                        "article" => "Section 13",
-                        "score_weight" => 20
-                    ],
-                    [
-                        "id" => "pdpa_2",
-                        "topic" => "Purpose Limitation",
-                        "question" => "Are purposes for data collection clearly notified to the individual?",
-                        "article" => "Section 20",
-                        "score_weight" => 15
-                    ],
-                    [
-                        "id" => "pdpa_3",
-                        "topic" => "Protection Obligation",
-                        "question" => "Are reasonable security arrangements implemented to prevent unauthorized access or similar risks?",
-                        "article" => "Section 24",
-                        "score_weight" => 20
-                    ],
-                    [
-                        "id" => "pdpa_4",
-                        "topic" => "Retention Limitation",
-                        "question" => "Is data destroyed or anonymised as soon as the purpose for which it was collected is no longer being served?",
-                        "article" => "Section 25",
-                        "score_weight" => 15
-                    ]
-                ]),
-                'is_active' => true,
-                'created_at' => now(),
+                'articles' => '[{"id":"TK-FR-01","topic":"Tata Kelola","question":"Apakah Organisasi telah memiliki kerangka kerja (framework) Pelindungan Data Pribadi yang disetujui manajemen tingkat atas?","article":"Pasal 47","weight":5,"score_weight":5},{"id":"TK-FR-02","topic":"Tata Kelola","question":"Apakah Organisasi telah menetapkan peran dan tanggung jawab struktural terkait pelindungan data pribadi (termasuk Penunjukan DPO)?","article":"Pasal 53","weight":5,"score_weight":5},{"id":"TK-FR-03","topic":"Tata Kelola","question":"Apakah Organisasi memiliki struktur tata kelola komite privasi atau keamanan informasi antar divisi?","article":"Pasal 47","weight":4,"score_weight":4},{"id":"TK-FR-04","topic":"Tata Kelola","question":"Apakah manajemen puncak memiliki KPI terkait kepatuhan privasi dan pelindungan data?","article":"Pasal 47","weight":4,"score_weight":4},{"id":"TK-AS-01","topic":"Asas","question":"Apakah seluruh pemrosesan data dilakukan berdasarkan keabsahan hukum, keadilan, dan transparansi?","article":"Pasal 16","weight":5,"score_weight":5},{"id":"TK-AS-02","topic":"Asas","question":"Apakah tujuan pemrosesan data pribadi bersifat terbatas, spesifik, sah secara hukum, dan eksplisit?","article":"Pasal 16","weight":5,"score_weight":5},{"id":"TK-AS-03","topic":"Asas","question":"Apakah Organisasi menerapkan minimisasi data (hanya memproses data yang relevan dan mencukupi)?","article":"Pasal 16","weight":5,"score_weight":5},{"id":"TK-AS-04","topic":"Asas","question":"Apakah Organisasi menjaga akurasi kemutakhiran data pribadi yang disimpannya?","article":"Pasal 16","weight":4,"score_weight":4},{"id":"DH-PM-01","topic":"Dasar Pemrosesan","question":"Apakah persetujuan yang sah (Consent) telah diperoleh dari subjek data secara eksplisit?","article":"Pasal 20","weight":5,"score_weight":5},{"id":"DH-PM-02","topic":"Dasar Pemrosesan","question":"Apakah terdapat mekanisme pencabutan (withdrawal) persetujuan yang semudah saat memberikannya?","article":"Pasal 9","weight":5,"score_weight":5},{"id":"DH-PM-03","topic":"Dasar Pemrosesan","question":"Apakah dasar hak atau pemenuhan kontrak menjadi dasar hukum valid pemrosesan selain consent?","article":"Pasal 20","weight":4,"score_weight":4},{"id":"DH-PM-04","topic":"Dasar Pemrosesan","question":"Apakah kepentingan vital atau kewajiban hukum perusahaan telah didokumentasikan jika memproses data kritikal?","article":"Pasal 20","weight":4,"score_weight":4},{"id":"SP-AS-RO-01","topic":"ROPA","question":"Apakah Organisasi memiliki dokumen Rekam Jejak Pemrosesan Data Pribadi (ROPA) yang komprehensif?","article":"Pasal 31","weight":5,"score_weight":5},{"id":"SP-AS-RO-02","topic":"ROPA","question":"Apakah ROPA memuat informasi tujuan, kategori data, penerima data, dan estimasi waktu retensi?","article":"Pasal 31","weight":4,"score_weight":4},{"id":"SP-AS-DP-01","topic":"DPIA","question":"Apakah Organisasi mewajibkan DPIA untuk pemrosesan berisiko tinggi (teknologi baru, data spesifik, pemantauan sistemik)?","article":"Pasal 34","weight":5,"score_weight":5},{"id":"SP-AS-DP-02","topic":"DPIA","question":"Apakah hasil DPIA memuat mitigasi risiko dan didiskusikan dengan DPO (atau komite keamanan)?","article":"Pasal 34","weight":5,"score_weight":5},{"id":"SP-PR-DA-01","topic":"Data Sensitif","question":"Apakah pemrosesan data pribadi spesifik (kesehatan, biometrik, keuangan) menggunakan pengamanan ekstra ketat?","article":"Pasal 4","weight":5,"score_weight":5},{"id":"SP-PR-DA-02","topic":"Data Anak","question":"Apakah terdapat proses perolehan persetujuan orang tua atau wali untuk pemrosesan data anak?","article":"Pasal 25","weight":5,"score_weight":5},{"id":"SP-PR-SC-01","topic":"Keamanan Informasi","question":"Apakah Organisasi mengenkripsi data pribadi dalam status diam (at rest) dan berpindah (in transit)?","article":"Pasal 35","weight":5,"score_weight":5},{"id":"SP-PR-SC-02","topic":"Keamanan Informasi","question":"Apakah akses log dan aktivitas database direkam serta dipantau berkala?","article":"Pasal 35","weight":4,"score_weight":4},{"id":"SP-PR-SC-03","topic":"Keamanan Informasi","question":"Apakah kontrol akses terbatas diterapkan (Role Based Access Control) untuk file data sensitif?","article":"Pasal 35","weight":5,"score_weight":5},{"id":"SP-PR-SC-04","topic":"Keamanan Informasi","question":"Apakah uji penetrasi dan kerentanan sistem dilakukan sedikitnya satu kali dalam setahun?","article":"Pasal 35","weight":4,"score_weight":4},{"id":"SP-PR-TP-01","topic":"Pihak Ketiga","question":"Apakah Data Processing Agreement (DPA) wajib ditandatangani oleh semua vendor?","article":"Pasal 47","weight":5,"score_weight":5},{"id":"SP-PR-TP-02","topic":"Pihak Ketiga","question":"Apakah Organisasi melakukan due diligence privasi saat proses on-boarding vendor baru?","article":"Pasal 47","weight":4,"score_weight":4},{"id":"SP-RD-IM-01","topic":"Insiden & Kebocoran","question":"Apakah perusahaan memiliki SOP investigasi dan pelaporan insiden kebocoran secara internal?","article":"Pasal 46","weight":5,"score_weight":5},{"id":"SP-RD-IM-02","topic":"Insiden & Kebocoran","question":"Mampukah Organisasi memberitahukan KOMFINFO dan subjek data dalam waktu 3x24 jam jika terjadi kebocoran?","article":"Pasal 46","weight":5,"score_weight":5},{"id":"SP-PR-DT-01","topic":"Hak Subjek Data","question":"Apakah tersedia formulir dan e-mail khusus untuk menerima permintaan subjek data (DSR)?","article":"Pasal 5-13","weight":5,"score_weight":5},{"id":"SP-PR-DT-02","topic":"Hak Subjek Data","question":"Apakah DSR dapat diselesaikan maksimal dalam 3x24 jam kerja hukum?","article":"Pasal 5-13","weight":4,"score_weight":4},{"id":"SP-PR-DT-03","topic":"Hak Subjek Data","question":"Apakah SOP mengatur verifikasi identitas secara layak sebelum membalas request DSR?","article":"Pasal 5-13","weight":4,"score_weight":4},{"id":"SP-PR-PB-01","topic":"Profiling","question":"Apakah Organisasi memberikan opt-out jika memakai pemrosesan keputusan otomatis atau AI?","article":"Pasal 29","weight":4,"score_weight":4},{"id":"SP-PR-CB-01","topic":"Transfer Lintas Batas","question":"Apakah transfer data lintas batas dilandasi oleh kecukupan standar negara tujuan, SCC, atau persetujuan subjek?","article":"Pasal 56","weight":5,"score_weight":5},{"id":"SP-SU-CP-01","topic":"Sustain","question":"Apakah minimal setiap 1 tahun ada program pelatihan privasi untuk karyawan front-liner dan operasional?","article":"Pasal 47","weight":4,"score_weight":4},{"id":"SP-SU-PA-01","topic":"Sustain","question":"Apakah audit independen dilakukan atas kepatuhan privasi sedikitnya satu kali dalam 2 tahun?","article":"Pasal 55","weight":5,"score_weight":5}]',
                 'updated_at' => now()
             ]
-        ]);
+        );
+
+        DB::table('regulation_frameworks')->updateOrInsert(
+            ['code' => 'gdpr'],
+            [
+                'id' => Str::uuid()->toString(),
+                'name' => 'General Data Protection Regulation (GDPR)',
+                'country' => 'European Union',
+                'is_active' => true,
+                'articles' => '[{"id":"gdpr_1","topic":"Lawfulness","question":"Does the organization have established protocols covering Lawfulness according to GDPR requirements (Art 5)?","article":"Article 5","score_weight":4},{"id":"gdpr_2","topic":"Transparency","question":"Does the organization have established protocols covering Transparency according to GDPR requirements (Art 6)?","article":"Article 6","score_weight":4},{"id":"gdpr_3","topic":"Data Minimisation","question":"Does the organization have established protocols covering Data Minimisation according to GDPR requirements (Art 7)?","article":"Article 7","score_weight":4},{"id":"gdpr_4","topic":"Accuracy","question":"Does the organization have established protocols covering Accuracy according to GDPR requirements (Art 8)?","article":"Article 8","score_weight":4},{"id":"gdpr_5","topic":"Storage Limitation","question":"Does the organization have established protocols covering Storage Limitation according to GDPR requirements (Art 9)?","article":"Article 9","score_weight":4},{"id":"gdpr_6","topic":"Integrity & Confidentiality","question":"Does the organization have established protocols covering Integrity & Confidentiality according to GDPR requirements (Art 10)?","article":"Article 10","score_weight":4},{"id":"gdpr_7","topic":"Accountability","question":"Does the organization have established protocols covering Accountability according to GDPR requirements (Art 11)?","article":"Article 11","score_weight":4},{"id":"gdpr_8","topic":"Consent","question":"Does the organization have established protocols covering Consent according to GDPR requirements (Art 12)?","article":"Article 12","score_weight":4},{"id":"gdpr_9","topic":"Children","question":"Does the organization have established protocols covering Children according to GDPR requirements (Art 13)?","article":"Article 13","score_weight":4},{"id":"gdpr_10","topic":"Special Categories","question":"Does the organization have established protocols covering Special Categories according to GDPR requirements (Art 14)?","article":"Article 14","score_weight":4},{"id":"gdpr_11","topic":"Right of Access","question":"Does the organization have established protocols covering Right of Access according to GDPR requirements (Art 15)?","article":"Article 15","score_weight":4},{"id":"gdpr_12","topic":"Right to Rectification","question":"Does the organization have established protocols covering Right to Rectification according to GDPR requirements (Art 16)?","article":"Article 16","score_weight":4},{"id":"gdpr_13","topic":"Right to Erasure","question":"Does the organization have established protocols covering Right to Erasure according to GDPR requirements (Art 17)?","article":"Article 17","score_weight":4},{"id":"gdpr_14","topic":"Right to Restrict","question":"Does the organization have established protocols covering Right to Restrict according to GDPR requirements (Art 18)?","article":"Article 18","score_weight":4},{"id":"gdpr_15","topic":"Data Portability","question":"Does the organization have established protocols covering Data Portability according to GDPR requirements (Art 19)?","article":"Article 19","score_weight":4},{"id":"gdpr_16","topic":"Right to Object","question":"Does the organization have established protocols covering Right to Object according to GDPR requirements (Art 20)?","article":"Article 20","score_weight":4},{"id":"gdpr_17","topic":"Automated Decision","question":"Does the organization have established protocols covering Automated Decision according to GDPR requirements (Art 21)?","article":"Article 21","score_weight":4},{"id":"gdpr_18","topic":"Data Protection by Design","question":"Does the organization have established protocols covering Data Protection by Design according to GDPR requirements (Art 22)?","article":"Article 22","score_weight":4},{"id":"gdpr_19","topic":"Joint Controllers","question":"Does the organization have established protocols covering Joint Controllers according to GDPR requirements (Art 23)?","article":"Article 23","score_weight":4},{"id":"gdpr_20","topic":"Processors","question":"Does the organization have established protocols covering Processors according to GDPR requirements (Art 24)?","article":"Article 24","score_weight":4},{"id":"gdpr_21","topic":"Records of Processing","question":"Does the organization have established protocols covering Records of Processing according to GDPR requirements (Art 25)?","article":"Article 25","score_weight":4},{"id":"gdpr_22","topic":"Security of Processing","question":"Does the organization have established protocols covering Security of Processing according to GDPR requirements (Art 26)?","article":"Article 26","score_weight":4},{"id":"gdpr_23","topic":"Breach Notification to Authority","question":"Does the organization have established protocols covering Breach Notification to Authority according to GDPR requirements (Art 27)?","article":"Article 27","score_weight":4},{"id":"gdpr_24","topic":"Breach Communication to Subject","question":"Does the organization have established protocols covering Breach Communication to Subject according to GDPR requirements (Art 28)?","article":"Article 28","score_weight":4},{"id":"gdpr_25","topic":"DPIA","question":"Does the organization have established protocols covering DPIA according to GDPR requirements (Art 29)?","article":"Article 29","score_weight":4},{"id":"gdpr_26","topic":"DPO Designation","question":"Does the organization have established protocols covering DPO Designation according to GDPR requirements (Art 30)?","article":"Article 30","score_weight":4},{"id":"gdpr_27","topic":"DPO Tasks","question":"Does the organization have established protocols covering DPO Tasks according to GDPR requirements (Art 31)?","article":"Article 31","score_weight":4},{"id":"gdpr_28","topic":"Cross-border Transfer Adequacy","question":"Does the organization have established protocols covering Cross-border Transfer Adequacy according to GDPR requirements (Art 32)?","article":"Article 32","score_weight":4},{"id":"gdpr_29","topic":"SCCs","question":"Does the organization have established protocols covering SCCs according to GDPR requirements (Art 33)?","article":"Article 33","score_weight":4},{"id":"gdpr_30","topic":"BCRs","question":"Does the organization have established protocols covering BCRs according to GDPR requirements (Art 34)?","article":"Article 34","score_weight":4}]',
+                'updated_at' => now()
+            ]
+        );
+
+        DB::table('regulation_frameworks')->updateOrInsert(
+            ['code' => 'pdpa'],
+            [
+                'id' => Str::uuid()->toString(),
+                'name' => 'Personal Data Protection Act (PDPA)',
+                'country' => 'Singapore',
+                'is_active' => true,
+                'articles' => '[{"id":"pdpa_1","topic":"Lawfulness","question":"Are Singapore PDPA standards on Lawfulness properly adopted and implemented organization-wide?","article":"Section 10","score_weight":4},{"id":"pdpa_2","topic":"Transparency","question":"Are Singapore PDPA standards on Transparency properly adopted and implemented organization-wide?","article":"Section 11","score_weight":4},{"id":"pdpa_3","topic":"Data Minimisation","question":"Are Singapore PDPA standards on Data Minimisation properly adopted and implemented organization-wide?","article":"Section 12","score_weight":4},{"id":"pdpa_4","topic":"Accuracy","question":"Are Singapore PDPA standards on Accuracy properly adopted and implemented organization-wide?","article":"Section 13","score_weight":4},{"id":"pdpa_5","topic":"Storage Limitation","question":"Are Singapore PDPA standards on Storage Limitation properly adopted and implemented organization-wide?","article":"Section 14","score_weight":4},{"id":"pdpa_6","topic":"Integrity & Confidentiality","question":"Are Singapore PDPA standards on Integrity & Confidentiality properly adopted and implemented organization-wide?","article":"Section 15","score_weight":4},{"id":"pdpa_7","topic":"Accountability","question":"Are Singapore PDPA standards on Accountability properly adopted and implemented organization-wide?","article":"Section 16","score_weight":4},{"id":"pdpa_8","topic":"Consent","question":"Are Singapore PDPA standards on Consent properly adopted and implemented organization-wide?","article":"Section 17","score_weight":4},{"id":"pdpa_9","topic":"Children","question":"Are Singapore PDPA standards on Children properly adopted and implemented organization-wide?","article":"Section 18","score_weight":4},{"id":"pdpa_10","topic":"Special Categories","question":"Are Singapore PDPA standards on Special Categories properly adopted and implemented organization-wide?","article":"Section 19","score_weight":4},{"id":"pdpa_11","topic":"Right of Access","question":"Are Singapore PDPA standards on Right of Access properly adopted and implemented organization-wide?","article":"Section 20","score_weight":4},{"id":"pdpa_12","topic":"Right to Rectification","question":"Are Singapore PDPA standards on Right to Rectification properly adopted and implemented organization-wide?","article":"Section 21","score_weight":4},{"id":"pdpa_13","topic":"Right to Erasure","question":"Are Singapore PDPA standards on Right to Erasure properly adopted and implemented organization-wide?","article":"Section 22","score_weight":4},{"id":"pdpa_14","topic":"Right to Restrict","question":"Are Singapore PDPA standards on Right to Restrict properly adopted and implemented organization-wide?","article":"Section 23","score_weight":4},{"id":"pdpa_15","topic":"Data Portability","question":"Are Singapore PDPA standards on Data Portability properly adopted and implemented organization-wide?","article":"Section 24","score_weight":4},{"id":"pdpa_16","topic":"Right to Object","question":"Are Singapore PDPA standards on Right to Object properly adopted and implemented organization-wide?","article":"Section 25","score_weight":4},{"id":"pdpa_17","topic":"Automated Decision","question":"Are Singapore PDPA standards on Automated Decision properly adopted and implemented organization-wide?","article":"Section 26","score_weight":4},{"id":"pdpa_18","topic":"Data Protection by Design","question":"Are Singapore PDPA standards on Data Protection by Design properly adopted and implemented organization-wide?","article":"Section 27","score_weight":4},{"id":"pdpa_19","topic":"Joint Controllers","question":"Are Singapore PDPA standards on Joint Controllers properly adopted and implemented organization-wide?","article":"Section 28","score_weight":4},{"id":"pdpa_20","topic":"Processors","question":"Are Singapore PDPA standards on Processors properly adopted and implemented organization-wide?","article":"Section 29","score_weight":4},{"id":"pdpa_21","topic":"Records of Processing","question":"Are Singapore PDPA standards on Records of Processing properly adopted and implemented organization-wide?","article":"Section 30","score_weight":4},{"id":"pdpa_22","topic":"Security of Processing","question":"Are Singapore PDPA standards on Security of Processing properly adopted and implemented organization-wide?","article":"Section 31","score_weight":4},{"id":"pdpa_23","topic":"Breach Notification to Authority","question":"Are Singapore PDPA standards on Breach Notification to Authority properly adopted and implemented organization-wide?","article":"Section 32","score_weight":4},{"id":"pdpa_24","topic":"Breach Communication to Subject","question":"Are Singapore PDPA standards on Breach Communication to Subject properly adopted and implemented organization-wide?","article":"Section 33","score_weight":4},{"id":"pdpa_25","topic":"DPIA","question":"Are Singapore PDPA standards on DPIA properly adopted and implemented organization-wide?","article":"Section 34","score_weight":4},{"id":"pdpa_26","topic":"DPO Designation","question":"Are Singapore PDPA standards on DPO Designation properly adopted and implemented organization-wide?","article":"Section 35","score_weight":4},{"id":"pdpa_27","topic":"DPO Tasks","question":"Are Singapore PDPA standards on DPO Tasks properly adopted and implemented organization-wide?","article":"Section 36","score_weight":4},{"id":"pdpa_28","topic":"Cross-border Transfer Adequacy","question":"Are Singapore PDPA standards on Cross-border Transfer Adequacy properly adopted and implemented organization-wide?","article":"Section 37","score_weight":4},{"id":"pdpa_29","topic":"SCCs","question":"Are Singapore PDPA standards on SCCs properly adopted and implemented organization-wide?","article":"Section 38","score_weight":4},{"id":"pdpa_30","topic":"BCRs","question":"Are Singapore PDPA standards on BCRs properly adopted and implemented organization-wide?","article":"Section 39","score_weight":4}]',
+                'updated_at' => now()
+            ]
+        );
     }
 }
