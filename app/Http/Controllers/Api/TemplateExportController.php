@@ -21,31 +21,35 @@ class TemplateExportController extends Controller
             return response()->json(['message' => 'Template ROPA tidak ditemukan'], 404);
         }
 
-        $templateProcessor = new TemplateProcessor($templatePath);
-        
-        // Ganti Tag Dinamis
-        $templateProcessor->setValue('registration_number', htmlspecialchars($ropa->registration_number));
-        $templateProcessor->setValue('processing_activity', htmlspecialchars($ropa->processing_activity));
-        $templateProcessor->setValue('division', htmlspecialchars($ropa->division ?? '-'));
-        $templateProcessor->setValue('risk_level', strtoupper($ropa->risk_level));
-        $templateProcessor->setValue('purpose', htmlspecialchars($ropa->purpose ?? '-'));
-        $templateProcessor->setValue('legal_basis', htmlspecialchars($ropa->legal_basis ?? '-'));
-        
-        // Data categories & subjects
-        $dataCategories = is_array($ropa->data_categories) ? implode(', ', $ropa->data_categories) : '-';
-        $templateProcessor->setValue('data_categories', htmlspecialchars($dataCategories));
-        
-        $dataSubjects = is_array($ropa->data_subjects) ? implode(', ', $ropa->data_subjects) : '-';
-        $templateProcessor->setValue('data_subjects', htmlspecialchars($dataSubjects));
+        try {
+            $templateProcessor = new TemplateProcessor($templatePath);
+            
+            // Ganti Tag Dinamis
+            $templateProcessor->setValue('registration_number', htmlspecialchars($ropa->registration_number));
+            $templateProcessor->setValue('processing_activity', htmlspecialchars($ropa->processing_activity));
+            $templateProcessor->setValue('division', htmlspecialchars($ropa->division ?? '-'));
+            $templateProcessor->setValue('risk_level', strtoupper($ropa->risk_level));
+            $templateProcessor->setValue('purpose', htmlspecialchars($ropa->purpose ?? '-'));
+            $templateProcessor->setValue('legal_basis', htmlspecialchars($ropa->legal_basis ?? '-'));
+            
+            // Data categories & subjects
+            $dataCategories = is_array($ropa->data_categories) ? implode(', ', $ropa->data_categories) : '-';
+            $templateProcessor->setValue('data_categories', htmlspecialchars($dataCategories));
+            
+            $dataSubjects = is_array($ropa->data_subjects) ? implode(', ', $ropa->data_subjects) : '-';
+            $templateProcessor->setValue('data_subjects', htmlspecialchars($dataSubjects));
 
-        $templateProcessor->setValue('retention_period', htmlspecialchars($ropa->retention_period ?? '-'));
-        $templateProcessor->setValue('security_measures', htmlspecialchars($ropa->security_measures ?? '-'));
+            $templateProcessor->setValue('retention_period', htmlspecialchars($ropa->retention_period ?? '-'));
+            $templateProcessor->setValue('security_measures', htmlspecialchars($ropa->security_measures ?? '-'));
 
-        $outputFileName = 'ROPA_' . $ropa->registration_number . '.docx';
-        $tempFile = tempnam(sys_get_temp_dir(), 'PHPWord');
-        $templateProcessor->saveAs($tempFile);
+            $outputFileName = 'ROPA_' . $ropa->registration_number . '.docx';
+            $tempFile = tempnam(sys_get_temp_dir(), 'PHPWord');
+            $templateProcessor->saveAs($tempFile);
 
-        return response()->download($tempFile, $outputFileName)->deleteFileAfterSend(true);
+            return response()->download($tempFile, $outputFileName)->deleteFileAfterSend(true);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Export error: ' . $e->getMessage()], 500);
+        }
     }
 
     public function exportDpia($id)
@@ -57,19 +61,23 @@ class TemplateExportController extends Controller
             return response()->json(['message' => 'Template DPIA tidak ditemukan'], 404);
         }
 
-        $templateProcessor = new TemplateProcessor($templatePath);
-        
-        $templateProcessor->setValue('registration_number', htmlspecialchars($dpia->registration_number));
-        $templateProcessor->setValue('ropa_number', htmlspecialchars($dpia->ropa ? $dpia->ropa->registration_number : '-'));
-        $templateProcessor->setValue('risk_level', strtoupper($dpia->risk_level));
-        $templateProcessor->setValue('status', strtoupper($dpia->status));
-        $templateProcessor->setValue('description', htmlspecialchars($dpia->description ?? '-'));
+        try {
+            $templateProcessor = new TemplateProcessor($templatePath);
+            
+            $templateProcessor->setValue('registration_number', htmlspecialchars($dpia->registration_number));
+            $templateProcessor->setValue('ropa_number', htmlspecialchars($dpia->ropa ? $dpia->ropa->registration_number : '-'));
+            $templateProcessor->setValue('risk_level', strtoupper($dpia->risk_level));
+            $templateProcessor->setValue('status', strtoupper($dpia->status));
+            $templateProcessor->setValue('description', htmlspecialchars($dpia->description ?? '-'));
 
-        $outputFileName = 'DPIA_' . $dpia->registration_number . '.docx';
-        $tempFile = tempnam(sys_get_temp_dir(), 'PHPWord');
-        $templateProcessor->saveAs($tempFile);
+            $outputFileName = 'DPIA_' . $dpia->registration_number . '.docx';
+            $tempFile = tempnam(sys_get_temp_dir(), 'PHPWord');
+            $templateProcessor->saveAs($tempFile);
 
-        return response()->download($tempFile, $outputFileName)->deleteFileAfterSend(true);
+            return response()->download($tempFile, $outputFileName)->deleteFileAfterSend(true);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Export error: ' . $e->getMessage()], 500);
+        }
     }
 
     // Untuk Gap Assessment (Excel) karena menggunakan .xls lawas, 
