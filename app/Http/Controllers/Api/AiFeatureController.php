@@ -753,10 +753,15 @@ class AiFeatureController extends Controller
     public function creditUsage(Request $request)
     {
         $orgId = $request->user()->org_id;
-        if (!$orgId && $request->user()->role === 'superadmin') {
-            // Super admin: return all tenants
-            return response()->json(['data' => CreditService::getAllTenantsUsage()]);
+
+        if ($request->user()->role === 'superadmin') {
+            if ($request->has('org_id')) {
+                $orgId = $request->org_id;
+            } else {
+                return response()->json(['data' => CreditService::getAllTenantsUsage()]);
+            }
         }
+
         CreditService::resetIfNeeded($orgId);
         return response()->json(['data' => CreditService::getUsage($orgId)]);
     }
