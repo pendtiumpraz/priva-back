@@ -41,31 +41,51 @@ class GapAssessmentController extends Controller
     }
 
     /**
-     * Compare latest assessments of all active regulations side-by-side
+     * Compare historical assessments for a specific regulation side-by-side
      */
     public function compare(Request $request)
     {
-        $regulations = \App\Models\RegulationFramework::where('is_active', true)->get();
+        $regCode = $request->query('regulation', 'uupdp');
+        $ids = $request->query('ids');
+
+        $query = GapAssessment::where('org_id', $request->user()->org_id)
+            ->where('regulation_code', $regCode);
+
+        if (!empty($ids) && is_array($ids)) {
+            $query->whereIn('id', $ids);
+        } else {
+            $query->orderBy('created_at', 'desc')->take(3); // fallback to latest 3 if no selection
+        }
+
+        $assessments = $query->get();
+
+        // Calculate category breakdowns on the fly for the radar chart
+        // Structure expected by frontend Recharts (RadarChart):
+        // [
+        //   { category: 'Keamanan Data', 'GAP_v3.0_#4': 80, 'GAP_v3.0_#3': 50, ... },
+        //   { category: 'Hak Subjek Data', 'GAP_v3.0_#4': 100, 'GAP_v3.0_#3': 60, ... }
+        // ]
+        
+        // 1. Collect all categories from the question bank
+        $qBank = GapAssessment::getQuestionBank($regCode);
+        $categories = array_values(array_unique(array_column($qBank, 'category')));
+
         $results = [];
-
-        foreach ($regulations as $reg) {
-            $latest = GapAssessment::where('org_id', $request->user()->org_id)
-                ->where('regulation_code', $reg->code)
-                ->orderBy('created_at', 'desc')
-                ->first();
-
-            $results[] = [
-                'code' => $reg->code,
-                'name' => $reg->name,
-                'score' => $latest ? (float) $latest->overall_score : 0,
-                'progress' => $latest ? (int) $latest->progress : 0,
-                'level' => $latest ? $latest->compliance_level : 'N/A',
-                'date' => $latest ? $latest->created_at->format('Y-m-d') : null,
-                'assessment_id' => $latest ? $latest->id : null,
+        foreach ($categories as $cat) {
+            $row = [
+                'category' => $cat
             ];
+            foreach ($assessments as $assessment) {
+                // Re-calculate to get breakdown
+                $calc = GapAssessment::calculateScore($assessment->answers ?: [], $regCode);
+                $breakdown = $calc['category_breakdown'];
+                $row[$assessment->version] = $breakdown[$cat] ?? 0;
+            }
+            $results[] = $row;
         }
 
         return response()->json([
+            'versions' => $assessments->pluck('version'),
             'data' => $results
         ]);
     }

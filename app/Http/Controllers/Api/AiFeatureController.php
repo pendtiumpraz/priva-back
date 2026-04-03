@@ -168,6 +168,35 @@ class AiFeatureController extends Controller
     }
 
     // =============================================
+    // GAP COMPARISON — AI Scoring & Insight
+    // =============================================
+    public function gapComparisonGenerate(Request $request, string $id)
+    {
+        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        
+        $comparison = \App\Models\GapComparison::findOrFail($id);
+        $ai = new AiService($request->user()->org_id);
+        if (!$ai->isAvailable()) {
+            return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        }
+
+        $systemPrompt = "Kamu adalah Data Protection Officer ahli UU PDP Indonesia. Output WAJIB berupa JSON valid.\n"
+            . "Format: {\"ai_score_mapping\":[{\"version\":\"...\",\"category\":\"...\",\"ai_score\":85}], \"sections\":[{\"type\":\"text\",\"title\":\"...\",\"content\":\"...\"}], \"closing\":\"...\"}";
+
+        $userPrompt = "Lakukan asesmen ulang (AI Scoring) dan analisis untuk perbandingan Gap Assessment ini:\n"
+            . "Chart Data Historis: " . json_encode($comparison->chart_data) . "\n"
+            . "Sistem Score Asal: " . json_encode($comparison->chart_data) . "\n\n"
+            . "Berikan:\n"
+            . "1. Tinjauan ulang probabilitas kepatuhan di dunia nyata untuk setiap kategori (AI Score vs System Score). Tentukan skor realistik versi AI di 'ai_score_mapping'.\n"
+            . "2. Analisis DPO tentang tren (Sections)\n"
+            . "Jawab HANYA dalam JSON format yang diminta.";
+
+        $response = $ai->ask($systemPrompt, $userPrompt, 3000);
+
+        return $this->saveAndRespond($request, 'gap_comparison', $response, ['chart_data' => $comparison->chart_data], $id, 'GapComparison');
+    }
+
+    // =============================================
     // ROPA — AI Analysis
     // =============================================
     public function ropaAnalysis(Request $request, string $id)

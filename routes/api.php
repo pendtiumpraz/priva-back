@@ -80,6 +80,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/users/{id}/restore', [UserController::class, 'restore']);
 
     // Departments
+
     Route::get('/departments', [\App\Http\Controllers\Api\DepartmentController::class, 'index']);
     Route::post('/departments', [\App\Http\Controllers\Api\DepartmentController::class, 'store']);
     Route::put('/departments/{id}', [\App\Http\Controllers\Api\DepartmentController::class, 'update']);
@@ -98,6 +99,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     // GAP Assessment — Real Compliance Engine
     // =============================================
     Route::prefix('gap')->group(function () {
+            Route::post('/comparisons', [\App\Http\Controllers\GapComparisonController::class, 'store'])->middleware('permission:gap_assessment,write');
+            Route::get('/comparisons', [\App\Http\Controllers\GapComparisonController::class, 'index'])->middleware('permission:gap_assessment,read');
             Route::get('/', [GapAssessmentController::class , 'index'])->middleware('permission:gap_assessment,read');
             Route::get('/compare', [GapAssessmentController::class , 'compare'])->middleware('permission:gap_assessment,read');
             Route::get('/regulations', [GapAssessmentController::class , 'getRegulations'])->middleware('permission:gap_assessment,read');
@@ -316,6 +319,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         // AI Features (License-Gated)
         // =============================================
         Route::prefix('ai-features')->group(function () {
+            Route::post('/gap_comparison/{id}/generate', [\App\Http\Controllers\Api\AiFeatureController::class, 'gapComparisonGenerate']);
             Route::post('/gap/{id}/remediation', [\App\Http\Controllers\Api\AiFeatureController::class, 'gapRemediation']);
             Route::post('/ropa/{id}/analysis', [\App\Http\Controllers\Api\AiFeatureController::class, 'ropaAnalysis']);
             Route::post('/dpia/{id}/risk-scoring', [\App\Http\Controllers\Api\AiFeatureController::class, 'dpiaRiskScoring']);
