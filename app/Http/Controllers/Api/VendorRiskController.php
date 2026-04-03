@@ -33,6 +33,8 @@ class VendorRiskController extends Controller
                     'service' => empty($vendor->services_provided) ? 'Unknown' : implode(', ', $vendor->services_provided),
                     'risk_level' => $vendor->risk_level,
                     'score' => $vendor->risk_score,
+                    'dpa_status' => $vendor->dpa_status,
+                    'dpa_expires_at' => $vendor->dpa_expires_at,
                     'last_assessed' => $vendor->last_assessed_at ? $vendor->last_assessed_at->format('Y-m-d') : '-',
                 ];
             });
@@ -47,7 +49,10 @@ class VendorRiskController extends Controller
             'services_provided' => 'nullable|array',
             'data_shared' => 'nullable|array',
             'risk_level' => 'nullable|string',
-            'risk_score' => 'nullable|integer'
+            'risk_score' => 'nullable|integer',
+            'dpa_status' => 'nullable|string|in:none,draft,signed,expired',
+            'dpa_signed_at' => 'nullable|date',
+            'dpa_expires_at' => 'nullable|date'
         ]);
 
         $vendor = Vendor::create(array_merge(
@@ -72,6 +77,9 @@ class VendorRiskController extends Controller
             'name' => 'string|max:255',
             'services_provided' => 'nullable|array',
             'data_shared' => 'nullable|array',
+            'dpa_status' => 'nullable|string|in:none,draft,signed,expired',
+            'dpa_signed_at' => 'nullable|date',
+            'dpa_expires_at' => 'nullable|date'
         ]);
 
         $vendor->update($request->all());
