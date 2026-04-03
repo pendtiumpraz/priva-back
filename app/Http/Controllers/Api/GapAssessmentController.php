@@ -19,7 +19,15 @@ class GapAssessmentController extends Controller
             $query->onlyTrashed();
         }
         if ($request->get('regulation')) {
-            $query->where('regulation_code', $request->get('regulation'));
+            $reg = $request->get('regulation');
+            if ($reg === 'uupdp') {
+                // Include legacy records with NULL regulation_code
+                $query->where(function($q) use ($reg) {
+                    $q->where('regulation_code', $reg)->orWhereNull('regulation_code');
+                });
+            } else {
+                $query->where('regulation_code', $reg);
+            }
         }
 
         $assessments = $query->orderBy('created_at', 'desc')->get();
@@ -48,35 +56,23 @@ class GapAssessmentController extends Controller
         $regCode = $request->query('regulation', 'uupdp');
         $ids = $request->query('ids');
 
-        $query = GapAssessment::where('org_id', $request->user()->org_id)
-            ->where('regulation_code', $regCode);
-
-        if (!empty($ids) && is_array($ids)) {
-            $query->whereIn('id', $ids);
-        } else {
-            $query->orderBy('created_at', 'desc')->take(3); // fallback to latest 3 if no selection
+        if (!$ids) {
+            return response()->json(['error' => 'ids required'], 400);
         }
 
-        $assessments = $query->get();
+        $idList = explode(',', $ids);
+        $assessments = GapAssessment::where('org_id', $request->user()->org_id)
+            ->whereIn('id', $idList)
+            ->orderBy('created_at')
+            ->get();
 
-        // Calculate category breakdowns on the fly for the radar chart
-        // Structure expected by frontend Recharts (RadarChart):
-        // [
-        //   { category: 'Keamanan Data', 'GAP_v3.0_#4': 80, 'GAP_v3.0_#3': 50, ... },
-        //   { category: 'Hak Subjek Data', 'GAP_v3.0_#4': 100, 'GAP_v3.0_#3': 60, ... }
-        // ]
-        
-        // 1. Collect all categories from the question bank
-        $qBank = GapAssessment::getQuestionBank($regCode);
-        $categories = array_values(array_unique(array_column($qBank, 'category')));
+        $questions = GapAssessment::getQuestionBank($regCode);
+        $categories = array_values(array_unique(array_column($questions, 'category')));
 
         $results = [];
         foreach ($categories as $cat) {
-            $row = [
-                'category' => $cat
-            ];
+            $row = ['category' => $cat];
             foreach ($assessments as $assessment) {
-                // Re-calculate to get breakdown
                 $calc = GapAssessment::calculateScore($assessment->answers ?: [], $regCode);
                 $breakdown = $calc['category_breakdown'];
                 $row[$assessment->version] = $breakdown[$cat] ?? 0;
@@ -118,6 +114,22 @@ class GapAssessmentController extends Controller
     public function store(Request $request)
     {
         $code = $request->query('regulation', 'uupdp');
+        
+        // Check cooldown (90 days)
+        $lastAssessment = GapAssessment::where('org_id', $request->user()->org_id)
+            ->where('regulation_code', $code)
+            ->orderBy('created_at', 'desc')
+            ->first();
+        
+        $cooldownWarning = null;
+        if ($lastAssessment) {
+            $daysSince = now()->diffInDays($lastAssessment->created_at);
+            if ($daysSince < 90) {
+                $nextDue = $lastAssessment->created_at->addDays(90)->format('d M Y');
+                $cooldownWarning = "Assessment terakhir baru {$daysSince} hari lalu. Assessment berikutnya disarankan pada {$nextDue}.";
+            }
+        }
+
         $lastVersion = GapAssessment::where('org_id', $request->user()->org_id)
             ->where('regulation_code', $code)
             ->withTrashed()
@@ -138,6 +150,7 @@ class GapAssessmentController extends Controller
         return response()->json([
             'message' => 'Assessment created',
             'data' => $assessment,
+            'cooldown_warning' => $cooldownWarning,
         ], 201);
     }
 
