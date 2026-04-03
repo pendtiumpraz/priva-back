@@ -18,18 +18,65 @@ class GapAssessmentController extends Controller
         if ($request->get('trash')) {
             $query->onlyTrashed();
         }
+        if ($request->get('regulation')) {
+            $query->where('regulation_code', $request->get('regulation'));
+        }
 
         $assessments = $query->orderBy('created_at', 'desc')->get();
 
-        return response()->json(['data' => $assessments]);
+        return response()->json([
+            'data' => $assessments,
+            'regulations' => \App\Models\RegulationFramework::where('is_active', true)->get()
+        ]);
+    }
+
+    /**
+     * Get list of active regulations
+     */
+    public function getRegulations()
+    {
+        return response()->json([
+            'data' => \App\Models\RegulationFramework::where('is_active', true)->get()
+        ]);
+    }
+
+    /**
+     * Compare latest assessments of all active regulations side-by-side
+     */
+    public function compare(Request $request)
+    {
+        $regulations = \App\Models\RegulationFramework::where('is_active', true)->get();
+        $results = [];
+
+        foreach ($regulations as $reg) {
+            $latest = GapAssessment::where('org_id', $request->user()->org_id)
+                ->where('regulation_code', $reg->code)
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            $results[] = [
+                'code' => $reg->code,
+                'name' => $reg->name,
+                'score' => $latest ? (float) $latest->overall_score : 0,
+                'progress' => $latest ? (int) $latest->progress : 0,
+                'level' => $latest ? $latest->compliance_level : 'N/A',
+                'date' => $latest ? $latest->created_at->format('Y-m-d') : null,
+                'assessment_id' => $latest ? $latest->id : null,
+            ];
+        }
+
+        return response()->json([
+            'data' => $results
+        ]);
     }
 
     /**
      * Get the question bank
      */
-    public function questions()
+    public function questions(Request $request)
     {
-        $questions = GapAssessment::getQuestionBank();
+        $code = $request->query('regulation', 'uupdp');
+        $questions = GapAssessment::getQuestionBank($code);
 
         // Group by category
         $grouped = [];
@@ -50,13 +97,16 @@ class GapAssessmentController extends Controller
      */
     public function store(Request $request)
     {
+        $code = $request->query('regulation', 'uupdp');
         $lastVersion = GapAssessment::where('org_id', $request->user()->org_id)
+            ->where('regulation_code', $code)
             ->withTrashed()
             ->count();
 
         $assessment = GapAssessment::create([
             'org_id' => $request->user()->org_id,
-            'version' => 'GAP_v3.0_#' . ($lastVersion + 1),
+            'regulation_code' => $code,
+            'version' => 'GAP_v3.0_' . strtoupper($code) . '_#' . ($lastVersion + 1),
             'overall_score' => 0,
             'compliance_level' => 'low',
             'progress' => 0,
@@ -80,7 +130,7 @@ class GapAssessmentController extends Controller
 
         return response()->json([
             'data' => $assessment,
-            'questions' => GapAssessment::getQuestionBank(),
+            'questions' => GapAssessment::getQuestionBank($assessment->regulation_code ?? 'uupdp'),
         ]);
     }
 
@@ -97,10 +147,10 @@ class GapAssessmentController extends Controller
         $answers = $request->input('answers');
 
         // Calculate score
-        $result = GapAssessment::calculateScore($answers);
+        $result = GapAssessment::calculateScore($answers, $assessment->regulation_code ?? 'uupdp');
 
         // Calculate progress
-        $totalQuestions = count(GapAssessment::getQuestionBank());
+        $totalQuestions = count(GapAssessment::getQuestionBank($assessment->regulation_code ?? 'uupdp'));
         $answeredCount = count(array_filter($answers, fn($a) => $a !== null && $a !== ''));
         $progress = round(($answeredCount / $totalQuestions) * 100);
 

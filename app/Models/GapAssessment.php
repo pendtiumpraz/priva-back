@@ -24,9 +24,9 @@ class GapAssessment extends Model
     /**
      * Hitung skor otomatis dari jawaban
      */
-    public static function calculateScore(array $answers): array
+    public static function calculateScore(array $answers, string $code = 'uupdp'): array
     {
-        $questions = self::getQuestionBank();
+        $questions = self::getQuestionBank($code);
         $totalWeight = 0;
         $earnedWeight = 0;
         $recommendations = [];
@@ -101,13 +101,35 @@ class GapAssessment extends Model
     }
 
     /**
-     * Bank soal GAP Assessment berdasarkan UU No. 27 Tahun 2022 (UU PDP)
-     * Struktur mengikuti framework resmi PRIVASIMU:
-     * - Tata Kelola (TK)
-     * - Siklus Proses PDP (SP) → Assess, Protect, Respond, Sustain
+     * Bank soal GAP Assessment berdasarkan Regulasi terpilih
      */
-    public static function getQuestionBank(): array
+    public static function getQuestionBank(string $code = 'uupdp'): array
     {
+        $framework = \App\Models\RegulationFramework::where('code', $code)->first();
+        if ($framework && $framework->articles) {
+            $articles = is_string($framework->articles) ? json_decode($framework->articles, true) : $framework->articles;
+            $mapped = [];
+            foreach ($articles as $a) {
+                if (isset($a['score_weight'])) {
+                    $mapped[] = [
+                        'id' => $a['id'],
+                        'category' => $a['topic'] ?? 'General',
+                        'subcategory' => 'Assessment',
+                        'article' => $a['article'] ?? '-',
+                        'weight' => $a['score_weight'] ?? 5,
+                        'question' => $a['question'] ?? '',
+                        'explanation' => '-',
+                        'recommendation' => 'Review ' . ($a['topic'] ?? '') . ' compliance based on ' . ($a['article'] ?? ''),
+                    ];
+                } else {
+                    $mapped[] = $a;
+                }
+            }
+            if (count($mapped) > 0 && $code !== 'uupdp') {
+                return $mapped;
+            }
+        }
+
         return [
             // ============================================
             // TATA KELOLA

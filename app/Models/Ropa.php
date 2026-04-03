@@ -10,7 +10,7 @@ class Ropa extends Model
     use HasUuids, SoftDeletes;
 
     protected $fillable = [
-        'org_id', 'registration_number', 'processing_activity', 'entity', 'division',
+        'org_id', 'regulation_code', 'registration_number', 'processing_activity', 'entity', 'division',
         'work_unit', 'description', 'kategori_pemrosesan', 'assign_group',
         'risk_level', 'status', 'purpose', 'legal_basis', 'data_categories', 'data_subjects',
         'recipients', 'retention_period', 'retention_due_date', 'security_measures',

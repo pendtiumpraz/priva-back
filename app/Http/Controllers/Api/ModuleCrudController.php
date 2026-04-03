@@ -309,8 +309,28 @@ class ModuleCrudController extends Controller
         // Detect wizard_data changes for audit logging
         $oldWizard = $record->wizard_data ?? [];
         $newWizard = $request->input('wizard_data', []);
-
+        $oldStatus = $record->status;
         $record->update($request->all());
+
+        // Approval Workflow trigger if status changes to 'waiting'
+        if ($request->has('status') && $request->input('status') === 'waiting' && $oldStatus !== 'waiting') {
+            // Need to create workflow based on module
+            if (in_array($module, ['ropa', 'dpia'])) {
+                $regulationCode = $record->regulation_code ?? 'uupdp';
+                // Simplified multi-level DPO -> CEO
+                $steps = [
+                    ['role' => 'dpo', 'status' => 'pending', 'name' => 'Review DPO'],
+                    ['role' => 'admin', 'status' => 'pending', 'name' => 'Final Approval (Management)']
+                ];
+                
+                // For GDPR/PDPA, maybe require an external auditor step. For now standard 2 step.
+                
+                \App\Models\ApprovalWorkflow::updateOrCreate(
+                    ['module' => $module, 'record_id' => $record->id, 'status' => 'pending'],
+                    ['org_id' => $record->org_id, 'steps' => $steps, 'current_step' => 0]
+                );
+            }
+        }
 
         // Audit log: detect section-level changes in wizard_data
         if (!empty($newWizard) && is_array($newWizard)) {

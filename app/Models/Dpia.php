@@ -10,7 +10,7 @@ class Dpia extends Model
     use HasUuids, SoftDeletes;
 
     protected $fillable = [
-        'org_id', 'registration_number', 'ropa_id', 'risk_level', 'status',
+        'org_id', 'regulation_code', 'registration_number', 'ropa_id', 'risk_level', 'status',
         'description', 'risk_assessment', 'mitigation_measures',
         'wizard_data', 'progress',
         'approver_id', 'approved_at', 'created_by',

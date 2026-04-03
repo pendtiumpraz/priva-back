@@ -99,6 +99,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     // =============================================
     Route::prefix('gap')->group(function () {
             Route::get('/', [GapAssessmentController::class , 'index'])->middleware('permission:gap_assessment,read');
+            Route::get('/compare', [GapAssessmentController::class , 'compare'])->middleware('permission:gap_assessment,read');
+            Route::get('/regulations', [GapAssessmentController::class , 'getRegulations'])->middleware('permission:gap_assessment,read');
             Route::get('/questions', [GapAssessmentController::class , 'questions'])->middleware('permission:gap_assessment,read');
             Route::post('/', [GapAssessmentController::class , 'store'])->middleware('permission:gap_assessment,write');
             Route::get('/{id}', [GapAssessmentController::class , 'show'])->middleware('permission:gap_assessment,read');
@@ -240,6 +242,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
         // Templates
         Route::get('/templates/dpia', [\App\Http\Controllers\Api\DashboardController::class, 'downloadDpiaTemplate']);
+        Route::get('/regulations', [\App\Http\Controllers\Api\GapAssessmentController::class, 'getRegulations']);
 
         // AI Provider Management (Multi-Provider LLM)
         Route::prefix('ai-providers')->group(function () {
@@ -249,6 +252,13 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::post('/test', [\App\Http\Controllers\Api\AiProviderController::class, 'testConnection']);
             Route::post('/set-active', [\App\Http\Controllers\Api\AiProviderController::class, 'setActiveModel']);
             Route::delete('/api-key', [\App\Http\Controllers\Api\AiProviderController::class, 'removeApiKey']);
+        });
+
+        // Workflow Approvals
+        Route::prefix('approvals')->group(function () {
+            Route::get('/pending', [\App\Http\Controllers\Api\ApprovalController::class, 'pending']);
+            Route::post('/{id}/approve', [\App\Http\Controllers\Api\ApprovalController::class, 'approve']);
+            Route::post('/{id}/reject', [\App\Http\Controllers\Api\ApprovalController::class, 'reject']);
         });
 
         // =============================================
