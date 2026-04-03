@@ -11,7 +11,7 @@ class GapAssessment extends Model
     use HasUuids, SoftDeletes;
 
     protected $fillable = [
-        'org_id', 'version', 'overall_score', 'compliance_level',
+        'org_id', 'regulation_code', 'version', 'overall_score', 'compliance_level',
         'progress', 'answers', 'recommendations', 'created_by',
     ];
 
