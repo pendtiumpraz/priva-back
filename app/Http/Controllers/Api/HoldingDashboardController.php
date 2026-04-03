@@ -138,14 +138,25 @@ class HoldingDashboardController extends Controller
     public function subHoldingBreakdown(Request $request): JsonResponse
     {
         $user = $request->user();
+        $subHoldingQuery = Organization::where('org_level', 'sub_holding');
+        
+        // Scope: superadmin sees all, holding admin sees their sub_holdings only
         if ($user->role !== 'superadmin') {
             $org = Organization::find($user->org_id);
-            if (!$org || !$org->isHolding()) {
-                return response()->json(['message' => 'Unauthorized'], 403);
+            if (!$org) return response()->json(['data' => []]);
+            
+            if ($org->org_level === 'sub_holding') {
+                // Sub-holding admin: only see themselves
+                $subHoldingQuery->where('id', $org->id);
+            } else if ($org->org_level === 'holding') {
+                // Holding admin: see sub_holdings under them
+                $subHoldingQuery->where('parent_id', $org->id);
+            } else {
+                return response()->json(['data' => []]);
             }
         }
-
-        $subHoldings = Organization::where('org_level', 'sub_holding')->get();
+        
+        $subHoldings = $subHoldingQuery->get();
         $breakdown = [];
 
         foreach ($subHoldings as $sh) {
