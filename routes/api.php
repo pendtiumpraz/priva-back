@@ -261,10 +261,24 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::post('/{id}/reject', [\App\Http\Controllers\Api\ApprovalController::class, 'reject']);
         });
 
-        // Security Posture (DSPM) Phase 4
+        // Security Posture & Alerts (DSPM) Phase 4
         Route::prefix('security')->group(function () {
             Route::get('/posture', [\App\Http\Controllers\Api\PostureController::class, 'getPosture']);
             Route::get('/posture/trend', [\App\Http\Controllers\Api\PostureController::class, 'getTrend']);
+
+            // Alert Engine
+            Route::get('/alerts', [\App\Http\Controllers\Api\AlertController::class, 'index']);
+            Route::get('/alerts/count', [\App\Http\Controllers\Api\AlertController::class, 'count']);
+            Route::post('/alerts/scan', [\App\Http\Controllers\Api\AlertController::class, 'scan']);
+            Route::post('/alerts/{id}/acknowledge', [\App\Http\Controllers\Api\AlertController::class, 'acknowledge']);
+            Route::post('/alerts/{id}/resolve', [\App\Http\Controllers\Api\AlertController::class, 'resolve']);
+            Route::post('/alerts/{id}/dismiss', [\App\Http\Controllers\Api\AlertController::class, 'dismiss']);
+        });
+
+        // Automation Rules (Phase 4)
+        Route::prefix('automation')->group(function () {
+            Route::get('/rules', [\App\Http\Controllers\Api\AutomationController::class, 'index']);
+            Route::put('/rules/{ruleType}', [\App\Http\Controllers\Api\AutomationController::class, 'update']);
         });
 
         // =============================================
