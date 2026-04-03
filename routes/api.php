@@ -261,6 +261,12 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::post('/{id}/reject', [\App\Http\Controllers\Api\ApprovalController::class, 'reject']);
         });
 
+        // Security Posture (DSPM) Phase 4
+        Route::prefix('security')->group(function () {
+            Route::get('/posture', [\App\Http\Controllers\Api\PostureController::class, 'getPosture']);
+            Route::get('/posture/trend', [\App\Http\Controllers\Api\PostureController::class, 'getTrend']);
+        });
+
         // =============================================
         // License Management
         // =============================================
