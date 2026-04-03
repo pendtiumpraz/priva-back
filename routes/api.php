@@ -348,6 +348,15 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::post('/ai-credits/topup', [\App\Http\Controllers\Api\AiFeatureController::class, 'creditTopup']);
 
         // =============================================
+        // Template Export (Word/Excel — Formatted Documents)
+        // =============================================
+        Route::prefix('export-doc')->group(function () {
+            Route::get('/ropa/{id}', [\App\Http\Controllers\Api\TemplateExportController::class, 'exportRopa']);
+            Route::get('/dpia/{id}', [\App\Http\Controllers\Api\TemplateExportController::class, 'exportDpia']);
+            Route::get('/gap/{id}', [\App\Http\Controllers\Api\TemplateExportController::class, 'exportGap']);
+        });
+
+        // =============================================
         // Export (CSV / JSON)
         // =============================================
         Route::prefix('export')->group(function () {

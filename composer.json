@@ -11,6 +11,8 @@
         "laravel/sanctum": "^4.0",
         "laravel/socialite": "^5.26",
         "laravel/tinker": "^2.10.1",
+        "phpoffice/phpspreadsheet": "^5.5",
+        "phpoffice/phpword": "^1.4",
         "socialiteproviders/keycloak": "^5.3",
         "socialiteproviders/microsoft-azure": "^5.2"
     },
