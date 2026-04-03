@@ -29,6 +29,9 @@ class Organization extends Model
             'core_systems' => 'array',
             'has_dpo' => 'boolean',
             'onboarding_completed' => 'boolean',
+            'ai_credits_monthly' => 'float',
+            'ai_credits_remaining' => 'float',
+            'ai_credits_purchased' => 'float',
             'ai_credits_reset_at' => 'datetime',
         ];
     }
