@@ -47,8 +47,8 @@ class TemplateExportController extends Controller
             $templateProcessor->saveAs($tempFile);
 
             return response()->download($tempFile, $outputFileName)->deleteFileAfterSend(true);
-        } catch (\Exception $e) {
-            return response()->json(['message' => 'Export error: ' . $e->getMessage()], 500);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Export error: ' . $e->getMessage() . ' di file ' . $e->getFile() . ' baris ' . $e->getLine()], 500);
         }
     }
 
@@ -75,8 +75,8 @@ class TemplateExportController extends Controller
             $templateProcessor->saveAs($tempFile);
 
             return response()->download($tempFile, $outputFileName)->deleteFileAfterSend(true);
-        } catch (\Exception $e) {
-            return response()->json(['message' => 'Export error: ' . $e->getMessage()], 500);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Export error: ' . $e->getMessage() . ' di file ' . $e->getFile() . ' baris ' . $e->getLine()], 500);
         }
     }
 
@@ -108,7 +108,7 @@ class TemplateExportController extends Controller
             $writer->save($tempFile);
 
             return response()->download($tempFile, $outputFileName)->deleteFileAfterSend(true);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return response()->json(['message' => 'Gagal membaca/menulis file Excel: ' . $e->getMessage()], 500);
         }
     }
