@@ -178,11 +178,14 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         // Phase 2: Cross Border Data Transfer
         // =============================================
         Route::prefix('cross-border')->group(function () {
+            Route::get('/trashed', [\App\Http\Controllers\Api\CrossBorderController::class, 'trashed']);
             Route::get('/', [\App\Http\Controllers\Api\CrossBorderController::class, 'index']);
             Route::post('/', [\App\Http\Controllers\Api\CrossBorderController::class, 'store']);
             Route::get('/{id}', [\App\Http\Controllers\Api\CrossBorderController::class, 'show']);
             Route::put('/{id}', [\App\Http\Controllers\Api\CrossBorderController::class, 'update']);
             Route::delete('/{id}', [\App\Http\Controllers\Api\CrossBorderController::class, 'destroy']);
+            Route::post('/{id}/restore', [\App\Http\Controllers\Api\CrossBorderController::class, 'restore']);
+            Route::delete('/{id}/force', [\App\Http\Controllers\Api\CrossBorderController::class, 'forceDelete']);
             
             // AI Transfer Impact Assessment (TIA)
             Route::post('/{id}/tia', [\App\Http\Controllers\Api\CrossBorderController::class, 'assessTIA']);

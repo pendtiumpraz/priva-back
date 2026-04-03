@@ -55,6 +55,27 @@ class CrossBorderController extends Controller
         return response()->json(['message' => 'Data transfer berhasil dihapus']);
     }
 
+    public function trashed(Request $request)
+    {
+        $transfers = CrossBorderTransfer::onlyTrashed()->where('org_id', $request->user()->org_id)
+            ->orderBy('deleted_at', 'desc')->get();
+        return response()->json($transfers);
+    }
+
+    public function restore(Request $request, $id)
+    {
+        $transfer = CrossBorderTransfer::onlyTrashed()->where('org_id', $request->user()->org_id)->findOrFail($id);
+        $transfer->restore();
+        return response()->json(['message' => 'Data transfer berhasil dipulihkan']);
+    }
+
+    public function forceDelete(Request $request, $id)
+    {
+        $transfer = CrossBorderTransfer::onlyTrashed()->where('org_id', $request->user()->org_id)->findOrFail($id);
+        $transfer->forceDelete();
+        return response()->json(['message' => 'Data transfer dihapus permanen']);
+    }
+
     /**
      * Conduct Transfer Impact Assessment (TIA) via AI
      */
@@ -99,6 +120,12 @@ class CrossBorderController extends Controller
             } catch (\Exception $e) {
                 \Illuminate\Support\Facades\Log::error('AI TIA Assessment failed: ' . $e->getMessage());
             }
+        } else {
+            // Manual flow fallback if no AI or disabled
+            $score = $request->input('manual_score', 50);
+            $riskLevel = $request->input('manual_risk_level', 'medium');
+            $safeguards = $request->input('manual_safeguards', []);
+            $summary = json_encode(['legal_basis' => 'Standard Contractual Clauses (SCCs) (Manual)', 'safeguards' => $safeguards]);
         }
 
         $transfer->update([
