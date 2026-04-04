@@ -74,6 +74,34 @@ class ConsentLogController extends Controller
     }
 
     /**
+     * Public API to get the latest consent state of a user
+     */
+    public function state(Request $request)
+    {
+        $request->validate([
+            'collection_id' => 'required|string',
+            'user_identifier' => 'required|string',
+        ]);
+
+        $collection = ConsentCollectionPoint::where('collection_id', $request->collection_id)
+            ->orWhere('id', $request->collection_id)
+            ->firstOrFail();
+
+        $latestLog = ConsentLog::where('collection_id', $collection->id)
+            ->where('user_identifier', $request->user_identifier)
+            ->latest()
+            ->first();
+
+        return response()->json([
+            'data' => [
+                'has_record' => $latestLog ? true : false,
+                'consented_items' => $latestLog ? $latestLog->consented_items : [],
+                'last_updated' => $latestLog ? $latestLog->created_at : null,
+            ]
+        ]);
+    }
+
+    /**
      * Public API to capture user consent from external websites
      */
     public function capture(Request $request)

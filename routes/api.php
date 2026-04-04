@@ -27,6 +27,7 @@ Route::post('/public/feature-requests/{id}/upvote', [\App\Http\Controllers\Api\F
 // Public Consent API (for banner integration)
 Route::post('/public/consent', [\App\Http\Controllers\Api\ConsentLogController::class, 'capture']);
 Route::get('/public/consent/config', [\App\Http\Controllers\Api\ConsentLogController::class, 'config']);
+Route::get('/public/consent/state', [\App\Http\Controllers\Api\ConsentLogController::class, 'state']);
 
 // SSO Public Routes
 Route::get('/sso/redirect', [\App\Http\Controllers\Api\SsoLoginController::class, 'redirect']);
