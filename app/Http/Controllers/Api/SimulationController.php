@@ -137,7 +137,7 @@ class SimulationController extends Controller
         ]);
 
         $sim = $this->getQuery($request)->findOrFail($id);
-        if ($sim->status !== 'in_progress') {
+        if ($sim->status !== 'in_progress' && $sim->status !== 'running') {
             return response()->json(['message' => 'Drill not in progress'], 422);
         }
 
