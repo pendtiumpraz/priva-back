@@ -13,6 +13,11 @@ use App\Models\GapAssessment;
 
 class TemplateExportController extends Controller
 {
+    private function t($text): string
+    {
+        return htmlspecialchars((string) $text, ENT_COMPAT, 'UTF-8');
+    }
+
     private function addCoverPage(PhpWord $phpWord, string $docType, string $title, string $regNumber, string $status, string $riskLevel, string $orgName)
     {
         $section = $phpWord->addSection(['marginTop' => 600, 'marginBottom' => 600, 'marginLeft' => 900, 'marginRight' => 900]);
@@ -26,10 +31,10 @@ class TemplateExportController extends Controller
         $section->addText(strtoupper($docType), ['size' => 12, 'color' => '6366f1', 'bold' => true], ['alignment' => Jc::CENTER]);
         $section->addTextBreak();
 
-        $section->addText($title ?: 'Untitled', ['size' => 24, 'bold' => true, 'color' => '1a1a2e'], ['alignment' => Jc::CENTER]);
+        $section->addText($this->t($title ?: 'Untitled'), ['size' => 24, 'bold' => true, 'color' => '1a1a2e'], ['alignment' => Jc::CENTER]);
         $section->addTextBreak();
 
-        $section->addText($regNumber, ['size' => 14, 'color' => '555555'], ['alignment' => Jc::CENTER]);
+        $section->addText($this->t($regNumber), ['size' => 14, 'color' => '555555'], ['alignment' => Jc::CENTER]);
         $section->addTextBreak(2);
 
         $metaTable = $section->addTable(['borderSize' => 0, 'cellMargin' => 80, 'alignment' => Jc::CENTER]);
@@ -38,7 +43,7 @@ class TemplateExportController extends Controller
 
         $metaTable->addRow();
         $metaTable->addCell(3000)->addText('Organisasi', $labelFont, ['alignment' => Jc::RIGHT]);
-        $metaTable->addCell(5000)->addText($orgName ?: '-', $valueFont);
+        $metaTable->addCell(5000)->addText($this->t($orgName ?: '-'), $valueFont);
 
         $metaTable->addRow();
         $metaTable->addCell(3000)->addText('Status', $labelFont, ['alignment' => Jc::RIGHT]);
@@ -66,7 +71,7 @@ class TemplateExportController extends Controller
             'marginLeft' => 900, 'marginRight' => 900,
         ]);
         $header = $section->addHeader();
-        $header->addText($headerText, ['size' => 8, 'color' => '999999', 'italic' => true]);
+        $header->addText($this->t($headerText), ['size' => 8, 'color' => '999999', 'italic' => true]);
         $footer = $section->addFooter();
         $footer->addPreserveText('Halaman {PAGE} dari {NUMPAGES} - Privasimu', ['size' => 8, 'color' => '999999']);
         return $section;
@@ -75,16 +80,16 @@ class TemplateExportController extends Controller
     private function addSectionTitle($section, string $title)
     {
         $section->addTextBreak();
-        $section->addText($title, ['size' => 16, 'bold' => true, 'color' => '1a1a2e'], ['spaceBefore' => 200, 'spaceAfter' => 100]);
+        $section->addText($this->t($title), ['size' => 16, 'bold' => true, 'color' => '1a1a2e'], ['spaceBefore' => 200, 'spaceAfter' => 100]);
     }
 
     private function addInfoRow($table, string $label, string $value)
     {
         $row = $table->addRow();
         $row->addCell(3200, ['bgColor' => 'f8f9fa', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
-            ->addText($label, ['size' => 10, 'bold' => true, 'color' => '555555']);
+            ->addText($this->t($label), ['size' => 10, 'bold' => true, 'color' => '555555']);
         $row->addCell(6800, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])
-            ->addText($value ?: '-', ['size' => 10, 'color' => '333333']);
+            ->addText($this->t($value ?: '-'), ['size' => 10, 'color' => '333333']);
     }
 
     private function makeInfoTable($section)
@@ -216,9 +221,7 @@ class TemplateExportController extends Controller
             $writer = IOFactory::createWriter($phpWord, 'Word2007');
             $writer->save($tempFile);
 
-            if (ob_get_length()) {
-                ob_end_clean();
-            }
+            while (ob_get_level() > 0) { ob_end_clean(); }
 
             return response()->download($tempFile, $outputFileName, [
                 'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -285,18 +288,18 @@ class TemplateExportController extends Controller
                     }
                     foreach ($ropaRecords as $ropaRec) {
                         $row = $rt->addRow();
-                        $row->addCell(2500, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($ropaRec->registration_number ?? '-', ['size' => 9]);
-                        $row->addCell(2500, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($ropaRec->processing_activity ?? '-', ['size' => 9]);
-                        $row->addCell(2500, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($ropaRec->division ?? '-', ['size' => 9]);
-                        $row->addCell(2500, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText(strtoupper($ropaRec->risk_level ?? '-'), ['size' => 9, 'bold' => true]);
+                        $row->addCell(2500, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($ropaRec->registration_number ?? '-'), ['size' => 9]);
+                        $row->addCell(2500, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($ropaRec->processing_activity ?? '-'), ['size' => 9]);
+                        $row->addCell(2500, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($ropaRec->division ?? '-'), ['size' => 9]);
+                        $row->addCell(2500, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t(strtoupper($ropaRec->risk_level ?? '-')), ['size' => 9, 'bold' => true]);
                     }
                 }
             }
             if (!$hasRopaConnection && $dpia->ropa) {
                 $t = $this->makeInfoTable($sec);
-                $this->addInfoRow($t, 'ROPA Terhubung', ($dpia->ropa->registration_number ?? '') . ' - ' . ($dpia->ropa->processing_activity ?? ''));
+                $this->addInfoRow($t, 'ROPA Terhubung', $this->t(($dpia->ropa->registration_number ?? '') . ' - ' . ($dpia->ropa->processing_activity ?? '')));
             } elseif (!$hasRopaConnection) {
-                $sec->addText('Tidak ada ROPA yang terhubung.', ['size' => 10, 'color' => '888888', 'italic' => true]);
+                $sec->addText($this->t('Tidak ada ROPA yang terhubung.'), ['size' => 10, 'color' => '888888', 'italic' => true]);
             }
 
             // 3. Tabel 21 Kategori Risiko
@@ -341,13 +344,13 @@ class TemplateExportController extends Controller
 
                 $row = $riskTable->addRow();
                 $row->addCell(800, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
-                    ->addText((string)($idx + 1), ['size' => 8, 'color' => '666666'], ['alignment' => Jc::CENTER]);
+                    ->addText($this->t((string)($idx + 1)), ['size' => 8, 'color' => '666666'], ['alignment' => Jc::CENTER]);
                 $row->addCell(3500, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
-                    ->addText($cat, ['size' => 8, 'bold' => true, 'color' => '333333']);
+                    ->addText($this->t($cat), ['size' => 8, 'bold' => true, 'color' => '333333']);
                 $row->addCell(2000, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
-                    ->addText($label, ['size' => 8, 'bold' => true, 'color' => $color], ['alignment' => Jc::CENTER]);
+                    ->addText($this->t($label), ['size' => 8, 'bold' => true, 'color' => $color], ['alignment' => Jc::CENTER]);
                 $row->addCell(3700, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
-                    ->addText($desc, ['size' => 8, 'color' => '555555']);
+                    ->addText($this->t($desc), ['size' => 8, 'color' => '555555']);
             }
 
             // 4. Ringkasan
@@ -374,13 +377,13 @@ class TemplateExportController extends Controller
                 }
                 foreach ($ra['risks'] as $risk) {
                     $row = $raTable->addRow();
-                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($risk['risk'] ?? '-', ['size' => 8]);
-                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText((string)($risk['likelihood'] ?? '-'), ['size' => 8], ['alignment' => Jc::CENTER]);
-                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText((string)($risk['impact'] ?? '-'), ['size' => 8], ['alignment' => Jc::CENTER]);
+                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($risk['risk'] ?? '-'), ['size' => 8]);
+                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t((string)($risk['likelihood'] ?? '-')), ['size' => 8], ['alignment' => Jc::CENTER]);
+                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t((string)($risk['impact'] ?? '-')), ['size' => 8], ['alignment' => Jc::CENTER]);
                     $score = (int)($risk['likelihood'] ?? 0) * (int)($risk['impact'] ?? 0);
-                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText((string)$score, ['size' => 8, 'bold' => true], ['alignment' => Jc::CENTER]);
-                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($risk['mitigation'] ?? '-', ['size' => 8]);
-                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($risk['status'] ?? '-', ['size' => 8], ['alignment' => Jc::CENTER]);
+                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t((string)$score), ['size' => 8, 'bold' => true], ['alignment' => Jc::CENTER]);
+                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($risk['mitigation'] ?? '-'), ['size' => 8]);
+                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($risk['status'] ?? '-'), ['size' => 8], ['alignment' => Jc::CENTER]);
                 }
             }
 
@@ -397,9 +400,7 @@ class TemplateExportController extends Controller
             $writer = IOFactory::createWriter($phpWord, 'Word2007');
             $writer->save($tempFile);
 
-            if (ob_get_length()) {
-                ob_end_clean();
-            }
+            while (ob_get_level() > 0) { ob_end_clean(); }
 
             return response()->download($tempFile, $outputFileName, [
                 'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -428,9 +429,7 @@ class TemplateExportController extends Controller
             $tempFile = tempnam(sys_get_temp_dir(), 'phpxls');
             $writer->save($tempFile);
 
-            if (ob_get_length()) {
-                ob_end_clean();
-            }
+            while (ob_get_level() > 0) { ob_end_clean(); }
 
             return response()->download($tempFile, $outputFileName, [
                 'Content-Type' => 'application/vnd.ms-excel',
