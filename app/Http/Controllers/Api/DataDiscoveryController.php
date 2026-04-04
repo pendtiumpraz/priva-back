@@ -33,6 +33,44 @@ class DataDiscoveryController extends Controller
             ]),
         ]);
 
+        // Auto-register to Master Data if successful
+        if (isset($results['success']) && $results['success'] === true && !empty($config['host'])) {
+            $host = $config['host'];
+            $username = $config['username'] ?? '';
+            $database = $config['database'] ?? '';
+            
+            // Check if it already exists in OrganizationApp by matching host, username, and database
+            $exists = \App\Models\OrganizationApp::where('org_id', $request->user()->org_id)
+                ->where(function ($q) use ($host, $username, $database) {
+                    $q->where(function ($q2) use ($host, $username, $database) {
+                        $q2->where('prod_db_host', $host)
+                           ->where('prod_db_username', $username)
+                           ->where('prod_db_database', $database);
+                    })->orWhere(function ($q2) use ($host, $username, $database) {
+                        $q2->where('staging_db_host', $host)
+                           ->where('staging_db_username', $username)
+                           ->where('staging_db_database', $database);
+                    });
+                })
+                ->exists();
+
+            if (!$exists) {
+                // Map the sourceType driver to standard if necessary (e.g. postgresql -> pgsql / postgresql)
+                \App\Models\OrganizationApp::create([
+                    'org_id'           => $request->user()->org_id,
+                    'name'             => $system->name . ' (Discovery)',
+                    'description'      => 'Auto-registered from Data Discovery connection test',
+                    'prod_db_driver'   => $sourceType,
+                    'prod_db_host'     => $config['host'] ?? null,
+                    'prod_db_port'     => $config['port'] ?? null,
+                    'prod_db_database' => $config['database'] ?? null,
+                    'prod_db_username' => $config['username'] ?? null,
+                    'prod_db_password' => $config['password'] ?? null,
+                    'is_active'        => true,
+                ]);
+            }
+        }
+
         AuditLog::log('data-discovery', $system->id, 'connection_tested', $results, 'system');
 
         return response()->json(['data' => $results]);
