@@ -236,26 +236,50 @@ class ModuleCrudController extends Controller
                 \Log::warning('Audit log failed: ' . $e->getMessage());
             }
 
-            // Auto-trigger: if ROPA risk=high → create draft DPIA
+            // Auto-trigger: if ROPA risk=high → create draft DPIA with inherited wizard_data
+            $autoDpiaId = null;
             if ($module === 'ropa' && ($data['risk_level'] ?? '') === 'high') {
                 $dpiaModel = $this->getModel('dpia');
                 $existingDpia = $dpiaModel->where('ropa_id', $record->id)->first();
                 if (!$existingDpia) {
-                    $dpiaModel->create([
+                    // Build DPIA wizard_data from ROPA's wizard_data
+                    $ropaWiz = $data['wizard_data'] ?? [];
+                    $dpoTeam = $ropaWiz['dpo_team'] ?? [];
+                    $dpiaWizardData = [
+                        'informasi_dpia' => [
+                            'description' => $data['processing_activity'] ?? '',
+                            'pic_name' => $dpoTeam['pic_name'] ?? '',
+                            'dpo_name' => $dpoTeam['dpo_name'] ?? '',
+                            'dpo_email' => $dpoTeam['dpo_email'] ?? '',
+                            'dpo_phone' => $dpoTeam['dpo_phone'] ?? '',
+                        ],
+                        'koneksi_ropa' => [
+                            'connected_ropas' => [$record->id],
+                        ],
+                        'potensi_risiko' => [],
+                    ];
+
+                    $autoDpia = $dpiaModel->create([
                         'org_id' => $data['org_id'],
                         'registration_number' => $this->nextCode('DPIA', $dpiaModel, $data['org_id']),
                         'ropa_id' => $record->id,
                         'risk_level' => 'high',
                         'status' => 'draft',
                         'description' => 'Auto-generated dari ROPA high-risk: ' . ($data['processing_activity'] ?? ''),
+                        'wizard_data' => $dpiaWizardData,
                         'risk_assessment' => ['likelihood' => 0, 'impact' => 0, 'risks' => []],
                         'mitigation_measures' => [],
                         'created_by' => $data['created_by'],
                     ]);
+                    $autoDpiaId = $autoDpia->id;
                 }
             }
 
-            return response()->json(['message' => 'Created', 'data' => $record], 201);
+            return response()->json([
+                'message' => 'Created',
+                'data' => $record,
+                'auto_dpia_id' => $autoDpiaId,
+            ], 201);
         } catch (\Exception $e) {
             \Log::error('ModuleCrud store error: ' . $e->getMessage(), [
                 'module' => $module,
