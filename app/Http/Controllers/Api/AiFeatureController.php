@@ -741,7 +741,7 @@ class AiFeatureController extends Controller
             . "5. Saran tindakan perbaikan\n"
             . "Jawab HANYA dalam JSON format yang diminta.";
 
-        $response = $ai->ask($systemPrompt, $userPrompt, 3000);
+        $response = $ai->ask($systemPrompt, $userPrompt, 8000);
 
         return $this->saveAndRespond($request, 'discovery_classification', $response, $inputData, $id, 'DataDiscoverySystem');
     }
