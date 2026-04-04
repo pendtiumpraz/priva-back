@@ -216,7 +216,13 @@ class TemplateExportController extends Controller
             $writer = IOFactory::createWriter($phpWord, 'Word2007');
             $writer->save($tempFile);
 
-            return response()->download($tempFile, $outputFileName)->deleteFileAfterSend(true);
+            if (ob_get_length()) {
+                ob_end_clean();
+            }
+
+            return response()->download($tempFile, $outputFileName, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            ])->deleteFileAfterSend(true);
         } catch (\Throwable $e) {
             return response()->json(['message' => 'Export error: ' . $e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
         }
@@ -391,7 +397,13 @@ class TemplateExportController extends Controller
             $writer = IOFactory::createWriter($phpWord, 'Word2007');
             $writer->save($tempFile);
 
-            return response()->download($tempFile, $outputFileName)->deleteFileAfterSend(true);
+            if (ob_get_length()) {
+                ob_end_clean();
+            }
+
+            return response()->download($tempFile, $outputFileName, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            ])->deleteFileAfterSend(true);
         } catch (\Throwable $e) {
             return response()->json(['message' => 'Export error: ' . $e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
         }
@@ -416,7 +428,13 @@ class TemplateExportController extends Controller
             $tempFile = tempnam(sys_get_temp_dir(), 'phpxls');
             $writer->save($tempFile);
 
-            return response()->download($tempFile, $outputFileName)->deleteFileAfterSend(true);
+            if (ob_get_length()) {
+                ob_end_clean();
+            }
+
+            return response()->download($tempFile, $outputFileName, [
+                'Content-Type' => 'application/vnd.ms-excel',
+            ])->deleteFileAfterSend(true);
         } catch (\Throwable $e) {
             return response()->json(['message' => 'Gagal export: ' . $e->getMessage()], 500);
         }
