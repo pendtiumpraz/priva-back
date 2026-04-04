@@ -13,6 +13,11 @@ class OrganizationAppController extends Controller
     {
         $orgId = $request->user()->org_id;
         $apps = OrganizationApp::where('org_id', $orgId)->orderBy('name')->get();
+        
+        if ($request->user()->role === 'superadmin' || $request->user()->role === 'admin') {
+            $apps->makeVisible(['staging_db_password', 'prod_db_password']);
+        }
+        
         return response()->json(['data' => $apps]);
     }
 
