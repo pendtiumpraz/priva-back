@@ -123,10 +123,11 @@ class GapAssessmentController extends Controller
         
         $cooldownWarning = null;
         if ($lastAssessment) {
-            $daysSince = now()->diffInDays($lastAssessment->created_at);
+            $daysSince = (int) $lastAssessment->created_at->diffInDays(now());
             if ($daysSince < 90) {
+                $timeString = $daysSince === 0 ? 'hari ini' : "{$daysSince} hari yang lalu";
                 $nextDue = $lastAssessment->created_at->addDays(90)->format('d M Y');
-                $cooldownWarning = "Assessment terakhir baru {$daysSince} hari lalu. Assessment berikutnya disarankan pada {$nextDue}.";
+                $cooldownWarning = "Assessment terakhir baru dilakukan {$timeString}. Assessment berikutnya disarankan pada {$nextDue}.";
             }
         }
 
