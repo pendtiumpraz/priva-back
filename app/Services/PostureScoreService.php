@@ -3,7 +3,11 @@
 namespace App\Services;
 
 use App\Models\GapAssessment;
-use App\Models\ModuleRecord;
+use App\Models\Vendor;
+use App\Models\Ropa;
+use App\Models\Dpia;
+use App\Models\BreachIncident;
+use App\Models\InformationSystem;
 use Carbon\Carbon;
 
 class PostureScoreService
@@ -15,39 +19,37 @@ class PostureScoreService
     {
         // 1. GAP Assessment Factor (Max 30 points)
         $gapScoreObj = GapAssessment::where('org_id', $orgId)->orderBy('created_at', 'desc')->first();
-        $baseGap = $gapScoreObj ? $gapScoreObj->score : 30; // base 30 if none
+        $baseGap = $gapScoreObj ? $gapScoreObj->overall_score : 30; // base 30 if none. assuming overall_score
         $factorGap = ($baseGap / 100) * 30;
 
         // 2. Vendor Risk Factor (Max 20 points)
-        $totalVendors = ModuleRecord::where('org_id', $orgId)->where('module', 'vendor-risk')->count();
-        $safeVendors = ModuleRecord::where('org_id', $orgId)
-            ->where('module', 'vendor-risk')
-            ->where(function ($q) {
-                // Assuming json extraction or general safe status for vendor risk
-                $q->whereJsonContains('data->risk_level', 'low')
-                  ->orWhere('status', 'active');
-            })->count();
+        $totalVendors = Vendor::where('org_id', $orgId)->count();
+        $safeVendors = Vendor::where('org_id', $orgId)
+            ->whereIn('risk_level', ['low', 'medium'])
+            ->count();
         $factorVendor = $totalVendors > 0 ? ($safeVendors / $totalVendors) * 20 : 20;
 
         // 3. Document Compliance (ROPA & DPIA) (Max 20 points)
-        $totalDocs = ModuleRecord::where('org_id', $orgId)->whereIn('module', ['ropa', 'dpia'])->count();
-        $completedDocs = ModuleRecord::where('org_id', $orgId)
-            ->whereIn('module', ['ropa', 'dpia'])
-            ->whereIn('status', ['published', 'approved', 'completed'])
-            ->count();
+        $totalRopa = Ropa::where('org_id', $orgId)->count();
+        $completedRopa = Ropa::where('org_id', $orgId)->where('status', 'published')->count();
+        $totalDpia = Dpia::where('org_id', $orgId)->count();
+        $completedDpia = Dpia::where('org_id', $orgId)->where('status', 'approved')->count();
+
+        $totalDocs = $totalRopa + $totalDpia;
+        $completedDocs = $completedRopa + $completedDpia;
         $factorDocs = $totalDocs > 0 ? ($completedDocs / $totalDocs) * 20 : 15;
 
         // 4. Breach / Incident Factor (Max 15 points)
         // Deduct 5 points per active breach, max 15 points
-        $activeBreaches = ModuleRecord::where('org_id', $orgId)
-            ->where('module', 'breach')
-            ->whereIn('status', ['open', 'in_progress'])
+        $activeBreaches = BreachIncident::where('org_id', $orgId)
+            ->whereIn('status', ['open', 'investigating', 'in_progress'])
             ->count();
         $factorBreach = max(0, 15 - ($activeBreaches * 5));
 
         // 5. Data Discovery / System Freshness (Max 15 points)
-        // Since we don't have a rigid scan tracking yet, use mock/placeholder or connected systems.
-        $factorDiscovery = 12; // Assume moderately fresh
+        $totalSystems = InformationSystem::where('org_id', $orgId)->count();
+        $scannedSystems = InformationSystem::where('org_id', $orgId)->whereNotNull('last_scanned_at')->count();
+        $factorDiscovery = $totalSystems > 0 ? ($scannedSystems / $totalSystems) * 15 : 12;
 
         // Total Score
         $totalScore = round($factorGap + $factorVendor + $factorDocs + $factorBreach + $factorDiscovery);
@@ -118,6 +120,6 @@ class PostureScoreService
                 'score' => $scoreLine
             ];
         }
-        return $trend;
+        return array_reverse($trend);
     }
 }
