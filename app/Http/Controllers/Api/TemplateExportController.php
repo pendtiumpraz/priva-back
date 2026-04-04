@@ -20,46 +20,54 @@ class TemplateExportController extends Controller
 
     private function addCoverPage(PhpWord $phpWord, string $docType, string $title, string $regNumber, string $status, string $riskLevel, string $orgName)
     {
-        $section = $phpWord->addSection(['marginTop' => 600, 'marginBottom' => 600, 'marginLeft' => 900, 'marginRight' => 900]);
+        $section = $phpWord->addSection([
+            'marginTop' => 0, 'marginBottom' => 0, 'marginLeft' => 0, 'marginRight' => 0,
+        ]);
 
-        for ($i = 0; $i < 8; $i++) $section->addTextBreak();
+        $tableStyle = ['borderSize' => 0, 'cellMargin' => 0, 'width' => 11905, 'unit' => \PhpOffice\PhpWord\SimpleType\TblWidth::TWIP];
+        $phpWord->addTableStyle('CoverTableBase', $tableStyle);
+        $table = $section->addTable('CoverTableBase');
 
-        $section->addText('PRIVASIMU', ['size' => 14, 'color' => '6366f1', 'bold' => true], ['alignment' => Jc::CENTER]);
-        $section->addText('Privacy Management Platform', ['size' => 10, 'color' => '888888', 'italic' => true], ['alignment' => Jc::CENTER]);
-        $section->addTextBreak(2);
+        $row = $table->addRow(16840, ['exactHeight' => true]);
+        $cell = $row->addCell(11905, ['bgColor' => '1b143c', 'valign' => 'center']);
+        
+        $cell->addTextBreak(6);
+        $cell->addText('PRIVASIMU', ['size' => 16, 'color' => 'ffffff', 'bold' => true], ['alignment' => Jc::CENTER]);
+        $cell->addText('|', ['size' => 14, 'color' => '4f46e5'], ['alignment' => Jc::CENTER]);
+        $cell->addTextBreak(1);
+        
+        $docTypeMain = explode(' ', $docType)[0];
+        $docTypeSub = str_replace($docTypeMain.' ', '', $docType);
+        
+        $textRun = $cell->addTextRun(['alignment' => Jc::CENTER]);
+        $textRun->addText($docTypeMain, ['size' => 32, 'bold' => true, 'color' => 'ffffff']);
+        if ($docTypeSub) {
+            $textRun->addText(' ' . trim($docTypeSub), ['size' => 32, 'color' => 'e0e7ff']);
+        }
+        
+        $cell->addTextBreak(1);
+        
+        $imgPath = base_path('public/images/doc-cover-bg.png');
+        if (file_exists($imgPath)) {
+            $cell->addImage($imgPath, [
+                'width' => 350,
+                'alignment' => Jc::CENTER,
+            ]);
+        } else {
+            $cell->addTextBreak(12);
+        }
+        
+        $cell->addTextBreak(4);
+        $cell->addText($this->t($title ?: 'Untitled'), ['size' => 16, 'color' => 'ffffff'], ['alignment' => Jc::CENTER]);
+        
+        $cell->addTextBreak(6);
 
-        $section->addText(strtoupper($docType), ['size' => 12, 'color' => '6366f1', 'bold' => true], ['alignment' => Jc::CENTER]);
-        $section->addTextBreak();
-
-        $section->addText($this->t($title ?: 'Untitled'), ['size' => 24, 'bold' => true, 'color' => '1a1a2e'], ['alignment' => Jc::CENTER]);
-        $section->addTextBreak();
-
-        $section->addText($this->t($regNumber), ['size' => 14, 'color' => '555555'], ['alignment' => Jc::CENTER]);
-        $section->addTextBreak(2);
-
-        $metaTable = $section->addTable(['borderSize' => 0, 'cellMargin' => 80, 'alignment' => Jc::CENTER]);
-        $labelFont = ['size' => 10, 'color' => '888888'];
-        $valueFont = ['size' => 11, 'bold' => true, 'color' => '333333'];
-
-        $metaTable->addRow();
-        $metaTable->addCell(3000)->addText('Organisasi', $labelFont, ['alignment' => Jc::RIGHT]);
-        $metaTable->addCell(5000)->addText($this->t($orgName ?: '-'), $valueFont);
-
-        $metaTable->addRow();
-        $metaTable->addCell(3000)->addText('Status', $labelFont, ['alignment' => Jc::RIGHT]);
-        $metaTable->addCell(5000)->addText(strtoupper($status), array_merge($valueFont, ['color' => $status === 'approved' ? '22c55e' : 'f59e0b']));
-
-        $metaTable->addRow();
-        $metaTable->addCell(3000)->addText('Risk Level', $labelFont, ['alignment' => Jc::RIGHT]);
-        $riskColor = match($riskLevel) { 'high' => 'ef4444', 'medium' => 'f59e0b', default => '22c55e' };
-        $metaTable->addCell(5000)->addText(strtoupper($riskLevel), array_merge($valueFont, ['color' => $riskColor]));
-
-        $metaTable->addRow();
-        $metaTable->addCell(3000)->addText('Tanggal', $labelFont, ['alignment' => Jc::RIGHT]);
-        $metaTable->addCell(5000)->addText(now()->format('d F Y'), $valueFont);
-
-        $section->addTextBreak(4);
-        $section->addText('Dokumen ini di-generate secara otomatis oleh Privasimu.', ['size' => 8, 'color' => 'aaaaaa', 'italic' => true], ['alignment' => Jc::CENTER]);
+        $metaTable = $cell->addTable(['borderSize' => 8, 'borderColor' => 'ffffff', 'cellMargin' => 100, 'alignment' => Jc::CENTER]);
+        $metaRow = $metaTable->addRow();
+        
+        $metaRow->addCell(4000)->addText($this->t("ROPA for:\n" . ($orgName ?: '-')), ['size' => 10, 'bold' => true, 'color' => 'ffffff']);
+        $metaRow->addCell(2500)->addText($this->t("Status:\n" . strtoupper($status)), ['size' => 10, 'bold' => true, 'color' => 'ffffff']);
+        $metaRow->addCell(2500)->addText($this->t("Date:\n" . now()->format('d M Y')), ['size' => 10, 'bold' => true, 'color' => 'ffffff']);
 
         return $section;
     }
@@ -67,36 +75,58 @@ class TemplateExportController extends Controller
     private function addContentSection(PhpWord $phpWord, string $headerText)
     {
         $section = $phpWord->addSection([
-            'marginTop' => 900, 'marginBottom' => 900,
-            'marginLeft' => 900, 'marginRight' => 900,
+            'marginTop' => 800, 'marginBottom' => 800,
+            'marginLeft' => 800, 'marginRight' => 800,
+            'bgColor' => 'fcfcfd'
         ]);
+        
         $header = $section->addHeader();
-        $header->addText($this->t($headerText), ['size' => 8, 'color' => '999999', 'italic' => true]);
+        $headerTable = $header->addTable(['borderBottomSize' => 12, 'borderBottomColor' => '94a3b8', 'width' => 100 * 50]);
+        $headerTable->addRow();
+        $docTypeMain = explode(' ', $headerText)[0];
+        $textRun = $headerTable->addCell(10000)->addTextRun();
+        $textRun->addText($docTypeMain, ['size' => 12, 'bold' => true, 'color' => '8b9cd4']);
+        $textRun->addText(' DATA EXPORT', ['size' => 12, 'color' => '8b9cd4']);
+        
         $footer = $section->addFooter();
-        $footer->addPreserveText('Halaman {PAGE} dari {NUMPAGES} - Privasimu', ['size' => 8, 'color' => '999999']);
+        $footerTable = $footer->addTable(['width' => 100 * 50]);
+        $footerTable->addRow();
+        $footerTable->addCell(3000)->addText('PRIVASIMU', ['size' => 12, 'bold' => true, 'color' => '8b9cd4']);
+        $footerTable->addCell(7000)->addPreserveText('Your Trusted Personal Data Protection Technology and Compliance Solution | {PAGE}', ['size' => 8, 'color' => '94a3b8', 'italic' => true], ['alignment' => Jc::END]);
+        
         return $section;
     }
 
     private function addSectionTitle($section, string $title)
     {
         $section->addTextBreak();
-        $section->addText($this->t($title), ['size' => 16, 'bold' => true, 'color' => '1a1a2e'], ['spaceBefore' => 200, 'spaceAfter' => 100]);
+        $table = $section->addTable(['bgColor' => 'ffffff', 'cellMargin' => 0]);
+        $table->addRow();
+        $cell = $table->addCell(10000);
+        $cleanTitle = ltrim($title, '0123456789. ');
+        $cell->addText($this->t('■  ' . $cleanTitle), ['size' => 14, 'bold' => true, 'color' => '1b143c'], ['spaceBefore' => 200, 'spaceAfter' => 100]);
     }
 
     private function addInfoRow($table, string $label, string $value)
     {
-        $row = $table->addRow();
-        $row->addCell(3200, ['bgColor' => 'f8f9fa', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
-            ->addText($this->t($label), ['size' => 10, 'bold' => true, 'color' => '555555']);
-        $row->addCell(6800, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])
-            ->addText($this->t($value ?: '-'), ['size' => 10, 'color' => '333333']);
+        $rowHeader = $table->addRow();
+        $rowHeader->addCell(10000, ['bgColor' => 'f4f5f9', 'borderSize' => 0])
+            ->addText($this->t($label), ['size' => 10, 'bold' => true, 'color' => '1e293b'], ['spaceBefore' => 60, 'spaceAfter' => 60]);
+            
+        $rowValue = $table->addRow();
+        $rowValue->addCell(10000, ['bgColor' => 'ffffff', 'borderSize' => 0])
+            ->addText($this->t($value ?: '-'), ['size' => 10, 'color' => '475569'], ['spaceBefore' => 40, 'spaceAfter' => 100]);
+            
+        $table->addRow()->addCell(10000)->addText('', [], ['spaceBefore' => 40]);
     }
 
     private function makeInfoTable($section)
     {
         return $section->addTable([
-            'borderSize' => 4, 'borderColor' => 'e0e0e0',
-            'cellMargin' => 80,
+            'borderSize' => 0,
+            'cellMargin' => 40,
+            'width' => 100 * 50,
+            'alignment' => Jc::CENTER
         ]);
     }
 
