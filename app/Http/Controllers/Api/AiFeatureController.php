@@ -701,7 +701,7 @@ class AiFeatureController extends Controller
         $creditErr = $this->checkCredit($request, 'discovery_classification');
         if ($creditErr) return $creditErr;
 
-        $system = DB::table('data_discovery_systems')->where('id', $id)->where('org_id', $request->user()->org_id)->first();
+        $system = DB::table('information_systems')->where('id', $id)->where('org_id', $request->user()->org_id)->first();
         if (!$system) return response()->json(['message' => 'System not found'], 404);
 
         $ai = new AiService();
