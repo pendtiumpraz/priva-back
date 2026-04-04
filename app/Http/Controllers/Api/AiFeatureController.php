@@ -704,7 +704,7 @@ class AiFeatureController extends Controller
         $system = DB::table('data_discovery_systems')->where('id', $id)->where('org_id', $request->user()->org_id)->first();
         if (!$system) return response()->json(['message' => 'System not found'], 404);
 
-        $ai = new AiService($request->user()->org_id);
+        $ai = new AiService();
         if (!$ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
