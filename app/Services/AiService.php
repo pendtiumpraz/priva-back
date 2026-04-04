@@ -244,15 +244,19 @@ class AiService
     /**
      * Consent: AI Consent Items Generator (Autofill Array)
      */
-    public function consentItemsGenerator(string $tenantContext, string $pointName, string $pointDomain): ?array
+    public function consentItemsGenerator(string $tenantContext, string $pointName, string $pointDomain, array $existingItems = []): ?array
     {
         $system = "Kamu adalah privacy lawyer Indonesia ahli UU PDP. Output WAJIB JSON valid.\n"
             . "Format: {\"items\":[{\"title\":\"...\",\"description\":\"...\",\"full_text\":\"...\",\"is_required\":true/false}]}\n"
             . "Buat sekumpulan item persetujuan (consent items) yang relevan untuk collection point ini.\n"
             . "KONTEKS ORGANISASI:\n{$tenantContext}\n";
 
+        if (!empty($existingItems)) {
+            $system .= "PERINGATAN PENTING: Berikut adalah item yang SUDAH ADA. JANGAN MEMBUAT item yang mirip, sama, atau berduplikat dengan ini: " . implode(', ', $existingItems) . "\n";
+        }
+
         $user = "Collection Point: {$pointName}\nDomain: {$pointDomain}\n\n"
-            . "Berikan 3-6 consent items (misal: Analytical Cookies, Marketing, Profiling, dsb).\n"
+            . "Berikan 3-6 consent items BARU yang penting (misal: Analytical Cookies, Marketing, Profiling, dsb).\n"
             . "Sesuaikan `is_required` dengan aturan (kalo essential/functional = true).\n"
             . "Jawab HANYA dalam JSON format yang diminta.";
 

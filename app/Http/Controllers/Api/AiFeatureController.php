@@ -528,11 +528,13 @@ class AiFeatureController extends Controller
         $point = DB::table('consent_collection_points')->where('id', $id)->first();
         if (!$point) return response()->json(['message' => 'Collection point not found'], 404);
 
+        $existingItems = DB::table('consent_items')->where('collection_point_id', $id)->pluck('title')->toArray();
+
         $ai = new AiService($request->user()->org_id);
         if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
 
         $context = TenantContextService::buildContext($request->user()->org_id);
-        $response = $ai->consentItemsGenerator($context, $point->name, $point->domain);
+        $response = $ai->consentItemsGenerator($context, $point->name, $point->domain, $existingItems);
 
         return $this->saveAndRespond($request, 'autofill_consent', $response, ['point_name' => $point->name]);
     }
