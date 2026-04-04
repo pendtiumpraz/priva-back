@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'license' => [
+        'public_key' => env('LICENSE_PUBLIC_KEY'),
+    ],
+
 ];

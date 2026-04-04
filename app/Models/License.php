@@ -56,9 +56,9 @@ class License extends Model
             $payloadStr = base64_decode(strtr($parts[1], '-_', '+/'));
             $signature = base64_decode(strtr($parts[2], '-_', '+/'));
             
-            $publicKeyB64 = env('LICENSE_PUBLIC_KEY');
+            $publicKeyB64 = config('services.license.public_key');
             if (!$publicKeyB64) {
-                \Log::error('LICENSE_PUBLIC_KEY is not set in .env');
+                \Log::error('LICENSE_PUBLIC_KEY is not set in config/services/environment');
                 return null;
             }
 
