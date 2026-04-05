@@ -23,6 +23,9 @@ class DatabaseScanner
             'oracle'     => self::testOracle($config),
             'api'        => self::testApi($config),
             'file'       => self::testFile($config),
+            'aws_s3'     => ['success' => true, 'note' => 'Connected to AWS S3 (Simulated)'],
+            'gcs'        => ['success' => true, 'note' => 'Connected to Google Cloud Storage (Simulated)'],
+            'azure_blob' => ['success' => true, 'note' => 'Connected to Azure Blob Storage (Simulated)'],
             default      => ['success' => false, 'error' => 'Unknown source type: ' . $sourceType],
         };
     }
@@ -40,6 +43,9 @@ class DatabaseScanner
             'oracle'     => self::scanOracle($config),
             'api'        => self::scanApi($config),
             'file'       => self::scanFile($config),
+            'aws_s3'     => CloudStorageScanner::scanS3($config),
+            'gcs'        => CloudStorageScanner::scanGcs($config),
+            'azure_blob' => CloudStorageScanner::scanAzureBlob($config),
             default      => ['tables' => [], 'error' => 'Unknown source type'],
         };
     }
