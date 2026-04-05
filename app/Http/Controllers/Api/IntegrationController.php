@@ -22,6 +22,7 @@ class IntegrationController extends Controller
                 'telegram_bot_token' => $settings['telegram_bot_token'] ?? '',
                 'telegram_chat_id' => $settings['telegram_chat_id'] ?? '',
                 'siem_webhook_url' => $settings['siem_webhook_url'] ?? '',
+                'soar_webhook_url' => $settings['soar_webhook_url'] ?? '',
             ]
         ]);
     }
@@ -37,6 +38,7 @@ class IntegrationController extends Controller
         if ($request->has('telegram_bot_token')) $settings['telegram_bot_token'] = $request->telegram_bot_token;
         if ($request->has('telegram_chat_id')) $settings['telegram_chat_id'] = $request->telegram_chat_id;
         if ($request->has('siem_webhook_url')) $settings['siem_webhook_url'] = $request->siem_webhook_url;
+        if ($request->has('soar_webhook_url')) $settings['soar_webhook_url'] = $request->soar_webhook_url;
 
         $org->update(['settings' => $settings]);
         
