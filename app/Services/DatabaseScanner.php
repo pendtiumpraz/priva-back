@@ -90,10 +90,30 @@ class DatabaseScanner
                 $cols = $pdo->query("SHOW COLUMNS FROM `{$tableName}`")->fetchAll(\PDO::FETCH_ASSOC);
                 $rowCount = $pdo->query("SELECT COUNT(*) FROM `{$tableName}`")->fetchColumn();
 
+                // Phase 1 Shadow Data Discovery: Content Sampling
+                $sampleRows = [];
+                try {
+                    $sampleRows = $pdo->query("SELECT * FROM `{$tableName}` LIMIT 100")->fetchAll(\PDO::FETCH_ASSOC);
+                } catch (\Throwable $e) {}
+
                 foreach ($cols as $col) {
-                    $piiResult = PiiDetector::analyze($col['Field'], $col['Type']);
+                    $colName = $col['Field'];
+                    $piiResult = PiiDetector::analyze($colName, $col['Type']);
+                    $shadowDetected = false;
+
+                    // Execute Content Scanner on sample data
+                    if (!empty($sampleRows) && count($sampleRows) > 0) {
+                        $columnValues = array_column($sampleRows, $colName);
+                        $contentPii = ContentPiiScanner::analyzeColumnContent($columnValues);
+
+                        if ($contentPii) {
+                            $piiResult = $contentPii;
+                            $shadowDetected = true;
+                        }
+                    }
+
                     $columns[] = [
-                        'name' => $col['Field'],
+                        'name' => $colName,
                         'type' => $col['Type'],
                         'nullable' => $col['Null'] === 'YES',
                         'pii_detected' => $piiResult['is_pii'],
@@ -102,6 +122,7 @@ class DatabaseScanner
                         'encryption_required' => $piiResult['encryption_required'],
                         'pii_reason' => $piiResult['reason'],
                         'manually_classified' => false,
+                        'shadow_detected' => $shadowDetected,
                     ];
                 }
 
@@ -172,11 +193,31 @@ class DatabaseScanner
                 $rowCount = 0;
                 try { $rowCount = $pdo->query("SELECT COUNT(*) FROM \"{$tableName}\"")->fetchColumn(); } catch (\Throwable) {}
 
+                // Phase 1 Shadow Data Discovery: Content Sampling
+                $sampleRows = [];
+                try {
+                    $sampleRows = $pdo->query("SELECT * FROM \"{$tableName}\" LIMIT 100")->fetchAll(\PDO::FETCH_ASSOC);
+                } catch (\Throwable $e) {}
+
                 $columns = [];
                 foreach ($cols as $col) {
-                    $piiResult = PiiDetector::analyze($col['column_name'], $col['data_type']);
+                    $colName = $col['column_name'];
+                    $piiResult = PiiDetector::analyze($colName, $col['data_type']);
+                    $shadowDetected = false;
+
+                    // Execute Content Scanner on sample data
+                    if (!empty($sampleRows) && count($sampleRows) > 0) {
+                        $columnValues = array_column($sampleRows, $colName);
+                        $contentPii = ContentPiiScanner::analyzeColumnContent($columnValues);
+
+                        if ($contentPii) {
+                            $piiResult = $contentPii;
+                            $shadowDetected = true;
+                        }
+                    }
+
                     $columns[] = [
-                        'name' => $col['column_name'],
+                        'name' => $colName,
                         'type' => $col['data_type'],
                         'nullable' => $col['is_nullable'] === 'YES',
                         'pii_detected' => $piiResult['is_pii'],
@@ -185,6 +226,7 @@ class DatabaseScanner
                         'encryption_required' => $piiResult['encryption_required'],
                         'pii_reason' => $piiResult['reason'],
                         'manually_classified' => false,
+                        'shadow_detected' => $shadowDetected,
                     ];
                 }
 
