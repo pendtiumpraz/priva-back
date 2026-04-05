@@ -350,6 +350,46 @@ class DataDiscoveryController extends Controller
             return response()->json(['error' => 'AI analysis failed to return valid JSON. Please try again.'], 500);
         }
 
+        // Merge AI PII flags INTO the original schema so we don't lose non-PII columns
+        $originalSchema = $schema['tables'];
+        $aiTables = collect($aiResult['tables'])->keyBy('name');
+
+        foreach ($originalSchema as &$table) {
+            $tableName = $table['name'];
+            if ($aiTables->has($tableName)) {
+                $aiCols = collect($aiTables->get($tableName)['columns'])->keyBy('name');
+                foreach ($table['columns'] as &$col) {
+                    $colName = $col['name'];
+                    if ($aiCols->has($colName)) {
+                        $aiCol = $aiCols->get($colName);
+                        // Overwrite with AI flags
+                        $col['pii_detected'] = $aiCol['pii_detected'] ?? true;
+                        $col['pdp_category'] = $aiCol['pdp_category'] ?? $col['pdp_category'];
+                        $col['classification'] = $aiCol['classification'] ?? $col['classification'];
+                        $col['encryption_required'] = $aiCol['encryption_required'] ?? $col['encryption_required'];
+                        $col['ai_recommendation'] = $aiCol['ai_recommendation'] ?? null;
+                    } else {
+                        // Ensure omitted columns are marked as non-PII
+                        $col['pii_detected'] = false;
+                        $col['pdp_category'] = null;
+                        $col['classification'] = 'internal';
+                        $col['encryption_required'] = false;
+                    }
+                }
+            } else {
+                // Table not returned by AI means it has no PII
+                foreach ($table['columns'] as &$col) {
+                    $col['pii_detected'] = false;
+                    $col['pdp_category'] = null;
+                    $col['classification'] = 'internal';
+                    $col['encryption_required'] = false;
+                }
+            }
+        }
+
+        // Put merged tables back into AI result map, preserving global_recommendation
+        $aiResult['tables'] = $originalSchema;
+
         $system->update(['ai_scan_results' => $aiResult]);
 
         AuditLog::log('data-discovery', $system->id, 'ai_scan_completed', [], 'system');

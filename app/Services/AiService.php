@@ -706,10 +706,9 @@ class AiService
                             'columns' => [
                                 [
                                     'name' => 'nama_kolom',
-                                    'type' => 'varchar(255)',
                                     'pii_detected' => true,
                                     'pdp_category' => 'umum | spesifik',
-                                    'classification' => 'internal | pii | sensitive',
+                                    'classification' => 'pii | sensitive',
                                     'encryption_required' => true,
                                     'ai_recommendation' => 'Rekomendasi proteksi spesifik'
                                 ]
@@ -720,13 +719,14 @@ class AiService
                 ], JSON_PRETTY_PRINT);
 
         $dataStr = json_encode($schema, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-        $user = "Analisis skema tabel beserta sampel data berikut (data sudah di-mask):\n{$dataStr}\n\n"
-              . "Tetapkan tipe datanya ('type'), 'pii_detected' (boolean), 'pdp_category', 'classification', dan 'encryption_required' untuk TIAP kolom berdasarkan namanya.\n"
-              . "Pastikan mencantumkan kembali SEMUA tabel dan kolom yang diberikan.\n"
-              . "Berikan juga rekomendasi proteksi spesifik di 'ai_recommendation'.\n"
+        $user = "Analisis skema tabel berikut:\n{$dataStr}\n\n"
+              . "PENTING: HANYA kembalikan tabel dan kolom yang MENGANDUNG data pribadi (PII/PDP). \n"
+              . "TIDAK PERLU mengembalikan kolom seperti id, created_at, status, fk_id, dll yang bukan PII.\n"
+              . "Jika suatu tabel tidak memiliki kolom PII satupun, JANGAN masukkan tabel tersebut ke dalam JSON response.\n"
+              . "Berikan juga rekomendasi proteksi ditiap kolom PII tersebut.\n"
               . "Keluarkan HANYA output JSON valid.";
 
-        return $this->ask($system, $user, 4000);
+        return $this->ask($system, $user, 1500); // 1500 tokens is enough for PII only
     }
 
     /**
