@@ -339,7 +339,9 @@ class DataDiscoveryController extends Controller
         $compactSchema = collect($schema['tables'])->map(function ($table) {
             return [
                 'name' => $table['name'],
-                'columns' => collect($table['columns'])->map(fn($c) => $c['name'])->toArray(),
+                'columns' => collect($table['columns'])->map(function ($c) {
+                    return ['name' => $c['name'], 'type' => $c['type'] ?? ''];
+                })->toArray(),
             ];
         })->toArray();
 

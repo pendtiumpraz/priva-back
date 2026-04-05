@@ -706,7 +706,8 @@ class AiService
                             'columns' => [
                                 [
                                     'name' => 'nama_kolom',
-                                    'is_pii' => true,
+                                    'type' => 'varchar(255)',
+                                    'pii_detected' => true,
                                     'pdp_category' => 'umum | spesifik',
                                     'classification' => 'internal | pii | sensitive',
                                     'encryption_required' => true,
@@ -720,7 +721,8 @@ class AiService
 
         $dataStr = json_encode($schema, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         $user = "Analisis skema tabel beserta sampel data berikut (data sudah di-mask):\n{$dataStr}\n\n"
-              . "Tetapkan 'is_pii', 'pdp_category', 'classification', dan 'encryption_required' untuk TIAP kolom.\n"
+              . "Tetapkan tipe datanya ('type'), 'pii_detected' (boolean), 'pdp_category', 'classification', dan 'encryption_required' untuk TIAP kolom berdasarkan namanya.\n"
+              . "Pastikan mencantumkan kembali SEMUA tabel dan kolom yang diberikan.\n"
               . "Berikan juga rekomendasi proteksi spesifik di 'ai_recommendation'.\n"
               . "Keluarkan HANYA output JSON valid.";
 
