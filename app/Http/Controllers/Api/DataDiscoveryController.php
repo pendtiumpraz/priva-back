@@ -473,20 +473,7 @@ class DataDiscoveryController extends Controller
             }
             $insightResult = $aiService->analyzeRawSubjectData($allRows, $prompt);
         }
-
-        // 4. Save History
-        \Illuminate\Support\Facades\DB::table('ai_specific_searches')->insert([
-            'id' => (string) \Illuminate\Support\Str::uuid(),
-            'system_id' => $system->id,
-            'user_prompt' => $prompt,
-            'generated_sql' => json_encode($queries),
-            'found_rows_count' => $totalRows,
-            'ai_analysis_insight' => json_encode($insightResult),
-            'created_at' => now(),
-            'updated_at' => now()
-        ]);
-
-        // 5. Mask sensitive data for frontend display
+        // 3.5 Mask sensitive data for frontend display and history
         $rawDataSample = array_slice($execResults['results'][0]['rows'] ?? [], 0, 5);
         $maskedDataSample = array_map(function ($row) {
             $maskedRow = [];
@@ -512,6 +499,24 @@ class DataDiscoveryController extends Controller
             return $maskedRow;
         }, $rawDataSample);
 
+        // Pack the masked sample into the insight result so it saves in the existing JSON column
+        $insightToSave = $insightResult ?? [];
+        if (is_array($insightToSave)) {
+            $insightToSave['_raw_sample'] = $maskedDataSample;
+        }
+
+        // 4. Save History
+        \Illuminate\Support\Facades\DB::table('ai_specific_searches')->insert([
+            'id' => (string) \Illuminate\Support\Str::uuid(),
+            'system_id' => $system->id,
+            'user_prompt' => $prompt,
+            'generated_sql' => json_encode($queries),
+            'found_rows_count' => $totalRows,
+            'ai_analysis_insight' => json_encode($insightToSave),
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
         return response()->json([
             'message' => 'Search completed.',
             'queries_generated' => $queries,
@@ -530,13 +535,19 @@ class DataDiscoveryController extends Controller
             ->get();
             
         $formatted = $history->map(function ($item) {
+            $insight = json_decode($item->ai_analysis_insight, true);
+            $rawSample = [];
+            if (is_array($insight) && isset($insight['_raw_sample'])) {
+                $rawSample = $insight['_raw_sample'];
+                unset($insight['_raw_sample']);
+            }
             return [
                 'prompt' => $item->user_prompt,
                 'result' => [
                     'queries_generated' => json_decode($item->generated_sql, true) ?? [],
                     'found_rows' => $item->found_rows_count,
-                    'ai_insight' => json_decode($item->ai_analysis_insight, true),
-                    'raw_data_sample' => [] // Skipped to keep history lightweight
+                    'ai_insight' => $insight,
+                    'raw_data_sample' => $rawSample
                 ],
                 'timestamp' => \Carbon\Carbon::parse($item->created_at)->timezone('Asia/Jakarta')->format('d/m/Y, H:i:s')
             ];
