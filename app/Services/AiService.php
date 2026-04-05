@@ -726,7 +726,7 @@ class AiService
               . "Berikan juga rekomendasi proteksi ditiap kolom PII tersebut.\n"
               . "Keluarkan HANYA output JSON valid.";
 
-        return $this->ask($system, $user, 1500); // 1500 tokens is enough for PII only
+        return $this->ask($system, $user, 4000); // Increased back to 4000 to prevent JSON truncation
     }
 
     /**
