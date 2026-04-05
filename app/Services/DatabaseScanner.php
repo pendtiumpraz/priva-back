@@ -26,6 +26,10 @@ class DatabaseScanner
             'aws_s3'     => ['success' => true, 'note' => 'Connected to AWS S3 (Simulated)'],
             'gcs'        => ['success' => true, 'note' => 'Connected to Google Cloud Storage (Simulated)'],
             'azure_blob' => ['success' => true, 'note' => 'Connected to Azure Blob Storage (Simulated)'],
+            'google_workspace' => ['success' => true, 'note' => 'Authenticated with Google Workspace (Simulated)'],
+            'microsoft_365'    => ['success' => true, 'note' => 'Authenticated with Microsoft 365 (Simulated)'],
+            'slack'            => ['success' => true, 'note' => 'Authenticated with Slack Workspace (Simulated)'],
+            'notion'           => ['success' => true, 'note' => 'Authenticated with Notion (Simulated)'],
             default      => ['success' => false, 'error' => 'Unknown source type: ' . $sourceType],
         };
     }
@@ -46,6 +50,10 @@ class DatabaseScanner
             'aws_s3'     => CloudStorageScanner::scanS3($config),
             'gcs'        => CloudStorageScanner::scanGcs($config),
             'azure_blob' => CloudStorageScanner::scanAzureBlob($config),
+            'google_workspace' => SaasScanner::scanGoogleWorkspace($config),
+            'microsoft_365'    => SaasScanner::scanMicrosoft365($config),
+            'slack'            => SaasScanner::scanSlack($config),
+            'notion'           => SaasScanner::scanNotion($config),
             default      => ['tables' => [], 'error' => 'Unknown source type'],
         };
     }
