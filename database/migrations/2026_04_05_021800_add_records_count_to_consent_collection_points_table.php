@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::table('consent_collection_points', function (Blueprint $table) {
             if (!Schema::hasColumn('consent_collection_points', 'records_count')) {
-                $table->unsignedBigInteger('records_count')->default(0)->after('is_active');
+                $table->unsignedBigInteger('records_count')->default(0);
             }
         });
     }
