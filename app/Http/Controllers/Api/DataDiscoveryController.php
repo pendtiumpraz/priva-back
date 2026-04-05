@@ -542,6 +542,7 @@ class DataDiscoveryController extends Controller
                 unset($insight['_raw_sample']);
             }
             return [
+                'id' => $item->id,
                 'prompt' => $item->user_prompt,
                 'result' => [
                     'queries_generated' => json_decode($item->generated_sql, true) ?? [],
@@ -564,6 +565,17 @@ class DataDiscoveryController extends Controller
             ->delete();
             
         return response()->json(['message' => 'History cleared']);
+    }
+
+    public function deleteSearchAiHistory(Request $request, string $id, string $historyId)
+    {
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+        \Illuminate\Support\Facades\DB::table('ai_specific_searches')
+            ->where('system_id', $system->id)
+            ->where('id', $historyId)
+            ->delete();
+            
+        return response()->json(['message' => 'History item deleted']);
     }
 }
 
