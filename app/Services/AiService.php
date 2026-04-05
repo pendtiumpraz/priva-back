@@ -683,4 +683,98 @@ class AiService
 
         return $this->ask($system, $user, 2500);
     }
+
+    // =============================================
+    // DATA DISCOVERY & DSR ENHANCEMENTS
+    // =============================================
+
+    /**
+     * AI Deep Scan schema for PII classification and encryption recommendation
+     */
+    public function dataDiscoveryAiDeepScan(array $schema): ?array
+    {
+        $system = "Kamu adalah Auditor Data Privacy & Cybersecurity spesialis UU PDP Indonesia.\n"
+                . "Tugasmu menganalisis skema database dan mengklasifikasikan PII untuk tiap kolom.\n"
+                . "Output WAJIB berupa JSON valid.\n\n"
+                . "FORMAT OUTPUT JSON:\n"
+                . json_encode([
+                    'tables' => [
+                        [
+                            'name' => 'nama_tabel',
+                            'columns' => [
+                                [
+                                    'name' => 'nama_kolom',
+                                    'is_pii' => true,
+                                    'pdp_category' => 'umum | spesifik',
+                                    'classification' => 'internal | pii | sensitive',
+                                    'encryption_required' => true,
+                                    'ai_recommendation' => 'Rekomendasi proteksi spesifik'
+                                ]
+                            ]
+                        ]
+                    ],
+                    'global_recommendation' => 'Rangkuman risiko database secara keseluruhan (2 kalimat)'
+                ], JSON_PRETTY_PRINT);
+
+        $dataStr = json_encode($schema, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        $user = "Analisis skema tabel beserta sampel data berikut (data sudah di-mask):\n{$dataStr}\n\n"
+              . "Tetapkan 'is_pii', 'pdp_category', 'classification', dan 'encryption_required' untuk TIAP kolom.\n"
+              . "Berikan juga rekomendasi proteksi spesifik di 'ai_recommendation'.\n"
+              . "Keluarkan HANYA output JSON valid.";
+
+        return $this->ask($system, $user, 4000);
+    }
+
+    /**
+     * Text-to-SQL Agent: Generate queries to find subject data
+     */
+    public function generateSqlFromText(array $schema, string $prompt, string $dialect = 'mysql'): ?array
+    {
+        $system = "Kamu adalah Database Administrator Ahli (Dialect: {$dialect}).\n"
+                . "Tugasmu adalah menghasilkan query SQL READ-ONLY murni untuk mencari entitas spesifik yang diminta user berdasarkan skema.\n"
+                . "Output WAJIB berupa JSON valid.\n\n"
+                . "FORMAT OUTPUT JSON:\n"
+                . json_encode([
+                    'sql_queries' => [
+                        "SELECT * FROM table1 WHERE col1 LIKE '%keyword%';",
+                        "SELECT a.* FROM table2 a JOIN table3 b ON a.fk = b.id WHERE b.col2 = 'exact';"
+                    ]
+                ], JSON_PRETTY_PRINT);
+
+        $schemaStr = json_encode($schema, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        $user = "Skema Database (hanya relasi dan kolom kunci):\n{$schemaStr}\n\n"
+              . "Instruksi pencarian DSR: \"{$prompt}\"\n\n"
+              . "Hasilkan maksimal 3 query SQL yang paling optimal untuk menemukan data tersebut.\n"
+              . "PENTING: Hanya gunakan SELECT. JANGAN gunakan UPDATE, DELETE, INSERT, DROP.\n"
+              . "Keluarkan HANYA output JSON valid.";
+
+        return $this->ask($system, $user, 1500);
+    }
+
+    /**
+     * Analyze RAW Database response from Text-to-SQL execution
+     */
+    public function analyzeRawSubjectData(array $rawData, string $originalPrompt): ?array
+    {
+        $system = "Kamu adalah Data Protection Officer Ahli UU PDP.\n"
+                . "Tugasmu menganalisa raw data yang ditemukan dari database terkait Data Subject Request (DSR).\n"
+                . "Output WAJIB berupa JSON valid.\n\n"
+                . "FORMAT OUTPUT JSON:\n"
+                . json_encode([
+                    'subject_found' => true,
+                    'insight' => 'Rangkuman analisa terhadap data yang ditemukan, sebutkan sensitivitas data (max 3 kalimat)',
+                    'tables_found' => ['tabel1', 'tabel2'],
+                    'recommendation' => 'Rekomendasi redaction/masking sebelum data dikirim ke subject (max 2 kalimat)'
+                ], JSON_PRETTY_PRINT);
+
+        // Limit the raw data size to prevent hitting context limits
+        $dataStr = json_encode(array_slice($rawData, 0, 50), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        
+        $user = "Tujuan Pencarian: \"{$originalPrompt}\"\n\n"
+              . "Hasil Eksekusi Raw SQL (Dibatasi 50 row per tabel untuk keamanan):\n{$dataStr}\n\n"
+              . "Berdasarkan record tersebut, buatkan insight risiko (terutama jika ada data spesifik) dan rekomendasi redaction.\n"
+              . "Keluarkan HANYA output JSON valid.";
+
+        return $this->ask($system, $user, 2000);
+    }
 }
