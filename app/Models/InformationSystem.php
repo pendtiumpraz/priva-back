@@ -12,11 +12,11 @@ class InformationSystem extends Model
     protected $fillable = [
         'org_id', 'name', 'owner', 'owner_id', 'source_type', 'connection_config',
         'scanning_status', 'scanning_progress', 'pdp_alert_count', 'pii_alert_count',
-        'scan_results', 'last_scanned_at', 'created_by',
+        'scan_results', 'ai_scan_results', 'last_scanned_at', 'created_by',
     ];
 
     protected $casts = [
-        'connection_config' => 'array', 'scan_results' => 'array',
+        'connection_config' => 'array', 'scan_results' => 'array', 'ai_scan_results' => 'array',
         'last_scanned_at' => 'datetime', 'scanning_progress' => 'decimal:2',
     ];
 
