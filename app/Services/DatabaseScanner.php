@@ -51,8 +51,9 @@ class DatabaseScanner
     {
         try {
             $start = microtime(true);
-            $dsn = "mysql:host={$config['host']};port={$config['port']};dbname={$config['database']}";
-            $pdo = new \PDO($dsn, $config['username'], $config['password'], [
+            $port = !empty($config['port']) ? $config['port'] : 3306;
+            $dsn = "mysql:host={$config['host']};port={$port};dbname={$config['database']}";
+            $pdo = new \PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [
                 \PDO::ATTR_TIMEOUT => 5,
                 \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
             ]);
@@ -74,8 +75,9 @@ class DatabaseScanner
     private static function scanMysql(array $config): array
     {
         try {
-            $dsn = "mysql:host={$config['host']};port={$config['port']};dbname={$config['database']}";
-            $pdo = new \PDO($dsn, $config['username'], $config['password'], [
+            $port = !empty($config['port']) ? $config['port'] : 3306;
+            $dsn = "mysql:host={$config['host']};port={$port};dbname={$config['database']}";
+            $pdo = new \PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [
                 \PDO::ATTR_TIMEOUT => 10,
                 \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
             ]);
@@ -125,8 +127,9 @@ class DatabaseScanner
     {
         try {
             $start = microtime(true);
-            $dsn = "pgsql:host={$config['host']};port={$config['port']};dbname={$config['database']}";
-            $pdo = new \PDO($dsn, $config['username'], $config['password'], [
+            $port = !empty($config['port']) ? $config['port'] : 5432;
+            $dsn = "pgsql:host={$config['host']};port={$port};dbname={$config['database']}";
+            $pdo = new \PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [
                 \PDO::ATTR_TIMEOUT => 5,
                 \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
             ]);
@@ -148,8 +151,9 @@ class DatabaseScanner
     private static function scanPostgresql(array $config): array
     {
         try {
-            $dsn = "pgsql:host={$config['host']};port={$config['port']};dbname={$config['database']}";
-            $pdo = new \PDO($dsn, $config['username'], $config['password'], [
+            $port = !empty($config['port']) ? $config['port'] : 5432;
+            $dsn = "pgsql:host={$config['host']};port={$port};dbname={$config['database']}";
+            $pdo = new \PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [
                 \PDO::ATTR_TIMEOUT => 10,
                 \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
             ]);
