@@ -64,7 +64,9 @@ class AiService
                 $headers[$this->authHeader] = $this->apiKey;
             }
 
-            $response = Http::timeout(60)
+            $timeout = (int) env('AI_TIMEOUT', 180);
+            
+            $response = Http::timeout($timeout)
                 ->withoutVerifying()
                 ->withHeaders($headers)
                 ->post($this->baseUrl . '/chat/completions', [
