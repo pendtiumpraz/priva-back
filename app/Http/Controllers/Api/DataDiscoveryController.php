@@ -330,9 +330,9 @@ class DataDiscoveryController extends Controller
             return response()->json(['error' => 'Please perform a standard scan first before using AI Deep Scan.'], 400);
         }
 
-        $aiService = new \App\Services\AiService($request->user()->org_id);
+        $aiService = new \App\Services\AiService();
         if (!$aiService->isAvailable()) {
-            return response()->json(['error' => 'AI Provider is not configured for this organization.'], 400);
+            return response()->json(['error' => 'AI Provider is not configured for this server.'], 400);
         }
 
         // Simplify schema to fit context window: just table names, column names
@@ -345,7 +345,7 @@ class DataDiscoveryController extends Controller
 
         $aiResult = $aiService->dataDiscoveryAiDeepScan($compactSchema);
         if (!$aiResult || !isset($aiResult['tables'])) {
-            return response()->json(['error' => 'AI analysis failed to return valid JSON.'], 500);
+            return response()->json(['error' => 'AI analysis failed to return valid JSON. Please try again.'], 500);
         }
 
         $system->update(['ai_scan_results' => $aiResult]);
@@ -375,7 +375,7 @@ class DataDiscoveryController extends Controller
             return response()->json(['error' => 'Please perform a standard scan first.'], 400);
         }
 
-        $aiService = new \App\Services\AiService($request->user()->org_id, 'agent');
+        $aiService = new \App\Services\AiService();
         if (!$aiService->isAvailable()) {
             return response()->json(['error' => 'AI Provider is not configured.'], 400);
         }
