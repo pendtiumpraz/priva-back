@@ -475,8 +475,8 @@ class DataDiscoveryController extends Controller
         }
 
         // 4. Save History
-        $history = \Illuminate\Support\Facades\DB::table('ai_specific_searches')->insertGetId([
-            'id' => \Illuminate\Support\Str::uuid(),
+        \Illuminate\Support\Facades\DB::table('ai_specific_searches')->insert([
+            'id' => (string) \Illuminate\Support\Str::uuid(),
             'system_id' => $system->id,
             'user_prompt' => $prompt,
             'generated_sql' => json_encode($queries),
@@ -486,12 +486,38 @@ class DataDiscoveryController extends Controller
             'updated_at' => now()
         ]);
 
+        // 5. Mask sensitive data for frontend display
+        $rawDataSample = array_slice($execResults['results'][0]['rows'] ?? [], 0, 5);
+        $maskedDataSample = array_map(function ($row) {
+            $maskedRow = [];
+            foreach ($row as $key => $value) {
+                if (is_string($value)) {
+                    if (preg_match('/(nik|ktp|email|phone|password|secret|token|credit_card|rekening)/i', $key)) {
+                        if (str_contains($value, '@')) {
+                            $parts = explode('@', $value);
+                            $maskedRow[$key] = substr($parts[0], 0, 2) . '***@' . $parts[1];
+                        } else {
+                            $len = strlen($value);
+                            $maskedRow[$key] = $len > 4 ? substr($value, 0, 2) . str_repeat('*', $len - 4) . substr($value, -2) : str_repeat('*', $len);
+                        }
+                    } else if (preg_match('/(name|nama|alamat|address)/i', $key) && strlen($value) > 3) {
+                        $maskedRow[$key] = substr($value, 0, 3) . str_repeat('*', strlen($value) - 3);
+                    } else {
+                        $maskedRow[$key] = $value;
+                    }
+                } else {
+                    $maskedRow[$key] = $value;
+                }
+            }
+            return $maskedRow;
+        }, $rawDataSample);
+
         return response()->json([
             'message' => 'Search completed.',
             'queries_generated' => $queries,
             'found_rows' => $totalRows,
             'ai_insight' => $insightResult,
-            'raw_data_sample' => array_slice($execResults['results'][0]['rows'] ?? [], 0, 5)
+            'raw_data_sample' => $maskedDataSample
         ]);
     }
     public function getSearchAiHistory(Request $request, string $id)
