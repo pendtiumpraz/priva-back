@@ -222,6 +222,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             
             // AI Specific Search (Text-to-SQL Flow)
             Route::post('/{id}/search-ai', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'specificSearchAi'])->middleware('permission:data_discovery,read');
+            Route::get('/{id}/search-ai-history', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'getSearchAiHistory'])->middleware('permission:data_discovery,read');
+            Route::delete('/{id}/search-ai-history', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'clearSearchAiHistory'])->middleware('permission:data_discovery,write');
         });
         
         // Consent Logs & Items

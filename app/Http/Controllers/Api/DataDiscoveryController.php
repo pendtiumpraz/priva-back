@@ -494,6 +494,39 @@ class DataDiscoveryController extends Controller
             'raw_data_sample' => array_slice($execResults['results'][0]['rows'] ?? [], 0, 5)
         ]);
     }
-}
+    public function getSearchAiHistory(Request $request, string $id)
+    {
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $history = \Illuminate\Support\Facades\DB::table('ai_specific_searches')
+            ->where('system_id', $system->id)
+            ->orderBy('created_at', 'desc')
+            ->limit(20)
+            ->get();
+            
+        $formatted = $history->map(function ($item) {
+            return [
+                'prompt' => $item->user_prompt,
+                'result' => [
+                    'queries_generated' => json_decode($item->generated_sql, true) ?? [],
+                    'found_rows' => $item->found_rows_count,
+                    'ai_insight' => json_decode($item->ai_analysis_insight, true),
+                    'raw_data_sample' => [] // Skipped to keep history lightweight
+                ],
+                'timestamp' => \Carbon\Carbon::parse($item->created_at)->timezone('Asia/Jakarta')->format('d/m/Y, H:i:s')
+            ];
+        });
+        
+        return response()->json(['data' => $formatted]);
+    }
 
+    public function clearSearchAiHistory(Request $request, string $id)
+    {
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+        \Illuminate\Support\Facades\DB::table('ai_specific_searches')
+            ->where('system_id', $system->id)
+            ->delete();
+            
+        return response()->json(['message' => 'History cleared']);
+    }
+}
 
