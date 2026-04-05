@@ -213,10 +213,15 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::prefix('data-discovery')->group(function () {
             Route::post('/{id}/test-connection', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'testConnection'])->middleware('permission:data_discovery,read');
             Route::post('/{id}/scan', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'triggerScan'])->middleware('permission:data_discovery,write');
+            // AI Deep Scan (replaces standard scan view with AI recommendations)
+            Route::post('/{id}/scan-ai', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'scanAi'])->middleware('permission:data_discovery,write');
             Route::get('/{id}/scan-details', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'scanDetails'])->middleware('permission:data_discovery,read');
             Route::put('/{id}/classify-column', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'updateColumnClassification'])->middleware('permission:data_discovery,write');
             Route::get('/{id}/ropa-links', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'ropaLinks'])->middleware('permission:data_discovery,read');
             Route::get('/search-dsr/subject', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'searchSubject'])->middleware('permission:data_discovery,read');
+            
+            // AI Specific Search (Text-to-SQL Flow)
+            Route::post('/{id}/search-ai', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'specificSearchAi'])->middleware('permission:data_discovery,read');
         });
         
         // Consent Logs & Items

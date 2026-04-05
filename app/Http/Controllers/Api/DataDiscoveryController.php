@@ -313,6 +313,130 @@ class DataDiscoveryController extends Controller
             'note'             => 'Actual row findings based on direct schema query.',
         ]);
     }
+
+    // ==========================================
+    // AI ENHANCEMENTS: DEEP SCAN & SPECIFIC SEARCH
+    // ==========================================
+
+    /**
+     * AI Deep Scan - Schema Analysis
+     */
+    public function scanAi(Request $request, string $id)
+    {
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+        
+        $schema = $system->scan_results ?? null;
+        if (!$schema || empty($schema['tables'])) {
+            return response()->json(['error' => 'Please perform a standard scan first before using AI Deep Scan.'], 400);
+        }
+
+        $aiService = new \App\Services\AiService($request->user()->org_id);
+        if (!$aiService->isAvailable()) {
+            return response()->json(['error' => 'AI Provider is not configured for this organization.'], 400);
+        }
+
+        // Simplify schema to fit context window: just table names, column names
+        $compactSchema = collect($schema['tables'])->map(function ($table) {
+            return [
+                'name' => $table['name'],
+                'columns' => collect($table['columns'])->map(fn($c) => $c['name'])->toArray(),
+            ];
+        })->toArray();
+
+        $aiResult = $aiService->dataDiscoveryAiDeepScan($compactSchema);
+        if (!$aiResult || !isset($aiResult['tables'])) {
+            return response()->json(['error' => 'AI analysis failed to return valid JSON.'], 500);
+        }
+
+        $system->update(['ai_scan_results' => $aiResult]);
+
+        AuditLog::log('data-discovery', $system->id, 'ai_scan_completed', [], 'system');
+
+        return response()->json([
+            'message' => 'AI Deep Scan completed successfully.',
+            'ai_scan_results' => $aiResult
+        ]);
+    }
+
+    /**
+     * AI Specific Search - Text to SQL Agentic Flow
+     */
+    public function specificSearchAi(Request $request, string $id)
+    {
+        $request->validate(['prompt' => 'required|string|min:5']);
+        $prompt = $request->prompt;
+
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $config = $system->connection_config ?? [];
+        $sourceType = $system->source_type;
+
+        $schema = $system->scan_results ?? null;
+        if (!$schema || empty($schema['tables'])) {
+            return response()->json(['error' => 'Please perform a standard scan first.'], 400);
+        }
+
+        $aiService = new \App\Services\AiService($request->user()->org_id, 'agent');
+        if (!$aiService->isAvailable()) {
+            return response()->json(['error' => 'AI Provider is not configured.'], 400);
+        }
+
+        // 1. Text to SQL
+        $compactSchema = collect($schema['tables'])->map(function ($table) {
+            return [
+                'name' => $table['name'],
+                'columns' => collect($table['columns'])->map(fn($c) => $c['name'])->toArray(),
+            ];
+        })->toArray();
+
+        $aiSqlResult = $aiService->generateSqlFromText($compactSchema, $prompt, $sourceType);
+        $queries = $aiSqlResult['sql_queries'] ?? [];
+
+        // 2. Execute SQL safely (assuming DatabaseScanner has a safe method, here simulating or passing raw if testing)
+        // Since we are building the plan, we'll execute safely using PDO via DatabaseScanner
+        $execResults = DatabaseScanner::executeRawReadQueries($sourceType, $config, $queries);
+        
+        if (isset($execResults['error'])) {
+            return response()->json(['error' => 'Database execution failed: ' . $execResults['error']], 500);
+        }
+
+        $totalRows = 0;
+        foreach ($execResults['results'] ?? [] as $res) {
+            $totalRows += count($res['rows'] ?? []);
+        }
+
+        // 3. AI Insight Analysis on Raw Data
+        $insightResult = null;
+        if ($totalRows > 0) {
+            // Flatten results safely
+            $allRows = [];
+            foreach ($execResults['results'] as $r) {
+                foreach ($r['rows'] as $row) {
+                    $allRows[] = array_merge(['_table' => $r['query']], $row);
+                }
+            }
+            $insightResult = $aiService->analyzeRawSubjectData($allRows, $prompt);
+        }
+
+        // 4. Save History
+        $history = \Illuminate\Support\Facades\DB::table('ai_specific_searches')->insertGetId([
+            'id' => \Illuminate\Support\Str::uuid(),
+            'system_id' => $system->id,
+            'user_prompt' => $prompt,
+            'generated_sql' => json_encode($queries),
+            'found_rows_count' => $totalRows,
+            'ai_analysis_insight' => json_encode($insightResult),
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        return response()->json([
+            'message' => 'Search completed.',
+            'queries_generated' => $queries,
+            'found_rows' => $totalRows,
+            'ai_insight' => $insightResult,
+            'raw_data_sample' => array_slice($execResults['results'][0]['rows'] ?? [], 0, 5)
+        ]);
+    }
 }
 
 
