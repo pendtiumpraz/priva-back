@@ -67,7 +67,7 @@ class IntegrationController extends Controller
                 return response()->json([
                     'success' => false,
                     'is_missing_config' => true,
-                    'message' => 'Telegram Bot Token & Chat ID belum dikonfigurasi. Silahkan atur di integrasi terlebih dahulu.',
+                    'message' => 'Telegram Bot Token & Chat ID belum dikonfigurasi. Silakan atur di integrasi terlebih dahulu.',
                 ], 400);
             }
 
@@ -123,7 +123,7 @@ class IntegrationController extends Controller
                 return response()->json([
                     'success' => false,
                     'is_missing_config' => true,
-                    'message' => 'SIEM Webhook URL belum dikonfigurasi. Silahkan atur di integrasi terlebih dahulu.',
+                    'message' => 'SIEM Webhook URL belum dikonfigurasi. Silakan atur di integrasi terlebih dahulu.',
                 ], 400);
             }
             

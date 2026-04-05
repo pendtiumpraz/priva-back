@@ -484,7 +484,7 @@ class LicenseController extends Controller
 
         if (!$license) {
             $msg = $user->role === 'superadmin'
-                ? 'Belum ada platform license. Silahkan aktivasi license.'
+                ? 'Belum ada platform license. Silakan aktivasi license.'
                 : 'Tenant ini belum memiliki license aktif. Hubungi administrator.';
             return response()->json([
                 'licensed' => false,
@@ -498,7 +498,7 @@ class LicenseController extends Controller
             $license->update(['status' => 'expired']);
             return response()->json([
                 'licensed' => false,
-                'message' => 'License sudah expired. Silahkan perpanjang.',
+                'message' => 'License sudah expired. Silakan perpanjang.',
                 'expired_at' => $license->getTrustedExpiresAt(),
                 'role' => $user->role,
             ]);

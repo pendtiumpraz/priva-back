@@ -30,7 +30,7 @@ class AiChatController extends Controller
         $providerConfig = AiProviderController::getActiveConfig($orgId, 'chat');
         
         if (!$providerConfig || empty($providerConfig['api_key'])) {
-            return response()->json(['message' => 'API key belum dikonfigurasi. Silahkan set AI Provider terlebih dahulu.'], 503);
+            return response()->json(['message' => 'API key belum dikonfigurasi. Silakan set AI Provider terlebih dahulu.'], 503);
         }
 
         $apiKey = $providerConfig['api_key'];
@@ -241,7 +241,7 @@ PROMPT;
         }
 
         $request->validate(['content' => 'required|string']);
-        AppSetting::set('knowledge_base', $request->content);
+        AppSetting::set('knowledge_base', $request->input('content'));
 
         return response()->json(['message' => 'Knowledge base updated']);
     }

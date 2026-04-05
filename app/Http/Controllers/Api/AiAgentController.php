@@ -52,7 +52,7 @@ class AiAgentController extends Controller
         }
 
         if (!$providerConfig || empty($providerConfig['api_key'])) {
-            return response()->json(['message' => 'API key belum dikonfigurasi. Silahkan set AI Provider terlebih dahulu.'], 503);
+            return response()->json(['message' => 'API key belum dikonfigurasi. Silakan set AI Provider terlebih dahulu.'], 503);
         }
 
         $apiKey = $providerConfig['api_key'];
