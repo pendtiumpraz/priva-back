@@ -335,15 +335,30 @@ class DataDiscoveryController extends Controller
             return response()->json(['error' => 'AI Provider is not configured for this server.'], 400);
         }
 
-        // Simplify schema to fit context window: just table names, column names
+        // AI TIMEOUT FIX: Only send columns ALREADY flagged as PII by the basic scanner to the AI
+        // This drops the payload from e.g., 400 columns to 50 columns, preventing cURL API timeout
         $compactSchema = collect($schema['tables'])->map(function ($table) {
+            $piiCols = collect($table['columns'])->filter(function ($c) {
+                return !empty($c['pii_detected']);
+            })->map(function ($c) {
+                return [
+                    'name' => $c['name'], 
+                    'type' => $c['type'] ?? ''
+                ];
+            })->values()->toArray();
+
+            if (empty($piiCols)) return null;
+
             return [
                 'name' => $table['name'],
-                'columns' => collect($table['columns'])->map(function ($c) {
-                    return ['name' => $c['name'], 'type' => $c['type'] ?? ''];
-                })->toArray(),
+                'columns' => $piiCols,
             ];
-        })->toArray();
+        })->filter()->values()->toArray();
+
+        // If the regex scanner found absolutely no PII, AI doesn't need to do a deep scan
+        if (empty($compactSchema)) {
+            return response()->json(['error' => 'Tidak ada kolom yang berpotensi PII dari Standard Scan. AI Deep Scan tidak diperlukan.'], 400);
+        }
 
         $aiResult = $aiService->dataDiscoveryAiDeepScan($compactSchema);
         if (!$aiResult || !isset($aiResult['tables'])) {
