@@ -225,6 +225,11 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::get('/{id}/search-ai-history', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'getSearchAiHistory'])->middleware('permission:data_discovery,read');
             Route::delete('/{id}/search-ai-history', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'clearSearchAiHistory'])->middleware('permission:data_discovery,write');
             Route::delete('/{id}/search-ai-history/{historyId}', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'deleteSearchAiHistory'])->middleware('permission:data_discovery,write');
+
+            // Protection Assessment (Manual + AI)
+            Route::get('/{id}/protection-assessment', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'getProtectionAssessment'])->middleware('permission:data_discovery,read');
+            Route::put('/{id}/protection-assessment', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'saveProtectionAssessment'])->middleware('permission:data_discovery,write');
+            Route::post('/{id}/ai-protection-assessment', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'aiProtectionAssessment'])->middleware('permission:data_discovery,write');
         });
         
         // Consent Logs & Items

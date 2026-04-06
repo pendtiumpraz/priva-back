@@ -577,5 +577,155 @@ class DataDiscoveryController extends Controller
             
         return response()->json(['message' => 'History item deleted']);
     }
-}
 
+    // ==========================================
+    // PROTECTION ASSESSMENT: Manual + AI
+    // ==========================================
+
+    /**
+     * Get saved protection assessments for a system
+     */
+    public function getProtectionAssessment(Request $request, string $id)
+    {
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+        return response()->json(['data' => $system->protection_assessments ?? []]);
+    }
+
+    /**
+     * Save protection assessment (manual checklist per column)
+     */
+    public function saveProtectionAssessment(Request $request, string $id)
+    {
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+
+        $request->validate([
+            'column_key' => 'required|string',       // e.g. "users.email"
+            'assessments' => 'required|array',
+        ]);
+
+        $columnKey = $request->input('column_key');
+        $assessments = $request->input('assessments');
+
+        $existing = $system->protection_assessments ?? [];
+        $existing[$columnKey] = array_merge($assessments, [
+            'assessed_at' => now()->toISOString(),
+            'assessed_by' => $request->user()->id,
+            'assessed_by_name' => $request->user()->name,
+            'source' => 'manual',
+        ]);
+
+        $system->update(['protection_assessments' => $existing]);
+
+        AuditLog::log('data-discovery', $system->id, 'protection_assessed', [
+            'column' => $columnKey,
+            'source' => 'manual',
+        ], 'manual');
+
+        return response()->json([
+            'message' => 'Protection assessment saved',
+            'data' => $existing,
+        ]);
+    }
+
+    /**
+     * AI Protection Assessment — auto-analyze PII columns and recommend protections
+     */
+    public function aiProtectionAssessment(Request $request, string $id)
+    {
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+
+        $schema = $system->scan_results ?? null;
+        if (!$schema || empty($schema['tables'])) {
+            return response()->json(['error' => 'Please perform a standard scan first.'], 400);
+        }
+
+        $aiService = new \App\Services\AiService($request->user()->org_id);
+        if (!$aiService->isAvailable()) {
+            return response()->json(['error' => 'AI Provider is not configured.'], 400);
+        }
+
+        // Collect PII columns for AI analysis
+        $piiColumns = [];
+        foreach ($schema['tables'] as $table) {
+            foreach ($table['columns'] as $col) {
+                if (!empty($col['pii_detected'])) {
+                    $piiColumns[] = [
+                        'key' => $table['name'] . '.' . $col['name'],
+                        'table' => $table['name'],
+                        'column' => $col['name'],
+                        'type' => $col['type'] ?? 'unknown',
+                        'classification' => $col['classification'] ?? '',
+                        'pdp_category' => $col['pdp_category'] ?? '',
+                    ];
+                }
+            }
+        }
+
+        if (empty($piiColumns)) {
+            return response()->json(['error' => 'No PII columns found to assess.'], 400);
+        }
+
+        // Build AI prompt using AiService->ask() pattern
+        $colList = '';
+        foreach ($piiColumns as $col) {
+            $colList .= "- {$col['key']} (type: {$col['type']}, classification: {$col['classification']}, pdp: {$col['pdp_category']})\n";
+        }
+
+        $systemPrompt = "Kamu adalah pakar keamanan data (Data Security Expert) dan DPO ahli UU PDP Indonesia.\n"
+            . "Tugasmu menganalisis kolom-kolom PII dan merekomendasikan proteksi yang diperlukan.\n"
+            . "Output WAJIB berupa JSON valid. JANGAN tambahkan teks apapun di luar JSON.\n\n"
+            . "FORMAT OUTPUT JSON (key = \"table.column\", value = object):\n"
+            . json_encode([
+                'users.email' => [
+                    'is_masked_frontend' => true,
+                    'is_encrypted_db' => false,
+                    'has_access_control' => true,
+                    'is_redacted_api' => true,
+                    'has_audit_log' => true,
+                    'has_retention_policy' => false,
+                    'recommendation' => 'Penjelasan singkat dalam Bahasa Indonesia',
+                ]
+            ], JSON_PRETTY_PRINT);
+
+        $userPrompt = "Analisis kolom PII dari database \"{$system->name}\":\n{$colList}\n"
+            . "Untuk SETIAP kolom di atas, rekomendasikan proteksi:\n"
+            . "- is_masked_frontend: Harus dimasking di UI?\n"
+            . "- is_encrypted_db: Harus dienkripsi di database?\n"
+            . "- has_access_control: Akses dibatasi per role?\n"
+            . "- is_redacted_api: API response harus diredaksi?\n"
+            . "- has_audit_log: Akses dicatat di audit log?\n"
+            . "- has_retention_policy: Perlu auto-delete setelah retensi?\n"
+            . "- recommendation: Alasan dalam Bahasa Indonesia\n\n"
+            . "Jawab HANYA JSON valid.";
+
+        $parsed = $aiService->ask($systemPrompt, $userPrompt, 3000);
+
+        if (!$parsed || isset($parsed['raw'])) {
+            return response()->json(['error' => 'AI returned invalid format. Please try again.'], 500);
+        }
+
+        // Save AI assessments to database
+        $existing = $system->protection_assessments ?? [];
+        foreach ($parsed as $columnKey => $assessment) {
+            if (!is_array($assessment)) continue;
+            $existing[$columnKey] = array_merge($assessment, [
+                'assessed_at' => now()->toISOString(),
+                'assessed_by' => $request->user()->id,
+                'assessed_by_name' => $request->user()->name,
+                'source' => 'ai',
+            ]);
+        }
+
+        $system->update(['protection_assessments' => $existing]);
+
+        AuditLog::log('data-discovery', $system->id, 'ai_protection_assessed', [
+            'columns_assessed' => count($parsed),
+        ], 'system');
+
+        return response()->json([
+            'message' => 'AI Protection Assessment completed',
+            'data' => $existing,
+            'ai_result' => $parsed,
+        ]);
+    }
+}
