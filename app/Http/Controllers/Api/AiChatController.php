@@ -162,8 +162,10 @@ PROMPT;
                 $headers[$chatAuthHeader] = $apiKey;
             }
 
-            $response = Http::timeout(60)
-                ->connectTimeout(15)
+            $response = Http::withOptions([
+                'timeout' => 60,
+                'connect_timeout' => 15,
+            ])
                 ->withoutVerifying()
                 ->withHeaders($headers)
                 ->post($chatBaseUrl . '/chat/completions', [
