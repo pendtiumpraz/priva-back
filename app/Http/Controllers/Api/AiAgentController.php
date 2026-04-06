@@ -208,7 +208,13 @@ PROMPT;
                     }
 
                     $fullUrl = $agentBaseUrl . '/chat/completions';
-                    $response = Http::timeout(60)
+
+                    // Keepalive: emit heartbeat before AI API call to prevent QUIC idle timeout
+                    echo json_encode(['type' => 'heartbeat', 'iteration' => $iteration]) . "\n";
+                    if (ob_get_level() > 0) ob_flush(); flush();
+
+                    $response = Http::timeout(90)
+                        ->connectTimeout(15)
                         ->withoutVerifying()
                         ->withHeaders($headers)
                         ->post($fullUrl, $payload);
