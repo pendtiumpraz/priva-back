@@ -93,7 +93,7 @@ class LogAnalyzerController extends Controller
                       "\n4. 'file_yang_harus_diperiksa' (array of strings - path/nama file yang kemungkinan menyebabkan error jika ada)." .
                       "\n\nBerikut lognya:\n" . substr($rawLogs, -8000); // Send the last 8000 chars roughly
 
-            $aiService = new AiService();
+            $aiService = (new AiService())->setLocale($request->user()->locale ?? 'id');
             // Assuming tenant configuration does not strictly apply to superadmin, but we need an active provider
             $response = $aiService->ask($prompt, "", 2000);
 

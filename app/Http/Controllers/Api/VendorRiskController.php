@@ -131,7 +131,7 @@ class VendorRiskController extends Controller
         }
 
         try {
-            $aiService = new AiService($org->id);
+            $aiService = (new AiService($org->id))->setLocale($request->user()->locale ?? 'id');
             $response = $aiService->vendorExtractor($request->url);
 
             if (!$response) {
@@ -165,7 +165,7 @@ class VendorRiskController extends Controller
         }
 
         try {
-            $aiService = new AiService($org->id);
+            $aiService = (new AiService($org->id))->setLocale($request->user()->locale ?? 'id');
             $response = $aiService->vendorQuestionnaire($request->extracted_data);
 
             if (!$response || !isset($response['questions'])) {
@@ -204,7 +204,7 @@ class VendorRiskController extends Controller
         try {
             DB::beginTransaction();
 
-            $aiService = new AiService($orgId);
+            $aiService = (new AiService($orgId))->setLocale($request->user()->locale ?? 'id');
             $response = $aiService->vendorRiskAssessor($request->answers);
 
             if (!$response || !isset($response['score'])) {

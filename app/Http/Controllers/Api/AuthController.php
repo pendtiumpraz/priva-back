@@ -147,4 +147,20 @@ class AuthController extends Controller
             'settings' => $settings,
         ]);
     }
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $fields = $request->validate([
+            'name' => 'nullable|string|max:255',
+            'phone' => 'nullable|string|max:20',
+            'locale' => 'nullable|string|in:id,en',
+        ]);
+
+        $user->update($fields);
+
+        return response()->json([
+            'message' => 'Profile updated successfully.',
+            'user' => $user->load('organization'),
+        ]);
+    }
 }

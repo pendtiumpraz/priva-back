@@ -15,6 +15,7 @@ class AiService
     private string $baseUrl;
     private string $authHeader;
     private string $authPrefix;
+    private string $locale = 'id';
 
     /**
      * Initialize AiService with the active provider config.
@@ -48,6 +49,26 @@ class AiService
     }
 
     /**
+     * Set the user's preferred locale for AI responses.
+     */
+    public function setLocale(string $locale): self
+    {
+        $this->locale = in_array($locale, ['id', 'en']) ? $locale : 'id';
+        return $this;
+    }
+
+    /**
+     * Get a language directive to prepend to system prompts.
+     */
+    private function getLanguageDirective(): string
+    {
+        if ($this->locale === 'en') {
+            return "IMPORTANT: You MUST reply entirely in English. All text, labels, and content must be in English.\n\n";
+        }
+        return ''; // Default is Indonesian, prompts are already in ID
+    }
+
+    /**
      * Send a prompt to the active LLM provider and get structured JSON response
      */
     public function ask(string $systemPrompt, string $userPrompt, int $maxTokens = 2000): ?array
@@ -72,7 +93,7 @@ class AiService
                 ->post($this->baseUrl . '/chat/completions', [
                     'model' => $this->model,
                     'messages' => [
-                        ['role' => 'system', 'content' => $systemPrompt],
+                        ['role' => 'system', 'content' => $this->getLanguageDirective() . $systemPrompt],
                         ['role' => 'user', 'content' => $userPrompt],
                     ],
                     'temperature' => 0.3,

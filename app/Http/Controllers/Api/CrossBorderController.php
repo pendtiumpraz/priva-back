@@ -100,7 +100,7 @@ class CrossBorderController extends Controller
         if ($hasAi) {
             try {
                 $vendorData = ['tia_answers' => $answers, 'transfer_purpose' => $transfer->transfer_purpose];
-                $aiService = new AiService($user->org_id);
+                $aiService = (new AiService($user->org_id))->setLocale($user->locale ?? 'id');
                 $result = $aiService->vendorTia($vendorData, $transfer->destination_country);
 
                 if ($result) {

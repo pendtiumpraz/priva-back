@@ -147,7 +147,7 @@ class AiFeatureController extends Controller
         $assessment = GapAssessment::findOrFail($id);
         $result = GapAssessment::calculateScore($assessment->answers ?? []);
 
-        $ai = new AiService($request->user()->org_id);
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
         if (!$ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
@@ -175,7 +175,7 @@ class AiFeatureController extends Controller
         if (!$this->checkAiLicense($request)) return $this->denyBasic();
         
         $comparison = \App\Models\GapComparison::findOrFail($id);
-        $ai = new AiService($request->user()->org_id);
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
         if (!$ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
@@ -206,7 +206,7 @@ class AiFeatureController extends Controller
         if ($creditErr) return $creditErr;
 
         $ropa = Ropa::findOrFail($id);
-        $ai = new AiService($request->user()->org_id);
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
         if (!$ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
@@ -240,7 +240,7 @@ class AiFeatureController extends Controller
         if ($creditErr) return $creditErr;
 
         $dpia = Dpia::findOrFail($id);
-        $ai = new AiService($request->user()->org_id);
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
         if (!$ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
@@ -274,7 +274,7 @@ class AiFeatureController extends Controller
         if ($creditErr) return $creditErr;
 
         $breach = BreachIncident::findOrFail($id);
-        $ai = new AiService($request->user()->org_id);
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
         if (!$ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
@@ -307,7 +307,7 @@ class AiFeatureController extends Controller
         if ($creditErr) return $creditErr;
 
         $dsr = DsrRequest::findOrFail($id);
-        $ai = new AiService($request->user()->org_id);
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
         if (!$ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
@@ -341,7 +341,7 @@ class AiFeatureController extends Controller
             'domain' => 'nullable|string',
         ]);
 
-        $ai = new AiService($request->user()->org_id);
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
         if (!$ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
@@ -389,7 +389,7 @@ class AiFeatureController extends Controller
             'total_simulations' => DB::table('breach_simulations')->where('org_id', $orgId)->whereNull('deleted_at')->count(),
         ];
 
-        $ai = new AiService($request->user()->org_id);
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
         if (!$ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
@@ -421,7 +421,7 @@ class AiFeatureController extends Controller
             'question_count' => 'nullable|integer|min:3|max:10',
         ]);
 
-        $ai = new AiService($request->user()->org_id);
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
         if (!$ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
@@ -453,7 +453,7 @@ class AiFeatureController extends Controller
 
         $request->validate(['activity_name' => 'required|string|max:500']);
 
-        $ai = new AiService($request->user()->org_id);
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
         if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
 
         $context = TenantContextService::buildContext($request->user()->org_id);
@@ -470,7 +470,7 @@ class AiFeatureController extends Controller
 
         $request->validate(['description' => 'required|string|max:500']);
 
-        $ai = new AiService($request->user()->org_id);
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
         if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
 
         $context = TenantContextService::buildContext($request->user()->org_id);
@@ -487,7 +487,7 @@ class AiFeatureController extends Controller
 
         $request->validate(['incident_title' => 'required|string|max:500']);
 
-        $ai = new AiService($request->user()->org_id);
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
         if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
 
         $context = TenantContextService::buildContext($request->user()->org_id);
@@ -507,7 +507,7 @@ class AiFeatureController extends Controller
             'requester_name' => 'required|string|max:255',
         ]);
 
-        $ai = new AiService($request->user()->org_id);
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
         if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
 
         $context = TenantContextService::buildContext($request->user()->org_id);
@@ -530,7 +530,7 @@ class AiFeatureController extends Controller
 
         $existingItems = DB::table('consent_items')->where('collection_point_id', $id)->pluck('title')->toArray();
 
-        $ai = new AiService($request->user()->org_id);
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
         if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
 
         $context = TenantContextService::buildContext($request->user()->org_id);
@@ -557,7 +557,7 @@ class AiFeatureController extends Controller
             return response()->json(['message' => 'Tidak ada consent items untuk diaudit. Silakan tambahkan minimal satu item.', 'status' => 'error'], 400);
         }
 
-        $ai = new AiService($request->user()->org_id);
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
         if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
 
         $context = TenantContextService::buildContext($request->user()->org_id);
@@ -596,7 +596,7 @@ class AiFeatureController extends Controller
         $riskProfile = $request->input('risk_profile', 'medium');
         $questionCount = min((int) $request->input('question_count', 5), 10);
 
-        $ai = new AiService($request->user()->org_id);
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
         if (!$ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
@@ -662,7 +662,7 @@ class AiFeatureController extends Controller
         if ($creditErr) return $creditErr;
 
         $sim = BreachSimulation::findOrFail($id);
-        $ai = new AiService($request->user()->org_id);
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
         if (!$ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
@@ -706,7 +706,7 @@ class AiFeatureController extends Controller
         $system = DB::table('information_systems')->where('id', $id)->where('org_id', $request->user()->org_id)->first();
         if (!$system) return response()->json(['message' => 'System not found'], 404);
 
-        $ai = new AiService();
+        $ai = (new AiService())->setLocale($request->user()->locale ?? 'id');
         if (!$ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
@@ -812,7 +812,7 @@ class AiFeatureController extends Controller
             'contract_type' => 'nullable|string',
         ]);
 
-        $ai = new AiService($request->user()->org_id);
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
         if (!$ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }

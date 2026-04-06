@@ -34,6 +34,7 @@ class User extends Authenticatable
         'is_active',
         'settings',
         'tenant_role_id',
+        'locale',
     ];
 
     /**
