@@ -407,5 +407,14 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::post('/system/update-backend', [\App\Http\Controllers\Api\SystemUpdateController::class, 'updateBackend']);
         Route::post('/system/checkout-version', [\App\Http\Controllers\Api\SystemUpdateController::class, 'checkoutVersion']);
 
+        // =============================================
+        // API Keys (Developer/Tenant Integration)
+        // =============================================
+        Route::prefix('api-keys')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\ApiKeyController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\ApiKeyController::class, 'store']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\ApiKeyController::class, 'destroy']);
+        });
+
     });
 
