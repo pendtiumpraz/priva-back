@@ -213,9 +213,18 @@ PROMPT;
                     echo json_encode(['type' => 'heartbeat', 'iteration' => $iteration]) . "\n";
                     if (ob_get_level() > 0) ob_flush(); flush();
 
+                    $lastHeartbeat = microtime(true);
+
                     $response = Http::withOptions([
-                        'timeout' => 90,
-                        'connect_timeout' => 15,
+                        'timeout' => 55,
+                        'connect_timeout' => 5,
+                        'progress' => function() use (&$lastHeartbeat) {
+                            if (microtime(true) - $lastHeartbeat > 3.0) {
+                                echo "\n";
+                                if (ob_get_level() > 0) ob_flush(); flush();
+                                $lastHeartbeat = microtime(true);
+                            }
+                        }
                     ])
                         ->withoutVerifying()
                         ->withHeaders($headers)
