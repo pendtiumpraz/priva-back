@@ -237,7 +237,7 @@ class AiProviderController extends Controller
     public function setActiveModel(Request $request)
     {
         $request->validate([
-            'mode' => 'required|in:chat,agent',
+            'mode' => 'required|in:chat,agent,document',
             'provider_id' => 'required|integer',
             'model_id' => 'required|integer',
         ]);
@@ -271,9 +271,11 @@ class AiProviderController extends Controller
             return response()->json(['error' => 'API key belum disimpan untuk provider ini'], 400);
         }
 
-        $fields = $mode === 'chat'
-            ? ['chat_provider_id' => $request->provider_id, 'chat_model_id' => $request->model_id]
-            : ['agent_provider_id' => $request->provider_id, 'agent_model_id' => $request->model_id];
+        $fields = match($mode) {
+            'chat'     => ['chat_provider_id' => $request->provider_id, 'chat_model_id' => $request->model_id],
+            'agent'    => ['agent_provider_id' => $request->provider_id, 'agent_model_id' => $request->model_id],
+            'document' => ['document_provider_id' => $request->provider_id, 'document_model_id' => $request->model_id],
+        };
 
         // Check if exists
         $selQuery = DB::table('ai_active_selections');
@@ -343,6 +345,10 @@ class AiProviderController extends Controller
                 $updates['agent_provider_id'] = null;
                 $updates['agent_model_id'] = null;
             }
+            if (isset($selection->document_provider_id) && $selection->document_provider_id == $request->provider_id) {
+                $updates['document_provider_id'] = null;
+                $updates['document_model_id'] = null;
+            }
             if (!empty($updates)) {
                 $updateQuery = DB::table('ai_active_selections');
                 if ($orgId) {
@@ -404,8 +410,16 @@ class AiProviderController extends Controller
 
         if (!$selection) return null;
 
-        $providerId = $mode === 'agent' ? $selection->agent_provider_id : $selection->chat_provider_id;
-        $modelId = $mode === 'agent' ? $selection->agent_model_id : $selection->chat_model_id;
+        $providerId = match($mode) {
+            'agent'    => $selection->agent_provider_id,
+            'document' => $selection->document_provider_id ?? $selection->chat_provider_id,
+            default    => $selection->chat_provider_id,
+        };
+        $modelId = match($mode) {
+            'agent'    => $selection->agent_model_id,
+            'document' => $selection->document_model_id ?? $selection->chat_model_id,
+            default    => $selection->chat_model_id,
+        };
 
         if (!$providerId || !$modelId) return null;
 

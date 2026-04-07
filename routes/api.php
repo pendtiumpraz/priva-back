@@ -416,5 +416,30 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::delete('/{id}', [\App\Http\Controllers\Api\ApiKeyController::class, 'destroy']);
         });
 
+        // =============================================
+        // Per-Tenant Cloud Storage Settings
+        // =============================================
+        Route::prefix('storage-settings')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\StorageSettingsController::class, 'show']);
+            Route::put('/', [\App\Http\Controllers\Api\StorageSettingsController::class, 'update']);
+            Route::post('/test', [\App\Http\Controllers\Api\StorageSettingsController::class, 'testConnection']);
+            Route::delete('/', [\App\Http\Controllers\Api\StorageSettingsController::class, 'destroy']);
+        });
+
+        // =============================================
+        // Document Intelligence (Import & AI Mapping)
+        // =============================================
+        Route::prefix('documents')->group(function () {
+            Route::post('/upload', [\App\Http\Controllers\Api\DocumentImportController::class, 'upload']);
+            Route::post('/batch-upload', [\App\Http\Controllers\Api\DocumentImportController::class, 'batchUpload']);
+            Route::get('/imports', [\App\Http\Controllers\Api\DocumentImportController::class, 'index']);
+            Route::get('/imports/{id}', [\App\Http\Controllers\Api\DocumentImportController::class, 'show']);
+            Route::put('/imports/{id}/approve', [\App\Http\Controllers\Api\DocumentImportController::class, 'approve']);
+            Route::put('/imports/{id}/edit-mapping', [\App\Http\Controllers\Api\DocumentImportController::class, 'editMapping']);
+            Route::delete('/imports/{id}', [\App\Http\Controllers\Api\DocumentImportController::class, 'destroy']);
+            Route::get('/batches', [\App\Http\Controllers\Api\DocumentImportController::class, 'batches']);
+            Route::get('/batches/{id}', [\App\Http\Controllers\Api\DocumentImportController::class, 'batchDetail']);
+        });
+
     });
 
