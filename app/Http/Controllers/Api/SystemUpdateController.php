@@ -107,6 +107,11 @@ class SystemUpdateController extends Controller
         
         // Disable execution time limit for this request
         set_time_limit(300);
+
+        // Ensure COMPOSER_HOME is set (Linux PHP-FPM often has no HOME)
+        $homeDir = getenv('HOME') ?: (function_exists('posix_getpwuid') ? posix_getpwuid(posix_geteuid())['dir'] : '/tmp');
+        putenv("HOME={$homeDir}");
+        putenv("COMPOSER_HOME={$homeDir}/.composer");
         
         $output = [];
 
@@ -117,7 +122,7 @@ class SystemUpdateController extends Controller
             $output[] = $gitOutput ?? "No output from git";
 
             // Composer install
-            $composerOutput = shell_exec("export COMPOSER_HOME=\$HOME/.composer && cd {$basePath} && composer install --no-dev --optimize-autoloader 2>&1");
+            $composerOutput = shell_exec("cd {$basePath} && HOME={$homeDir} COMPOSER_HOME={$homeDir}/.composer composer install --no-dev --optimize-autoloader 2>&1");
             $output[] = "\n--- COMPOSER INSTALL ---";
             $output[] = $composerOutput ?? "No output from composer";
 
@@ -203,7 +208,8 @@ class SystemUpdateController extends Controller
             $output[] = "--- GIT RESET TO {$request->commit_hash} ---";
             $output[] = $resetOutput ?? "No output";
 
-            $composerOutput = shell_exec("export COMPOSER_HOME=\$HOME/.composer && cd {$basePath} && composer install --no-dev --optimize-autoloader 2>&1");
+            $homeDir = getenv('HOME') ?: (function_exists('posix_getpwuid') ? posix_getpwuid(posix_geteuid())['dir'] : '/tmp');
+            $composerOutput = shell_exec("cd {$basePath} && HOME={$homeDir} COMPOSER_HOME={$homeDir}/.composer composer install --no-dev --optimize-autoloader 2>&1");
             $output[] = "\n--- COMPOSER INSTALL ---";
             $output[] = $composerOutput ?? "No output";
 
