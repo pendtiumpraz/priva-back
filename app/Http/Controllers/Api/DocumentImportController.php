@@ -25,7 +25,7 @@ class DocumentImportController extends Controller
     public function upload(Request $request)
     {
         $request->validate([
-            'file' => 'required|file|max:51200|mimes:docx,xlsx,xls,csv', // 50MB max
+            'file' => 'required|file|max:51200|mimes:docx,xlsx,xls,csv,pdf', // 50MB max
             'target_module' => 'required|in:ropa,dpia',
         ]);
 
@@ -77,7 +77,7 @@ class DocumentImportController extends Controller
     {
         $request->validate([
             'files' => 'required|array|min:1|max:20',
-            'files.*' => 'file|max:51200|mimes:docx,xlsx,xls,csv',
+            'files.*' => 'file|max:51200|mimes:docx,xlsx,xls,csv,pdf',
             'target_module' => 'required|in:ropa,dpia',
             'batch_name' => 'required|string|max:255',
         ]);

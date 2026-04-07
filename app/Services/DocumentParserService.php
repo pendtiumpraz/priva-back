@@ -17,6 +17,7 @@ class DocumentParserService
             'docx' => $this->parseDocx($filePath),
             'xlsx', 'xls' => $this->parseXlsx($filePath),
             'csv' => $this->parseCsv($filePath),
+            'pdf' => $this->parsePdf($filePath),
             default => throw new \InvalidArgumentException("Tipe file '{$fileType}' belum didukung."),
         };
     }
@@ -203,6 +204,57 @@ class DocumentParserService
                 'row_count' => count($rows),
                 'column_count' => count($headers),
                 'character_count' => mb_strlen($rawText),
+            ],
+        ];
+    }
+
+    /**
+     * Parse a PDF file using smalot/pdfparser.
+     */
+    private function parsePdf(string $filePath): array
+    {
+        $parser = new \Smalot\PdfParser\Parser();
+        $pdf = $parser->parseFile($filePath);
+
+        $sections = [];
+        $rawText = '';
+        $pages = $pdf->getPages();
+
+        foreach ($pages as $idx => $page) {
+            $pageText = $page->getText();
+            $pageNum = $idx + 1;
+
+            if (trim($pageText)) {
+                $sections[] = [
+                    'title' => "Halaman {$pageNum}",
+                    'content' => trim($pageText),
+                ];
+                $rawText .= "=== Halaman {$pageNum} ===\n{$pageText}\n\n";
+            }
+        }
+
+        // Also try to extract document metadata
+        $pdfMeta = [];
+        try {
+            $details = $pdf->getDetails();
+            $pdfMeta = [
+                'title' => $details['Title'] ?? null,
+                'author' => $details['Author'] ?? null,
+                'creator' => $details['Creator'] ?? null,
+                'pages' => $details['Pages'] ?? count($pages),
+            ];
+        } catch (\Exception $e) {}
+
+        return [
+            'sections' => $sections,
+            'tables' => [], // PDF table extraction is limited without OCR
+            'raw_text' => trim($rawText),
+            'metadata' => [
+                'format' => 'pdf',
+                'page_count' => count($pages),
+                'section_count' => count($sections),
+                'character_count' => mb_strlen($rawText),
+                'pdf_metadata' => $pdfMeta,
             ],
         ];
     }
