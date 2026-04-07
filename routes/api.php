@@ -441,5 +441,35 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::get('/batches/{id}', [\App\Http\Controllers\Api\DocumentImportController::class, 'batchDetail']);
         });
 
+        // =============================================
+        // API Hub (Key Management, Webhooks, Usage)
+        // =============================================
+        Route::prefix('api-hub')->group(function () {
+            Route::get('/docs', [\App\Http\Controllers\Api\ApiHubController::class, 'docs']);
+            // API Keys
+            Route::get('/keys', [\App\Http\Controllers\Api\ApiHubController::class, 'listKeys']);
+            Route::post('/keys', [\App\Http\Controllers\Api\ApiHubController::class, 'createKey']);
+            Route::put('/keys/{id}/toggle', [\App\Http\Controllers\Api\ApiHubController::class, 'toggleKey']);
+            Route::delete('/keys/{id}', [\App\Http\Controllers\Api\ApiHubController::class, 'deleteKey']);
+            // Usage
+            Route::get('/usage', [\App\Http\Controllers\Api\ApiHubController::class, 'usage']);
+            // Webhooks
+            Route::get('/webhooks', [\App\Http\Controllers\Api\ApiHubController::class, 'listWebhooks']);
+            Route::post('/webhooks', [\App\Http\Controllers\Api\ApiHubController::class, 'createWebhook']);
+            Route::put('/webhooks/{id}/toggle', [\App\Http\Controllers\Api\ApiHubController::class, 'toggleWebhook']);
+            Route::delete('/webhooks/{id}', [\App\Http\Controllers\Api\ApiHubController::class, 'deleteWebhook']);
+        });
+
     });
 
+// =============================================
+// Public Partner API v1 (authenticated via X-Api-Key)
+// =============================================
+Route::prefix('v1')->middleware(\App\Http\Middleware\AuthenticatePartnerApi::class)->group(function () {
+    // Breach Management
+    Route::get('/breach/stats', [\App\Http\Controllers\Api\V1\BreachApiController::class, 'stats']);
+    Route::get('/breach', [\App\Http\Controllers\Api\V1\BreachApiController::class, 'index']);
+    Route::get('/breach/{id}', [\App\Http\Controllers\Api\V1\BreachApiController::class, 'show']);
+    Route::post('/breach', [\App\Http\Controllers\Api\V1\BreachApiController::class, 'store']);
+    Route::put('/breach/{id}', [\App\Http\Controllers\Api\V1\BreachApiController::class, 'update']);
+});
