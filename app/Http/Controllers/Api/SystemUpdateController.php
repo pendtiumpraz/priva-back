@@ -122,7 +122,7 @@ class SystemUpdateController extends Controller
             $output[] = $gitOutput ?? "No output from git";
 
             // Composer install
-            $composerOutput = shell_exec("cd {$basePath} && HOME={$homeDir} COMPOSER_HOME={$homeDir}/.composer composer install --no-dev --optimize-autoloader 2>&1");
+            $composerOutput = shell_exec("cd {$basePath} && HOME={$homeDir} COMPOSER_HOME={$homeDir}/.composer composer install --no-dev --optimize-autoloader --ignore-platform-reqs 2>&1");
             $output[] = "\n--- COMPOSER INSTALL ---";
             $output[] = $composerOutput ?? "No output from composer";
 
@@ -209,7 +209,7 @@ class SystemUpdateController extends Controller
             $output[] = $resetOutput ?? "No output";
 
             $homeDir = getenv('HOME') ?: (function_exists('posix_getpwuid') ? posix_getpwuid(posix_geteuid())['dir'] : '/tmp');
-            $composerOutput = shell_exec("cd {$basePath} && HOME={$homeDir} COMPOSER_HOME={$homeDir}/.composer composer install --no-dev --optimize-autoloader 2>&1");
+            $composerOutput = shell_exec("cd {$basePath} && HOME={$homeDir} COMPOSER_HOME={$homeDir}/.composer composer install --no-dev --optimize-autoloader --ignore-platform-reqs 2>&1");
             $output[] = "\n--- COMPOSER INSTALL ---";
             $output[] = $composerOutput ?? "No output";
 
