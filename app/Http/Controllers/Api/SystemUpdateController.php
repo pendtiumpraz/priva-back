@@ -117,7 +117,7 @@ class SystemUpdateController extends Controller
             $output[] = $gitOutput ?? "No output from git";
 
             // Composer install
-            $composerOutput = shell_exec("cd {$basePath} && composer install --no-dev --optimize-autoloader 2>&1");
+            $composerOutput = shell_exec("export COMPOSER_HOME=\$HOME/.composer && cd {$basePath} && composer install --no-dev --optimize-autoloader 2>&1");
             $output[] = "\n--- COMPOSER INSTALL ---";
             $output[] = $composerOutput ?? "No output from composer";
 
@@ -203,7 +203,7 @@ class SystemUpdateController extends Controller
             $output[] = "--- GIT RESET TO {$request->commit_hash} ---";
             $output[] = $resetOutput ?? "No output";
 
-            $composerOutput = shell_exec("cd {$basePath} && composer install --no-dev --optimize-autoloader 2>&1");
+            $composerOutput = shell_exec("export COMPOSER_HOME=\$HOME/.composer && cd {$basePath} && composer install --no-dev --optimize-autoloader 2>&1");
             $output[] = "\n--- COMPOSER INSTALL ---";
             $output[] = $composerOutput ?? "No output";
 
