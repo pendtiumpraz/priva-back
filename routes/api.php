@@ -463,6 +463,19 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::delete('/webhooks/{id}', [\App\Http\Controllers\Api\ApiHubController::class, 'deleteWebhook']);
         });
 
+        // =============================================
+        // Integrations (Telegram, SIEM, SOAR, SOCRadar)
+        // =============================================
+        Route::prefix('integrations')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\IntegrationController::class, 'index']);
+            Route::put('/{provider}', [\App\Http\Controllers\Api\IntegrationController::class, 'update']);
+            Route::post('/{provider}/test', [\App\Http\Controllers\Api\IntegrationController::class, 'test']);
+            Route::delete('/{provider}', [\App\Http\Controllers\Api\IntegrationController::class, 'destroy']);
+            // Breach sync shortcuts
+            Route::post('/breach/{id}/telegram', [\App\Http\Controllers\Api\IntegrationController::class, 'syncBreachTelegram']);
+            Route::post('/breach/{id}/siem', [\App\Http\Controllers\Api\IntegrationController::class, 'syncBreachSiem']);
+        });
+
     });
 
 // =============================================

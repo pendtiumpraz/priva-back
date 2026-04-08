@@ -14,8 +14,8 @@ class Organization extends Model
         'parent_id', 'org_level',
         'idle_timeout_enabled', 'idle_timeout_minutes', 'name', 'slug', 'industry', 'logo_url', 'privacy_policy_url',
         'website', 'address', 'phone', 'email', 'settings',
-        // Storage
-        'storage_driver', 'storage_config',
+        // Storage & Integrations
+        'storage_driver', 'storage_config', 'integration_config',
         // Onboarding
         'business_model', 'company_size', 'data_subjects_type', 'core_systems',
         'has_dpo', 'onboarding_completed',
