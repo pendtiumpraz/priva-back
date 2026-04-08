@@ -16,9 +16,11 @@ use App\Models\ConsentCollectionPoint;
 use App\Models\InformationSystem;
 use App\Services\AiAgentToolExecutor;
 use App\Services\CreditService;
+use App\Services\DocumentParserService;
 use App\Http\Controllers\Api\AiProviderController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 
 class AiAgentController extends Controller
 {
@@ -33,7 +35,41 @@ class AiAgentController extends Controller
         $request->validate([
             'message' => 'required|string|max:4000',
             'conversation_id' => 'nullable|string',
+            'file' => 'nullable|file|max:10240|mimes:pdf,docx,xlsx,xls,csv,jpg,jpeg,png,gif,webp',
         ]);
+
+        // Handle file upload
+        $fileContext = null;
+        $fileImageBase64 = null;
+        $fileName = null;
+        if ($request->hasFile('file')) {
+            $file = $request->file('file');
+            $fileName = $file->getClientOriginalName();
+            $ext = strtolower($file->getClientOriginalExtension());
+            $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp']);
+
+            if ($isImage) {
+                // For images: encode as base64 for vision-capable models
+                $imageData = file_get_contents($file->getRealPath());
+                $mimeType = $file->getMimeType();
+                $fileImageBase64 = 'data:' . $mimeType . ';base64,' . base64_encode($imageData);
+            } else {
+                // For documents: parse and extract text
+                try {
+                    $parser = new DocumentParserService();
+                    $parsed = $parser->parse($file->getRealPath(), $ext);
+                    $rawText = $parsed['raw_text'] ?? '';
+                    // Truncate to prevent exceeding context window
+                    $fileContext = mb_substr($rawText, 0, 12000);
+                    if (mb_strlen($rawText) > 12000) {
+                        $fileContext .= "\n\n[... dokumen terlalu panjang, dipotong pada 12.000 karakter ...]";
+                    }
+                } catch (\Exception $e) {
+                    \Log::warning('AI Agent file parse failed: ' . $e->getMessage());
+                    $fileContext = "[Gagal membaca file: {$e->getMessage()}]";
+                }
+            }
+        }
 
         $user = $request->user();
         $orgId = $user->org_id;
@@ -102,11 +138,15 @@ class AiAgentController extends Controller
             ]);
         }
 
-        // Save user message
+        // Save user message (include file name if present)
+        $displayMsg = $request->message;
+        if ($fileName) {
+            $displayMsg = "📎 [{$fileName}]\n\n" . $displayMsg;
+        }
         ChatMessage::create([
             'conversation_id' => $conversation->id,
             'role' => 'user',
-            'content' => $request->message,
+            'content' => $displayMsg,
             'sender_name' => $user->name,
         ]);
 
@@ -179,6 +219,24 @@ PROMPT;
             $role = $msg->role === 'admin' ? 'assistant' : $msg->role;
             if ($role === 'user' || $role === 'assistant') {
                 $messages[] = ['role' => $role, 'content' => $msg->content];
+            }
+        }
+
+        // Inject file context into the last user message
+        if ($fileContext || $fileImageBase64) {
+            // Find last user message and enhance it
+            $lastIdx = count($messages) - 1;
+            if ($messages[$lastIdx]['role'] === 'user') {
+                if ($fileImageBase64) {
+                    // Vision: use multimodal content format
+                    $messages[$lastIdx]['content'] = [
+                        ['type' => 'text', 'text' => "File yang diupload: {$fileName}\n\n" . $messages[$lastIdx]['content']],
+                        ['type' => 'image_url', 'image_url' => ['url' => $fileImageBase64]],
+                    ];
+                } elseif ($fileContext) {
+                    // Document: prepend extracted text
+                    $messages[$lastIdx]['content'] = "=== DOKUMEN YANG DIUPLOAD: {$fileName} ===\n{$fileContext}\n=== AKHIR DOKUMEN ===\n\nPermintaan User: " . $messages[$lastIdx]['content'];
+                }
             }
         }
 
