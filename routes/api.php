@@ -33,6 +33,9 @@ Route::get('/public/consent/state', [\App\Http\Controllers\Api\ConsentLogControl
 Route::get('/sso/redirect', [\App\Http\Controllers\Api\SsoLoginController::class, 'redirect']);
 Route::get('/sso/callback', [\App\Http\Controllers\Api\SsoLoginController::class, 'callback']);
 
+// Threat Intel Webhook Receiver (SOCRadar, etc.)
+Route::post('/webhooks/threat-intel/{org_id}', [\App\Http\Controllers\Api\ThreatIntelController::class, 'receive']);
+
 });
 
 // =============================================

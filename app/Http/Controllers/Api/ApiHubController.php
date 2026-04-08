@@ -170,7 +170,7 @@ class ApiHubController extends Controller
             'name' => 'required|string|max:255',
             'url' => 'required|url|max:1000',
             'events' => 'required|array|min:1',
-            'events.*' => 'string|in:breach.created,breach.updated,breach.status_changed,breach.closed',
+            'events.*' => 'string|in:breach.created,breach.updated,breach.status_changed,breach.closed,threat_intel.inbound',
             'secret' => 'nullable|string|max:255',
         ]);
 
@@ -292,6 +292,13 @@ class ApiHubController extends Controller
                     'breach.updated' => 'Saat breach diperbarui',
                     'breach.status_changed' => 'Saat status breach berubah',
                     'breach.closed' => 'Saat breach ditutup',
+                    'threat_intel.inbound' => 'Menerima alert dari threat intel (SOCRadar, dll)',
+                ],
+                'threat_intel' => [
+                    'endpoint' => url('/api/webhooks/threat-intel/{org_id}'),
+                    'auth' => 'X-Webhook-Secret header',
+                    'description' => 'Endpoint untuk menerima alert dari SOCRadar dan provider threat intelligence lainnya. Auto-create breach incident.',
+                    'supported_providers' => ['SOCRadar', 'Generic JSON'],
                 ],
             ],
         ]);
