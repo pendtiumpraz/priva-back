@@ -21,7 +21,7 @@ class AiProviderController extends Controller
     }
 
     /**
-     * List all providers with their models
+     * List all providers with their models (public — active only)
      */
     public function index()
     {
@@ -33,6 +33,267 @@ class AiProviderController extends Controller
             ->get();
 
         return response()->json(['data' => $providers]);
+    }
+
+    // ==================== ADMIN CRUD: PROVIDERS ====================
+
+    /**
+     * Admin: list all providers (including inactive, with trashed count)
+     */
+    public function adminIndex()
+    {
+        $providers = AiProvider::withCount(['models', 'models as trashed_models_count' => function ($q) {
+                $q->onlyTrashed();
+            }])
+            ->with(['models' => function ($q) {
+                $q->orderBy('sort_order');
+            }])
+            ->orderBy('sort_order')
+            ->get();
+
+        return response()->json(['data' => $providers]);
+    }
+
+    /**
+     * Admin: create a new provider
+     */
+    public function storeProvider(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'slug' => 'required|string|max:50|unique:ai_providers,slug',
+            'api_base_url' => 'required|url|max:500',
+            'auth_header' => 'nullable|string|max:100',
+            'auth_prefix' => 'nullable|string|max:50',
+            'supports_tools' => 'boolean',
+            'supports_streaming' => 'boolean',
+            'is_active' => 'boolean',
+            'description' => 'nullable|string|max:1000',
+            'website' => 'nullable|url|max:500',
+            'icon' => 'nullable|string|max:100',
+        ]);
+
+        $maxSort = AiProvider::max('sort_order') ?? 0;
+
+        $provider = AiProvider::create(array_merge($request->only([
+            'name', 'slug', 'api_base_url', 'auth_header', 'auth_prefix',
+            'supports_tools', 'supports_streaming', 'is_active',
+            'description', 'website', 'icon',
+        ]), [
+            'auth_header' => $request->auth_header ?? 'Authorization',
+            'auth_prefix' => $request->auth_prefix ?? 'Bearer',
+            'sort_order' => $maxSort + 1,
+        ]));
+
+        return response()->json(['message' => 'Provider berhasil dibuat.', 'data' => $provider], 201);
+    }
+
+    /**
+     * Admin: update a provider
+     */
+    public function updateProvider(Request $request, int $id)
+    {
+        $provider = AiProvider::findOrFail($id);
+        $request->validate([
+            'name' => 'string|max:255',
+            'slug' => 'string|max:50|unique:ai_providers,slug,' . $id,
+            'api_base_url' => 'url|max:500',
+            'auth_header' => 'nullable|string|max:100',
+            'auth_prefix' => 'nullable|string|max:50',
+            'supports_tools' => 'boolean',
+            'supports_streaming' => 'boolean',
+            'is_active' => 'boolean',
+            'description' => 'nullable|string|max:1000',
+            'website' => 'nullable|url|max:500',
+            'icon' => 'nullable|string|max:100',
+            'sort_order' => 'nullable|integer',
+        ]);
+
+        $provider->update($request->only([
+            'name', 'slug', 'api_base_url', 'auth_header', 'auth_prefix',
+            'supports_tools', 'supports_streaming', 'is_active',
+            'description', 'website', 'icon', 'sort_order',
+        ]));
+
+        return response()->json(['message' => 'Provider diperbarui.', 'data' => $provider]);
+    }
+
+    /**
+     * Admin: soft delete a provider
+     */
+    public function destroyProvider(int $id)
+    {
+        $provider = AiProvider::findOrFail($id);
+        $provider->delete(); // soft delete
+        // Also soft-delete its models
+        AiModel::where('provider_id', $id)->delete();
+
+        return response()->json(['message' => "{$provider->name} dipindahkan ke trash."]);
+    }
+
+    /**
+     * Admin: list trashed providers
+     */
+    public function trashedProviders()
+    {
+        $trashed = AiProvider::onlyTrashed()
+            ->withCount(['models' => function ($q) { $q->withTrashed(); }])
+            ->orderBy('deleted_at', 'desc')
+            ->get();
+
+        return response()->json(['data' => $trashed]);
+    }
+
+    /**
+     * Admin: restore a trashed provider
+     */
+    public function restoreProvider(int $id)
+    {
+        $provider = AiProvider::onlyTrashed()->findOrFail($id);
+        $provider->restore();
+        // Also restore its models
+        AiModel::onlyTrashed()->where('provider_id', $id)->restore();
+
+        return response()->json(['message' => "{$provider->name} berhasil di-restore."]);
+    }
+
+    /**
+     * Admin: permanently delete a trashed provider
+     */
+    public function forceDeleteProvider(int $id)
+    {
+        $provider = AiProvider::onlyTrashed()->findOrFail($id);
+        // Force delete models first
+        AiModel::onlyTrashed()->where('provider_id', $id)->forceDelete();
+        $provider->forceDelete();
+
+        return response()->json(['message' => 'Provider dihapus permanen.']);
+    }
+
+    // ==================== ADMIN CRUD: MODELS ====================
+
+    /**
+     * Admin: list models for a provider (including inactive)
+     */
+    public function listModels(int $providerId)
+    {
+        $models = AiModel::where('provider_id', $providerId)
+            ->orderBy('sort_order')
+            ->get();
+
+        return response()->json(['data' => $models]);
+    }
+
+    /**
+     * Admin: create a model for a provider
+     */
+    public function storeModel(Request $request, int $providerId)
+    {
+        AiProvider::findOrFail($providerId);
+        $request->validate([
+            'model_id' => 'required|string|max:255',
+            'name' => 'required|string|max:255',
+            'category' => 'nullable|string|max:100',
+            'context_window' => 'nullable|integer',
+            'max_output_tokens' => 'nullable|integer',
+            'supports_tools' => 'boolean',
+            'supports_vision' => 'boolean',
+            'is_reasoning' => 'boolean',
+            'recommended_for_agent' => 'boolean',
+            'input_price_per_m' => 'nullable|numeric|min:0',
+            'output_price_per_m' => 'nullable|numeric|min:0',
+            'is_active' => 'boolean',
+        ]);
+
+        $maxSort = AiModel::where('provider_id', $providerId)->max('sort_order') ?? 0;
+
+        $model = AiModel::create(array_merge($request->only([
+            'model_id', 'name', 'category', 'context_window', 'max_output_tokens',
+            'supports_tools', 'supports_vision', 'is_reasoning', 'recommended_for_agent',
+            'input_price_per_m', 'output_price_per_m', 'is_active',
+        ]), [
+            'provider_id' => $providerId,
+            'sort_order' => $maxSort + 1,
+        ]));
+
+        return response()->json(['message' => 'Model berhasil dibuat.', 'data' => $model], 201);
+    }
+
+    /**
+     * Admin: update a model
+     */
+    public function updateModel(Request $request, int $modelId)
+    {
+        $model = AiModel::findOrFail($modelId);
+        $request->validate([
+            'model_id' => 'string|max:255',
+            'name' => 'string|max:255',
+            'category' => 'nullable|string|max:100',
+            'context_window' => 'nullable|integer',
+            'max_output_tokens' => 'nullable|integer',
+            'supports_tools' => 'boolean',
+            'supports_vision' => 'boolean',
+            'is_reasoning' => 'boolean',
+            'recommended_for_agent' => 'boolean',
+            'input_price_per_m' => 'nullable|numeric|min:0',
+            'output_price_per_m' => 'nullable|numeric|min:0',
+            'is_active' => 'boolean',
+            'sort_order' => 'nullable|integer',
+        ]);
+
+        $model->update($request->only([
+            'model_id', 'name', 'category', 'context_window', 'max_output_tokens',
+            'supports_tools', 'supports_vision', 'is_reasoning', 'recommended_for_agent',
+            'input_price_per_m', 'output_price_per_m', 'is_active', 'sort_order',
+        ]));
+
+        return response()->json(['message' => 'Model diperbarui.', 'data' => $model]);
+    }
+
+    /**
+     * Admin: soft delete a model
+     */
+    public function destroyModel(int $modelId)
+    {
+        $model = AiModel::findOrFail($modelId);
+        $model->delete();
+
+        return response()->json(['message' => "{$model->name} dipindahkan ke trash."]);
+    }
+
+    /**
+     * Admin: list trashed models for a provider
+     */
+    public function trashedModels(int $providerId)
+    {
+        $models = AiModel::onlyTrashed()
+            ->where('provider_id', $providerId)
+            ->orderBy('deleted_at', 'desc')
+            ->get();
+
+        return response()->json(['data' => $models]);
+    }
+
+    /**
+     * Admin: restore a trashed model
+     */
+    public function restoreModel(int $modelId)
+    {
+        $model = AiModel::onlyTrashed()->findOrFail($modelId);
+        $model->restore();
+
+        return response()->json(['message' => "{$model->name} berhasil di-restore."]);
+    }
+
+    /**
+     * Admin: permanently delete a trashed model
+     */
+    public function forceDeleteModel(int $modelId)
+    {
+        $model = AiModel::onlyTrashed()->findOrFail($modelId);
+        $model->forceDelete();
+
+        return response()->json(['message' => 'Model dihapus permanen.']);
     }
 
     /**

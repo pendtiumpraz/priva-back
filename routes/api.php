@@ -273,6 +273,24 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::post('/test', [\App\Http\Controllers\Api\AiProviderController::class, 'testConnection']);
             Route::post('/set-active', [\App\Http\Controllers\Api\AiProviderController::class, 'setActiveModel']);
             Route::delete('/api-key', [\App\Http\Controllers\Api\AiProviderController::class, 'removeApiKey']);
+            // Admin CRUD
+            Route::get('/admin', [\App\Http\Controllers\Api\AiProviderController::class, 'adminIndex']);
+            Route::post('/', [\App\Http\Controllers\Api\AiProviderController::class, 'storeProvider']);
+            Route::put('/{id}', [\App\Http\Controllers\Api\AiProviderController::class, 'updateProvider']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\AiProviderController::class, 'destroyProvider']);
+            // Trash & Restore (Providers)
+            Route::get('/trash', [\App\Http\Controllers\Api\AiProviderController::class, 'trashedProviders']);
+            Route::post('/{id}/restore', [\App\Http\Controllers\Api\AiProviderController::class, 'restoreProvider']);
+            Route::delete('/{id}/force', [\App\Http\Controllers\Api\AiProviderController::class, 'forceDeleteProvider']);
+            // Models CRUD
+            Route::get('/{providerId}/models', [\App\Http\Controllers\Api\AiProviderController::class, 'listModels']);
+            Route::post('/{providerId}/models', [\App\Http\Controllers\Api\AiProviderController::class, 'storeModel']);
+            Route::put('/models/{modelId}', [\App\Http\Controllers\Api\AiProviderController::class, 'updateModel']);
+            Route::delete('/models/{modelId}', [\App\Http\Controllers\Api\AiProviderController::class, 'destroyModel']);
+            // Trash & Restore (Models)
+            Route::get('/{providerId}/models/trash', [\App\Http\Controllers\Api\AiProviderController::class, 'trashedModels']);
+            Route::post('/models/{modelId}/restore', [\App\Http\Controllers\Api\AiProviderController::class, 'restoreModel']);
+            Route::delete('/models/{modelId}/force', [\App\Http\Controllers\Api\AiProviderController::class, 'forceDeleteModel']);
         });
 
         // Workflow Approvals
