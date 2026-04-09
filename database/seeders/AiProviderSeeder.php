@@ -10,12 +10,6 @@ class AiProviderSeeder extends Seeder
 {
     public function run(): void
     {
-        // Truncate existing data for clean re-seed
-        \DB::statement('SET FOREIGN_KEY_CHECKS=0');
-        AiModel::truncate();
-        AiProvider::truncate();
-        \DB::statement('SET FOREIGN_KEY_CHECKS=1');
-
         $providers = [
             // =============================================
             // 1. OpenAI
@@ -78,6 +72,8 @@ class AiProviderSeeder extends Seeder
                 'slug' => 'google',
                 'name' => 'Google AI (Gemini)',
                 'api_base_url' => 'https://generativelanguage.googleapis.com/v1beta/openai',
+                'auth_header' => null,
+                'auth_prefix' => null,
                 // Uses standard Bearer auth via OpenAI-compatible endpoint
                 'supports_tools' => true,
                 'supports_streaming' => true,
