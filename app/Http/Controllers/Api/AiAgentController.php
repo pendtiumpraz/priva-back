@@ -64,7 +64,7 @@ class AiAgentController extends Controller
                     if (mb_strlen($rawText) > 12000) {
                         $fileContext .= "\n\n[... dokumen terlalu panjang, dipotong pada 12.000 karakter ...]";
                     }
-                } catch (\Exception $e) {
+                } catch (\Throwable $e) {
                     \Log::warning('AI Agent file parse failed: ' . $e->getMessage());
                     $fileContext = "[Gagal membaca file: {$e->getMessage()}]";
                 }
