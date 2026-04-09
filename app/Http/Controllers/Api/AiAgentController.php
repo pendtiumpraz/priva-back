@@ -87,6 +87,22 @@ class AiAgentController extends Controller
             $providerConfig = AiProviderController::getActiveConfig($orgId, 'chat');
         }
 
+        // --- VISION FALLBACK LOGIC ---
+        // If an image is uploaded, the active agent (e.g. DeepSeek) might not support vision.
+        // We must fallback to a provider that supports vision (e.g. Gemini Document config).
+        if ($fileImageBase64 && !($providerConfig['model']->supports_vision ?? false)) {
+            $docConfig = AiProviderController::getActiveConfig($orgId, 'document');
+            
+            // Check if document provider exists and supports vision (assume Gemini supports vision)
+            if ($docConfig && ($docConfig['model']->supports_vision ?? true)) {
+                $providerConfig = $docConfig;
+                \Log::info('Switched to Document Provider (Vision) for image payload.');
+            } else {
+                // If not even document mode has vision, reject cleanly
+                return response()->json(['message' => 'AI Provider yang aktif tidak mendukung analisa gambar (Vision). Ubah AI Document ke Gemini terlebih dahulu.'], 400);
+            }
+        }
+
         if (!$providerConfig || empty($providerConfig['api_key'])) {
             return response()->json(['message' => 'API key belum dikonfigurasi. Silakan set AI Provider terlebih dahulu.'], 503);
         }
