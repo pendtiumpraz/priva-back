@@ -140,14 +140,32 @@ class AiAgentController extends Controller
 
         // Save user message (include file name if present)
         $displayMsg = $request->message;
-        if ($fileName) {
+        $attachmentUrl = null;
+        $attachmentName = null;
+        $attachmentType = null;
+
+        if ($fileName && $request->hasFile('file')) {
+            $file = $request->file('file');
+            $ext = strtolower($file->getClientOriginalExtension());
+            $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp']);
+            $attachmentType = $isImage ? 'image' : 'document';
+            $attachmentName = $fileName;
+
+            // Save to storage
+            $storagePath = $file->store('chat-attachments/' . ($orgId ?: 'system'), 'public');
+            $attachmentUrl = '/storage/' . $storagePath;
+
             $displayMsg = "📎 [{$fileName}]\n\n" . $displayMsg;
         }
+
         ChatMessage::create([
             'conversation_id' => $conversation->id,
             'role' => 'user',
             'content' => $displayMsg,
             'sender_name' => $user->name,
+            'attachment_url' => $attachmentUrl,
+            'attachment_name' => $attachmentName,
+            'attachment_type' => $attachmentType,
         ]);
 
         $executor = new AiAgentToolExecutor($orgId ?? '');
