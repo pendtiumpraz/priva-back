@@ -159,7 +159,7 @@ class AiAgentController extends Controller
                 $displayMsg = "📎 [{$fileName}]\n\n" . $displayMsg;
             } catch (\Throwable $e) {
                 \Log::error('AI Agent Failed to save attachment: ' . $e->getMessage());
-                return response()->json(['message' => 'Gagal menyimpan file ke server. Periksa permission folder storage/app/public.'], 500);
+                return response()->json(['message' => 'Gagal menyimpan file: ' . $e->getMessage()], 500);
             }
         }
 
