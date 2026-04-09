@@ -145,28 +145,38 @@ class AiAgentController extends Controller
         $attachmentType = null;
 
         if ($fileName && $request->hasFile('file')) {
-            $file = $request->file('file');
-            $ext = strtolower($file->getClientOriginalExtension());
-            $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp']);
-            $attachmentType = $isImage ? 'image' : 'document';
-            $attachmentName = $fileName;
+            try {
+                $file = $request->file('file');
+                $ext = strtolower($file->getClientOriginalExtension());
+                $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp']);
+                $attachmentType = $isImage ? 'image' : 'document';
+                $attachmentName = $fileName;
 
-            // Save to storage
-            $storagePath = $file->store('chat-attachments/' . ($orgId ?: 'system'), 'public');
-            $attachmentUrl = '/storage/' . $storagePath;
+                // Save to storage
+                $storagePath = $file->store('chat-attachments/' . ($orgId ?: 'system'), 'public');
+                $attachmentUrl = '/storage/' . $storagePath;
 
-            $displayMsg = "📎 [{$fileName}]\n\n" . $displayMsg;
+                $displayMsg = "📎 [{$fileName}]\n\n" . $displayMsg;
+            } catch (\Throwable $e) {
+                \Log::error('AI Agent Failed to save attachment: ' . $e->getMessage());
+                return response()->json(['message' => 'Gagal menyimpan file ke server. Periksa permission folder storage/app/public.'], 500);
+            }
         }
 
-        ChatMessage::create([
-            'conversation_id' => $conversation->id,
-            'role' => 'user',
-            'content' => $displayMsg,
-            'sender_name' => $user->name,
-            'attachment_url' => $attachmentUrl,
-            'attachment_name' => $attachmentName,
-            'attachment_type' => $attachmentType,
-        ]);
+        try {
+            ChatMessage::create([
+                'conversation_id' => $conversation->id,
+                'role' => 'user',
+                'content' => $displayMsg,
+                'sender_name' => $user->name,
+                'attachment_url' => $attachmentUrl,
+                'attachment_name' => $attachmentName,
+                'attachment_type' => $attachmentType,
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('AI Agent DB Error: ' . $e->getMessage());
+            return response()->json(['message' => 'Database error saat menyimpan pesan chat.'], 500);
+        }
 
         $executor = new AiAgentToolExecutor($orgId ?? '');
 
