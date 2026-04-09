@@ -177,7 +177,6 @@ class AiAgentController extends Controller
                 $storagePath = $file->store('chat-attachments/' . ($orgId ?: 'system'), 'public');
                 $attachmentUrl = '/storage/' . $storagePath;
 
-                $displayMsg = "📎 [{$fileName}]\n\n" . $displayMsg;
             } catch (\Throwable $e) {
                 \Log::error('AI Agent Failed to save attachment: ' . $e->getMessage());
                 return response()->json(['message' => 'Gagal menyimpan file: ' . $e->getMessage()], 500);
