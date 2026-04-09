@@ -412,9 +412,9 @@ PROMPT;
                     if (ob_get_level() > 0) ob_flush(); flush();
                 }
 
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
                 \Log::error('AI Agent error: ' . $e->getMessage());
-                echo json_encode(['type' => 'error', 'message' => 'Terjadi kesalahan sistem internal.']) . "\n";
+                echo json_encode(['type' => 'error', 'message' => 'Terjadi kesalahan sistem internal: ' . $e->getMessage()]) . "\n";
                 if (ob_get_level() > 0) ob_flush(); flush();
             }
         }, 200, [
