@@ -105,6 +105,13 @@ class AiAgentController extends Controller
             return response()->json(['message' => 'API key belum dikonfigurasi. Silakan set AI Provider terlebih dahulu.'], 503);
         }
 
+        // --- STRICT VISION CHECK ---
+        // Jika file berupa gambar, model yang AKTIF saat ini WAJIB mensupport vision.
+        // Jika tidak, tolak dari awal agar tidak crash dilempar ke provider yang salah.
+        if ($fileImageBase64 && !($providerConfig['model']->supports_vision ?? false)) {
+            return response()->json(['message' => 'Mode Document kamu ber-fallback ke model (' . $providerConfig['model']->name . ') yang tidak mendukung analisa Gambar (Vision). Pastikan di dashboard menu API Hub, "Mode Document" sudah kamu Simpan secara eksplisit ke Gemini 1.5 atau model lain yang support Vision.'], 400);
+        }
+
         $apiKey = $providerConfig['api_key'];
         $agentModel = $providerConfig['model']->model_id;
         $agentBaseUrl = rtrim($providerConfig['base_url'], '/');
