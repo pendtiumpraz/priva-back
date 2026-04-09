@@ -9,9 +9,15 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('chat_messages', function (Blueprint $table) {
-            $table->string('attachment_url')->nullable()->after('content');
-            $table->string('attachment_name')->nullable()->after('attachment_url');
-            $table->string('attachment_type')->nullable()->after('attachment_name'); // image, document
+            if (!Schema::hasColumn('chat_messages', 'attachment_url')) {
+                $table->string('attachment_url')->nullable()->after('content');
+            }
+            if (!Schema::hasColumn('chat_messages', 'attachment_name')) {
+                $table->string('attachment_name')->nullable()->after('attachment_url');
+            }
+            if (!Schema::hasColumn('chat_messages', 'attachment_type')) {
+                $table->string('attachment_type')->nullable()->after('attachment_name');
+            }
         });
     }
 
