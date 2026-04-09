@@ -72,8 +72,8 @@ class AiProviderSeeder extends Seeder
                 'slug' => 'google',
                 'name' => 'Google AI (Gemini)',
                 'api_base_url' => 'https://generativelanguage.googleapis.com/v1beta/openai',
-                'auth_header' => null,
-                'auth_prefix' => null,
+                'auth_header' => '',
+                'auth_prefix' => '',
                 // Uses standard Bearer auth via OpenAI-compatible endpoint
                 'supports_tools' => true,
                 'supports_streaming' => true,

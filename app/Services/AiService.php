@@ -31,15 +31,15 @@ class AiService
             $this->apiKey = $config['api_key'];
             $this->model = $config['model']->model_id;
             $this->baseUrl = rtrim($config['base_url'], '/');
-            $this->authHeader = $config['auth_header'] ?? 'Authorization';
-            $this->authPrefix = $config['auth_prefix'] ?? 'Bearer';
+            $this->authHeader = $config['auth_header'] ?: 'Authorization';
+            $this->authPrefix = ($config['auth_header'] && !($config['auth_prefix'] ?? '')) ? '' : ($config['auth_prefix'] ?: 'Bearer');
         } else {
             // Null state, will fail cleanly in isAvailable() checking
             $this->apiKey = '';
             $this->model = '';
             $this->baseUrl = '';
-            $this->authHeader = '';
-            $this->authPrefix = '';
+            $this->authHeader = 'Authorization';
+            $this->authPrefix = 'Bearer';
         }
     }
 

@@ -36,8 +36,8 @@ class AiChatController extends Controller
         $apiKey = $providerConfig['api_key'];
         $chatModel = $providerConfig['model']->model_id;
         $chatBaseUrl = rtrim($providerConfig['base_url'], '/');
-        $chatAuthHeader = $providerConfig['auth_header'] ?? 'Authorization';
-        $chatAuthPrefix = $providerConfig['auth_prefix'] ?? 'Bearer';
+        $chatAuthHeader = $providerConfig['auth_header'] ?: 'Authorization';
+        $chatAuthPrefix = ($providerConfig['auth_header'] && !($providerConfig['auth_prefix'] ?? '')) ? '' : ($providerConfig['auth_prefix'] ?: 'Bearer');
 
         // Credit check (skip for SuperAdmin — no org to bill)
         $orgId = $request->user()->org_id;

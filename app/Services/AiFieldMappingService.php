@@ -180,10 +180,12 @@ SCHEMA;
         $baseUrl = rtrim($config['base_url'], '/');
 
         $headers = ['Content-Type' => 'application/json'];
-        if ($config['auth_prefix']) {
-            $headers[$config['auth_header']] = $config['auth_prefix'] . ' ' . $apiKey;
+        $authH = ($config['auth_header'] ?? '') ?: 'Authorization';
+        $authP = ($config['auth_header'] && !($config['auth_prefix'] ?? '')) ? '' : (($config['auth_prefix'] ?? '') ?: 'Bearer');
+        if ($authP) {
+            $headers[$authH] = $authP . ' ' . $apiKey;
         } else {
-            $headers[$config['auth_header']] = $apiKey;
+            $headers[$authH] = $apiKey;
         }
 
         $response = Http::timeout(120)

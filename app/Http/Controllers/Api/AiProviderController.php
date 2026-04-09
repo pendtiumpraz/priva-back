@@ -448,10 +448,12 @@ class AiProviderController extends Controller
         try {
             // Try a minimal chat completion to verify
             $headers = ['Content-Type' => 'application/json'];
-            if ($provider->auth_prefix) {
-                $headers[$provider->auth_header] = $provider->auth_prefix . ' ' . $apiKey;
+            $authH = $provider->auth_header ?: 'Authorization';
+            $authP = ($provider->auth_header && !$provider->auth_prefix) ? '' : ($provider->auth_prefix ?: 'Bearer');
+            if ($authP) {
+                $headers[$authH] = $authP . ' ' . $apiKey;
             } else {
-                $headers[$provider->auth_header] = $apiKey;
+                $headers[$authH] = $apiKey;
             }
 
             $baseUrl = rtrim($provider->api_base_url, '/');

@@ -94,8 +94,8 @@ class AiAgentController extends Controller
         $apiKey = $providerConfig['api_key'];
         $agentModel = $providerConfig['model']->model_id;
         $agentBaseUrl = rtrim($providerConfig['base_url'], '/');
-        $agentAuthHeader = $providerConfig['auth_header'] ?? 'Authorization';
-        $agentAuthPrefix = $providerConfig['auth_prefix'] ?? 'Bearer';
+        $agentAuthHeader = $providerConfig['auth_header'] ?: 'Authorization';
+        $agentAuthPrefix = ($providerConfig['auth_header'] && !($providerConfig['auth_prefix'] ?? '')) ? '' : ($providerConfig['auth_prefix'] ?: 'Bearer');
 
         // DEBUG: Log exact config used (temporary)
         \Log::info('AI Agent Config Debug', [
