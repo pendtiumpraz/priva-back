@@ -701,7 +701,26 @@ class DataDiscoveryController extends Controller
         $parsed = $aiService->ask($systemPrompt, $userPrompt, 3000);
 
         if (!$parsed || isset($parsed['raw'])) {
-            return response()->json(['error' => 'AI returned invalid format. Please try again.'], 500);
+            $rawText = $parsed['raw'] ?? '';
+            // Try robust fallback extraction
+            if (preg_match('/```(?:json)?\s*({[\s\S]*?})\s*```/is', $rawText, $matches)) {
+                $parsed = json_decode($matches[1], true);
+            } else {
+                $start = strpos($rawText, '{');
+                $end = strrpos($rawText, '}');
+                if ($start !== false && $end !== false) {
+                    $jsonStr = substr($rawText, $start, $end - $start + 1);
+                    $parsed = json_decode($jsonStr, true);
+                }
+            }
+            
+            // If it still fails, spit out the debug
+            if (!is_array($parsed) || isset($parsed['raw'])) {
+                return response()->json([
+                    'error' => 'AI returned invalid format. Please try again.',
+                    'debug_raw' => $rawText
+                ], 500);
+            }
         }
 
         // Save AI assessments to database
