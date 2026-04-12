@@ -234,6 +234,11 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::get('/{id}/protection-assessment', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'getProtectionAssessment'])->middleware('permission:data_discovery,read');
             Route::put('/{id}/protection-assessment', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'saveProtectionAssessment'])->middleware('permission:data_discovery,write');
             Route::post('/{id}/ai-protection-assessment', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'aiProtectionAssessment'])->middleware('permission:data_discovery,write');
+
+            // AI Patrol & Daily Changelogs
+            Route::get('/{id}/changelogs', [\App\Http\Controllers\Api\DiscoveryChangelogController::class, 'index'])->middleware('permission:data_discovery,read');
+            Route::post('/{id}/changelogs', [\App\Http\Controllers\Api\DiscoveryChangelogController::class, 'store'])->middleware('permission:data_discovery,write');
+            Route::post('/{id}/patrol-config', [\App\Http\Controllers\Api\DiscoveryChangelogController::class, 'saveConfig'])->middleware('permission:data_discovery,write');
         });
         
         // Consent Logs & Items
