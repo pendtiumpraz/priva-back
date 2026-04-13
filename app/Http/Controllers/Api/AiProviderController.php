@@ -500,7 +500,7 @@ class AiProviderController extends Controller
     public function setActiveModel(Request $request)
     {
         $request->validate([
-            'mode' => 'required|in:chat,agent,document,avatar',
+            'mode' => 'required|in:chat,agent,document,avatar,voice',
             'provider_id' => 'required|integer',
             'model_id' => 'required|integer',
         ]);
@@ -539,6 +539,7 @@ class AiProviderController extends Controller
             'agent'    => ['agent_provider_id' => $request->provider_id, 'agent_model_id' => $request->model_id],
             'document' => ['document_provider_id' => $request->provider_id, 'document_model_id' => $request->model_id],
             'avatar'   => ['avatar_provider_id' => $request->provider_id, 'avatar_model_id' => $request->model_id],
+            'voice'    => ['voice_provider_id' => $request->provider_id, 'voice_model_id' => $request->model_id],
         };
 
         // Check if exists
@@ -617,6 +618,10 @@ class AiProviderController extends Controller
                 $updates['avatar_provider_id'] = null;
                 $updates['avatar_model_id'] = null;
             }
+            if (isset($selection->voice_provider_id) && $selection->voice_provider_id == $request->provider_id) {
+                $updates['voice_provider_id'] = null;
+                $updates['voice_model_id'] = null;
+            }
             if (!empty($updates)) {
                 $updateQuery = DB::table('ai_active_selections');
                 if ($orgId) {
@@ -682,12 +687,14 @@ class AiProviderController extends Controller
             'agent'    => $selection->agent_provider_id,
             'document' => $selection->document_provider_id ?? $selection->chat_provider_id,
             'avatar'   => $selection->avatar_provider_id ?? $selection->chat_provider_id,
+            'voice'    => $selection->voice_provider_id ?? null,
             default    => $selection->chat_provider_id,
         };
         $modelId = match($mode) {
             'agent'    => $selection->agent_model_id,
             'document' => $selection->document_model_id ?? $selection->chat_model_id,
             'avatar'   => $selection->avatar_model_id ?? $selection->chat_model_id,
+            'voice'    => $selection->voice_model_id ?? null,
             default    => $selection->chat_model_id,
         };
 
