@@ -9,8 +9,12 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('ai_active_selections', function (Blueprint $table) {
-            $table->foreignId('avatar_provider_id')->nullable()->constrained('ai_providers')->nullOnDelete();
-            $table->foreignId('avatar_model_id')->nullable()->constrained('ai_models')->nullOnDelete();
+            if (!Schema::hasColumn('ai_active_selections', 'avatar_provider_id')) {
+                $table->foreignId('avatar_provider_id')->nullable()->constrained('ai_providers')->nullOnDelete();
+            }
+            if (!Schema::hasColumn('ai_active_selections', 'avatar_model_id')) {
+                $table->foreignId('avatar_model_id')->nullable()->constrained('ai_models')->nullOnDelete();
+            }
         });
     }
 
