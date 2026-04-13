@@ -432,6 +432,11 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::post('/avatar/chat', [\App\Http\Controllers\Api\AvatarChatController::class, 'chat']);
 
         // =============================================
+        // Voice TTS Synthesis (AI-powered text-to-speech)
+        // =============================================
+        Route::post('/voice/synthesize', [\App\Http\Controllers\Api\VoiceTtsController::class, 'synthesize']);
+
+        // =============================================
         // System / Superadmin Tools
         // =============================================
         Route::get('/system/check-update', [\App\Http\Controllers\Api\SystemUpdateController::class, 'checkUpdate']);

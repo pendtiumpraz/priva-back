@@ -121,6 +121,28 @@ class VoiceTtsProviderSeeder extends Seeder
                     ['model_id' => 'id-ID-ArdiNeural', 'name' => 'Azure Ardi (Male id-ID)', 'category' => 'voice', 'context_window' => 0, 'max_output_tokens' => 0, 'supports_tools' => false, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 16.0, 'output_price_per_m' => 0, 'sort_order' => 2],
                 ],
             ],
+
+            // =============================================
+            // 5. MiniMax TTS — High quality, voice cloning
+            // Free: 10,000 credits/month
+            // =============================================
+            [
+                'slug' => 'minimax-tts',
+                'name' => 'MiniMax TTS',
+                'api_base_url' => 'https://api.minimax.io/v1',
+                'supports_tools' => false,
+                'supports_streaming' => true,
+                'sort_order' => 24,
+                'description' => 'MiniMax TTS — suara AI natural dengan voice cloning. Free: 10K credits/bulan. Support 30+ bahasa.',
+                'website' => 'https://www.minimax.io',
+                'icon' => '🎵',
+                'models' => [
+                    // speech-02-turbo — fast, lower latency
+                    ['model_id' => 'speech-02-turbo', 'name' => 'MiniMax Speech Turbo', 'category' => 'voice', 'context_window' => 0, 'max_output_tokens' => 0, 'supports_tools' => false, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 60.0, 'output_price_per_m' => 0, 'sort_order' => 1],
+                    // speech-02-hd — highest quality
+                    ['model_id' => 'speech-02-hd', 'name' => 'MiniMax Speech HD', 'category' => 'voice', 'context_window' => 0, 'max_output_tokens' => 0, 'supports_tools' => false, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 100.0, 'output_price_per_m' => 0, 'sort_order' => 2],
+                ],
+            ],
         ];
 
         foreach ($voiceProviders as $providerData) {
@@ -141,6 +163,6 @@ class VoiceTtsProviderSeeder extends Seeder
         }
 
         $voiceCount = AiModel::where('category', 'voice')->count();
-        $this->command->info("✅ Seeded 4 Voice TTS providers with {$voiceCount} voice models");
+        $this->command->info("✅ Seeded 5 Voice TTS providers with {$voiceCount} voice models");
     }
 }
