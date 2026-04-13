@@ -137,10 +137,12 @@ class VoiceTtsProviderSeeder extends Seeder
                 'website' => 'https://www.minimax.io',
                 'icon' => '🎵',
                 'models' => [
-                    // speech-02-turbo — fast, lower latency
-                    ['model_id' => 'speech-02-turbo', 'name' => 'MiniMax Speech Turbo', 'category' => 'voice', 'context_window' => 0, 'max_output_tokens' => 0, 'supports_tools' => false, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 60.0, 'output_price_per_m' => 0, 'sort_order' => 1],
-                    // speech-02-hd — highest quality
-                    ['model_id' => 'speech-02-hd', 'name' => 'MiniMax Speech HD', 'category' => 'voice', 'context_window' => 0, 'max_output_tokens' => 0, 'supports_tools' => false, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 100.0, 'output_price_per_m' => 0, 'sort_order' => 2],
+                    // speech-2.8-turbo — latest, fast
+                    ['model_id' => 'speech-2.8-turbo', 'name' => 'MiniMax Speech 2.8 Turbo', 'category' => 'voice', 'context_window' => 0, 'max_output_tokens' => 0, 'supports_tools' => false, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 60.0, 'output_price_per_m' => 0, 'sort_order' => 1],
+                    // speech-2.8-hd — latest, best quality
+                    ['model_id' => 'speech-2.8-hd', 'name' => 'MiniMax Speech 2.8 HD', 'category' => 'voice', 'context_window' => 0, 'max_output_tokens' => 0, 'supports_tools' => false, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 100.0, 'output_price_per_m' => 0, 'sort_order' => 2],
+                    // speech-01-turbo — legacy, stable
+                    ['model_id' => 'speech-01-turbo', 'name' => 'MiniMax Speech 01 Turbo (Legacy)', 'category' => 'voice', 'context_window' => 0, 'max_output_tokens' => 0, 'supports_tools' => false, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 60.0, 'output_price_per_m' => 0, 'sort_order' => 3],
                 ],
             ],
         ];
