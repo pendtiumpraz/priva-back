@@ -368,8 +368,10 @@ class DatabaseScanner
             return ['tables' => [], 'error' => 'Path is invalid or not a directory.'];
         }
 
-        $files = glob($path . '/*.{csv,json}', GLOB_BRACE);
+        $files = glob($path . '/*.{csv,json,xlsx,pdf,docx}', GLOB_BRACE);
         $tables = [];
+
+        $parserService = new \App\Services\DocumentParserService();
 
         foreach ($files as $file) {
             $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
@@ -408,6 +410,37 @@ class DatabaseScanner
                                     'manually_classified' => false
                                 ], $piiResult);
                             }
+                        }
+                    }
+                } elseif (in_array($ext, ['pdf', 'docx', 'xlsx'])) {
+                    // UNSTRUCTURED DATA SCAN USING DOCUMENT INTELLIGENCE
+                    $parsed = $parserService->parse($file, $ext);
+                    $rawText = $parsed['raw_text'] ?? '';
+                    
+                    // Split raw text into isolated words to match exact regex patterns
+                    $words = preg_split('/\s+/', $rawText);
+                    $rowCount = 1;
+
+                    if (!empty($words)) {
+                        $piiResult = ContentPiiScanner::analyzeColumnContent($words);
+                        if ($piiResult && $piiResult['is_pii']) {
+                            $columns[] = array_merge([
+                                'name' => 'unstructured_content',
+                                'type' => strtoupper($ext) . ' Document',
+                                'nullable' => true,
+                                'manually_classified' => false
+                            ], $piiResult);
+                        } else {
+                            $columns[] = [
+                                'name' => 'unstructured_content',
+                                'type' => strtoupper($ext) . ' Document',
+                                'nullable' => true,
+                                'pii_detected' => false,
+                                'pdp_category' => null,
+                                'classification' => 'internal',
+                                'encryption_required' => false,
+                                'manually_classified' => false
+                            ];
                         }
                     }
                 }
