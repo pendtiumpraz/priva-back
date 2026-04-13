@@ -427,6 +427,11 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         });
 
         // =============================================
+        // Avatar 3D Chat (Platform Q&A with Knowledge Base)
+        // =============================================
+        Route::post('/avatar/chat', [\App\Http\Controllers\Api\AvatarChatController::class, 'chat']);
+
+        // =============================================
         // System / Superadmin Tools
         // =============================================
         Route::get('/system/check-update', [\App\Http\Controllers\Api\SystemUpdateController::class, 'checkUpdate']);
