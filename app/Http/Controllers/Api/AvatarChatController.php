@@ -100,9 +100,15 @@ class AvatarChatController extends Controller
                 $data = $response->json();
                 $reply = $data['choices'][0]['message']['content'] ?? 'Maaf, saya tidak bisa menjawab saat ini.';
 
-                // Clean response — remove markdown code blocks if any
-                $reply = preg_replace('/```json\s*/', '', $reply);
-                $reply = preg_replace('/```\s*/', '', $reply);
+                // Clean response — strip all markdown formatting
+                $reply = preg_replace('/```[\s\S]*?```/', '', $reply);  // code blocks
+                $reply = preg_replace('/`([^`]+)`/', '$1', $reply);     // inline code
+                $reply = preg_replace('/\*\*([^*]+)\*\*/', '$1', $reply); // **bold**
+                $reply = preg_replace('/\*([^*]+)\*/', '$1', $reply);   // *italic*
+                $reply = preg_replace('/__([^_]+)__/', '$1', $reply);   // __bold__
+                $reply = preg_replace('/_([^_]+)_/', '$1', $reply);     // _italic_
+                $reply = preg_replace('/^#{1,6}\s*/m', '', $reply);     // # headings
+                $reply = preg_replace('/^\s*>\s*/m', '', $reply);       // > blockquotes
 
                 return response()->json([
                     'reply' => trim($reply),
@@ -156,10 +162,13 @@ Kamu adalah **Priva**, asisten virtual 3D milik platform PRIVASIMU — platform 
 5. Jawab dengan singkat dan jelas (maksimal 3-4 paragraf), kecuali diminta penjelasan detail
 6. Gunakan emoji sesekali untuk membuat percakapan lebih hidup 😊
 
-## FORMAT JAWABAN
-- Jawab dalam teks biasa (plain text), BUKAN JSON
-- Gunakan bullet points atau numbering jika perlu
-- Jangan gunakan markdown heading (#)
+## FORMAT JAWABAN (WAJIB DIIKUTI)
+- Jawab dalam teks biasa (plain text) saja
+- DILARANG menggunakan format markdown apapun: tidak boleh pakai tanda bintang (*), underscore (_), hash (#), backtick (`), blockquote (>)
+- Jika ingin memberi penekanan, cukup gunakan tanda kutip, contoh: "fitur ini"
+- Gunakan tanda strip (–) untuk daftar/list
+- Jawab dalam paragraf pendek dan ringkas
+- Jangan gunakan huruf kapital semua untuk satu kata
 
 PROMPT;
 
