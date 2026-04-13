@@ -665,68 +665,82 @@ class DataDiscoveryController extends Controller
             return response()->json(['error' => 'No PII columns found to assess.'], 400);
         }
 
-        // Build AI prompt using AiService->ask() pattern
-        $colList = '';
-        foreach ($piiColumns as $col) {
-            $colList .= "- {$col['key']} (type: {$col['type']}, classification: {$col['classification']}, pdp: {$col['pdp_category']})\n";
-        }
+        // Process in chunks of 15 columns to prevent JSON truncation/token limits
+        $chunks = array_chunk($piiColumns, 15);
+        $allAssessments = [];
+        $hasError = false;
 
-        $systemPrompt = "Kamu adalah pakar keamanan data (Data Security Expert) dan DPO ahli UU PDP Indonesia.\n"
-            . "Tugasmu menganalisis kolom-kolom PII dan merekomendasikan proteksi yang diperlukan.\n"
-            . "Output WAJIB berupa JSON valid. JANGAN tambahkan teks apapun di luar JSON.\n\n"
-            . "FORMAT OUTPUT JSON (key = \"table.column\", value = object):\n"
-            . json_encode([
-                'users.email' => [
-                    'is_masked_frontend' => true,
-                    'is_encrypted_db' => false,
-                    'has_access_control' => true,
-                    'is_redacted_api' => true,
-                    'has_audit_log' => true,
-                    'has_retention_policy' => false,
-                    'recommendation' => 'Penjelasan singkat dalam Bahasa Indonesia',
-                ]
-            ], JSON_PRETTY_PRINT);
+        foreach ($chunks as $chunk) {
+            $colList = '';
+            foreach ($chunk as $col) {
+                $colList .= "- {$col['key']} (type: {$col['type']}, classification: {$col['classification']}, pdp: {$col['pdp_category']})\n";
+            }
 
-        $userPrompt = "Analisis kolom PII dari database \"{$system->name}\":\n{$colList}\n"
-            . "Untuk SETIAP kolom di atas, rekomendasikan proteksi:\n"
-            . "- is_masked_frontend: Harus dimasking di UI?\n"
-            . "- is_encrypted_db: Harus dienkripsi di database?\n"
-            . "- has_access_control: Akses dibatasi per role?\n"
-            . "- is_redacted_api: API response harus diredaksi?\n"
-            . "- has_audit_log: Akses dicatat di audit log?\n"
-            . "- has_retention_policy: Perlu auto-delete setelah retensi?\n"
-            . "- recommendation: Alasan dalam Bahasa Indonesia\n\n"
-            . "Jawab HANYA JSON valid.";
+            $systemPrompt = "Kamu adalah pakar keamanan data (Data Security Expert) dan DPO ahli UU PDP Indonesia.\n"
+                . "Tugasmu menganalisis kolom-kolom PII dan merekomendasikan proteksi yang diperlukan.\n"
+                . "Output WAJIB berupa JSON valid. JANGAN tambahkan teks apapun di luar JSON.\n\n"
+                . "FORMAT OUTPUT JSON (key = \"table.column\", value = object):\n"
+                . json_encode([
+                    'users.email' => [
+                        'is_masked_frontend' => true,
+                        'is_encrypted_db' => false,
+                        'has_access_control' => true,
+                        'is_redacted_api' => true,
+                        'has_audit_log' => true,
+                        'has_retention_policy' => false,
+                        'recommendation' => 'Penjelasan singkat dalam Bahasa Indonesia',
+                    ]
+                ], JSON_PRETTY_PRINT);
 
-        $parsed = $aiService->ask($systemPrompt, $userPrompt, 3000);
+            $userPrompt = "Analisis kolom PII dari database \"{$system->name}\":\n{$colList}\n"
+                . "Untuk SETIAP kolom di atas, rekomendasikan proteksi:\n"
+                . "- is_masked_frontend: Harus dimasking di UI?\n"
+                . "- is_encrypted_db: Harus dienkripsi di database?\n"
+                . "- has_access_control: Akses dibatasi per role?\n"
+                . "- is_redacted_api: API response harus diredaksi?\n"
+                . "- has_audit_log: Akses dicatat di audit log?\n"
+                . "- has_retention_policy: Perlu auto-delete setelah retensi?\n"
+                . "- recommendation: Alasan spesifik dalam Bahasa Indonesia\n\n"
+                . "Jawab HANYA JSON valid.";
 
-        if (!$parsed || isset($parsed['raw'])) {
-            $rawText = $parsed['raw'] ?? '';
-            // Try robust fallback extraction
-            if (preg_match('/```(?:json)?\s*({[\s\S]*?})\s*```/is', $rawText, $matches)) {
-                $parsed = json_decode($matches[1], true);
-            } else {
-                $start = strpos($rawText, '{');
-                $end = strrpos($rawText, '}');
-                if ($start !== false && $end !== false) {
-                    $jsonStr = substr($rawText, $start, $end - $start + 1);
-                    $parsed = json_decode($jsonStr, true);
+            $parsed = $aiService->ask($systemPrompt, $userPrompt, 4000);
+
+            if (!$parsed || isset($parsed['raw'])) {
+                $rawText = $parsed['raw'] ?? '';
+                if (preg_match('/```(?:json)?\s*({[\s\S]*?})\s*```/is', $rawText, $matches)) {
+                    $parsed = json_decode($matches[1], true);
+                } else {
+                    $start = strpos($rawText, '{');
+                    $end = strrpos($rawText, '}');
+                    if ($start !== false && $end !== false) {
+                        $parsed = json_decode(substr($rawText, $start, $end - $start + 1), true);
+                    }
+                }
+                
+                // If it still fails, gracefully skip this chunk instead of fully failing
+                if (!is_array($parsed) || isset($parsed['raw'])) {
+                    $hasError = true;
+                    continue;
                 }
             }
             
-            // If it still fails, spit out the debug
-            if (!is_array($parsed) || isset($parsed['raw'])) {
-                return response()->json([
-                    'error' => 'AI returned invalid format. Please try again.',
-                    'debug_raw' => $rawText
-                ], 500);
+            // Merge valid chunk results
+            foreach ($parsed as $key => $val) {
+                if (is_array($val)) {
+                    $allAssessments[$key] = $val;
+                }
             }
+        }
+
+        if (empty($allAssessments)) {
+            return response()->json([
+                'error' => 'AI returned invalid format across all chunks. Please try again.',
+            ], 500);
         }
 
         // Save AI assessments to database
         $existing = $system->protection_assessments ?? [];
-        foreach ($parsed as $columnKey => $assessment) {
-            if (!is_array($assessment)) continue;
+        foreach ($allAssessments as $columnKey => $assessment) {
             $existing[$columnKey] = array_merge($assessment, [
                 'assessed_at' => now()->toISOString(),
                 'assessed_by' => $request->user()->id,
@@ -738,13 +752,14 @@ class DataDiscoveryController extends Controller
         $system->update(['protection_assessments' => $existing]);
 
         AuditLog::log('data-discovery', $system->id, 'ai_protection_assessed', [
-            'columns_assessed' => count($parsed),
+            'columns_assessed' => count($allAssessments),
+            'has_partial_errors' => $hasError
         ], 'system');
 
         return response()->json([
-            'message' => 'AI Protection Assessment completed',
+            'message' => $hasError ? 'AI Protection Assessment partially completed (some chunks failed).' : 'AI Protection Assessment completed',
             'data' => $existing,
-            'ai_result' => $parsed,
+            'ai_result' => $allAssessments,
         ]);
     }
 }
