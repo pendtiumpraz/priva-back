@@ -583,6 +583,46 @@ class AiProviderController extends Controller
     }
 
     /**
+     * Unset (remove) active model for a specific mode
+     */
+    public function unsetActiveModel(Request $request)
+    {
+        $request->validate([
+            'mode' => 'required|in:chat,agent,document,avatar,voice',
+        ]);
+
+        $orgId = $this->resolveOrgId($request);
+        $isSuperAdmin = $request->user()->role === 'superadmin';
+
+        if (!$orgId && !$isSuperAdmin) {
+            return response()->json(['error' => 'Tidak ada organisasi.'], 400);
+        }
+
+        $mode = $request->mode;
+
+        $fields = match($mode) {
+            'chat'     => ['chat_provider_id' => null, 'chat_model_id' => null],
+            'agent'    => ['agent_provider_id' => null, 'agent_model_id' => null],
+            'document' => ['document_provider_id' => null, 'document_model_id' => null],
+            'avatar'   => ['avatar_provider_id' => null, 'avatar_model_id' => null],
+            'voice'    => ['voice_provider_id' => null, 'voice_model_id' => null],
+        };
+
+        $updateQuery = DB::table('ai_active_selections');
+        if ($orgId) {
+            $updateQuery->where('org_id', $orgId);
+        } else {
+            $updateQuery->whereNull('org_id');
+        }
+        $updateQuery->update($fields);
+
+        return response()->json([
+            'message' => "Mode {$mode} di-nonaktifkan",
+            'mode' => $mode,
+        ]);
+    }
+
+    /**
      * Remove API key for a provider
      */
     public function removeApiKey(Request $request)

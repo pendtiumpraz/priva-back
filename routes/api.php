@@ -277,6 +277,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::post('/api-key', [\App\Http\Controllers\Api\AiProviderController::class, 'saveApiKey']);
             Route::post('/test', [\App\Http\Controllers\Api\AiProviderController::class, 'testConnection']);
             Route::post('/set-active', [\App\Http\Controllers\Api\AiProviderController::class, 'setActiveModel']);
+            Route::post('/unset-active', [\App\Http\Controllers\Api\AiProviderController::class, 'unsetActiveModel']);
             Route::delete('/api-key', [\App\Http\Controllers\Api\AiProviderController::class, 'removeApiKey']);
             // Admin CRUD
             Route::get('/admin', [\App\Http\Controllers\Api\AiProviderController::class, 'adminIndex']);
