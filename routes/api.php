@@ -167,7 +167,31 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         });
 
         // =============================================
-        // Phase 2: Vendor Risk Management
+        // Contract Review CRUD
+        // =============================================
+        Route::prefix('contract-reviews')->group(function () {
+            Route::get('/trashed', [\App\Http\Controllers\Api\ContractReviewCrudController::class, 'trashed']);
+            Route::get('/', [\App\Http\Controllers\Api\ContractReviewCrudController::class, 'index']);
+            Route::get('/{id}', [\App\Http\Controllers\Api\ContractReviewCrudController::class, 'show']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\ContractReviewCrudController::class, 'destroy']);
+            Route::post('/{id}/restore', [\App\Http\Controllers\Api\ContractReviewCrudController::class, 'restore']);
+            Route::delete('/{id}/force', [\App\Http\Controllers\Api\ContractReviewCrudController::class, 'forceDelete']);
+        });
+
+        // =============================================
+        // Policy Review CRUD
+        // =============================================
+        Route::prefix('policy-reviews')->group(function () {
+            Route::get('/trashed', [\App\Http\Controllers\Api\PolicyReviewCrudController::class, 'trashed']);
+            Route::get('/', [\App\Http\Controllers\Api\PolicyReviewCrudController::class, 'index']);
+            Route::get('/{id}', [\App\Http\Controllers\Api\PolicyReviewCrudController::class, 'show']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\PolicyReviewCrudController::class, 'destroy']);
+            Route::post('/{id}/restore', [\App\Http\Controllers\Api\PolicyReviewCrudController::class, 'restore']);
+            Route::delete('/{id}/force', [\App\Http\Controllers\Api\PolicyReviewCrudController::class, 'forceDelete']);
+        });
+
+        // =============================================
+        // Phase 2: Vendor Risk Management (Third Party Management)
         // =============================================
         Route::prefix('vendor-risk')->group(function () {
             Route::get('/trashed', [\App\Http\Controllers\Api\VendorRiskController::class, 'trashed']);

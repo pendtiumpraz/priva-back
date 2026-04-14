@@ -857,6 +857,26 @@ class AiFeatureController extends Controller
             'text_length' => strlen($request->contract_text),
         ];
 
+        // Persist to contract_reviews table
+        try {
+            DB::table('contract_reviews')->insert([
+                'id' => \Illuminate\Support\Str::uuid(),
+                'org_id' => $request->user()->org_id,
+                'title' => 'Contract Review — ' . ucfirst($contractType),
+                'contract_type' => $contractType,
+                'contract_text' => mb_substr($request->contract_text, 0, 20000),
+                'review_result' => json_encode($response),
+                'risk_score' => $response['risk_score'] ?? 0,
+                'overall_rating' => $response['overall_rating'] ?? null,
+                'status' => 'completed',
+                'created_by' => $request->user()->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::warning('contract_reviews save failed: ' . $e->getMessage());
+        }
+
         return $this->saveAndRespond($request, 'contract_review', $response, $inputData);
     }
 
@@ -968,6 +988,27 @@ class AiFeatureController extends Controller
             'file_path' => $storedPath,
             'text_length' => mb_strlen($extractedText),
         ];
+
+        // Persist to contract_reviews table
+        try {
+            DB::table('contract_reviews')->insert([
+                'id' => \Illuminate\Support\Str::uuid(),
+                'org_id' => $request->user()->org_id,
+                'title' => $file->getClientOriginalName(),
+                'contract_type' => $contractType,
+                'file_path' => $storedPath,
+                'file_name' => $file->getClientOriginalName(),
+                'review_result' => json_encode($response),
+                'risk_score' => $response['risk_score'] ?? 0,
+                'overall_rating' => $response['overall_rating'] ?? null,
+                'status' => 'completed',
+                'created_by' => $request->user()->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::warning('contract_reviews save failed: ' . $e->getMessage());
+        }
 
         return $this->saveAndRespond($request, 'contract_review', $response, $inputData);
     }
