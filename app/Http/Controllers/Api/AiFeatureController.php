@@ -902,7 +902,7 @@ class AiFeatureController extends Controller
 
         // Extract text based on file type
         $extractedText = '';
-        $fullPath = storage_path('app/' . $storedPath);
+        $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($storedPath);
 
         try {
             if ($ext === 'pdf') {
@@ -1038,7 +1038,7 @@ class AiFeatureController extends Controller
             $ext = strtolower($file->getClientOriginalExtension());
             $fileName = $file->getClientOriginalName();
             $storedPath = $file->store('policy-uploads/' . $request->user()->org_id, 'local');
-            $fullPath = storage_path('app/' . $storedPath);
+            $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($storedPath);
 
             try {
                 if ($ext === 'pdf') {
