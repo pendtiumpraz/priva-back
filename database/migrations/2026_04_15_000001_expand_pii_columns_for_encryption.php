@@ -1,82 +1,98 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
  * Expand PII columns from varchar(255) to TEXT to accommodate AES-256-CBC ciphertext.
- * Encrypted values are ~4x larger than plaintext (base64 JSON with iv+value+mac).
+ * Handles MySQL index constraints: drops indexes on columns before converting to TEXT.
  */
 return new class extends Migration
 {
     public function up(): void
     {
-        // Users
-        Schema::table('users', function (Blueprint $table) {
-            $table->text('name')->change();
-            $table->text('phone')->nullable()->change();
-        });
+        $driver = Schema::getConnection()->getDriverName();
 
-        // Organizations
-        Schema::table('organizations', function (Blueprint $table) {
-            $table->text('phone')->nullable()->change();
-            $table->text('address')->nullable()->change();
-        });
+        // Helper: For MySQL, drop any index that includes the given column before altering to TEXT
+        $dropIndexes = function (string $table, string $column) use ($driver) {
+            if ($driver !== 'mysql') return;
 
-        // DSR Requests
-        Schema::table('dsr_requests', function (Blueprint $table) {
-            $table->text('requester_name')->nullable()->change();
-            $table->text('requester_email')->nullable()->change();
-            $table->text('requester_phone')->nullable()->change();
-            // description is likely already text
-        });
+            $dbName = DB::getDatabaseName();
+            $indexes = DB::select("
+                SELECT DISTINCT INDEX_NAME 
+                FROM INFORMATION_SCHEMA.STATISTICS 
+                WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?
+                AND INDEX_NAME != 'PRIMARY'
+            ", [$dbName, $table, $column]);
 
-        // Consent Records
-        Schema::table('consent_records', function (Blueprint $table) {
-            $table->text('subject_identifier')->nullable()->change();
-            $table->text('subject_name')->nullable()->change();
-            $table->text('ip_address')->nullable()->change();
-        });
+            foreach ($indexes as $idx) {
+                try {
+                    DB::statement("ALTER TABLE `{$table}` DROP INDEX `{$idx->INDEX_NAME}`");
+                } catch (\Throwable $e) {
+                    // Index might already be dropped, ignore
+                }
+            }
+        };
 
-        // Breach Incidents
-        Schema::table('breach_incidents', function (Blueprint $table) {
-            $table->text('pic_name')->nullable()->change();
-            // description is likely already text
-        });
+        // Helper: safely alter column to TEXT
+        $toText = function (string $table, string $column, bool $nullable = true) use ($driver, $dropIndexes) {
+            if (!Schema::hasColumn($table, $column)) return;
+            
+            $dropIndexes($table, $column);
 
-        // Vendors
-        Schema::table('vendors', function (Blueprint $table) {
-            $table->text('contact_name')->nullable()->change();
-            $table->text('contact_email')->nullable()->change();
-        });
+            $null = $nullable ? 'NULL' : 'NOT NULL';
+            if ($driver === 'mysql') {
+                DB::statement("ALTER TABLE `{$table}` MODIFY `{$column}` TEXT {$null}");
+            } else {
+                // PostgreSQL
+                DB::statement("ALTER TABLE \"{$table}\" ALTER COLUMN \"{$column}\" TYPE TEXT");
+            }
+        };
 
-        // Organization Apps (credentials)
-        Schema::table('organization_apps', function (Blueprint $table) {
-            $table->text('staging_db_username')->nullable()->change();
-            $table->text('staging_db_password')->nullable()->change();
-            $table->text('prod_db_username')->nullable()->change();
-            $table->text('prod_db_password')->nullable()->change();
-        });
+        // ──── Users ────
+        $toText('users', 'name', false);
+        $toText('users', 'phone');
 
-        // Tenant SSO
-        Schema::table('tenant_ssos', function (Blueprint $table) {
-            $table->text('client_secret')->nullable()->change();
-        });
+        // ──── Organizations ────
+        $toText('organizations', 'phone');
+        $toText('organizations', 'address');
 
-        // Webhooks
-        Schema::table('webhooks', function (Blueprint $table) {
-            $table->text('secret')->nullable()->change();
-        });
+        // ──── DSR Requests ────
+        $toText('dsr_requests', 'requester_name');
+        $toText('dsr_requests', 'requester_email');
+        $toText('dsr_requests', 'requester_phone');
 
-        // License Activations
-        Schema::table('license_activations', function (Blueprint $table) {
-            $table->text('ip_address')->nullable()->change();
-        });
+        // ──── Consent Records ────
+        $toText('consent_records', 'subject_identifier');
+        $toText('consent_records', 'subject_name');
+        $toText('consent_records', 'ip_address');
+
+        // ──── Breach Incidents ────
+        $toText('breach_incidents', 'pic_name');
+
+        // ──── Vendors ────
+        $toText('vendors', 'contact_name');
+        $toText('vendors', 'contact_email');
+
+        // ──── Organization Apps (credentials) ────
+        $toText('organization_apps', 'staging_db_username');
+        $toText('organization_apps', 'staging_db_password');
+        $toText('organization_apps', 'prod_db_username');
+        $toText('organization_apps', 'prod_db_password');
+
+        // ──── Tenant SSO ────
+        $toText('tenant_ssos', 'client_secret');
+
+        // ──── Webhooks ────
+        $toText('webhooks', 'secret');
+
+        // ──── License Activations ────
+        $toText('license_activations', 'ip_address');
     }
 
     public function down(): void
     {
-        // Revert would lose data if ciphertext > 255 chars, so we don't revert
+        // Cannot safely revert — ciphertext may exceed varchar(255)
     }
 };
