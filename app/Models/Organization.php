@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Casts\EncryptedString;
+
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -35,6 +37,9 @@ class Organization extends Model
             'ai_credits_remaining' => 'float',
             'ai_credits_purchased' => 'float',
             'ai_credits_reset_at' => 'datetime',
+            // PII Encryption — AES-256-CBC
+            'phone' => EncryptedString::class,
+            'address' => EncryptedString::class,
         ];
     }
 

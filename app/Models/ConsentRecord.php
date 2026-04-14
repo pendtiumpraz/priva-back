@@ -1,6 +1,7 @@
 <?php
 namespace App\Models;
 
+use App\Casts\EncryptedString;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 
@@ -16,5 +17,9 @@ class ConsentRecord extends Model
 
     protected $casts = [
         'is_granted' => 'boolean', 'granted_at' => 'datetime', 'revoked_at' => 'datetime',
+        // PII Encryption — AES-256-CBC
+        'subject_identifier' => EncryptedString::class,
+        'subject_name' => EncryptedString::class,
+        'ip_address' => EncryptedString::class,
     ];
 }

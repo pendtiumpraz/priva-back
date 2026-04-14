@@ -1,6 +1,7 @@
 <?php
 namespace App\Models;
 
+use App\Casts\EncryptedString;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -26,6 +27,9 @@ class BreachIncident extends Model
         'notification_deadline' => 'datetime', 'detected_at' => 'datetime',
         'assessed_at' => 'datetime', 'contained_at' => 'datetime', 'closed_at' => 'datetime',
         'notified_komdigi_at' => 'datetime', 'notified_subjects_at' => 'datetime',
+        // PII Encryption — AES-256-CBC
+        'pic_name' => EncryptedString::class,
+        'description' => EncryptedString::class,
     ];
 
     public function organization()

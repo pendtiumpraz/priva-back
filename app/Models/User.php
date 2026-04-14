@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Casts\EncryptedString;
+
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -59,6 +61,9 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_active' => 'boolean',
             'settings' => 'array',
+            // PII Encryption — AES-256-CBC
+            'name' => EncryptedString::class,
+            'phone' => EncryptedString::class,
         ];
     }
 

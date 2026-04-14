@@ -1,6 +1,7 @@
 <?php
 namespace App\Models;
 
+use App\Casts\EncryptedString;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -18,6 +19,11 @@ class DsrRequest extends Model
 
     protected $casts = [
         'deadline_at' => 'datetime', 'responded_at' => 'datetime', 'closed_at' => 'datetime',
+        // PII Encryption — AES-256-CBC
+        'requester_name' => EncryptedString::class,
+        'requester_email' => EncryptedString::class,
+        'requester_phone' => EncryptedString::class,
+        'description' => EncryptedString::class,
     ];
 
     public function organization()
