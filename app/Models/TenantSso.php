@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\EncryptedString;
 use Illuminate\Database\Eloquent\Model;
 
 class TenantSso extends Model
@@ -14,6 +15,11 @@ class TenantSso extends Model
 
     protected $hidden = [
         'client_secret'
+    ];
+
+    protected $casts = [
+        // Credential Encryption — AES-256-CBC
+        'client_secret' => EncryptedString::class,
     ];
 
     public function organization()

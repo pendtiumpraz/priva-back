@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\EncryptedString;
 use Illuminate\Database\Eloquent\Model;
 
 class OrganizationApp extends Model
@@ -31,6 +32,14 @@ class OrganizationApp extends Model
     protected $hidden = [
         'staging_db_password',
         'prod_db_password',
+    ];
+
+    protected $casts = [
+        // Credential Encryption — AES-256-CBC
+        'staging_db_username' => EncryptedString::class,
+        'staging_db_password' => EncryptedString::class,
+        'prod_db_username' => EncryptedString::class,
+        'prod_db_password' => EncryptedString::class,
     ];
 
     public function organization()

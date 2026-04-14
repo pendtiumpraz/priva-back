@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\EncryptedString;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -37,6 +38,9 @@ class Vendor extends Model
         'data_shared' => 'array',
         'services_provided' => 'array',
         'risk_score' => 'integer',
+        // PII Encryption — AES-256-CBC
+        'contact_name' => EncryptedString::class,
+        'contact_email' => EncryptedString::class,
     ];
 
     public function organization()
