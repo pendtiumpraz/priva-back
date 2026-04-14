@@ -372,6 +372,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::post('/drill/scenario', [\App\Http\Controllers\Api\AiFeatureController::class, 'drillScenario']);
             Route::get('/history/{featureType}/{recordId}', [\App\Http\Controllers\Api\AiFeatureController::class, 'history']);
             Route::post('/contract/review', [\App\Http\Controllers\Api\AiFeatureController::class, 'contractReview']);
+            Route::post('/contract/upload', [\App\Http\Controllers\Api\AiFeatureController::class, 'contractUpload']);
+            Route::post('/policy/review', [\App\Http\Controllers\Api\AiFeatureController::class, 'policyReview']);
             Route::post('/consent/{id}/audit', [\App\Http\Controllers\Api\AiFeatureController::class, 'consentAudit']);
             Route::post('/simulation/{id}/analysis', [\App\Http\Controllers\Api\AiFeatureController::class, 'simulationAnalysis']);
             Route::post('/drill/scenario', [\App\Http\Controllers\Api\AiFeatureController::class, 'drillScenarioGenerator']);

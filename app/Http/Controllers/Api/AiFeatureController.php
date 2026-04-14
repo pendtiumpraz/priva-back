@@ -115,6 +115,7 @@ class AiFeatureController extends Controller
             str_contains($featureType, 'dashboard') => 'dashboard',
             str_contains($featureType, 'chat') => 'chat',
             str_contains($featureType, 'contract') => 'contract-review',
+            str_contains($featureType, 'policy') => 'policy-review',
             str_contains($featureType, 'discovery') => 'data-discovery',
             default => null,
         };
@@ -857,5 +858,260 @@ class AiFeatureController extends Controller
         ];
 
         return $this->saveAndRespond($request, 'contract_review', $response, $inputData);
+    }
+
+    // =============================================
+    // CONTRACT UPLOAD — Extract text from PDF/DOCX then review
+    // =============================================
+    public function contractUpload(Request $request)
+    {
+        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'contract_review');
+        if ($creditErr) return $creditErr;
+
+        $request->validate([
+            'file' => 'required|file|mimes:pdf,docx,doc|max:10240', // max 10MB
+            'contract_type' => 'nullable|string',
+        ]);
+
+        $file = $request->file('file');
+        $ext = strtolower($file->getClientOriginalExtension());
+
+        // Store file in Laravel storage (local disk by default)
+        $storedPath = $file->store('contract-uploads/' . $request->user()->org_id, 'local');
+
+        // Extract text based on file type
+        $extractedText = '';
+        $fullPath = storage_path('app/' . $storedPath);
+
+        try {
+            if ($ext === 'pdf') {
+                $parser = new \Smalot\PdfParser\Parser();
+                $pdf = $parser->parseFile($fullPath);
+                $extractedText = $pdf->getText();
+            } elseif (in_array($ext, ['docx', 'doc'])) {
+                $phpWord = \PhpOffice\PhpWord\IOFactory::load($fullPath);
+                $text = '';
+                foreach ($phpWord->getSections() as $section) {
+                    foreach ($section->getElements() as $element) {
+                        if (method_exists($element, 'getText')) {
+                            $text .= $element->getText() . "\n";
+                        } elseif (method_exists($element, 'getElements')) {
+                            foreach ($element->getElements() as $child) {
+                                if (method_exists($child, 'getText')) {
+                                    $text .= $child->getText() . "\n";
+                                }
+                            }
+                        }
+                    }
+                }
+                $extractedText = $text;
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Gagal mengekstrak teks dari file: ' . $e->getMessage(),
+            ], 422);
+        }
+
+        $extractedText = trim($extractedText);
+        if (mb_strlen($extractedText) < 50) {
+            return response()->json([
+                'message' => 'Teks yang diekstrak terlalu pendek atau file tidak mengandung teks yang dapat dibaca.',
+                'extracted_length' => mb_strlen($extractedText),
+            ], 422);
+        }
+
+        // Run AI review using the same logic as contractReview
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
+        if (!$ai->isAvailable()) {
+            return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        }
+
+        $contractType = $request->contract_type ?? 'other';
+
+        $systemPrompt = "Kamu adalah Data Protection Officer ahli UU PDP Indonesia (UU No. 27/2022). "
+            . "Output WAJIB berupa JSON valid. JANGAN tambahkan teks apapun di luar JSON.\n\n"
+            . "Format output:\n"
+            . json_encode([
+                'overall_rating' => 'baik/perlu_perbaikan/buruk',
+                'risk_score' => '0-100 (integer)',
+                'findings' => [['clause' => '...', 'issue' => '...', 'risk_level' => 'high/medium/low', 'recommendation' => '...', 'uu_pdp_reference' => 'Pasal X']],
+                'missing_clauses' => ['klausul yang seharusnya ada tapi tidak ditemukan'],
+                'summary' => 'ringkasan keseluruhan analisis (2-3 kalimat)',
+                'compliance_checklist' => [
+                    'klausul_tujuan_pemrosesan' => 'boolean',
+                    'hak_subjek_data' => 'boolean',
+                    'kewajiban_pengendali' => 'boolean',
+                    'transfer_lintas_negara' => 'boolean',
+                    'masa_retensi' => 'boolean',
+                    'mekanisme_pemusnahan' => 'boolean',
+                    'klausul_kerahasiaan' => 'boolean',
+                    'klausul_pelanggaran_data' => 'boolean',
+                ],
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        $userPrompt = "Analisis kontrak/perjanjian berikut dari perspektif perlindungan data pribadi UU PDP.\n\n"
+            . "Tipe Kontrak: {$contractType}\n"
+            . "Nama File: {$file->getClientOriginalName()}\n\n"
+            . "=== ISI KONTRAK ===\n"
+            . mb_substr($extractedText, 0, 8000)
+            . "\n=== END ===\n\n"
+            . "Berikan analisis LENGKAP dalam format JSON yang diminta. "
+            . "Identifikasi semua temuan, klausul yang hilang, dan skor risiko 0-100. "
+            . "Jawab HANYA JSON valid.";
+
+        $response = $ai->ask($systemPrompt, $userPrompt, 4000);
+
+        $inputData = [
+            'contract_type' => $contractType,
+            'file_name' => $file->getClientOriginalName(),
+            'file_path' => $storedPath,
+            'text_length' => mb_strlen($extractedText),
+        ];
+
+        return $this->saveAndRespond($request, 'contract_review', $response, $inputData);
+    }
+
+    // =============================================
+    // POLICY REVIEW — AI SOP/Policy Compliance Analyzer
+    // =============================================
+    public function policyReview(Request $request)
+    {
+        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'policy_review');
+        if ($creditErr) return $creditErr;
+
+        // Accept either text or file
+        $policyText = $request->input('policy_text', '');
+        $docType = $request->input('doc_type', 'kebijakan_privasi');
+        $title = $request->input('title', 'Untitled Policy');
+        $storedPath = null;
+        $fileName = null;
+
+        if ($request->hasFile('file')) {
+            $request->validate([
+                'file' => 'required|file|mimes:pdf,docx,doc|max:10240',
+            ]);
+
+            $file = $request->file('file');
+            $ext = strtolower($file->getClientOriginalExtension());
+            $fileName = $file->getClientOriginalName();
+            $storedPath = $file->store('policy-uploads/' . $request->user()->org_id, 'local');
+            $fullPath = storage_path('app/' . $storedPath);
+
+            try {
+                if ($ext === 'pdf') {
+                    $parser = new \Smalot\PdfParser\Parser();
+                    $pdf = $parser->parseFile($fullPath);
+                    $policyText = $pdf->getText();
+                } elseif (in_array($ext, ['docx', 'doc'])) {
+                    $phpWord = \PhpOffice\PhpWord\IOFactory::load($fullPath);
+                    $text = '';
+                    foreach ($phpWord->getSections() as $section) {
+                        foreach ($section->getElements() as $element) {
+                            if (method_exists($element, 'getText')) {
+                                $text .= $element->getText() . "\n";
+                            } elseif (method_exists($element, 'getElements')) {
+                                foreach ($element->getElements() as $child) {
+                                    if (method_exists($child, 'getText')) {
+                                        $text .= $child->getText() . "\n";
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    $policyText = $text;
+                }
+            } catch (\Exception $e) {
+                return response()->json(['message' => 'Gagal mengekstrak teks: ' . $e->getMessage()], 422);
+            }
+        }
+
+        $policyText = trim($policyText);
+        if (mb_strlen($policyText) < 50) {
+            return response()->json(['message' => 'Teks kebijakan minimal harus 50 karakter.'], 422);
+        }
+
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
+        if (!$ai->isAvailable()) {
+            return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        }
+
+        $context = TenantContextService::buildContext($request->user()->org_id);
+
+        $docTypeLabels = [
+            'kebijakan_privasi' => 'Kebijakan Privasi (Privacy Policy)',
+            'sop_data_handling' => 'SOP Penanganan Data Pribadi',
+            'sop_breach_response' => 'SOP Respon Pelanggaran Data',
+            'peraturan_perusahaan' => 'Peraturan Perusahaan',
+            'sop_dsr' => 'SOP Pemenuhan Hak Subjek Data',
+            'sop_retensi' => 'SOP Retensi & Pemusnahan Data',
+            'other' => 'Dokumen Lainnya',
+        ];
+        $docLabel = $docTypeLabels[$docType] ?? $docType;
+
+        $systemPrompt = "Kamu adalah auditor kepatuhan senior UU PDP Indonesia (UU No. 27/2022). "
+            . "Tugasmu mengaudit kebijakan/SOP internal perusahaan terhadap kepatuhan UU PDP.\n"
+            . "Konteks Tenant:\n$context\n\n"
+            . "Output WAJIB berupa JSON valid. Format:\n"
+            . json_encode([
+                'overall_score' => '0-100 (integer)',
+                'compliance_level' => 'compliant/partial/non_compliant',
+                'summary' => 'ringkasan keseluruhan 2-3 kalimat',
+                'sections' => [[
+                    'section_title' => 'Nama bagian/pasal dokumen',
+                    'status' => 'comply/partial/non_comply/missing',
+                    'score' => '0-100',
+                    'gap_description' => 'Penjelasan gap yang ditemukan',
+                    'recommendation' => 'Saran perbaikan konkret',
+                    'uu_pdp_reference' => 'Pasal UU PDP yang relevan',
+                ]],
+                'missing_elements' => ['elemen penting yang belum ada dalam dokumen'],
+                'strengths' => ['hal-hal yang sudah baik'],
+                'priority_actions' => [['action' => '...', 'priority' => 'high/medium/low', 'deadline_suggestion' => '...']],
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        $userPrompt = "Audit dokumen internal berikut terhadap kepatuhan UU PDP Indonesia:\n\n"
+            . "Judul: {$title}\n"
+            . "Tipe Dokumen: {$docLabel}\n"
+            . ($fileName ? "File: {$fileName}\n" : "")
+            . "\n=== ISI DOKUMEN ===\n"
+            . mb_substr($policyText, 0, 8000)
+            . "\n=== END ===\n\n"
+            . "Berikan analisis LENGKAP per-section: status comply/partial/non_comply, gap, rekomendasi. "
+            . "Sertakan skor keseluruhan 0-100 dan list elemen yang hilang. "
+            . "Jawab HANYA JSON valid.";
+
+        $response = $ai->ask($systemPrompt, $userPrompt, 5000);
+
+        $inputData = [
+            'title' => $title,
+            'doc_type' => $docType,
+            'file_name' => $fileName,
+            'file_path' => $storedPath,
+            'text_length' => mb_strlen($policyText),
+        ];
+
+        // Save to policy_reviews table if it exists
+        try {
+            DB::table('policy_reviews')->insert([
+                'id' => \Illuminate\Support\Str::uuid(),
+                'org_id' => $request->user()->org_id,
+                'title' => $title,
+                'doc_type' => $docType,
+                'file_path' => $storedPath,
+                'review_result' => json_encode($response),
+                'risk_score' => $response['overall_score'] ?? 0,
+                'status' => 'completed',
+                'created_by' => $request->user()->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Exception $e) {
+            // Table may not exist yet, proceed anyway
+            \Log::warning('policy_reviews table not available: ' . $e->getMessage());
+        }
+
+        return $this->saveAndRespond($request, 'policy_review', $response, $inputData);
     }
 }
