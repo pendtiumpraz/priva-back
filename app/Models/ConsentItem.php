@@ -10,7 +10,7 @@ class ConsentItem extends Model
     use HasUuids, SoftDeletes;
 
     protected $fillable = [
-        'collection_point_id', 'title', 'description', 'full_text',
+        'collection_point_id', 'title', 'description', 'specific_purpose', 'full_text',
         'version', 'is_required', 'is_active',
     ];
 

@@ -123,6 +123,7 @@ class AiFeatureController extends Controller
 
     /**
      * Get previous AI results for a record
+     * Sanitizes corrupt/invalid cached results to prevent frontend crashes
      */
     public function history(Request $request, string $featureType, string $recordId)
     {
@@ -133,7 +134,21 @@ class AiFeatureController extends Controller
             ->limit(10)
             ->get();
 
-        return response()->json(['data' => $results]);
+        // Sanitize: filter out entries with null/invalid result_data
+        $sanitized = $results->filter(function ($item) {
+            $data = $item->result_data;
+            // result_data must be a non-null array/object
+            if (is_null($data)) return false;
+            if (is_string($data)) {
+                // Try to decode if stored as string
+                $decoded = json_decode($data, true);
+                if ($decoded === null) return false;
+                $item->result_data = $decoded;
+            }
+            return true;
+        })->values();
+
+        return response()->json(['data' => $sanitized]);
     }
 
     // =============================================

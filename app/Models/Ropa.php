@@ -12,7 +12,7 @@ class Ropa extends Model
     protected $fillable = [
         'org_id', 'regulation_code', 'registration_number', 'processing_activity', 'entity', 'division',
         'work_unit', 'description', 'kategori_pemrosesan', 'assign_group',
-        'risk_level', 'status', 'purpose', 'legal_basis', 'data_categories', 'data_subjects',
+        'risk_level', 'status', 'purpose', 'legal_basis', 'legal_basis_detail', 'data_categories', 'data_subjects',
         'recipients', 'retention_period', 'retention_due_date', 'security_measures',
         'wizard_data', 'progress',
         'approved_by', 'approved_at', 'created_by',

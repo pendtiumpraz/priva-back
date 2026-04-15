@@ -196,7 +196,7 @@ class TemplateExportController extends Controller
             $t = $this->makeInfoTable($sec);
             $this->addInfoRow($t, 'Tujuan Pemrosesan', $ropa->purpose ?? $info['tujuan'] ?? '-');
             $this->addInfoRow($t, 'Dasar Hukum Pemrosesan', $ropa->legal_basis ?? $info['dasar_pemrosesan'] ?? '-');
-            $this->addInfoRow($t, 'Keterangan Dasar Hukum', $info['keterangan_dasar'] ?? '-');
+            $this->addInfoRow($t, 'Detail / Keterangan Dasar Hukum', $ropa->legal_basis_detail ?? $info['legal_basis_detail'] ?? $info['keterangan_dasar'] ?? '-');
 
             // 4. Pengumpulan Data
             $this->addSectionTitle($sec, '4. Pengumpulan Data');
@@ -448,14 +448,101 @@ class TemplateExportController extends Controller
         $gap = GapAssessment::where('org_id', auth()->user()->org_id)->findOrFail($id);
         $templatePath = storage_path('app/templates/gap-template.xls');
 
-        if (!file_exists($templatePath)) {
-            return response()->json(['message' => 'Template Gap Assessment (.xls) tidak ditemukan'], 404);
+        // Fallback to a blank spreadsheet if template is missing
+        $spreadsheet = file_exists($templatePath) 
+            ? \PhpOffice\PhpSpreadsheet\IOFactory::load($templatePath)
+            : new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Gap Analysis');
+
+        // Styles
+        $headerStyle = [
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '4F46E5']],
+            'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER],
+        ];
+
+        // 1. Metadata Header
+        $sheet->setCellValue('A1', 'PRIVASIMU NEXUS - GAP ASSESSMENT REPORT');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
+        
+        $sheet->setCellValue('A3', 'Version:'); $sheet->setCellValue('B3', $gap->version);
+        $sheet->setCellValue('A4', 'Compliance Score:'); $sheet->setCellValue('B4', $gap->overall_score . '%');
+        $sheet->setCellValue('A5', 'Compliance Level:'); $sheet->setCellValue('B5', strtoupper($gap->compliance_level));
+        $sheet->setCellValue('A6', 'Date Generated:'); $sheet->setCellValue('B6', now()->format('d M Y H:i'));
+        $sheet->setCellValue('A7', 'Framework:'); $sheet->setCellValue('B7', $gap->regulation_code ?: 'UU PDP');
+
+        // 2. Category Breakdown
+        $sheet->setCellValue('A9', 'Category Breakdown');
+        $sheet->getStyle('A9')->getFont()->setBold(true);
+        
+        $row = 10;
+        $scoreData = GapAssessment::calculateScore($gap->answers ?: [], $gap->regulation_code ?: 'uupdp');
+        foreach ($scoreData['category_breakdown'] as $cat => $score) {
+            $sheet->setCellValue('A' . $row, $cat);
+            $sheet->setCellValue('B' . $row, $score . '%');
+            $row++;
         }
 
+        // 3. Detailed Results Table
+        $startRow = $row + 2;
+        $sheet->setCellValue('A' . $startRow, 'ID');
+        $sheet->setCellValue('B' . $startRow, 'Category');
+        $sheet->setCellValue('C' . $startRow, 'Question');
+        $sheet->setCellValue('D' . $startRow, 'Answer');
+        $sheet->setCellValue('E' . $startRow, 'Recommendation');
+        
+        $sheet->getStyle("A{$startRow}:E{$startRow}")->applyFromArray($headerStyle);
+        
+        $questions = GapAssessment::getQuestionBank($gap->regulation_code ?: 'uupdp');
+        $currentRow = $startRow + 1;
+        
+        foreach ($questions as $q) {
+            $ansCode = $gap->answers[$q['id']] ?? 'n/a';
+            $ansLabel = match($ansCode) {
+                'yes' => 'Sudah Memenuhi',
+                'partial' => 'Memenuhi Sebagian',
+                'no' => 'Belum Memenuhi',
+                'na' => 'N/A',
+                default => 'Belum Dijawab'
+            };
+            
+            $sheet->setCellValue('A' . $currentRow, $q['id']);
+            $sheet->setCellValue('B' . $currentRow, $q['category']);
+            $sheet->setCellValue('C' . $currentRow, $q['question']);
+            $sheet->setCellValue('D' . $currentRow, $ansLabel);
+            
+            // Set color for answer
+            $color = match($ansCode) {
+                'yes' => '22C55E',
+                'partial' => 'F59E0B',
+                'no' => 'EF4444',
+                default => '94A3B8'
+            };
+            $sheet->getStyle('D' . $currentRow)->getFont()->getColor()->setRGB($color);
+            $sheet->getStyle('D' . $currentRow)->getFont()->setBold(true);
+
+            // Recommendation (only if not 'yes')
+            if ($ansCode !== 'yes' && $ansCode !== 'na') {
+                $sheet->setCellValue('E' . $currentRow, $q['recommendation']);
+            }
+            
+            $currentRow++;
+        }
+
+        // Auto-size columns
+        foreach (range('A', 'E') as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+        // Limit width for Question and Recommendation
+        $sheet->getColumnDimension('C')->setAutoSize(false)->setWidth(50);
+        $sheet->getColumnDimension('E')->setAutoSize(false)->setWidth(60);
+        $sheet->getStyle("C1:E{$currentRow}")->getAlignment()->setWrapText(true);
+
         try {
-            $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($templatePath);
             $writer = \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($spreadsheet, 'Xls');
-            $outputFileName = 'Gap_Assessment_' . $gap->version . '.xls';
+            $outputFileName = 'Gap_Assessment_' . str_replace(' ', '_', $gap->version) . '.xls';
             $tempFile = tempnam(sys_get_temp_dir(), 'phpxls');
             $writer->save($tempFile);
 

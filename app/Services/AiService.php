@@ -7,6 +7,7 @@ use App\Models\KnowledgeBaseSection;
 use App\Http\Controllers\Api\AiProviderController;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class AiService
 {
@@ -29,8 +30,8 @@ class AiService
 
         if ($config && !empty($config['api_key'])) {
             $this->apiKey = $config['api_key'];
-            $this->model = $config['model']->model_id;
-            $this->baseUrl = rtrim($config['base_url'], '/');
+            $this->model = $config['model']->model_id ?? '';
+            $this->baseUrl = rtrim($config['base_url'] ?? '', '/');
             $this->authHeader = $config['auth_header'] ?: 'Authorization';
             $this->authPrefix = ($config['auth_header'] && !($config['auth_prefix'] ?? '')) ? '' : ($config['auth_prefix'] ?: 'Bearer');
         } else {
@@ -77,6 +78,15 @@ class AiService
             return null;
         }
 
+        // Generate a unique cache key based on the model, prompts and language
+        $cacheKey = 'ai_resp_' . md5($this->model . $systemPrompt . $userPrompt . $this->locale);
+
+        // Check if we have a cached response (TTL 24 hours)
+        if ($cached = Cache::get($cacheKey)) {
+            Log::info("AI Cache Hit for model [{$this->model}]");
+            return $cached;
+        }
+
         try {
             $headers = ['Content-Type' => 'application/json'];
             if ($this->authPrefix) {
@@ -117,12 +127,12 @@ class AiService
             }
 
             $parsed = json_decode($cleaned, true);
-            if ($parsed !== null) {
-                return $parsed;
-            }
+            $result = $parsed !== null ? $parsed : ['raw' => $content];
 
-            // Return as raw text
-            return ['raw' => $content];
+            // Store in cache for 24 hours
+            Cache::put($cacheKey, $result, now()->addHours(24));
+
+            return $result;
         } catch (\Exception $e) {
             Log::error('AI Service error [' . $this->model . ']: ' . $e->getMessage());
             return null;

@@ -128,13 +128,44 @@ class ModuleCrudController extends Controller
             $query->onlyTrashed();
         if ($request->get('status'))
             $query->where('status', $request->get('status'));
+            
+        // Basic search if 'q' is provided
+        if ($request->filled('q')) {
+            $q = $request->get('q');
+            $searchColumns = match ($module) {
+                'ropa' => ['registration_number', 'processing_activity', 'division', 'description'],
+                'dpia' => ['registration_number', 'description'],
+                'dsr' => ['request_id', 'requester_name', 'description'],
+                'consent' => ['collection_id', 'name', 'domain'],
+                'breach' => ['incident_code', 'title', 'description'],
+                'data-discovery' => ['name', 'connection_type', 'host'],
+                default => [],
+            };
+            
+            if (!empty($searchColumns)) {
+                $query->where(function($sub) use ($searchColumns, $q) {
+                    foreach ($searchColumns as $col) {
+                        $sub->orWhere($col, 'like', "%{$q}%");
+                    }
+                });
+            }
+        }
 
         // Add relationship counts for consent module
         if ($module === 'consent') {
             $query->withCount(['items', 'records']);
         }
 
-        return response()->json(['data' => $query->orderBy('created_at', 'desc')->get()]);
+        $query->orderBy('created_at', 'desc');
+
+        // Pagination
+        if ($request->filled('per_page')) {
+            $perPage = (int) $request->get('per_page', 25);
+            $paginated = $query->cursorPaginate($perPage);
+            return response()->json($paginated);
+        }
+
+        return response()->json(['data' => $query->get()]);
     }
 
     /**

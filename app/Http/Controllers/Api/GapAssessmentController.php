@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\GapAssessment;
+use App\Models\CustomGapQuestion;
 use Illuminate\Http\Request;
 
 class GapAssessmentController extends Controller
@@ -94,6 +95,19 @@ class GapAssessmentController extends Controller
         $code = $request->query('regulation', 'uupdp');
         $questions = GapAssessment::getQuestionBank($code);
 
+        // Merge custom questions from this org
+        $orgId = $request->user()->org_id;
+        if ($orgId) {
+            $customQuestions = CustomGapQuestion::forOrg($orgId)
+                ->forRegulation($code)
+                ->active()
+                ->orderBy('sort_order')
+                ->get()
+                ->map(fn($q) => $q->toQuestionFormat())
+                ->toArray();
+            $questions = array_merge($questions, $customQuestions);
+        }
+
         // Group by category
         $grouped = [];
         foreach ($questions as $q) {
@@ -144,6 +158,7 @@ class GapAssessmentController extends Controller
             'compliance_level' => 'low',
             'progress' => 0,
             'answers' => [],
+            'attachments' => [],
             'recommendations' => [],
             'created_by' => $request->user()->id,
         ]);
@@ -158,13 +173,22 @@ class GapAssessmentController extends Controller
     /**
      * Get assessment detail
      */
-    public function show(string $id)
+    public function show(Request $request, string $id)
     {
         $assessment = GapAssessment::withTrashed()->findOrFail($id);
+        $code = $assessment->regulation_code ?? 'uupdp';
+        $questions = GapAssessment::getQuestionBank($code);
+
+        // Merge custom questions
+        $orgId = $request->user()->org_id;
+        if ($orgId) {
+            $custom = CustomGapQuestion::forOrg($orgId)->forRegulation($code)->active()->orderBy('sort_order')->get();
+            $questions = array_merge($questions, $custom->map(fn($q) => $q->toQuestionFormat())->toArray());
+        }
 
         return response()->json([
             'data' => $assessment,
-            'questions' => GapAssessment::getQuestionBank($assessment->regulation_code ?? 'uupdp'),
+            'questions' => $questions,
         ]);
     }
 
@@ -175,21 +199,25 @@ class GapAssessmentController extends Controller
     {
         $request->validate([
             'answers' => 'required|array',
+            'attachments' => 'nullable|array',
         ]);
 
         $assessment = GapAssessment::findOrFail($id);
         $answers = $request->input('answers');
+        $attachmentsInput = $request->input('attachments', []);
 
         // Calculate score
         $result = GapAssessment::calculateScore($answers, $assessment->regulation_code ?? 'uupdp');
 
-        // Calculate progress
-        $totalQuestions = count(GapAssessment::getQuestionBank($assessment->regulation_code ?? 'uupdp'));
+        // Calculate progress (include custom questions)
+        $customCount = CustomGapQuestion::forOrg($assessment->org_id)->forRegulation($assessment->regulation_code ?? 'uupdp')->active()->count();
+        $totalQuestions = count(GapAssessment::getQuestionBank($assessment->regulation_code ?? 'uupdp')) + $customCount;
         $answeredCount = count(array_filter($answers, fn($a) => $a !== null && $a !== ''));
         $progress = round(($answeredCount / $totalQuestions) * 100);
 
         $assessment->update([
             'answers' => $answers,
+            'attachments' => $attachmentsInput,
             'overall_score' => $result['overall_score'],
             'compliance_level' => $result['compliance_level'],
             'progress' => $progress,
@@ -231,8 +259,133 @@ class GapAssessmentController extends Controller
     public function forceDelete(string $id)
     {
         $assessment = GapAssessment::onlyTrashed()->findOrFail($id);
+        
+        // Cleanup attachments
+        if ($assessment->attachments) {
+            foreach ($assessment->attachments as $questionPaths) {
+                if (is_array($questionPaths)) {
+                    foreach ($questionPaths as $path) {
+                        if ($path) \Illuminate\Support\Facades\Storage::disk('public')->delete($path);
+                    }
+                }
+            }
+        }
+        
         $assessment->forceDelete();
 
         return response()->json(['message' => 'Assessment permanently deleted']);
+    }
+
+    // =============================================
+    // Evidence Upload (Sprint B3)
+    // =============================================
+
+    public function uploadEvidence(Request $request, string $id)
+    {
+        $request->validate([
+            'question_id' => 'required|string',
+            'file' => 'required|file|max:10240|mimes:pdf,png,jpg,jpeg,docx',
+        ]);
+
+        $assessment = GapAssessment::findOrFail($id);
+        
+        $file = $request->file('file');
+        $path = $file->storeAs(
+            "org/{$assessment->org_id}/gap/{$assessment->id}/evidence",
+            uniqid() . '_' . preg_replace('/[^A-Za-z0-9.\-]/', '_', $file->getClientOriginalName()),
+            'public'
+        );
+
+        $attachments = $assessment->attachments ?? [];
+        $qId = $request->question_id;
+        
+        if (!isset($attachments[$qId])) {
+            $attachments[$qId] = [];
+        }
+        
+        $attachments[$qId][] = [
+            'path' => $path,
+            'url' => asset('storage/' . $path),
+            'name' => $file->getClientOriginalName(),
+            'uploaded_at' => now()->toIso8601String()
+        ];
+
+        $assessment->update(['attachments' => $attachments]);
+
+        return response()->json([
+            'message' => 'Evidence uploaded',
+            'data' => end($attachments[$qId]),
+            'attachments' => $attachments
+        ]);
+    }
+
+    // =============================================
+    // Custom Questions CRUD (Sprint B2)
+    // =============================================
+
+    public function customQuestions(Request $request)
+    {
+        $code = $request->query('regulation', 'uupdp');
+        $questions = CustomGapQuestion::forOrg($request->user()->org_id)
+            ->forRegulation($code)
+            ->orderBy('sort_order')
+            ->get();
+
+        return response()->json(['data' => $questions]);
+    }
+
+    public function storeCustomQuestion(Request $request)
+    {
+        $request->validate([
+            'regulation_code' => 'required|string|max:20',
+            'category' => 'required|string|max:255',
+            'question' => 'required|string',
+            'recommendation' => 'required|string',
+            'weight' => 'nullable|numeric|min:0.1|max:10',
+            'article' => 'nullable|string|max:100',
+            'explanation' => 'nullable|string',
+        ]);
+
+        $question = CustomGapQuestion::create([
+            'org_id' => $request->user()->org_id,
+            'regulation_code' => $request->regulation_code,
+            'category' => $request->category,
+            'subcategory' => $request->subcategory,
+            'question' => $request->question,
+            'explanation' => $request->explanation,
+            'recommendation' => $request->recommendation,
+            'weight' => $request->weight ?? 1.0,
+            'article' => $request->article,
+            'sort_order' => CustomGapQuestion::forOrg($request->user()->org_id)->max('sort_order') + 1,
+        ]);
+
+        return response()->json(['message' => 'Custom question created', 'data' => $question], 201);
+    }
+
+    public function updateCustomQuestion(Request $request, string $id)
+    {
+        $question = CustomGapQuestion::forOrg($request->user()->org_id)->findOrFail($id);
+
+        $request->validate([
+            'category' => 'sometimes|string|max:255',
+            'question' => 'sometimes|string',
+            'recommendation' => 'sometimes|string',
+            'weight' => 'nullable|numeric|min:0.1|max:10',
+        ]);
+
+        $question->update($request->only([
+            'category', 'subcategory', 'question', 'explanation',
+            'recommendation', 'weight', 'article', 'sort_order', 'is_active',
+        ]));
+
+        return response()->json(['message' => 'Custom question updated', 'data' => $question->fresh()]);
+    }
+
+    public function destroyCustomQuestion(Request $request, string $id)
+    {
+        $question = CustomGapQuestion::forOrg($request->user()->org_id)->findOrFail($id);
+        $question->delete();
+
+        return response()->json(['message' => 'Custom question deleted']);
     }
 }
