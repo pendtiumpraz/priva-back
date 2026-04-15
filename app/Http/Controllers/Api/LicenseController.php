@@ -366,7 +366,7 @@ class LicenseController extends Controller
                     ->where(function($q) use ($targetOrgId) {
                         if (!$targetOrgId) {
                             // Being activated FOR platform right now, so we exclude the same exact context
-                            $q->where('id', '<', 0); // Always false, just to skip
+                            $q->whereRaw('1 = 0'); // Always false, just to skip
                         }
                     })
                     ->where('status', 'active')
