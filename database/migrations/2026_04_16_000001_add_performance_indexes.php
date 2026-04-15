@@ -96,12 +96,15 @@ return new class extends Migration
     private function indexExists(string $table, string $indexName): bool
     {
         try {
-            $conn = Schema::getConnection();
-            $sm = $conn->getDoctrineSchemaManager();
-            $indexes = $sm->listTableIndexes($table);
-            return isset($indexes[strtolower($indexName)]);
+            $db = Schema::getConnection()->getDatabaseName();
+            $result = \Illuminate\Support\Facades\DB::select(
+                "SELECT COUNT(*) as cnt FROM information_schema.statistics WHERE table_schema = ? AND table_name = ? AND index_name = ?",
+                [$db, $table, $indexName]
+            );
+            return ($result[0]->cnt ?? 0) > 0;
         } catch (\Exception $e) {
-            return false;
+            // If we can't check, assume it exists to avoid duplicate errors
+            return true;
         }
     }
 };
