@@ -423,6 +423,22 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::post('/ai-credits/topup', [\App\Http\Controllers\Api\AiFeatureController::class, 'creditTopup']);
 
         // =============================================
+        // Sprint C1: Custom Fields & Templates (ROPA / DPIA)
+        // =============================================
+        Route::prefix('custom-fields')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\CustomFieldController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\CustomFieldController::class, 'store']);
+            Route::put('/{id}', [\App\Http\Controllers\Api\CustomFieldController::class, 'update']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\CustomFieldController::class, 'destroy']);
+        });
+        Route::prefix('module-templates')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\CustomFieldController::class, 'templates']);
+            Route::post('/', [\App\Http\Controllers\Api\CustomFieldController::class, 'storeTemplate']);
+            Route::put('/{id}', [\App\Http\Controllers\Api\CustomFieldController::class, 'updateTemplate']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\CustomFieldController::class, 'destroyTemplate']);
+        });
+
+        // =============================================
         // Template Export (Word/Excel — Formatted Documents)
         // =============================================
         Route::prefix('export-doc')->group(function () {

@@ -332,7 +332,22 @@ class ModuleCrudController extends Controller
             $query->with(['items', 'records']);
         }
 
-        return response()->json(['data' => $query->findOrFail($id)]);
+        $record = $query->findOrFail($id);
+
+        // Sprint C1: attach tenant custom field definitions for ROPA / DPIA
+        $customFields = [];
+        if (in_array($module, ['ropa', 'dpia'], true)) {
+            $customFields = \App\Models\ModuleCustomField::where('org_id', $request->user()->org_id)
+                ->forModule($module)
+                ->active()
+                ->orderBy('sort_order')
+                ->get();
+        }
+
+        return response()->json([
+            'data' => $record,
+            'custom_fields' => $customFields,
+        ]);
     }
 
     /**
