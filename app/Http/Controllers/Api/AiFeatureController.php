@@ -496,6 +496,58 @@ class AiFeatureController extends Controller
     }
 
     /**
+     * Sprint F1/F2/F3: Assessment AI analysis (generic dispatcher).
+     */
+    public function assessmentAnalysis(Request $request, string $kind)
+    {
+        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $feature = "assessment_{$kind}";
+        $creditErr = $this->checkCredit($request, $feature);
+        if ($creditErr) return $creditErr;
+
+        $data = $request->validate(['id' => 'required|uuid']);
+        $orgId = $request->user()->org_id;
+
+        $model = match ($kind) {
+            'lia' => \App\Models\LiaAssessment::class,
+            'tia' => \App\Models\TiaAssessment::class,
+            'maturity' => \App\Models\MaturityAssessment::class,
+            default => null,
+        };
+        if (!$model) return response()->json(['message' => 'Unknown assessment kind'], 422);
+
+        $record = $model::where('org_id', $orgId)->find($data['id']);
+        if (!$record) return response()->json(['message' => 'Assessment tidak ditemukan'], 404);
+
+        $ai = (new AiService($orgId))->setLocale($request->user()->locale ?? 'id');
+        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+
+        $response = match ($kind) {
+            'lia' => $ai->liaAnalysis($record->toArray()),
+            'tia' => $ai->tiaAnalysis($record->toArray()),
+            'maturity' => $ai->maturityAnalysis($record->toArray()),
+        };
+
+        // Persist key fields back to record for convenience
+        if ($response) {
+            $updates = [];
+            if ($kind === 'lia') {
+                if (isset($response['overall_score'])) $updates['overall_score'] = $response['overall_score'];
+                if (isset($response['assessment_result'])) $updates['assessment_result'] = $response['assessment_result'];
+            } elseif ($kind === 'tia') {
+                if (isset($response['overall_risk_level'])) $updates['overall_risk_level'] = $response['overall_risk_level'];
+            } elseif ($kind === 'maturity') {
+                if (isset($response['overall_level'])) $updates['overall_level'] = $response['overall_level'];
+                if (isset($response['overall_score'])) $updates['overall_score'] = $response['overall_score'];
+                if (isset($response['roadmap'])) $updates['recommendations'] = $response['roadmap'];
+            }
+            if (!empty($updates)) $record->update($updates);
+        }
+
+        return $this->saveAndRespond($request, $feature, $response, ['id' => $data['id']]);
+    }
+
+    /**
      * Sprint D4: Generate dynamic containment steps for a breach incident.
      */
     public function breachContainmentSteps(Request $request)

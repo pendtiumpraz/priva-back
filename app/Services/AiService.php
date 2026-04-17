@@ -547,6 +547,73 @@ class AiService
     }
 
     /**
+     * Sprint F1: LIA analysis — evaluates purpose/necessity/balancing tests.
+     */
+    public function liaAnalysis(array $lia): ?array
+    {
+        $system = "Kamu adalah privacy lawyer spesialis Legitimate Interest Assessment UU PDP/GDPR.\n"
+            . "Output WAJIB JSON valid.\n\n"
+            . "FORMAT: " . json_encode([
+                'overall_score' => 'integer 0-100',
+                'assessment_result' => 'pass | conditional | fail',
+                'purpose_evaluation' => 'string (2-3 kalimat)',
+                'necessity_evaluation' => 'string',
+                'balancing_evaluation' => 'string — evaluasi keseimbangan kepentingan vs hak subjek',
+                'recommendations' => [['priority' => 'critical|high|medium', 'description' => '...']],
+                'red_flags' => ['hal yang berisiko dari perspektif UU PDP'],
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        $user = "LIA record:\n" . json_encode($lia, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+            . "\n\nAnalisis ke-3 test (Purpose, Necessity, Balancing). Jawab HANYA JSON valid.";
+        return $this->ask($system, $user, 2500);
+    }
+
+    /**
+     * Sprint F2: TIA analysis — evaluates cross-border transfer risk.
+     */
+    public function tiaAnalysis(array $tia): ?array
+    {
+        $system = "Kamu adalah privacy lawyer internasional ahli cross-border data transfer.\n"
+            . "Output WAJIB JSON valid.\n\n"
+            . "FORMAT: " . json_encode([
+                'overall_risk_level' => 'low | medium | high | critical',
+                'jurisdiction_analysis' => 'string — status adequacy negara tujuan vs UU PDP',
+                'recommended_safeguards' => ['SCCs', 'BCR', 'encryption', 'pseudonymization', 'contractual'],
+                'risk_score' => 'integer 0-100 (higher = lebih berisiko)',
+                'go_no_go' => 'proceed | proceed_with_conditions | stop',
+                'conditions' => ['kalau proceed_with_conditions — syarat yang harus dipenuhi'],
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        $user = "TIA record:\n" . json_encode($tia, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+            . "\n\nEvaluasi risiko transfer. Jawab HANYA JSON valid.";
+        return $this->ask($system, $user, 2500);
+    }
+
+    /**
+     * Sprint F3: Maturity analysis — evaluate & recommend roadmap.
+     */
+    public function maturityAnalysis(array $maturity): ?array
+    {
+        $system = "Kamu adalah data protection maturity auditor (CMM model, 5 level).\n"
+            . "Level: 1=Initial, 2=Repeatable, 3=Defined, 4=Managed, 5=Optimizing.\n"
+            . "Output WAJIB JSON valid.\n\n"
+            . "FORMAT: " . json_encode([
+                'overall_level' => 'integer 1-5',
+                'overall_score' => 'integer 0-100',
+                'dimension_summary' => [
+                    'governance' => ['level' => 1, 'summary' => '...'],
+                    'process' => ['level' => 1, 'summary' => '...'],
+                    'technology' => ['level' => 1, 'summary' => '...'],
+                    'people' => ['level' => 1, 'summary' => '...'],
+                    'compliance' => ['level' => 1, 'summary' => '...'],
+                ],
+                'roadmap' => [['priority' => 'critical|high|medium', 'dimension' => '...', 'next_level_from_current' => 'X → Y', 'actions' => ['...']]],
+                'executive_summary' => 'string (3-4 kalimat eksekutif)',
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        $user = "Maturity record:\n" . json_encode($maturity, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+            . "\n\nBeri analisis maturity + roadmap. Jawab HANYA JSON valid.";
+        return $this->ask($system, $user, 3000);
+    }
+
+    /**
      * Sprint D4: Dynamic containment steps generator tailored to a specific breach case.
      * Returns: { containment_steps: [{ order, step, critical, estimated_minutes }] }
      */

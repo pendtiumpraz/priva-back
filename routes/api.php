@@ -429,6 +429,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::post('/batch-review', [\App\Http\Controllers\Api\AiFeatureController::class, 'batchReview']);
             Route::get('/batch-review/{batchId}', [\App\Http\Controllers\Api\AiFeatureController::class, 'batchReviewStatus']);
             Route::post('/breach/containment-steps', [\App\Http\Controllers\Api\AiFeatureController::class, 'breachContainmentSteps']);
+            Route::post('/assessment/{kind}/analysis', [\App\Http\Controllers\Api\AiFeatureController::class, 'assessmentAnalysis'])->where('kind', 'lia|tia|maturity');
             Route::post('/autofill/breach', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillBreach']);
             Route::post('/autofill/dsr', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillDsr']);
             Route::post('/autofill/consent-items/{id}', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillConsentItems']);
@@ -441,6 +442,19 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         // =============================================
         // Sprint C1: Custom Fields & Templates (ROPA / DPIA)
         // =============================================
+        // =============================================
+        // Sprint F1/F2/F3: LIA / TIA / Maturity Assessment
+        // =============================================
+        Route::prefix('assessments/{kind}')->where(['kind' => 'lia|tia|maturity'])->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\AssessmentsController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\AssessmentsController::class, 'store']);
+            Route::get('/{id}', [\App\Http\Controllers\Api\AssessmentsController::class, 'show']);
+            Route::put('/{id}', [\App\Http\Controllers\Api\AssessmentsController::class, 'update']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\AssessmentsController::class, 'destroy']);
+            Route::post('/{id}/restore', [\App\Http\Controllers\Api\AssessmentsController::class, 'restore']);
+            Route::delete('/{id}/force', [\App\Http\Controllers\Api\AssessmentsController::class, 'forceDelete']);
+        });
+
         // =============================================
         // Sprint C4: Module Comments (threaded, cross-module)
         // =============================================
