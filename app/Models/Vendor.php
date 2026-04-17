@@ -29,6 +29,7 @@ class Vendor extends Model
         'last_assessed_at',
         'data_shared',
         'services_provided',
+        'documents',
     ];
 
     protected $casts = [
@@ -37,6 +38,7 @@ class Vendor extends Model
         'last_assessed_at' => 'date',
         'data_shared' => 'array',
         'services_provided' => 'array',
+        'documents' => 'array',
         'risk_score' => 'integer',
         // PII Encryption — AES-256-CBC
         'contact_name' => EncryptedString::class,

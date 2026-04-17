@@ -213,6 +213,11 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::post('/extract', [\App\Http\Controllers\Api\VendorRiskController::class, 'extract']);
             Route::post('/generate-questions', [\App\Http\Controllers\Api\VendorRiskController::class, 'generateQuestions']);
             Route::post('/assess', [\App\Http\Controllers\Api\VendorRiskController::class, 'assess']);
+
+            // Sprint D3: TPRM document management
+            Route::post('/{id}/documents', [\App\Http\Controllers\Api\VendorRiskController::class, 'uploadDocument']);
+            Route::delete('/{id}/documents/{docId}', [\App\Http\Controllers\Api\VendorRiskController::class, 'deleteDocument']);
+            Route::post('/{id}/screen-documents', [\App\Http\Controllers\Api\VendorRiskController::class, 'screenDocuments']);
         });
 
         // =============================================

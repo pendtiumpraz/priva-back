@@ -118,6 +118,101 @@ class VendorRiskController extends Controller
         return response()->json(['message' => 'Vendor dihapus permanen']);
     }
 
+    // =========================================================
+    //  Sprint D3: TPRM document management
+    // =========================================================
+
+    public function uploadDocument(Request $request, string $id)
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:pdf,docx,doc,xlsx|max:15360', // 15MB
+        ]);
+
+        $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($id);
+
+        $file = $request->file('file');
+        $path = $file->store("vendors/{$vendor->id}", 'local');
+
+        $documents = $vendor->documents ?? [];
+        $documents[] = [
+            'id' => (string) \Illuminate\Support\Str::uuid(),
+            'name' => $file->getClientOriginalName(),
+            'path' => $path,
+            'type' => strtolower($file->getClientOriginalExtension()),
+            'size' => $file->getSize(),
+            'uploaded_at' => now()->toIso8601String(),
+            'uploaded_by' => $request->user()->id,
+        ];
+        $vendor->update(['documents' => $documents]);
+
+        return response()->json(['message' => 'Dokumen terupload', 'data' => $documents]);
+    }
+
+    public function deleteDocument(Request $request, string $id, string $docId)
+    {
+        $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $docs = $vendor->documents ?? [];
+        $doc = collect($docs)->firstWhere('id', $docId);
+        if ($doc && !empty($doc['path'])) {
+            \Illuminate\Support\Facades\Storage::disk('local')->delete($doc['path']);
+        }
+        $vendor->update(['documents' => array_values(array_filter($docs, fn($d) => ($d['id'] ?? null) !== $docId))]);
+
+        return response()->json(['message' => 'Dokumen dihapus', 'data' => $vendor->documents]);
+    }
+
+    public function screenDocuments(Request $request, string $id)
+    {
+        $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $docs = $vendor->documents ?? [];
+        if (count($docs) === 0) {
+            return response()->json(['message' => 'Vendor tidak punya dokumen untuk di-screen'], 422);
+        }
+
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
+        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+
+        $parser = new \App\Services\DocumentParserService();
+        $summaries = [];
+        foreach ($docs as $d) {
+            $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($d['path'] ?? '');
+            if (!is_file($fullPath)) continue;
+            try {
+                $parsed = $parser->parse($fullPath, $d['type'] ?? 'pdf');
+                $summaries[] = [
+                    'doc' => $d['name'] ?? '',
+                    'text' => mb_substr($parsed['raw_text'] ?? '', 0, 5000),
+                ];
+            } catch (\Exception $e) {
+                \Log::warning("screenDocuments parse failed for {$d['name']}: " . $e->getMessage());
+            }
+        }
+
+        if (count($summaries) === 0) {
+            return response()->json(['message' => 'Tidak ada dokumen yang bisa di-parse'], 422);
+        }
+
+        $combinedText = '';
+        foreach ($summaries as $s) {
+            $combinedText .= "=== {$s['doc']} ===\n{$s['text']}\n\n";
+        }
+
+        $response = $ai->vendorRiskAssessor([
+            'vendor' => ['name' => $vendor->name, 'services' => $vendor->services_provided ?? []],
+            'documents_text' => mb_substr($combinedText, 0, 12000),
+        ]);
+
+        if ($response && isset($response['score'])) {
+            $vendor->update([
+                'risk_score' => (int) ($response['score'] ?? $vendor->risk_score),
+                'risk_level' => $response['risk_level'] ?? $vendor->risk_level,
+                'last_assessed_at' => now(),
+            ]);
+        }
+
+        return response()->json(['message' => 'Screening selesai', 'data' => $response, 'vendor' => $vendor->fresh()]);
+    }
+
     /**
      * 1. AI Auto-Form (Extractor)
      */
