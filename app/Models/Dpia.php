@@ -12,14 +12,17 @@ class Dpia extends Model
     protected $fillable = [
         'org_id', 'regulation_code', 'registration_number', 'ropa_id', 'risk_level', 'status',
         'description', 'risk_assessment', 'mitigation_measures',
-        'wizard_data', 'progress',
+        'wizard_data', 'raci_matrix', 'progress',
         'approver_id', 'approved_at', 'created_by',
+        'assigned_roles',
     ];
 
     protected $casts = [
         'risk_assessment' => 'array',
         'mitigation_measures' => 'array',
         'wizard_data' => 'array',
+        'raci_matrix' => 'array',
+        'assigned_roles' => 'array',
         'approved_at' => 'datetime',
         'progress' => 'float',
     ];

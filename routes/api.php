@@ -413,6 +413,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             // Auto-Fill endpoints
             Route::post('/autofill/ropa', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillRopa']);
             Route::post('/autofill/dpia', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillDpia']);
+            Route::post('/generate-raci', [\App\Http\Controllers\Api\AiFeatureController::class, 'generateRaci']);
             Route::post('/autofill/breach', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillBreach']);
             Route::post('/autofill/dsr', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillDsr']);
             Route::post('/autofill/consent-items/{id}', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillConsentItems']);

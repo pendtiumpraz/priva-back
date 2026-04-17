@@ -495,6 +495,55 @@ class AiFeatureController extends Controller
         return $this->saveAndRespond($request, 'autofill_dpia', $response, ['description' => $request->description]);
     }
 
+    /**
+     * Sprint C2: AI-generated RACI matrix for ROPA / DPIA.
+     */
+    public function generateRaci(Request $request)
+    {
+        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'generate_raci');
+        if ($creditErr) return $creditErr;
+
+        $data = $request->validate([
+            'module' => 'required|in:ropa,dpia',
+            'record_id' => 'required|uuid',
+        ]);
+
+        $orgId = $request->user()->org_id;
+        $record = $data['module'] === 'ropa'
+            ? Ropa::where('org_id', $orgId)->find($data['record_id'])
+            : Dpia::where('org_id', $orgId)->find($data['record_id']);
+
+        if (!$record) return response()->json(['message' => 'Record tidak ditemukan'], 404);
+
+        $users = \App\Models\User::where('org_id', $orgId)
+            ->select('id', 'name', 'role')
+            ->get()
+            ->map(fn($u) => ['name' => $u->name, 'role' => $u->role])
+            ->toArray();
+
+        if (count($users) < 2) {
+            return response()->json(['message' => 'Butuh minimal 2 user dalam tenant untuk generate RACI'], 422);
+        }
+
+        $recordData = [
+            'title' => $record->processing_activity ?? $record->description ?? '',
+            'description' => $record->description ?? '',
+            'risk_level' => $record->risk_level ?? null,
+            'wizard_data' => $record->wizard_data ?? [],
+        ];
+
+        $ai = (new AiService($orgId))->setLocale($request->user()->locale ?? 'id');
+        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+
+        $response = $ai->raciSuggestion($data['module'], $recordData, $users);
+
+        return $this->saveAndRespond($request, 'generate_raci', $response, [
+            'module' => $data['module'],
+            'record_id' => $data['record_id'],
+        ]);
+    }
+
     public function autofillBreach(Request $request)
     {
         if (!$this->checkAiLicense($request)) return $this->denyBasic();

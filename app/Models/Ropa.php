@@ -14,7 +14,7 @@ class Ropa extends Model
         'work_unit', 'description', 'kategori_pemrosesan', 'assign_group',
         'risk_level', 'status', 'purpose', 'legal_basis', 'legal_basis_detail', 'data_categories', 'data_subjects',
         'recipients', 'retention_period', 'retention_due_date', 'security_measures',
-        'wizard_data', 'progress',
+        'wizard_data', 'raci_matrix', 'progress',
         'approved_by', 'approved_at', 'created_by',
     ];
 
@@ -23,6 +23,7 @@ class Ropa extends Model
         'data_subjects' => 'array',
         'recipients' => 'array',
         'wizard_data' => 'array',
+        'raci_matrix' => 'array',
         'approved_at' => 'datetime',
         'progress' => 'float',
     ];

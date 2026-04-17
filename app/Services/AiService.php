@@ -547,6 +547,41 @@ class AiService
     }
 
     /**
+     * Sprint C2: Suggest RACI matrix for a ROPA / DPIA record.
+     * Returns: { raci: [{ task, responsible, accountable, consulted, informed }] }
+     */
+    public function raciSuggestion(string $module, array $recordData, array $userList): ?array
+    {
+        $userNames = array_map(fn($u) => "- {$u['name']} ({$u['role']})", $userList);
+        $userNameList = implode("\n", $userNames);
+
+        $moduleLabel = match ($module) {
+            'ropa' => 'Record of Processing Activity',
+            'dpia' => 'Data Protection Impact Assessment',
+            default => ucfirst($module),
+        };
+
+        $system = "Kamu adalah konsultan ahli UU PDP dan governance privasi data.\n"
+            . "Tugasmu membuat RACI matrix untuk aktivitas pemrosesan data.\n"
+            . "Output WAJIB JSON valid.\n\n"
+            . "FORMAT OUTPUT:\n"
+            . '{"raci":[{"task":"string","responsible":"nama user","accountable":"nama user","consulted":["nama user",...],"informed":["nama user",...]}]}' . "\n\n"
+            . "ATURAN:\n"
+            . "- Gunakan HANYA nama user dari daftar yang disediakan di user prompt.\n"
+            . "- Setiap task harus punya tepat 1 Responsible dan 1 Accountable.\n"
+            . "- Consulted dan Informed boleh kosong [], atau berisi banyak nama.\n"
+            . "- Generate 5-8 task paling penting untuk {$moduleLabel}.\n";
+
+        $dataStr = json_encode($recordData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        $user = "MODULE: {$moduleLabel}\n\n"
+            . "DAFTAR USER YANG TERSEDIA:\n{$userNameList}\n\n"
+            . "DATA RECORD:\n{$dataStr}\n\n"
+            . "Buatkan RACI matrix untuk aktivitas pemrosesan ini. Jawab HANYA JSON valid.";
+
+        return $this->ask($system, $user, 2500);
+    }
+
+    /**
      * Breach Auto-Fill: Generate incident report draft
      */
     public function breachAutoFill(string $incidentTitle, string $tenantContext): ?array
