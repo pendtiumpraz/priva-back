@@ -555,4 +555,163 @@ class TemplateExportController extends Controller
             return response()->json(['message' => 'Gagal export: ' . $e->getMessage()], 500);
         }
     }
+
+    // ================================================================
+    //  GAP ASSESSMENT — DOCX REPORT (Sprint B3 Step 5)
+    // ================================================================
+    public function exportGapReport($id)
+    {
+        $gap = GapAssessment::where('org_id', auth()->user()->org_id)->findOrFail($id);
+
+        try {
+            $phpWord = new PhpWord();
+            $orgName = auth()->user()->organization->name ?? '-';
+            $regCode = $gap->regulation_code ?? 'uupdp';
+            $regName = \App\Models\RegulationFramework::where('code', $regCode)->value('name') ?? 'UU No. 27 Tahun 2022 (UU PDP)';
+            $scoreData = GapAssessment::calculateScore($gap->answers ?: [], $regCode);
+
+            // Cover Page
+            $this->addCoverPage(
+                $phpWord, 'Gap Assessment Report',
+                $gap->version ?? 'Untitled',
+                $regName,
+                $gap->compliance_level ?? 'low',
+                $gap->compliance_level ?? 'low',
+                $orgName
+            );
+
+            // Content Page
+            $sec = $this->addContentSection($phpWord, 'GAP ASSESSMENT - ' . ($gap->version ?? ''));
+
+            // 1. Informasi Assessment
+            $this->addSectionTitle($sec, '1. Informasi Assessment');
+            $t = $this->makeInfoTable($sec);
+            $this->addInfoRow($t, 'Versi Assessment', $gap->version ?? '-');
+            $this->addInfoRow($t, 'Organisasi', $orgName);
+            $this->addInfoRow($t, 'Framework Regulasi', $regName);
+            $this->addInfoRow($t, 'Skor Kepatuhan', round($gap->overall_score ?? 0) . '%');
+            $this->addInfoRow($t, 'Level Kepatuhan', strtoupper($gap->compliance_level ?? '-'));
+            $this->addInfoRow($t, 'Progress', ($gap->progress ?? 0) . '%');
+            $this->addInfoRow($t, 'Tanggal Dibuat', $gap->created_at ? $gap->created_at->format('d F Y H:i') : '-');
+            $this->addInfoRow($t, 'Terakhir Diupdate', $gap->updated_at ? $gap->updated_at->format('d F Y H:i') : '-');
+
+            // 2. Ringkasan Skor per Kategori
+            $this->addSectionTitle($sec, '2. Skor per Kategori');
+            $catTable = $sec->addTable(['borderSize' => 4, 'borderColor' => 'e0e0e0', 'cellMargin' => 80]);
+            $hRow = $catTable->addRow();
+            $hRow->addCell(6000, ['bgColor' => '6366f1', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                ->addText('Kategori', ['size' => 9, 'bold' => true, 'color' => 'ffffff']);
+            $hRow->addCell(2000, ['bgColor' => '6366f1', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                ->addText('Skor', ['size' => 9, 'bold' => true, 'color' => 'ffffff'], ['alignment' => Jc::CENTER]);
+            $hRow->addCell(2000, ['bgColor' => '6366f1', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                ->addText('Status', ['size' => 9, 'bold' => true, 'color' => 'ffffff'], ['alignment' => Jc::CENTER]);
+
+            foreach ($scoreData['category_breakdown'] as $cat => $catScore) {
+                $scoreColor = $catScore >= 70 ? '22c55e' : ($catScore >= 40 ? 'f59e0b' : 'ef4444');
+                $statusLabel = $catScore >= 70 ? 'COMPLY' : ($catScore >= 40 ? 'SEBAGIAN' : 'BELUM COMPLY');
+                $row = $catTable->addRow();
+                $row->addCell(6000, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                    ->addText($this->t($cat), ['size' => 9, 'bold' => true]);
+                $row->addCell(2000, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                    ->addText($this->t(round($catScore) . '%'), ['size' => 9, 'bold' => true, 'color' => $scoreColor], ['alignment' => Jc::CENTER]);
+                $row->addCell(2000, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                    ->addText($this->t($statusLabel), ['size' => 8, 'bold' => true, 'color' => $scoreColor], ['alignment' => Jc::CENTER]);
+            }
+
+            // 3. Detail Pertanyaan & Jawaban
+            $this->addSectionTitle($sec, '3. Detail Jawaban per Pertanyaan');
+
+            $questions = GapAssessment::getQuestionBank($regCode);
+            $answerLabels = [
+                'yes' => ['label' => 'Sudah Memenuhi', 'color' => '22c55e'],
+                'partial' => ['label' => 'Memenuhi Sebagian', 'color' => 'f59e0b'],
+                'no' => ['label' => 'Belum Memenuhi', 'color' => 'ef4444'],
+                'na' => ['label' => 'N/A', 'color' => '94a3b8'],
+            ];
+
+            $detailTable = $sec->addTable(['borderSize' => 4, 'borderColor' => 'e0e0e0', 'cellMargin' => 60]);
+            $dh = $detailTable->addRow();
+            foreach (['ID', 'Kategori', 'Pertanyaan', 'Jawaban', 'Rekomendasi'] as $h) {
+                $w = match($h) {
+                    'ID' => 800, 'Kategori' => 1500, 'Pertanyaan' => 3500, 'Jawaban' => 1600, 'Rekomendasi' => 2600,
+                    default => 2000,
+                };
+                $dh->addCell($w, ['bgColor' => '6366f1', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                    ->addText($h, ['size' => 8, 'bold' => true, 'color' => 'ffffff'], ['alignment' => Jc::CENTER]);
+            }
+
+            foreach ($questions as $idx => $q) {
+                $ansCode = $gap->answers[$q['id']] ?? 'n/a';
+                $ansInfo = $answerLabels[$ansCode] ?? ['label' => 'Belum Dijawab', 'color' => '94a3b8'];
+                $bgColor = ($idx % 2 === 0) ? 'ffffff' : 'f8f9fa';
+
+                $row = $detailTable->addRow();
+                $row->addCell(800, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                    ->addText($this->t($q['id']), ['size' => 7, 'color' => '666666'], ['alignment' => Jc::CENTER]);
+                $row->addCell(1500, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                    ->addText($this->t($q['category']), ['size' => 7, 'bold' => true]);
+                $row->addCell(3500, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                    ->addText($this->t($q['question']), ['size' => 7]);
+                $row->addCell(1600, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                    ->addText($this->t($ansInfo['label']), ['size' => 7, 'bold' => true, 'color' => $ansInfo['color']], ['alignment' => Jc::CENTER]);
+                $row->addCell(2600, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                    ->addText($this->t(($ansCode !== 'yes' && $ansCode !== 'na') ? ($q['recommendation'] ?? '-') : '-'), ['size' => 7, 'color' => '555555']);
+            }
+
+            // 4. Rekomendasi Prioritas
+            $recs = $scoreData['recommendations'] ?? [];
+            if (count($recs) > 0) {
+                $this->addSectionTitle($sec, '4. Rekomendasi Prioritas');
+                $t = $this->makeInfoTable($sec);
+                $critCount = count(array_filter($recs, fn($r) => $r['priority'] === 'critical'));
+                $highCount = count(array_filter($recs, fn($r) => $r['priority'] === 'high'));
+                $medCount = count(array_filter($recs, fn($r) => $r['priority'] === 'medium'));
+                $this->addInfoRow($t, 'Total Rekomendasi', (string)count($recs));
+                $this->addInfoRow($t, 'Critical', "$critCount item");
+                $this->addInfoRow($t, 'High', "$highCount item");
+                $this->addInfoRow($t, 'Medium', "$medCount item");
+
+                $recTable = $sec->addTable(['borderSize' => 4, 'borderColor' => 'e0e0e0', 'cellMargin' => 60]);
+                $rh = $recTable->addRow();
+                foreach (['Prioritas', 'Artikel', 'Pertanyaan', 'Rekomendasi'] as $h) {
+                    $w = match($h) { 'Prioritas' => 1200, 'Artikel' => 1300, 'Pertanyaan' => 3500, 'Rekomendasi' => 4000, default => 2500 };
+                    $rh->addCell($w, ['bgColor' => 'ef4444', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                        ->addText($h, ['size' => 8, 'bold' => true, 'color' => 'ffffff']);
+                }
+
+                foreach ($recs as $idx => $rec) {
+                    $pColor = match($rec['priority']) { 'critical' => 'ef4444', 'high' => 'f59e0b', default => '3b82f6' };
+                    $bgColor = ($idx % 2 === 0) ? 'ffffff' : 'fff5f5';
+                    $row = $recTable->addRow();
+                    $row->addCell(1200, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                        ->addText($this->t(strtoupper($rec['priority'])), ['size' => 8, 'bold' => true, 'color' => $pColor], ['alignment' => Jc::CENTER]);
+                    $row->addCell(1300, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                        ->addText($this->t($rec['article'] ?? '-'), ['size' => 8]);
+                    $row->addCell(3500, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                        ->addText($this->t($rec['question'] ?? '-'), ['size' => 8]);
+                    $row->addCell(4000, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                        ->addText($this->t($rec['recommendation'] ?? '-'), ['size' => 8]);
+                }
+            }
+
+            // Status Dokumen
+            $this->addSectionTitle($sec, 'Status Dokumen');
+            $t = $this->makeInfoTable($sec);
+            $this->addInfoRow($t, 'Status', strtoupper($gap->compliance_level ?? '-'));
+            $this->addInfoRow($t, 'Digenerate Pada', now()->format('d F Y H:i'));
+
+            $outputFileName = 'Gap_Assessment_Report_' . str_replace(' ', '_', $gap->version ?? 'export') . '.docx';
+            $tempFile = tempnam(sys_get_temp_dir(), 'gap_report_');
+            $writer = IOFactory::createWriter($phpWord, 'Word2007');
+            $writer->save($tempFile);
+
+            while (ob_get_level() > 0) { ob_end_clean(); }
+
+            return response()->download($tempFile, $outputFileName, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            ])->deleteFileAfterSend(true);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Export error: ' . $e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
+        }
+    }
 }

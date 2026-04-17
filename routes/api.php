@@ -429,6 +429,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::get('/ropa/{id}', [\App\Http\Controllers\Api\TemplateExportController::class, 'exportRopa']);
             Route::get('/dpia/{id}', [\App\Http\Controllers\Api\TemplateExportController::class, 'exportDpia']);
             Route::get('/gap/{id}', [\App\Http\Controllers\Api\TemplateExportController::class, 'exportGap']);
+            Route::get('/gap/{id}/report', [\App\Http\Controllers\Api\TemplateExportController::class, 'exportGapReport']);
         });
 
         // =============================================
