@@ -11,6 +11,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('lia_assessments')) {
+            return;
+        }
+
         Schema::create('lia_assessments', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('org_id');

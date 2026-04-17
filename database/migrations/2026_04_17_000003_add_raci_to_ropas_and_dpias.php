@@ -12,23 +12,31 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('ropas', function (Blueprint $table) {
-            $table->json('raci_matrix')->nullable()->after('wizard_data');
-        });
+        if (Schema::hasTable('ropas') && !Schema::hasColumn('ropas', 'raci_matrix')) {
+            Schema::table('ropas', function (Blueprint $table) {
+                $table->json('raci_matrix')->nullable();
+            });
+        }
 
-        Schema::table('dpias', function (Blueprint $table) {
-            $table->json('raci_matrix')->nullable()->after('wizard_data');
-        });
+        if (Schema::hasTable('dpias') && !Schema::hasColumn('dpias', 'raci_matrix')) {
+            Schema::table('dpias', function (Blueprint $table) {
+                $table->json('raci_matrix')->nullable();
+            });
+        }
     }
 
     public function down(): void
     {
-        Schema::table('ropas', function (Blueprint $table) {
-            $table->dropColumn('raci_matrix');
-        });
+        if (Schema::hasTable('ropas') && Schema::hasColumn('ropas', 'raci_matrix')) {
+            Schema::table('ropas', function (Blueprint $table) {
+                $table->dropColumn('raci_matrix');
+            });
+        }
 
-        Schema::table('dpias', function (Blueprint $table) {
-            $table->dropColumn('raci_matrix');
-        });
+        if (Schema::hasTable('dpias') && Schema::hasColumn('dpias', 'raci_matrix')) {
+            Schema::table('dpias', function (Blueprint $table) {
+                $table->dropColumn('raci_matrix');
+            });
+        }
     }
 };

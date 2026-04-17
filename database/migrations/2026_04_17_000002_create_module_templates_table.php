@@ -12,6 +12,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('module_templates')) {
+            return;
+        }
+
         Schema::create('module_templates', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('org_id');

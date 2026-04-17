@@ -12,15 +12,19 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('vendors', function (Blueprint $table) {
-            $table->json('documents')->nullable()->after('services_provided');
-        });
+        if (Schema::hasTable('vendors') && !Schema::hasColumn('vendors', 'documents')) {
+            Schema::table('vendors', function (Blueprint $table) {
+                $table->json('documents')->nullable();
+            });
+        }
     }
 
     public function down(): void
     {
-        Schema::table('vendors', function (Blueprint $table) {
-            $table->dropColumn('documents');
-        });
+        if (Schema::hasTable('vendors') && Schema::hasColumn('vendors', 'documents')) {
+            Schema::table('vendors', function (Blueprint $table) {
+                $table->dropColumn('documents');
+            });
+        }
     }
 };

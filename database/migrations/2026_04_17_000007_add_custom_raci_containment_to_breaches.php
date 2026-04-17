@@ -14,18 +14,26 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (!Schema::hasTable('breach_incidents')) {
+            return;
+        }
+
         Schema::table('breach_incidents', function (Blueprint $table) {
             if (!Schema::hasColumn('breach_incidents', 'custom_raci')) {
-                $table->json('custom_raci')->nullable()->after('timeline_log');
+                $table->json('custom_raci')->nullable();
             }
             if (!Schema::hasColumn('breach_incidents', 'containment_steps')) {
-                $table->json('containment_steps')->nullable()->after('custom_raci');
+                $table->json('containment_steps')->nullable();
             }
         });
     }
 
     public function down(): void
     {
+        if (!Schema::hasTable('breach_incidents')) {
+            return;
+        }
+
         Schema::table('breach_incidents', function (Blueprint $table) {
             if (Schema::hasColumn('breach_incidents', 'custom_raci')) {
                 $table->dropColumn('custom_raci');

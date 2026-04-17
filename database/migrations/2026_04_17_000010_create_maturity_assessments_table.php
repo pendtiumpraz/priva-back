@@ -11,6 +11,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('maturity_assessments')) {
+            return;
+        }
+
         Schema::create('maturity_assessments', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('org_id');
