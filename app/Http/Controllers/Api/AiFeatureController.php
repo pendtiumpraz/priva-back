@@ -496,6 +496,74 @@ class AiFeatureController extends Controller
     }
 
     /**
+     * Sprint C6: Batch AI Review. Queues a review job per record and returns batch_id
+     * so the frontend can poll ai_results for progress.
+     */
+    public function batchReview(Request $request)
+    {
+        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+
+        $data = $request->validate([
+            'module' => 'required|in:ropa,dpia',
+            'ids' => 'required|array|min:1|max:50',
+            'ids.*' => 'required|uuid',
+        ]);
+
+        $orgId = $request->user()->org_id;
+
+        // Credit check: 1 credit per record, deducted by individual job via AiResult flow.
+        $cost = count($data['ids']);
+        if ($orgId) {
+            $org = Organization::find($orgId);
+            $available = ($org->ai_credits_remaining ?? 0) + ($org->ai_credits_purchased ?? 0);
+            if ($available < $cost) {
+                return response()->json([
+                    'message' => "Quota AI tidak cukup untuk batch ({$cost} credits dibutuhkan, {$available} tersedia).",
+                    'credits_exhausted' => true,
+                ], 402);
+            }
+        }
+
+        $batchId = (string) \Illuminate\Support\Str::uuid();
+
+        foreach ($data['ids'] as $recordId) {
+            \App\Jobs\BatchAiReviewJob::dispatch(
+                $orgId,
+                $request->user()->id,
+                $data['module'],
+                $recordId,
+                $batchId,
+                $request->user()->locale ?? 'id'
+            );
+        }
+
+        return response()->json([
+            'message' => "Batch review dimulai untuk {$cost} record",
+            'batch_id' => $batchId,
+            'total' => $cost,
+        ]);
+    }
+
+    /**
+     * Sprint C6: Batch review progress — count AiResult rows tagged with batch_id.
+     */
+    public function batchReviewStatus(Request $request, string $batchId)
+    {
+        $orgId = $request->user()->org_id;
+        $results = AiResult::where('org_id', $orgId)
+            ->whereIn('feature', ['analysis_ropa', 'analysis_dpia'])
+            ->where('input_summary', 'like', '%"batch_id":"' . $batchId . '"%')
+            ->orderByDesc('created_at')
+            ->get();
+
+        return response()->json([
+            'batch_id' => $batchId,
+            'completed' => $results->count(),
+            'results' => $results,
+        ]);
+    }
+
+    /**
      * Sprint C2: AI-generated RACI matrix for ROPA / DPIA.
      */
     public function generateRaci(Request $request)
