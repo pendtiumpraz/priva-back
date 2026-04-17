@@ -18,12 +18,14 @@ class BreachIncident extends Model
         'notified_subjects_at', 'notification_template', 'detected_by',
         'incident_commander', 'dpo_id', 'pic_id', 'pic_name', 'detected_at', 'assessed_at',
         'contained_at', 'closed_at', 'timeline_log', 'created_by',
+        'custom_raci', 'containment_steps',
     ];
 
     protected $casts = [
         'is_simulation' => 'boolean', 'notification_required' => 'boolean',
         'affected_data_types' => 'array', 'containment_checklist' => 'array',
         'notification_template' => 'array', 'timeline_log' => 'array',
+        'custom_raci' => 'array', 'containment_steps' => 'array',
         'notification_deadline' => 'datetime', 'detected_at' => 'datetime',
         'assessed_at' => 'datetime', 'contained_at' => 'datetime', 'closed_at' => 'datetime',
         'notified_komdigi_at' => 'datetime', 'notified_subjects_at' => 'datetime',

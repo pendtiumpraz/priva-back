@@ -423,6 +423,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::post('/generate-raci', [\App\Http\Controllers\Api\AiFeatureController::class, 'generateRaci']);
             Route::post('/batch-review', [\App\Http\Controllers\Api\AiFeatureController::class, 'batchReview']);
             Route::get('/batch-review/{batchId}', [\App\Http\Controllers\Api\AiFeatureController::class, 'batchReviewStatus']);
+            Route::post('/breach/containment-steps', [\App\Http\Controllers\Api\AiFeatureController::class, 'breachContainmentSteps']);
             Route::post('/autofill/breach', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillBreach']);
             Route::post('/autofill/dsr', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillDsr']);
             Route::post('/autofill/consent-items/{id}', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillConsentItems']);

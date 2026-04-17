@@ -547,6 +547,36 @@ class AiService
     }
 
     /**
+     * Sprint D4: Dynamic containment steps generator tailored to a specific breach case.
+     * Returns: { containment_steps: [{ order, step, critical, estimated_minutes }] }
+     */
+    public function breachContainmentSteps(array $breachData): ?array
+    {
+        $system = "Kamu adalah incident commander cyber security & UU PDP Indonesia.\n"
+            . "Tugasmu merancang containment steps dinamis berdasarkan kasus breach spesifik — BUKAN template 10 langkah generic.\n"
+            . "Output WAJIB JSON valid.\n\n"
+            . "FORMAT OUTPUT:\n"
+            . json_encode([
+                'containment_steps' => [[
+                    'order' => 1,
+                    'step' => 'Nama langkah singkat (≤ 60 karakter)',
+                    'description' => 'Detail teknis langkah ini (1-2 kalimat)',
+                    'critical' => true,
+                    'estimated_minutes' => 15,
+                    'responsible_role' => 'DPO | IT Admin | Security | Legal | ...',
+                ]],
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        $dataStr = json_encode($breachData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        $user = "Kasus breach:\n{$dataStr}\n\n"
+            . "Rancang 5-10 containment step SPESIFIK untuk kasus ini. "
+            . "Urutkan berdasarkan prioritas. Fokus pada action yang realistis dan technical. "
+            . "Jawab HANYA JSON valid.";
+
+        return $this->ask($system, $user, 2500);
+    }
+
+    /**
      * Sprint D1: Contract compliance analyzer with comply/non-comply split + page hints.
      * pages = [{ page: 1, text: "..." }, ...] (from DocumentParserService)
      * Returns: { comply: [...], non_comply: [...], recommendations: [...], risk_score, summary }

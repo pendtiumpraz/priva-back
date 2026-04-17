@@ -496,6 +496,42 @@ class AiFeatureController extends Controller
     }
 
     /**
+     * Sprint D4: Generate dynamic containment steps for a breach incident.
+     */
+    public function breachContainmentSteps(Request $request)
+    {
+        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'breach_containment');
+        if ($creditErr) return $creditErr;
+
+        $data = $request->validate(['breach_id' => 'required|uuid']);
+
+        $breach = BreachIncident::where('org_id', $request->user()->org_id)->find($data['breach_id']);
+        if (!$breach) return response()->json(['message' => 'Breach tidak ditemukan'], 404);
+
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
+        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+
+        $response = $ai->breachContainmentSteps([
+            'title' => $breach->title,
+            'description' => $breach->description,
+            'severity' => $breach->severity,
+            'source' => $breach->source,
+            'affected_data_types' => $breach->affected_data_types,
+            'affected_subjects_count' => $breach->affected_subjects_count,
+            'root_cause' => $breach->root_cause,
+        ]);
+
+        if ($response && !empty($response['containment_steps'])) {
+            $breach->update(['containment_steps' => $response['containment_steps']]);
+        }
+
+        return $this->saveAndRespond($request, 'breach_containment', $response, [
+            'breach_id' => $data['breach_id'],
+        ]);
+    }
+
+    /**
      * Sprint D1: Contract upload & structured compliance review (comply vs non-comply + page refs).
      */
     public function contractAnalyze(Request $request)
