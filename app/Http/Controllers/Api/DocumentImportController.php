@@ -75,8 +75,10 @@ class DocumentImportController extends Controller
      */
     public function batchUpload(Request $request)
     {
+        // Sprint C7: higher limit on on-premise deployments; cloud stays at 20.
+        $maxFiles = (env('DEPLOYMENT_MODE', 'cloud') === 'onpremise') ? 100 : 20;
         $request->validate([
-            'files' => 'required|array|min:1|max:20',
+            'files' => "required|array|min:1|max:{$maxFiles}",
             'files.*' => 'file|max:51200|mimes:docx,xlsx,xls,csv,pdf',
             'target_module' => 'required|in:ropa,dpia',
             'batch_name' => 'required|string|max:255',
