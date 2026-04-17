@@ -6,37 +6,50 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Sprint C2: RACI matrix column on ROPA and DPIA.
- * Format: [{ task: "...", responsible: user_id, accountable: user_id, consulted: [user_id,...], informed: [user_id,...] }]
  */
 return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable('ropas') && !Schema::hasColumn('ropas', 'raci_matrix')) {
-            Schema::table('ropas', function (Blueprint $table) {
-                $table->json('raci_matrix')->nullable();
-            });
-        }
-
-        if (Schema::hasTable('dpias') && !Schema::hasColumn('dpias', 'raci_matrix')) {
-            Schema::table('dpias', function (Blueprint $table) {
-                $table->json('raci_matrix')->nullable();
-            });
-        }
+        $this->addJsonColumn('ropas', 'raci_matrix');
+        $this->addJsonColumn('dpias', 'raci_matrix');
     }
 
     public function down(): void
     {
-        if (Schema::hasTable('ropas') && Schema::hasColumn('ropas', 'raci_matrix')) {
-            Schema::table('ropas', function (Blueprint $table) {
-                $table->dropColumn('raci_matrix');
-            });
-        }
+        $this->dropColumn('ropas', 'raci_matrix');
+        $this->dropColumn('dpias', 'raci_matrix');
+    }
 
-        if (Schema::hasTable('dpias') && Schema::hasColumn('dpias', 'raci_matrix')) {
-            Schema::table('dpias', function (Blueprint $table) {
-                $table->dropColumn('raci_matrix');
-            });
+    private function addJsonColumn(string $tableName, string $colName): void
+    {
+        if (!Schema::hasTable($tableName) || Schema::hasColumn($tableName, $colName)) {
+            return;
         }
+        try {
+            Schema::table($tableName, function (Blueprint $table) use ($colName) {
+                $table->json($colName)->nullable();
+            });
+        } catch (\Throwable $e) {
+            if (!$this->columnAlreadyExists($e)) throw $e;
+        }
+    }
+
+    private function dropColumn(string $tableName, string $colName): void
+    {
+        if (!Schema::hasTable($tableName) || !Schema::hasColumn($tableName, $colName)) {
+            return;
+        }
+        Schema::table($tableName, function (Blueprint $table) use ($colName) {
+            $table->dropColumn($colName);
+        });
+    }
+
+    private function columnAlreadyExists(\Throwable $e): bool
+    {
+        $msg = $e->getMessage();
+        return str_contains($msg, 'Duplicate column')
+            || str_contains($msg, '1060')    // MySQL duplicate column
+            || str_contains($msg, '42701');  // PostgreSQL duplicate column
     }
 };

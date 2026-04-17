@@ -6,7 +6,6 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Sprint C4: Threaded comments on ROPA/DPIA/Breach/etc records.
- * parent_id nullable → self-referential threading.
  */
 return new class extends Migration
 {
@@ -16,26 +15,39 @@ return new class extends Migration
             return;
         }
 
-        Schema::create('module_comments', function (Blueprint $table) {
-            $table->uuid('id')->primary();
-            $table->uuid('org_id');
-            $table->string('module', 32);
-            $table->uuid('record_id');
-            $table->uuid('user_id');
-            $table->uuid('parent_id')->nullable();
-            $table->text('comment');
-            $table->timestamps();
-            $table->softDeletes();
+        try {
+            Schema::create('module_comments', function (Blueprint $table) {
+                $table->uuid('id')->primary();
+                $table->uuid('org_id');
+                $table->string('module', 32);
+                $table->uuid('record_id');
+                $table->uuid('user_id');
+                $table->uuid('parent_id')->nullable();
+                $table->text('comment');
+                $table->timestamps();
+                $table->softDeletes();
 
-            $table->foreign('org_id')->references('id')->on('organizations')->onDelete('cascade');
-            $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
-            $table->index(['org_id', 'module', 'record_id'], 'module_comments_record_idx');
-            $table->index('parent_id');
-        });
+                $table->foreign('org_id')->references('id')->on('organizations')->onDelete('cascade');
+                $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
+                $table->index(['org_id', 'module', 'record_id'], 'module_comments_record_idx');
+                $table->index('parent_id');
+            });
+        } catch (\Throwable $e) {
+            if (!$this->alreadyExists($e)) throw $e;
+        }
     }
 
     public function down(): void
     {
         Schema::dropIfExists('module_comments');
+    }
+
+    private function alreadyExists(\Throwable $e): bool
+    {
+        $msg = $e->getMessage();
+        return str_contains($msg, 'already exists')
+            || str_contains($msg, '1050')
+            || str_contains($msg, '42S01')
+            || str_contains($msg, '42P07');
     }
 };

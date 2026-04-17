@@ -6,9 +6,6 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Sprint D4: Custom RACI + AI-generated dynamic containment steps on breach.
- * containment_checklist already exists (fixed 10-step default). This adds:
- *  - custom_raci: free-form RACI table per breach
- *  - containment_steps: dynamic AI-driven step list replacing the fixed 10
  */
 return new class extends Migration
 {
@@ -17,30 +14,33 @@ return new class extends Migration
         if (!Schema::hasTable('breach_incidents')) {
             return;
         }
-
-        Schema::table('breach_incidents', function (Blueprint $table) {
-            if (!Schema::hasColumn('breach_incidents', 'custom_raci')) {
-                $table->json('custom_raci')->nullable();
-            }
-            if (!Schema::hasColumn('breach_incidents', 'containment_steps')) {
-                $table->json('containment_steps')->nullable();
-            }
-        });
+        $this->addJsonCol('custom_raci');
+        $this->addJsonCol('containment_steps');
     }
 
     public function down(): void
     {
-        if (!Schema::hasTable('breach_incidents')) {
-            return;
+        if (!Schema::hasTable('breach_incidents')) return;
+        foreach (['custom_raci', 'containment_steps'] as $col) {
+            if (Schema::hasColumn('breach_incidents', $col)) {
+                Schema::table('breach_incidents', function (Blueprint $table) use ($col) {
+                    $table->dropColumn($col);
+                });
+            }
         }
+    }
 
-        Schema::table('breach_incidents', function (Blueprint $table) {
-            if (Schema::hasColumn('breach_incidents', 'custom_raci')) {
-                $table->dropColumn('custom_raci');
-            }
-            if (Schema::hasColumn('breach_incidents', 'containment_steps')) {
-                $table->dropColumn('containment_steps');
-            }
-        });
+    private function addJsonCol(string $col): void
+    {
+        if (Schema::hasColumn('breach_incidents', $col)) return;
+        try {
+            Schema::table('breach_incidents', function (Blueprint $table) use ($col) {
+                $table->json($col)->nullable();
+            });
+        } catch (\Throwable $e) {
+            $msg = $e->getMessage();
+            $dup = str_contains($msg, 'Duplicate column') || str_contains($msg, '1060') || str_contains($msg, '42701');
+            if (!$dup) throw $e;
+        }
     }
 };
