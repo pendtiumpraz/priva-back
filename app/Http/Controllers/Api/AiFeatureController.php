@@ -496,6 +496,134 @@ class AiFeatureController extends Controller
     }
 
     /**
+     * Sprint D1: Contract upload & structured compliance review (comply vs non-comply + page refs).
+     */
+    public function contractAnalyze(Request $request)
+    {
+        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'contract_review');
+        if ($creditErr) return $creditErr;
+
+        $request->validate([
+            'file' => 'required|file|mimes:pdf,docx|max:10240',
+            'contract_type' => 'nullable|string',
+        ]);
+
+        $file = $request->file('file');
+        $ext = strtolower($file->getClientOriginalExtension());
+        $storedPath = $file->store('contract-uploads/' . $request->user()->org_id, 'local');
+        $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($storedPath);
+
+        try {
+            $parser = new \App\Services\DocumentParserService();
+            $parsed = $parser->parse($fullPath, $ext);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Gagal parse dokumen: ' . $e->getMessage()], 422);
+        }
+
+        $pages = [];
+        foreach (($parsed['sections'] ?? []) as $idx => $sec) {
+            $pages[] = ['page' => $idx + 1, 'text' => $sec['content'] ?? ''];
+        }
+        if (count($pages) === 0) {
+            return response()->json(['message' => 'Dokumen tidak berisi teks yang bisa dibaca'], 422);
+        }
+
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
+        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+
+        $response = $ai->contractComplianceAnalyzer($pages, $request->contract_type ?? 'other');
+
+        try {
+            DB::table('contract_reviews')->insert([
+                'id' => (string) \Illuminate\Support\Str::uuid(),
+                'org_id' => $request->user()->org_id,
+                'title' => $file->getClientOriginalName(),
+                'contract_type' => $request->contract_type ?? 'other',
+                'file_path' => $storedPath,
+                'file_name' => $file->getClientOriginalName(),
+                'review_result' => json_encode($response),
+                'risk_score' => $response['risk_score'] ?? 0,
+                'status' => 'completed',
+                'created_by' => $request->user()->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::warning('contract_reviews save failed: ' . $e->getMessage());
+        }
+
+        return $this->saveAndRespond($request, 'contract_review', $response, [
+            'file_name' => $file->getClientOriginalName(),
+            'pages' => count($pages),
+        ]);
+    }
+
+    /**
+     * Sprint D2: Policy / SOP upload & compliance review.
+     */
+    public function policyAnalyze(Request $request)
+    {
+        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $creditErr = $this->checkCredit($request, 'policy_review');
+        if ($creditErr) return $creditErr;
+
+        $request->validate([
+            'file' => 'required|file|mimes:pdf,docx|max:10240',
+            'policy_type' => 'nullable|string',
+        ]);
+
+        $file = $request->file('file');
+        $ext = strtolower($file->getClientOriginalExtension());
+        $storedPath = $file->store('policy-uploads/' . $request->user()->org_id, 'local');
+        $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($storedPath);
+
+        try {
+            $parser = new \App\Services\DocumentParserService();
+            $parsed = $parser->parse($fullPath, $ext);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Gagal parse dokumen: ' . $e->getMessage()], 422);
+        }
+
+        $pages = [];
+        foreach (($parsed['sections'] ?? []) as $idx => $sec) {
+            $pages[] = ['page' => $idx + 1, 'text' => $sec['content'] ?? ''];
+        }
+        if (count($pages) === 0) {
+            return response()->json(['message' => 'Dokumen tidak berisi teks yang bisa dibaca'], 422);
+        }
+
+        $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
+        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+
+        $response = $ai->policyComplianceAnalyzer($pages, $request->policy_type ?? 'sop');
+
+        try {
+            DB::table('policy_reviews')->insert([
+                'id' => (string) \Illuminate\Support\Str::uuid(),
+                'org_id' => $request->user()->org_id,
+                'title' => $file->getClientOriginalName(),
+                'policy_type' => $request->policy_type ?? 'sop',
+                'file_path' => $storedPath,
+                'file_name' => $file->getClientOriginalName(),
+                'review_result' => json_encode($response),
+                'risk_score' => $response['risk_score'] ?? 0,
+                'status' => 'completed',
+                'created_by' => $request->user()->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::warning('policy_reviews save failed: ' . $e->getMessage());
+        }
+
+        return $this->saveAndRespond($request, 'policy_review', $response, [
+            'file_name' => $file->getClientOriginalName(),
+            'pages' => count($pages),
+        ]);
+    }
+
+    /**
      * Sprint C6: Batch AI Review. Queues a review job per record and returns batch_id
      * so the frontend can poll ai_results for progress.
      */

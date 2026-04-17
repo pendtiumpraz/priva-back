@@ -547,6 +547,84 @@ class AiService
     }
 
     /**
+     * Sprint D1: Contract compliance analyzer with comply/non-comply split + page hints.
+     * pages = [{ page: 1, text: "..." }, ...] (from DocumentParserService)
+     * Returns: { comply: [...], non_comply: [...], recommendations: [...], risk_score, summary }
+     */
+    public function contractComplianceAnalyzer(array $pages, string $contractType = 'other'): ?array
+    {
+        $pagesText = '';
+        foreach ($pages as $p) {
+            $pagesText .= "\n--- HALAMAN {$p['page']} ---\n" . mb_substr($p['text'] ?? '', 0, 3500);
+        }
+
+        $system = "Kamu adalah Data Protection Officer ahli UU PDP Indonesia (UU No. 27/2022).\n"
+            . "Tugasmu menganalisis klausul kontrak dan memisahkan mana yang comply vs non-comply terhadap UU PDP.\n"
+            . "Output WAJIB JSON valid.\n\n"
+            . "FORMAT OUTPUT:\n"
+            . json_encode([
+                'comply' => [[
+                    'clause' => 'judul klausul yang ditemukan',
+                    'page' => 1,
+                    'description' => 'kenapa klausul ini sudah memenuhi UU PDP',
+                    'uu_pdp_reference' => 'Pasal X UU PDP',
+                ]],
+                'non_comply' => [[
+                    'clause' => 'judul klausul yang bermasalah',
+                    'page' => 2,
+                    'description' => 'apa yang kurang / melanggar',
+                    'severity' => 'high|medium|low',
+                    'uu_pdp_reference' => 'Pasal X UU PDP',
+                ]],
+                'recommendations' => [[
+                    'priority' => 'critical|high|medium',
+                    'description' => 'apa yang harus ditambahkan/diubah',
+                    'reference_article' => 'Pasal X',
+                ]],
+                'missing_clauses' => ['klausul standar yang SEHARUSNYA ada tapi tidak ditemukan'],
+                'risk_score' => '0-100 integer',
+                'summary' => '2-3 kalimat eksekutif summary',
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        $user = "Tipe kontrak: {$contractType}\n\n"
+            . "Halaman-halaman kontrak:\n{$pagesText}\n\n"
+            . "Analisis setiap klausul. Untuk tiap temuan, sebutkan halaman-nya dari header '--- HALAMAN N ---'. "
+            . "Jawab HANYA JSON valid.";
+
+        return $this->ask($system, $user, 4000);
+    }
+
+    /**
+     * Sprint D2: Policy / SOP review analyzer (mirror of contract, different lens).
+     */
+    public function policyComplianceAnalyzer(array $pages, string $policyType = 'sop'): ?array
+    {
+        $pagesText = '';
+        foreach ($pages as $p) {
+            $pagesText .= "\n--- HALAMAN {$p['page']} ---\n" . mb_substr($p['text'] ?? '', 0, 3500);
+        }
+
+        $system = "Kamu adalah compliance auditor untuk perlindungan data pribadi UU PDP.\n"
+            . "Tugasmu mengevaluasi SOP/Kebijakan Perusahaan apakah sudah selaras dengan UU PDP.\n"
+            . "Output WAJIB JSON valid.\n\n"
+            . "FORMAT OUTPUT (sama dengan contract analyzer):\n"
+            . json_encode([
+                'comply' => [['clause' => '...', 'page' => 1, 'description' => '...', 'uu_pdp_reference' => '...']],
+                'non_comply' => [['clause' => '...', 'page' => 2, 'description' => '...', 'severity' => 'high|medium|low', 'uu_pdp_reference' => '...']],
+                'recommendations' => [['priority' => 'critical|high|medium', 'description' => '...', 'reference_article' => '...']],
+                'missing_clauses' => [],
+                'risk_score' => 'integer 0-100',
+                'summary' => '2-3 kalimat',
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        $user = "Tipe dokumen: {$policyType} (SOP / kebijakan perusahaan)\n\n"
+            . "Isi dokumen:\n{$pagesText}\n\n"
+            . "Analisis kepatuhan dokumen terhadap UU PDP. Jawab HANYA JSON valid.";
+
+        return $this->ask($system, $user, 4000);
+    }
+
+    /**
      * Sprint C2: Suggest RACI matrix for a ROPA / DPIA record.
      * Returns: { raci: [{ task, responsible, accountable, consulted, informed }] }
      */
