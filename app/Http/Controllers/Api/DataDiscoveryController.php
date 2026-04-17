@@ -94,6 +94,13 @@ class DataDiscoveryController extends Controller
             $scanResult = DatabaseScanner::simulateScan($sourceType);
         }
 
+        // Sprint E2: selective scan via ?selected_tables / ?selected_columns
+        $selectedTables = $request->input('selected_tables', []);
+        $selectedColumns = $request->input('selected_columns', []);
+        if (!empty($selectedTables) || !empty($selectedColumns)) {
+            $scanResult = DatabaseScanner::filterSchema($scanResult, (array) $selectedTables, (array) $selectedColumns);
+        }
+
         $tables = $scanResult['tables'] ?? [];
         $engine = $scanResult['engine'] ?? 'unknown';
 
@@ -760,6 +767,125 @@ class DataDiscoveryController extends Controller
             'message' => $hasError ? 'AI Protection Assessment partially completed (some chunks failed).' : 'AI Protection Assessment completed',
             'data' => $existing,
             'ai_result' => $allAssessments,
+        ]);
+    }
+
+    // =========================================================
+    //  Sprint E1: OCR scan for unstructured files
+    // =========================================================
+    public function scanUnstructured(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:jpg,jpeg,png,tiff,bmp,pdf|max:10240',
+        ]);
+
+        $file = $request->file('file');
+        $path = $file->store('ocr-uploads/' . $request->user()->org_id, 'local');
+        $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($path);
+
+        $ocr = new \App\Services\OcrScannerService();
+        $result = $ocr->extractText($fullPath, $request->user()->org_id);
+        $text = $result['text'] ?? '';
+
+        // Inline PII regex detection — Indonesian-first patterns
+        $piiMatches = [];
+        $patterns = [
+            'nik' => '/\b\d{16}\b/',
+            'npwp' => '/\b\d{2}\.\d{3}\.\d{3}\.\d{1}-\d{3}\.\d{3}\b/',
+            'email' => '/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/',
+            'phone_id' => '/\b(?:\+62|0)8\d{8,11}\b/',
+            'credit_card' => '/\b(?:\d[ -]*?){13,19}\b/',
+            'address_keyword' => '/\b(jl\.|jalan|gang|kel\.|kelurahan|rt\/rw|rt ?\d{2}|rw ?\d{2})\b/i',
+        ];
+        foreach ($patterns as $type => $re) {
+            if (preg_match_all($re, $text, $m)) {
+                $piiMatches[] = [
+                    'type' => $type,
+                    'count' => count($m[0]),
+                    'sample' => array_slice($m[0], 0, 3),
+                ];
+            }
+        }
+
+        return response()->json([
+            'data' => [
+                'file_name' => $file->getClientOriginalName(),
+                'extracted_text' => $result['text'] ?? '',
+                'confidence' => $result['confidence'] ?? 0,
+                'source' => $result['source'] ?? 'none',
+                'pii_matches' => $piiMatches,
+            ],
+        ]);
+    }
+
+    // =========================================================
+    //  Sprint E3: Metadata structure comparison
+    // =========================================================
+    public function compareMetadata(Request $request, string $id)
+    {
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $data = $request->validate([
+            'columns' => 'required|array|min:1|max:100',
+            'columns.*' => 'string|max:100',
+        ]);
+
+        $schema = $system->scan_results ?? [];
+        if (empty($schema['tables'])) {
+            return response()->json(['message' => 'System belum pernah di-scan. Jalankan scan dulu.'], 422);
+        }
+
+        $matches = DatabaseScanner::compareMetadata($schema, $data['columns']);
+        return response()->json(['data' => $matches]);
+    }
+
+    // =========================================================
+    //  Sprint E4: AI SQL generator + sample execution
+    // =========================================================
+    public function sampleQuery(Request $request, string $id)
+    {
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $data = $request->validate([
+            'prompt' => 'required|string|max:1000',
+            'limit' => 'nullable|integer|min:1|max:100',
+        ]);
+
+        $schema = $system->scan_results ?? [];
+        if (empty($schema['tables'])) {
+            return response()->json(['message' => 'System belum pernah di-scan. Jalankan scan dulu.'], 422);
+        }
+
+        $ai = new \App\Services\AiService($request->user()->org_id);
+        if (!$ai->isAvailable()) return response()->json(['message' => 'AI belum dikonfigurasi'], 503);
+
+        $dialect = match ($system->source_type) {
+            'postgresql' => 'postgresql',
+            default => 'mysql',
+        };
+        $sqlResp = $ai->generateSqlFromText(['tables' => $schema['tables']], $data['prompt'], $dialect);
+        $queries = $sqlResp['sql_queries'] ?? [];
+        if (empty($queries)) {
+            return response()->json(['message' => 'AI tidak menghasilkan query yang valid', 'ai_response' => $sqlResp], 422);
+        }
+
+        $firstSql = $queries[0];
+        $execution = DatabaseScanner::executeSampleQuery(
+            $system->source_type,
+            $system->connection_config ?? [],
+            $firstSql,
+            (int) ($data['limit'] ?? 50)
+        );
+
+        AuditLog::log('data-discovery', $system->id, 'sample_query', [
+            'prompt' => $data['prompt'],
+            'sql' => $execution['sql'] ?? $firstSql,
+            'row_count' => $execution['row_count'] ?? 0,
+        ], 'user');
+
+        return response()->json([
+            'data' => [
+                'generated_queries' => $queries,
+                'executed' => $execution,
+            ],
         ]);
     }
 }

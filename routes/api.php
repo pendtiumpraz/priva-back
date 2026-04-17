@@ -271,6 +271,11 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::put('/{id}/protection-assessment', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'saveProtectionAssessment'])->middleware('permission:data_discovery,write');
             Route::post('/{id}/ai-protection-assessment', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'aiProtectionAssessment'])->middleware('permission:data_discovery,write');
 
+            // Sprint E1/E3/E4: Unstructured OCR + metadata compare + AI SQL sample
+            Route::post('/scan-unstructured', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'scanUnstructured'])->middleware('permission:data_discovery,write');
+            Route::post('/{id}/compare-metadata', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'compareMetadata'])->middleware('permission:data_discovery,read');
+            Route::post('/{id}/sample-query', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'sampleQuery'])->middleware('permission:data_discovery,read');
+
             // AI Patrol & Daily Changelogs
             Route::get('/{id}/changelogs', [\App\Http\Controllers\Api\DiscoveryChangelogController::class, 'index'])->middleware('permission:data_discovery,read');
             Route::post('/{id}/changelogs', [\App\Http\Controllers\Api\DiscoveryChangelogController::class, 'store'])->middleware('permission:data_discovery,write');

@@ -639,4 +639,149 @@ class DatabaseScanner
             return ['error' => $e->getMessage()];
         }
     }
+
+    // =========================================================
+    //  Sprint E2/E3/E4 — Selective scan, metadata compare, sample query
+    // =========================================================
+
+    /**
+     * Sprint E2: Filter a full schema scan by table / column whitelist.
+     * Returns the same shape as scanSchema() minus unselected entries.
+     */
+    public static function filterSchema(array $schema, array $selectedTables = [], array $selectedColumns = []): array
+    {
+        if (empty($schema['tables'] ?? null)) return $schema;
+        if (empty($selectedTables) && empty($selectedColumns)) return $schema;
+
+        $filtered = [];
+        foreach ($schema['tables'] as $table) {
+            $tableName = $table['name'] ?? ($table['table_name'] ?? null);
+            if (!empty($selectedTables) && !in_array($tableName, $selectedTables, true)) {
+                continue;
+            }
+
+            if (!empty($selectedColumns) && !empty($table['columns'])) {
+                $table['columns'] = array_values(array_filter($table['columns'], function ($col) use ($selectedColumns, $tableName) {
+                    $name = $col['name'] ?? ($col['column_name'] ?? null);
+                    return in_array($name, $selectedColumns, true)
+                        || in_array("{$tableName}.{$name}", $selectedColumns, true);
+                }));
+                if (empty($table['columns'])) continue;
+            }
+
+            $filtered[] = $table;
+        }
+
+        $schema['tables'] = $filtered;
+        return $schema;
+    }
+
+    /**
+     * Sprint E3: Compare an external column list against the scanned DB schema
+     * using fuzzy string matching. Returns ranked matches.
+     *
+     * @param array  $schema        scanSchema() output
+     * @param array  $columnNames   e.g. ['email', 'phone', 'name', 'birth_date']
+     * @return array{matches: array} ranked match list
+     */
+    public static function compareMetadata(array $schema, array $columnNames): array
+    {
+        $columnNames = array_values(array_filter(array_map('trim', $columnNames)));
+        if (empty($columnNames) || empty($schema['tables'] ?? null)) {
+            return ['matches' => []];
+        }
+
+        $matches = [];
+        foreach ($schema['tables'] as $table) {
+            $tableName = $table['name'] ?? ($table['table_name'] ?? '');
+            $tableCols = array_map(
+                fn($c) => strtolower($c['name'] ?? ($c['column_name'] ?? '')),
+                $table['columns'] ?? []
+            );
+
+            $matched = [];
+            foreach ($columnNames as $needle) {
+                $needleLc = strtolower($needle);
+                foreach ($tableCols as $col) {
+                    if (!$col) continue;
+                    $sim = self::colSimilarity($needleLc, $col);
+                    if ($sim >= 0.6) {
+                        $matched[] = ['input' => $needle, 'matched_column' => $col, 'similarity' => round($sim, 2)];
+                    }
+                }
+            }
+
+            if (count($matched) > 0) {
+                $avgSim = array_sum(array_map(fn($m) => $m['similarity'], $matched)) / count($matched);
+                $coverage = count($matched) / count($columnNames);
+                $matches[] = [
+                    'table' => $tableName,
+                    'matching_columns' => $matched,
+                    'coverage' => round($coverage, 2),
+                    'similarity' => round(($avgSim + $coverage) / 2, 2),
+                ];
+            }
+        }
+
+        usort($matches, fn($a, $b) => $b['similarity'] <=> $a['similarity']);
+        return ['matches' => $matches];
+    }
+
+    private static function colSimilarity(string $a, string $b): float
+    {
+        if ($a === $b) return 1.0;
+        if ($a === '' || $b === '') return 0.0;
+
+        // Substring hint
+        if (str_contains($b, $a) || str_contains($a, $b)) return 0.85;
+
+        similar_text($a, $b, $percent);
+        return $percent / 100.0;
+    }
+
+    /**
+     * Sprint E4: Execute a single AI-generated SELECT with strict safety net.
+     * Returns { sql, rows, truncated, error? }
+     */
+    public static function executeSampleQuery(string $sourceType, array $config, string $sql, int $limit = 100): array
+    {
+        $sqlTrim = trim($sql);
+        if (!preg_match('/^SELECT\b/i', $sqlTrim)) {
+            return ['error' => 'Only SELECT statements are allowed.', 'sql' => $sqlTrim];
+        }
+        if (preg_match('/\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|REPLACE|GRANT|REVOKE)\b/i', $sqlTrim)) {
+            return ['error' => 'Query contains disallowed keyword.', 'sql' => $sqlTrim];
+        }
+
+        try {
+            if ($sourceType === 'mysql') {
+                $dsn = "mysql:host={$config['host']};port=" . ($config['port'] ?? 3306) . ";dbname={$config['database']}";
+                $pdo = new \PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION, \PDO::ATTR_TIMEOUT => 10]);
+            } elseif ($sourceType === 'postgresql') {
+                $dsn = "pgsql:host={$config['host']};port=" . ($config['port'] ?? 5432) . ";dbname={$config['database']}";
+                $pdo = new \PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION, \PDO::ATTR_TIMEOUT => 10]);
+            } else {
+                return ['error' => 'Sample query supports mysql / postgresql only.', 'sql' => $sqlTrim];
+            }
+
+            // Inject LIMIT if missing
+            $finalSql = $sqlTrim;
+            if (!preg_match('/\bLIMIT\s+\d+/i', $finalSql)) {
+                $finalSql = rtrim($finalSql, "; \t\n\r") . " LIMIT {$limit}";
+            }
+
+            $stmt = $pdo->query($finalSql);
+            $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+            return [
+                'sql' => $finalSql,
+                'rows' => array_slice($rows, 0, $limit),
+                'truncated' => count($rows) > $limit,
+                'row_count' => count($rows),
+            ];
+        } catch (\Throwable $e) {
+            Log::error('executeSampleQuery failed: ' . $e->getMessage());
+            return ['error' => $e->getMessage(), 'sql' => $sqlTrim];
+        }
+    }
 }
