@@ -426,6 +426,16 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         // =============================================
         // Sprint C1: Custom Fields & Templates (ROPA / DPIA)
         // =============================================
+        // =============================================
+        // Sprint C4: Module Comments (threaded, cross-module)
+        // =============================================
+        Route::prefix('comments')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\ModuleCommentController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\ModuleCommentController::class, 'store']);
+            Route::put('/{id}', [\App\Http\Controllers\Api\ModuleCommentController::class, 'update']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\ModuleCommentController::class, 'destroy']);
+        });
+
         Route::prefix('custom-fields')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\CustomFieldController::class, 'index']);
             Route::post('/', [\App\Http\Controllers\Api\CustomFieldController::class, 'store']);
