@@ -39,14 +39,18 @@ class MenuRegistryController extends Controller
     // ──────────────────────────────────────────────
     public function allMenus(Request $request)
     {
-        $this->requireRoot($request);
+        // Read-only list is needed by /menu-preferences too (superadmin + admin).
+        $this->requireRootOrManager($request);
         $items = MenuItem::orderBy('sort_order')->get();
         return response()->json(['data' => $items]);
     }
 
     public function whitelist(Request $request)
     {
-        $this->requireRoot($request);
+        // Read-only whitelist matrix also used by /menu-preferences to know
+        // which columns are toggleable. Write endpoint (updateWhitelist) stays
+        // root-only.
+        $this->requireRootOrManager($request);
         $rows = RoleMenuWhitelist::with('menu')->get();
         return response()->json(['data' => $rows]);
     }
@@ -448,6 +452,19 @@ class MenuRegistryController extends Controller
     {
         if (($request->user()->role ?? null) !== 'root') {
             abort(403, 'Hanya role root yang dapat mengakses endpoint ini.');
+        }
+    }
+
+    /**
+     * Allow root, superadmin, or tenant admin. Used on READ endpoints that
+     * /menu-preferences needs to render its matrix (menus + whitelist) even
+     * though the WRITE endpoints stay root-only.
+     */
+    private function requireRootOrManager(Request $request): void
+    {
+        $role = $request->user()->role ?? null;
+        if (!in_array($role, ['root', 'superadmin', 'admin'], true)) {
+            abort(403, 'Hanya root/superadmin/admin yang dapat mengakses endpoint ini.');
         }
     }
 }
