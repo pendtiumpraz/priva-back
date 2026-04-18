@@ -60,10 +60,9 @@ class MenuRegistryController extends Controller
             'is_allowed' => 'required|boolean',
         ]);
 
-        if ($data['role'] === 'root') {
-            // Root always allowed for everything; do not persist a "disallow" for root.
-            return response()->json(['message' => 'Root role cannot be restricted'], 422);
-        }
+        // Note: role=root is intentionally allowed to be toggled. Root can
+        // hide menus from itself via /menu-preferences or /menu-control, and
+        // MenuRegistryService respects the whitelist for root too now.
 
         $before = RoleMenuWhitelist::where('menu_id', $data['menu_id'])->where('role', $data['role'])->value('is_allowed');
         $row = RoleMenuWhitelist::updateOrCreate(
