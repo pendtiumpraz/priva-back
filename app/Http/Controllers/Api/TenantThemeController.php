@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\Organization;
 use App\Models\TenantTheme;
+use App\Services\AiService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -31,6 +33,30 @@ class TenantThemeController extends Controller
             return ['value' => null, 'is_platform' => true];
         }
         return ['value' => $user->org_id, 'is_platform' => false];
+    }
+
+    private const MAX_THEMES_PER_SCOPE = 3;
+
+    /**
+     * Enforce the 3-themes-per-scope cap. Editing existing rows is always
+     * allowed; only new-row creation (store/generate/import) counts.
+     * Returns a JsonResponse when limit hit, null when ok.
+     */
+    private function assertUnderLimit(array $scope): ?\Illuminate\Http\JsonResponse
+    {
+        $q = TenantTheme::query();
+        if ($scope['value'] === null) $q->whereNull('org_id');
+        else $q->where('org_id', $scope['value']);
+
+        $count = $q->count();
+        if ($count >= self::MAX_THEMES_PER_SCOPE) {
+            return response()->json([
+                'message' => 'Batas tema tercapai. Setiap akun maksimal ' . self::MAX_THEMES_PER_SCOPE . ' tema. Hapus tema lama untuk membuat yang baru.',
+                'limit' => self::MAX_THEMES_PER_SCOPE,
+                'current' => $count,
+            ], 422);
+        }
+        return null;
     }
 
     public function index(Request $request)
@@ -72,6 +98,7 @@ class TenantThemeController extends Controller
         ]);
 
         $scope = $this->scope($request);
+        if ($limit = $this->assertUnderLimit($scope)) return $limit;
         $theme = TenantTheme::create([
             'org_id' => $scope['value'],
             'name' => $data['name'],
@@ -159,6 +186,191 @@ class TenantThemeController extends Controller
 
         $this->audit('theme_use_default', null, ['scope' => $scope['value']]);
         return response()->json(['message' => 'Menggunakan tema default']);
+    }
+
+    /**
+     * AI-generate a theme from tenant onboarding context + optional preferences.
+     * Always saved as a draft (is_active=false). User reviews + activates manually.
+     */
+    public function generate(Request $request)
+    {
+        $data = $request->validate([
+            'preferences' => 'nullable|string|max:2000',
+            'name' => 'nullable|string|max:120',
+        ]);
+
+        $user = $request->user();
+        $scope = $this->scope($request);
+        if ($limit = $this->assertUnderLimit($scope)) return $limit;
+
+        // Context pull: onboarding fields if tenant-scoped, otherwise a
+        // generic "platform" context for root/superadmin themes.
+        $contextLines = [];
+        if ($scope['value']) {
+            $org = Organization::find($scope['value']);
+            if ($org) {
+                $contextLines[] = 'Company: ' . $org->name;
+                if ($org->industry) $contextLines[] = 'Industry: ' . $org->industry;
+                if ($org->business_model) $contextLines[] = 'Business model: ' . $org->business_model;
+                if ($org->company_size) $contextLines[] = 'Company size: ' . $org->company_size;
+                if (is_array($org->data_subjects_type) && count($org->data_subjects_type) > 0) {
+                    $contextLines[] = 'Data subjects: ' . implode(', ', $org->data_subjects_type);
+                }
+                if (is_array($org->core_systems) && count($org->core_systems) > 0) {
+                    $contextLines[] = 'Core systems: ' . implode(', ', $org->core_systems);
+                }
+            }
+        } else {
+            $contextLines[] = 'Platform-level theme (Privasimu Nexus), target: root/superadmin interface.';
+        }
+
+        $prefs = trim($data['preferences'] ?? '');
+        if ($prefs !== '') $contextLines[] = 'Designer preferences: ' . $prefs;
+
+        $context = implode("\n", $contextLines);
+
+        $systemPrompt = <<<PROMPT
+You are a senior product designer tasked with generating a web app theme JSON for a B2B SaaS compliance platform. You MUST reply with a SINGLE JSON object and nothing else. No markdown, no prose.
+
+Schema:
+{
+  "name": "short creative theme name, 2-4 words",
+  "palette": {
+    "primary": "#hex",
+    "accent": "#hex",
+    "bg": "#hex (light or dark based on mood)",
+    "card_bg": "#hex (contrasts with bg)",
+    "text": "#hex (high contrast on card_bg)",
+    "text_muted": "#hex",
+    "border": "#hex (subtle)",
+    "danger": "#hex (red-ish)",
+    "success": "#hex (green-ish)"
+  },
+  "gradients": {
+    "primary": { "from": "#hex", "to": "#hex", "angle": 0-360 } | null,
+    "accent":  { "from": "#hex", "to": "#hex", "angle": 0-360 } | null
+  },
+  "opacities": { "card_bg": 0.0-1.0, "sidebar_bg": 0.0-1.0 },
+  "radius": 4-20,
+  "shadow": "none" | "soft" | "medium" | "strong",
+  "layout_preset": "classic" | "compact" | "brand-heavy" | "minimal",
+  "font_family": "Inter" | "Plus Jakarta Sans" | "Space Grotesk" | "Manrope" | "Roboto",
+  "reasoning": "1-2 sentence rationale tying the palette to the company context"
+}
+
+Rules:
+- ALL colors in #RRGGBB hex, validated. No rgba/hsl/named colors.
+- Ensure WCAG AA (contrast ratio ≥ 4.5) between text and card_bg.
+- Match the industry and mood. Finance → trusted blue/navy. Healthcare → calm teal/green. Legal → deep conservative. Tech/startup → bold gradient. Retail → warm accent.
+- If reply should feel "creative", return gradients populated; otherwise gradients can be null for flat look.
+- Opacities default 1.0; set 0.85-0.95 only when glassmorphism fits the vibe.
+- Output pure JSON, no code fence.
+PROMPT;
+
+        $userPrompt = "Context:\n{$context}\n\nGenerate the theme JSON now.";
+
+        $ai = new AiService($scope['value']);
+        if (!$ai->isAvailable()) {
+            return response()->json(['message' => 'AI provider belum dikonfigurasi. Atur di Settings → AI Providers.'], 422);
+        }
+
+        $result = $ai->ask($systemPrompt, $userPrompt, 1500);
+        if (!$result || isset($result['raw'])) {
+            return response()->json([
+                'message' => 'AI tidak mengembalikan JSON valid. Coba lagi atau ubah preferensi.',
+                'debug' => $result ?? null,
+            ], 502);
+        }
+
+        $palette = $result['palette'] ?? [];
+        $defaults = TenantTheme::defaultPalette();
+        foreach ($defaults as $k => $v) {
+            if (empty($palette[$k]) || !preg_match('/^#[0-9a-f]{6}$/i', (string)($palette[$k] ?? ''))) {
+                $palette[$k] = $v; // fall back on any malformed slot
+            }
+        }
+
+        // Extended palette fields (gradient, opacity, radius, shadow) live inside
+        // the palette JSON for schema flexibility — no migration needed.
+        $palette['_gradients'] = $result['gradients'] ?? null;
+        $palette['_opacities'] = $result['opacities'] ?? null;
+        $palette['_radius'] = (int)($result['radius'] ?? 10);
+        $palette['_shadow'] = $result['shadow'] ?? 'medium';
+        $palette['_reasoning'] = (string)($result['reasoning'] ?? '');
+
+        $layoutPreset = in_array($result['layout_preset'] ?? '', ['classic', 'compact', 'brand-heavy', 'minimal'], true)
+            ? $result['layout_preset']
+            : 'classic';
+
+        $themeName = $data['name']
+            ?? (is_string($result['name'] ?? null) ? substr(trim($result['name']), 0, 120) : 'AI Generated Theme');
+
+        $theme = TenantTheme::create([
+            'org_id' => $scope['value'],
+            'name' => $themeName,
+            'palette' => $palette,
+            'layout_preset' => $layoutPreset,
+            'font_family' => $result['font_family'] ?? 'Inter',
+            'logo_url' => null,
+            'favicon_url' => null,
+            'is_active' => false, // ALWAYS draft — user must manually activate
+            'created_by' => $user->id,
+        ]);
+
+        $this->audit('theme_ai_generated', $theme->id, [
+            'org_id' => $scope['value'],
+            'preferences_len' => strlen($prefs),
+            'reasoning' => $palette['_reasoning'] ?? null,
+        ]);
+
+        return response()->json(['data' => $theme, 'reasoning' => $palette['_reasoning'] ?? null], 201);
+    }
+
+    /**
+     * Export a theme as downloadable JSON (for cross-tenant sharing in holding
+     * groups). Response is the theme record; frontend handles the Blob save.
+     */
+    public function export(Request $request, string $id)
+    {
+        $theme = $this->findScoped($request, $id);
+        return response()->json([
+            'schema_version' => 1,
+            'name' => $theme->name,
+            'palette' => $theme->palette,
+            'layout_preset' => $theme->layout_preset,
+            'font_family' => $theme->font_family,
+            // Intentionally skipping logo_url / favicon_url — those are tenant-
+            // scoped storage URLs that won't work in another tenant's context.
+            'exported_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Import a theme from an exported JSON blob. Saved as draft.
+     */
+    public function import(Request $request)
+    {
+        $data = $request->validate([
+            'schema_version' => 'required|integer|in:1',
+            'name' => 'required|string|max:120',
+            'palette' => 'required|array',
+            'layout_preset' => 'nullable|string|in:classic,compact,brand-heavy,minimal',
+            'font_family' => 'nullable|string|max:60',
+        ]);
+
+        $scope = $this->scope($request);
+        if ($limit = $this->assertUnderLimit($scope)) return $limit;
+        $theme = TenantTheme::create([
+            'org_id' => $scope['value'],
+            'name' => $data['name'] . ' (imported)',
+            'palette' => $data['palette'],
+            'layout_preset' => $data['layout_preset'] ?? 'classic',
+            'font_family' => $data['font_family'] ?? 'Inter',
+            'is_active' => false,
+            'created_by' => $request->user()->id,
+        ]);
+        $this->audit('theme_imported', $theme->id, ['name' => $data['name']]);
+        return response()->json(['data' => $theme], 201);
     }
 
     public function uploadAsset(Request $request)

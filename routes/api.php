@@ -509,6 +509,9 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\TenantThemeController::class, 'index']);
             Route::get('/active', [\App\Http\Controllers\Api\TenantThemeController::class, 'active']);
             Route::post('/use-default', [\App\Http\Controllers\Api\TenantThemeController::class, 'useDefault']);
+            Route::post('/generate', [\App\Http\Controllers\Api\TenantThemeController::class, 'generate']);
+            Route::post('/import', [\App\Http\Controllers\Api\TenantThemeController::class, 'import']);
+            Route::get('/{id}/export', [\App\Http\Controllers\Api\TenantThemeController::class, 'export']);
             Route::post('/', [\App\Http\Controllers\Api\TenantThemeController::class, 'store']);
             Route::post('/upload-asset', [\App\Http\Controllers\Api\TenantThemeController::class, 'uploadAsset']);
             Route::get('/{id}', [\App\Http\Controllers\Api\TenantThemeController::class, 'show']);
