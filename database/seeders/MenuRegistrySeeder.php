@@ -84,6 +84,7 @@ class MenuRegistrySeeder extends Seeder
             ['menu_key' => 'knowledge-base', 'label' => 'Knowledge Base', 'href' => '/knowledge-base', 'icon' => 'BookOpen', 'section' => 'Organisasi', 'sort' => 930, 'roles' => self::ADMIN_SUPERADMIN],
             ['menu_key' => 'settings', 'label' => 'Pengaturan Tenant', 'href' => '/settings', 'icon' => 'Settings', 'section' => 'Organisasi', 'sort' => 940, 'hideable' => false, 'roles' => self::ALL],
             ['menu_key' => 'menu-preferences', 'label' => 'Menu Preferences', 'href' => '/menu-preferences', 'icon' => 'Layers', 'section' => 'Organisasi', 'sort' => 950, 'roles' => ['root', 'admin']],
+            ['menu_key' => 'branding', 'label' => 'Branding & Theme', 'href' => '/branding', 'icon' => 'Palette', 'section' => 'Organisasi', 'sort' => 960, 'roles' => ['root', 'superadmin', 'admin']],
         ];
 
         foreach ($menus as $m) {
