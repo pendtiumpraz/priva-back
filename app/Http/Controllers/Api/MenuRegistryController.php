@@ -176,20 +176,23 @@ class MenuRegistryController extends Controller
     }
 
     // ──────────────────────────────────────────────
-    // Tenant admin (+ root): Layer 2 override
-    // Root (no org_id) → edits apply globally to every tenant.
-    // Superadmin is NOT allowed here — manage their scope via /menu-control.
+    // Tenant admin (+ superadmin + root): Layer 2 override
+    // Root / superadmin (no org_id) → edits apply globally to every tenant.
+    // Admin tenant (has org_id) → edits scoped to their own tenant only.
+    // Column visibility is enforced client-side; server still validates roles.
     // ──────────────────────────────────────────────
     public function tenantOverrides(Request $request)
     {
         $user = $request->user();
-        if (!in_array($user->role, ['root', 'admin'], true)) {
-            return response()->json(['message' => 'Hanya root atau admin tenant yang bisa akses'], 403);
+        if (!in_array($user->role, ['root', 'superadmin', 'admin'], true)) {
+            return response()->json(['message' => 'Hanya root/superadmin/admin yang bisa akses'], 403);
         }
 
-        // Root without org_id → aggregate "consensus" view across all tenants:
+        $isPlatform = in_array($user->role, ['root', 'superadmin'], true) && !$user->org_id;
+
+        // Platform user without org_id → aggregate "consensus" view across all tenants:
         // return one row per (menu,role) only when every tenant agrees on the value.
-        if ($user->role === 'root' && !$user->org_id && !$request->filled('org_id')) {
+        if ($isPlatform && !$request->filled('org_id')) {
             $orgCount = \App\Models\Organization::count();
             $grouped = TenantMenuOverride::select('menu_id', 'role', 'is_visible')
                 ->selectRaw('COUNT(*) as c')
@@ -217,7 +220,9 @@ class MenuRegistryController extends Controller
             return response()->json(['data' => $rows, 'scope' => 'global']);
         }
 
-        $orgId = $user->role === 'root' && $request->filled('org_id')
+        // Admin with org → their own tenant.
+        // Root with ?org_id=... → that specific tenant (impersonation).
+        $orgId = in_array($user->role, ['root', 'superadmin'], true) && $request->filled('org_id')
             ? $request->org_id
             : $user->org_id;
 
@@ -230,15 +235,19 @@ class MenuRegistryController extends Controller
     public function updateTenantOverride(Request $request)
     {
         $user = $request->user();
-        if (!in_array($user->role, ['root', 'admin'], true)) {
-            return response()->json(['message' => 'Hanya root atau admin tenant yang bisa akses'], 403);
+        if (!in_array($user->role, ['root', 'superadmin', 'admin'], true)) {
+            return response()->json(['message' => 'Hanya root/superadmin/admin yang bisa akses'], 403);
         }
 
-        // Root may also toggle platform roles (root, superadmin).
-        // Tenant admins are constrained to the 4 tenant roles.
-        $allowedRoles = $user->role === 'root'
-            ? 'root,superadmin,admin,dpo,maker,viewer'
-            : 'admin,dpo,maker,viewer';
+        // Column visibility per role:
+        //   root       → root, superadmin, admin, dpo, maker, viewer
+        //   superadmin →       superadmin, admin, dpo, maker, viewer
+        //   admin      →                   admin, dpo, maker, viewer
+        $allowedRoles = match ($user->role) {
+            'root' => 'root,superadmin,admin,dpo,maker,viewer',
+            'superadmin' => 'superadmin,admin,dpo,maker,viewer',
+            default => 'admin,dpo,maker,viewer',
+        };
 
         $data = $request->validate([
             'menu_id' => 'required|uuid|exists:menu_items,id',
@@ -252,12 +261,16 @@ class MenuRegistryController extends Controller
         }
 
         // Platform roles (root/superadmin) aren't scoped to any org — they
-        // live in role_menu_whitelist, not tenant_menu_override. So when root
-        // toggles visibility for those roles, upsert the whitelist row
-        // directly (is_allowed = is_visible) and return.
+        // live in role_menu_whitelist, not tenant_menu_override. So toggling
+        // visibility for those roles = upsert the whitelist row.
+        //   role=root       → only root may toggle
+        //   role=superadmin → root OR superadmin may toggle
         if (in_array($data['role'], ['root', 'superadmin'], true)) {
-            if ($user->role !== 'root') {
-                return response()->json(['message' => 'Hanya root yang boleh mengatur role platform'], 403);
+            if ($data['role'] === 'root' && $user->role !== 'root') {
+                return response()->json(['message' => 'Hanya root yang boleh mengatur role=root'], 403);
+            }
+            if ($data['role'] === 'superadmin' && !in_array($user->role, ['root', 'superadmin'], true)) {
+                return response()->json(['message' => 'Hanya root/superadmin yang boleh mengatur role=superadmin'], 403);
             }
             $before = RoleMenuWhitelist::where('menu_id', $data['menu_id'])
                 ->where('role', $data['role'])->value('is_allowed');
@@ -291,8 +304,8 @@ class MenuRegistryController extends Controller
             }
         }
 
-        // Root without org_id → bulk-apply to every organization.
-        if ($user->role === 'root' && !$user->org_id && !$request->filled('org_id')) {
+        // Root/Superadmin without org_id → bulk-apply to every organization.
+        if (in_array($user->role, ['root', 'superadmin'], true) && !$user->org_id && !$request->filled('org_id')) {
             $orgIds = \App\Models\Organization::pluck('id');
             foreach ($orgIds as $orgId) {
                 TenantMenuOverride::updateOrCreate(
@@ -315,7 +328,7 @@ class MenuRegistryController extends Controller
             ]);
         }
 
-        $orgId = $user->role === 'root' && $request->filled('org_id')
+        $orgId = in_array($user->role, ['root', 'superadmin'], true) && $request->filled('org_id')
             ? $request->org_id
             : $user->org_id;
         if (!$orgId) return response()->json(['message' => 'org_id tidak ditemukan'], 422);
