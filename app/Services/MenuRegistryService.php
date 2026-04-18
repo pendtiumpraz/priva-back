@@ -66,17 +66,15 @@ class MenuRegistryService
         }
 
         $visible = [];
+        $visibleIds = [];
         foreach ($all as $menu) {
-            // Layer 1 — must be whitelisted for role
             if (!in_array($menu->id, $whitelistedMenuIds, true)) continue;
-
-            // Layer 0 — if explicitly revoked, skip; otherwise default entitled
             if (isset($revoked[$menu->id])) continue;
-
-            // Layer 2 — admin has hidden it
             if (isset($hidden[$menu->id])) continue;
-
+            // If this is a sub-item, its parent must also be visible.
+            if ($menu->parent_menu_id && !isset($visibleIds[$menu->parent_menu_id])) continue;
             $visible[] = self::toArray($menu);
+            $visibleIds[$menu->id] = true;
         }
 
         return $visible;
@@ -86,6 +84,7 @@ class MenuRegistryService
     {
         return [
             'id' => $m->id,
+            'parent_menu_id' => $m->parent_menu_id,
             'menu_key' => $m->menu_key,
             'label' => $m->label,
             'href' => $m->href,

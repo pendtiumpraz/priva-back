@@ -10,8 +10,18 @@ class MenuItem extends Model
     use HasUuids;
 
     protected $fillable = [
-        'menu_key', 'label', 'href', 'icon', 'section', 'sort_order', 'hideable',
+        'parent_menu_id', 'menu_key', 'label', 'href', 'icon', 'section', 'sort_order', 'hideable',
     ];
+
+    public function parent()
+    {
+        return $this->belongsTo(self::class, 'parent_menu_id');
+    }
+
+    public function children()
+    {
+        return $this->hasMany(self::class, 'parent_menu_id')->orderBy('sort_order');
+    }
 
     protected $casts = [
         'hideable' => 'boolean',

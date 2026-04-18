@@ -102,5 +102,60 @@ class MenuRegistrySeeder extends Seeder
                 );
             }
         }
+
+        // Settings sub-tabs (children of 'settings' menu_item)
+        $settings = MenuItem::where('menu_key', 'settings')->first();
+        if ($settings) {
+            $this->seedSettingsTabs($settings->id);
+        }
+    }
+
+    private function seedSettingsTabs(string $parentId): void
+    {
+        $tabs = [
+            ['key' => 'settings.profile', 'label' => 'My Profile', 'icon' => 'User', 'section' => 'Settings: Account & Profile', 'sort' => 1001, 'roles' => self::ALL],
+            ['key' => 'settings.security', 'label' => 'Security', 'icon' => 'Key', 'section' => 'Settings: Account & Profile', 'sort' => 1002, 'roles' => self::ALL],
+            ['key' => 'settings.notifications', 'label' => 'Notifications', 'icon' => 'Bell', 'section' => 'Settings: Account & Profile', 'sort' => 1003, 'roles' => self::ALL],
+
+            ['key' => 'settings.organization', 'label' => 'Organisation', 'icon' => 'Building2', 'section' => 'Settings: Organization', 'sort' => 1010, 'roles' => self::ADMIN_SUPERADMIN],
+            ['key' => 'settings.departments', 'label' => 'Departments', 'icon' => 'GitBranch', 'section' => 'Settings: Organization', 'sort' => 1011, 'roles' => self::ADMIN_SUPERADMIN],
+            ['key' => 'settings.positions', 'label' => 'Positions', 'icon' => 'Briefcase', 'section' => 'Settings: Organization', 'sort' => 1012, 'roles' => self::ADMIN_SUPERADMIN],
+            ['key' => 'settings.master_data', 'label' => 'Master Application', 'icon' => 'Database', 'section' => 'Settings: Organization', 'sort' => 1013, 'roles' => self::ADMIN_SUPERADMIN],
+
+            ['key' => 'settings.compliance', 'label' => 'Compliance', 'icon' => 'Shield', 'section' => 'Settings: Compliance', 'sort' => 1020, 'roles' => ['root', 'superadmin', 'admin', 'dpo']],
+            ['key' => 'settings.automation', 'label' => 'System Automation', 'icon' => 'Sparkles', 'section' => 'Settings: Compliance', 'sort' => 1021, 'roles' => self::ADMIN_SUPERADMIN],
+
+            ['key' => 'settings.sso', 'label' => 'Single Sign-On (SSO)', 'icon' => 'Shield', 'section' => 'Settings: Integration', 'sort' => 1030, 'roles' => self::ADMIN_SUPERADMIN],
+            ['key' => 'settings.integrations', 'label' => 'Breach Integrations', 'icon' => 'Zap', 'section' => 'Settings: Integration', 'sort' => 1031, 'roles' => self::ADMIN_SUPERADMIN],
+            ['key' => 'settings.roles', 'label' => 'Role Management', 'icon' => 'Users', 'section' => 'Settings: Integration', 'sort' => 1032, 'roles' => self::ADMIN_SUPERADMIN],
+            ['key' => 'settings.cloud_storage', 'label' => 'Cloud Storage', 'icon' => 'Cloud', 'section' => 'Settings: Integration', 'sort' => 1033, 'roles' => self::ADMIN_SUPERADMIN],
+            ['key' => 'settings.crm_integration', 'label' => 'CRM Integration', 'icon' => 'Link2', 'section' => 'Settings: Integration', 'sort' => 1034, 'roles' => self::ADMIN_SUPERADMIN],
+            ['key' => 'settings.developer', 'label' => 'Developer API Keys', 'icon' => 'Key', 'section' => 'Settings: Integration', 'sort' => 1035, 'roles' => self::ADMIN_SUPERADMIN],
+
+            ['key' => 'settings.ai_providers', 'label' => 'AI Providers', 'icon' => 'Cpu', 'section' => 'Settings: AI', 'sort' => 1040, 'roles' => self::PLATFORM_SUPERADMIN],
+            ['key' => 'settings.ai_assistant', 'label' => 'AI Assistant', 'icon' => 'Bot', 'section' => 'Settings: AI', 'sort' => 1041, 'roles' => self::ADMIN_SUPERADMIN],
+            ['key' => 'settings.credits', 'label' => 'AI Credits', 'icon' => 'Zap', 'section' => 'Settings: AI', 'sort' => 1042, 'roles' => self::ADMIN_SUPERADMIN],
+        ];
+
+        foreach ($tabs as $t) {
+            $item = MenuItem::updateOrCreate(
+                ['menu_key' => $t['key']],
+                [
+                    'parent_menu_id' => $parentId,
+                    'label' => $t['label'],
+                    'href' => '/settings#' . str_replace('settings.', '', $t['key']),
+                    'icon' => $t['icon'] ?? null,
+                    'section' => $t['section'] ?? null,
+                    'sort_order' => $t['sort'] ?? 0,
+                    'hideable' => true,
+                ]
+            );
+            foreach ($t['roles'] ?? [] as $role) {
+                RoleMenuWhitelist::firstOrCreate(
+                    ['menu_id' => $item->id, 'role' => $role],
+                    ['is_allowed' => true]
+                );
+            }
+        }
     }
 }
