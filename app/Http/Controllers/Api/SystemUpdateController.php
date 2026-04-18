@@ -14,7 +14,7 @@ class SystemUpdateController extends Controller
     public function checkUpdate(Request $request)
     {
         $user = $request->user();
-        if ($user->role !== 'superadmin') {
+        if ($user->role !== 'root') {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -99,7 +99,7 @@ class SystemUpdateController extends Controller
     public function updateBackend(Request $request)
     {
         $user = $request->user();
-        if ($user->role !== 'superadmin') {
+        if ($user->role !== 'root') {
             return response()->json(['message' => 'Unauthorized. Only Superadmin can update.'], 403);
         }
 
@@ -160,7 +160,7 @@ class SystemUpdateController extends Controller
     public function checkoutVersion(Request $request)
     {
         $user = $request->user();
-        if ($user->role !== 'superadmin') {
+        if ($user->role !== 'root') {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 

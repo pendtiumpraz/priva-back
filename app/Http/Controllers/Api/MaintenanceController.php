@@ -16,7 +16,7 @@ class MaintenanceController extends Controller
     public function getSeeders(Request $request)
     {
         $user = $request->user();
-        if ($user->role !== 'superadmin') {
+        if ($user->role !== 'root') {
             return response()->json(['message' => 'Forbidden Access.'], 403);
         }
 
@@ -43,7 +43,7 @@ class MaintenanceController extends Controller
     {
         $user = $request->user();
 
-        if ($user->role !== 'superadmin') {
+        if ($user->role !== 'root') {
             return response()->json(['message' => 'Forbidden Access. System Level Required.'], 403);
         }
 

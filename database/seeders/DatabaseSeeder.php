@@ -14,6 +14,12 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        // Menu Registry + Root user seeders are always idempotent (see each class).
+        $this->call([
+            MenuRegistrySeeder::class,
+            RootUserSeeder::class,
+        ]);
+
         if (User::where('email', 'superadmin@privasimu.com')->exists()) {
             $this->command->info('Database is already seeded. Skipping to avoid duplicates.');
             return;

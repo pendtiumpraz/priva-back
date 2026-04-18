@@ -1,0 +1,192 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\MenuItem;
+use App\Models\Organization;
+use App\Models\RoleMenuWhitelist;
+use App\Models\TenantMenuOverride;
+use App\Models\TenantModuleEntitlement;
+use App\Services\MenuRegistryService;
+use Illuminate\Http\Request;
+
+/**
+ * Menu Registry API:
+ *  - GET /menu-registry                   → effective menu for current user (3-layer resolved)
+ *  - GET /menu-registry/all               → all menu_items (root only)
+ *  - GET /menu-registry/whitelist         → (menu × role) matrix (root only)
+ *  - PUT /menu-registry/whitelist         → toggle whitelist (root only)
+ *  - GET /menu-registry/entitlements      → per-tenant entitlements (root only)
+ *  - PUT /menu-registry/entitlements      → set/revoke entitlement (root only)
+ *  - GET /menu-registry/tenant-overrides  → my tenant's overrides (admin+)
+ *  - PUT /menu-registry/tenant-overrides  → toggle override (admin+, only within allowed set)
+ */
+class MenuRegistryController extends Controller
+{
+    // ──────────────────────────────────────────────
+    // All users
+    // ──────────────────────────────────────────────
+    public function me(Request $request)
+    {
+        $menus = MenuRegistryService::forUser($request->user());
+        return response()->json(['data' => $menus]);
+    }
+
+    // ──────────────────────────────────────────────
+    // Root-only: manage Layer 1 (role whitelist)
+    // ──────────────────────────────────────────────
+    public function allMenus(Request $request)
+    {
+        $this->requireRoot($request);
+        $items = MenuItem::orderBy('sort_order')->get();
+        return response()->json(['data' => $items]);
+    }
+
+    public function whitelist(Request $request)
+    {
+        $this->requireRoot($request);
+        $rows = RoleMenuWhitelist::with('menu')->get();
+        return response()->json(['data' => $rows]);
+    }
+
+    public function updateWhitelist(Request $request)
+    {
+        $this->requireRoot($request);
+        $data = $request->validate([
+            'menu_id' => 'required|uuid|exists:menu_items,id',
+            'role' => 'required|string|in:root,superadmin,admin,dpo,maker,viewer',
+            'is_allowed' => 'required|boolean',
+        ]);
+
+        if ($data['role'] === 'root') {
+            // Root always allowed for everything; do not persist a "disallow" for root.
+            return response()->json(['message' => 'Root role cannot be restricted'], 422);
+        }
+
+        $row = RoleMenuWhitelist::updateOrCreate(
+            ['menu_id' => $data['menu_id'], 'role' => $data['role']],
+            ['is_allowed' => $data['is_allowed']]
+        );
+
+        return response()->json(['message' => 'Whitelist diperbarui', 'data' => $row]);
+    }
+
+    // ──────────────────────────────────────────────
+    // Root-only: manage Layer 0 (tenant entitlements)
+    // ──────────────────────────────────────────────
+    public function entitlements(Request $request)
+    {
+        $this->requireRoot($request);
+
+        if ($request->filled('org_id')) {
+            $rows = TenantModuleEntitlement::where('org_id', $request->org_id)->get();
+            return response()->json(['data' => $rows]);
+        }
+
+        // Return entitlement matrix per-org summary
+        $orgs = Organization::select('id', 'name', 'slug')->orderBy('name')->get();
+        $menus = MenuItem::orderBy('sort_order')->get();
+        $entitlements = TenantModuleEntitlement::all()->groupBy('org_id');
+
+        return response()->json([
+            'orgs' => $orgs,
+            'menus' => $menus,
+            'entitlements' => $entitlements,
+        ]);
+    }
+
+    public function updateEntitlement(Request $request)
+    {
+        $this->requireRoot($request);
+        $data = $request->validate([
+            'org_id' => 'required|uuid|exists:organizations,id',
+            'menu_id' => 'required|uuid|exists:menu_items,id',
+            'is_entitled' => 'required|boolean',
+            'valid_until' => 'nullable|date',
+            'notes' => 'nullable|string|max:500',
+        ]);
+
+        $row = TenantModuleEntitlement::updateOrCreate(
+            ['org_id' => $data['org_id'], 'menu_id' => $data['menu_id']],
+            [
+                'is_entitled' => $data['is_entitled'],
+                'valid_until' => $data['valid_until'] ?? null,
+                'notes' => $data['notes'] ?? null,
+            ]
+        );
+
+        return response()->json(['message' => 'Entitlement diperbarui', 'data' => $row]);
+    }
+
+    // ──────────────────────────────────────────────
+    // Tenant admin (+ superadmin + root): Layer 2 override
+    // ──────────────────────────────────────────────
+    public function tenantOverrides(Request $request)
+    {
+        $user = $request->user();
+        if (!in_array($user->role, ['root', 'superadmin', 'admin'], true)) {
+            return response()->json(['message' => 'Hanya admin tenant yang bisa akses'], 403);
+        }
+
+        $orgId = $user->role === 'root' && $request->filled('org_id')
+            ? $request->org_id
+            : $user->org_id;
+
+        if (!$orgId) return response()->json(['data' => []]);
+
+        $rows = TenantMenuOverride::where('org_id', $orgId)->get();
+        return response()->json(['data' => $rows]);
+    }
+
+    public function updateTenantOverride(Request $request)
+    {
+        $user = $request->user();
+        if (!in_array($user->role, ['root', 'superadmin', 'admin'], true)) {
+            return response()->json(['message' => 'Hanya admin tenant yang bisa akses'], 403);
+        }
+
+        $data = $request->validate([
+            'menu_id' => 'required|uuid|exists:menu_items,id',
+            'role' => 'required|string|in:admin,dpo,maker,viewer',
+            'is_visible' => 'required|boolean',
+        ]);
+
+        $orgId = $user->role === 'root' && $request->filled('org_id')
+            ? $request->org_id
+            : $user->org_id;
+        if (!$orgId) return response()->json(['message' => 'org_id tidak ditemukan'], 422);
+
+        // Guard: admin tenant hanya bisa toggle menu yang whitelisted untuk role tsb
+        // AND tidak boleh menyentuh menu yg hideable=false
+        $menu = MenuItem::findOrFail($data['menu_id']);
+        if (!$menu->hideable) {
+            return response()->json(['message' => 'Menu ini tidak bisa di-hide'], 422);
+        }
+
+        if ($user->role !== 'root') {
+            $whitelisted = RoleMenuWhitelist::where('menu_id', $menu->id)
+                ->where('role', $data['role'])
+                ->where('is_allowed', true)
+                ->exists();
+            if (!$whitelisted) {
+                return response()->json(['message' => 'Menu ini tidak di-whitelist oleh root untuk role tsb — tidak ada yg bisa di-toggle'], 422);
+            }
+        }
+
+        $row = TenantMenuOverride::updateOrCreate(
+            ['org_id' => $orgId, 'menu_id' => $data['menu_id'], 'role' => $data['role']],
+            ['is_visible' => $data['is_visible']]
+        );
+
+        return response()->json(['message' => 'Override diperbarui', 'data' => $row]);
+    }
+
+    // ──────────────────────────────────────────────
+    private function requireRoot(Request $request): void
+    {
+        if (($request->user()->role ?? null) !== 'root') {
+            abort(403, 'Hanya role root yang dapat mengakses endpoint ini.');
+        }
+    }
+}

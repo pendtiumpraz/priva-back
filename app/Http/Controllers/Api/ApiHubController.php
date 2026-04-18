@@ -14,8 +14,8 @@ class ApiHubController extends Controller
     public function __construct()
     {
         $this->middleware(function ($request, $next) {
-            if ($request->user()->role !== 'superadmin') {
-                return response()->json(['message' => 'Forbidden. SuperAdmin only.'], 403);
+            if ($request->user()->role !== 'root') {
+                return response()->json(['message' => 'Forbidden. Root only.'], 403);
             }
             return $next($request);
         });

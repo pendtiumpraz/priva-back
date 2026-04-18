@@ -16,7 +16,7 @@ class LogAnalyzerController extends Controller
      */
     public function index(Request $request)
     {
-        if ($request->user()->role !== 'superadmin') {
+        if ($request->user()->role !== 'root') {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -52,7 +52,7 @@ class LogAnalyzerController extends Controller
      */
     public function analyze(Request $request)
     {
-        if ($request->user()->role !== 'superadmin') {
+        if ($request->user()->role !== 'root') {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
