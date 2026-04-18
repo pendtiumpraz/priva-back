@@ -474,6 +474,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::get('/all', [\App\Http\Controllers\Api\MenuRegistryController::class, 'allMenus']);
             Route::get('/whitelist', [\App\Http\Controllers\Api\MenuRegistryController::class, 'whitelist']);
             Route::put('/whitelist', [\App\Http\Controllers\Api\MenuRegistryController::class, 'updateWhitelist']);
+            Route::get('/orgs', [\App\Http\Controllers\Api\MenuRegistryController::class, 'orgs']);
             Route::get('/entitlements', [\App\Http\Controllers\Api\MenuRegistryController::class, 'entitlements']);
             Route::put('/entitlements', [\App\Http\Controllers\Api\MenuRegistryController::class, 'updateEntitlement']);
             Route::post('/bulk-entitlement', [\App\Http\Controllers\Api\MenuRegistryController::class, 'bulkEntitlement']);

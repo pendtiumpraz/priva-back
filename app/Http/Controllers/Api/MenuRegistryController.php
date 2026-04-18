@@ -82,6 +82,45 @@ class MenuRegistryController extends Controller
 
     // ──────────────────────────────────────────────
     // Root-only: manage Layer 0 (tenant entitlements)
+    // Paginated tenant picker for the LazySearchSelect on /menu-control.
+    // Contract: { data: [{id, name, slug}], next_cursor }.
+    public function orgs(Request $request)
+    {
+        $this->requireRoot($request);
+
+        $perPage = min(50, max(1, (int) $request->input('per_page', 5)));
+        $q = trim((string) $request->input('q', ''));
+        $cursor = $request->input('cursor');
+
+        $query = Organization::select('id', 'name', 'slug')->orderBy('name')->orderBy('id');
+        if ($q !== '') {
+            $query->where(function ($w) use ($q) {
+                $w->where('name', 'like', "%{$q}%")->orWhere('slug', 'like', "%{$q}%");
+            });
+        }
+        if ($cursor) {
+            // Cursor is the last-seen (name, id) pair encoded as name|id
+            [$lastName, $lastId] = array_pad(explode('|', base64_decode($cursor), 2), 2, '');
+            $query->where(function ($w) use ($lastName, $lastId) {
+                $w->where('name', '>', $lastName)
+                  ->orWhere(function ($w2) use ($lastName, $lastId) {
+                      $w2->where('name', $lastName)->where('id', '>', $lastId);
+                  });
+            });
+        }
+
+        $rows = $query->limit($perPage + 1)->get();
+        $hasMore = $rows->count() > $perPage;
+        $data = $rows->take($perPage)->values();
+        $nextCursor = null;
+        if ($hasMore) {
+            $last = $data->last();
+            $nextCursor = base64_encode($last->name . '|' . $last->id);
+        }
+
+        return response()->json(['data' => $data, 'next_cursor' => $nextCursor]);
+    }
+
     // ──────────────────────────────────────────────
     public function entitlements(Request $request)
     {
