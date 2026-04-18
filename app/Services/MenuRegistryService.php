@@ -32,16 +32,26 @@ class MenuRegistryService
         // Load ALL menu_items once — cacheable per role.
         $all = MenuItem::orderBy('sort_order')->get();
 
-        // Root bypass: sees every menu regardless of whitelist/entitlement/override.
-        if ($role === 'root') {
-            return $all->map(fn($m) => self::toArray($m))->values()->toArray();
-        }
-
         // Layer 1: role whitelist — which menus is this role allowed to ever see?
+        // Root MUST respect their own whitelist so /menu-preferences toggles work;
+        // the bypass here only skips tenant-scoped layers (entitlement + override)
+        // because root has no org.
         $whitelistedMenuIds = RoleMenuWhitelist::where('role', $role)
             ->where('is_allowed', true)
             ->pluck('menu_id')
             ->toArray();
+
+        if ($role === 'root') {
+            $visible = [];
+            $visibleIds = [];
+            foreach ($all as $menu) {
+                if (!in_array($menu->id, $whitelistedMenuIds, true)) continue;
+                if ($menu->parent_menu_id && !isset($visibleIds[$menu->parent_menu_id])) continue;
+                $visible[] = self::toArray($menu);
+                $visibleIds[$menu->id] = true;
+            }
+            return $visible;
+        }
 
         // Layer 0: entitlement — which menus is THIS tenant licensed for?
         // If no row exists for (org_id, menu_id): default entitled=true.
