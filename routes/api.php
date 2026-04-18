@@ -507,12 +507,14 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::prefix('themes')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\TenantThemeController::class, 'index']);
             Route::get('/active', [\App\Http\Controllers\Api\TenantThemeController::class, 'active']);
+            Route::post('/use-default', [\App\Http\Controllers\Api\TenantThemeController::class, 'useDefault']);
             Route::post('/', [\App\Http\Controllers\Api\TenantThemeController::class, 'store']);
             Route::post('/upload-asset', [\App\Http\Controllers\Api\TenantThemeController::class, 'uploadAsset']);
             Route::get('/{id}', [\App\Http\Controllers\Api\TenantThemeController::class, 'show']);
             Route::put('/{id}', [\App\Http\Controllers\Api\TenantThemeController::class, 'update']);
             Route::delete('/{id}', [\App\Http\Controllers\Api\TenantThemeController::class, 'destroy']);
             Route::post('/{id}/activate', [\App\Http\Controllers\Api\TenantThemeController::class, 'setActive']);
+            Route::post('/{id}/deactivate', [\App\Http\Controllers\Api\TenantThemeController::class, 'deactivate']);
         });
 
         // =============================================

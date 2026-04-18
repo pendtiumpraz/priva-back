@@ -133,6 +133,34 @@ class TenantThemeController extends Controller
         return response()->json(['data' => $theme]);
     }
 
+    /**
+     * Deactivate a theme without activating any other — the app falls back
+     * to the built-in default palette (globals.css baseline).
+     */
+    public function deactivate(Request $request, string $id)
+    {
+        $theme = $this->findScoped($request, $id);
+        $theme->update(['is_active' => false]);
+        $this->audit('theme_deactivated', $theme->id, []);
+        return response()->json(['data' => $theme]);
+    }
+
+    /**
+     * Deactivate ALL themes in the caller's scope → app reverts to built-in
+     * default palette. Used by the virtual "Default" card's Activate button.
+     */
+    public function useDefault(Request $request)
+    {
+        $scope = $this->scope($request);
+        $q = TenantTheme::query();
+        if ($scope['value'] === null) $q->whereNull('org_id');
+        else $q->where('org_id', $scope['value']);
+        $q->update(['is_active' => false]);
+
+        $this->audit('theme_use_default', null, ['scope' => $scope['value']]);
+        return response()->json(['message' => 'Menggunakan tema default']);
+    }
+
     public function uploadAsset(Request $request)
     {
         $request->validate([
