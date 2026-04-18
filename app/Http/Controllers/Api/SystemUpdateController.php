@@ -397,10 +397,21 @@ class SystemUpdateController extends Controller
             return response()->json(['message' => 'FRONTEND_DEPLOY_HOOK_URL belum di-set.'], 422);
         }
 
-        $response = Http::timeout(30)->withoutVerifying()->post($hookUrl, [
+        $headers = [];
+        $secretHeader = (string) env('FRONTEND_DEPLOY_HOOK_HEADER', 'X-Deploy-Secret');
+        $secret = (string) env('FRONTEND_DEPLOY_HOOK_SECRET', '');
+        if ($secret !== '') $headers[$secretHeader] = $secret;
+
+        $method = strtoupper((string) env('FRONTEND_DEPLOY_HOOK_METHOD', 'POST'));
+
+        $client = Http::timeout(60)->withoutVerifying();
+        if (!empty($headers)) $client = $client->withHeaders($headers);
+
+        $payload = [
             'triggered_by' => $user->email ?? 'root',
             'timestamp' => now()->toIso8601String(),
-        ]);
+        ];
+        $response = $method === 'GET' ? $client->get($hookUrl, $payload) : $client->post($hookUrl, $payload);
 
         $log = "--- WEBHOOK TRIGGER ---\n" .
             "URL: " . preg_replace('/^(https?:\/\/[^\/]+).*/', '$1/…', $hookUrl) . "\n" .
