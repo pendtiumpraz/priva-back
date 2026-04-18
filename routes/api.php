@@ -493,7 +493,13 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::post('/{id}/unfreeze', [\App\Http\Controllers\Api\TenantOffboardController::class, 'unfreeze']);
             Route::post('/{id}/transfer', [\App\Http\Controllers\Api\TenantOffboardController::class, 'transfer']);
             Route::post('/{id}/archive', [\App\Http\Controllers\Api\TenantOffboardController::class, 'archive']);
+            Route::post('/{id}/export', [\App\Http\Controllers\Api\TenantExportController::class, 'export']);
         });
+
+        // =============================================
+        // Root Dashboard (platform-level aggregates)
+        // =============================================
+        Route::get('/root-dashboard', [\App\Http\Controllers\Api\RootDashboardController::class, 'index']);
 
         // =============================================
         // Sprint C4: Module Comments (threaded, cross-module)
