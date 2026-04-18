@@ -259,8 +259,8 @@ class SystemUpdateController extends Controller
         if ($mode === 'shell') {
             $checks['path_configured'] = $path !== '';
             $checks['path_exists'] = $path !== '' && is_dir($path);
-            $checks['git_repo'] = $checks['path_exists'] && is_dir(rtrim($path, '/') . '/.git');
-            $checks['npm_available'] = $this->binaryAvailable('npm');
+            $checks['git_repo'] = ($checks['path_exists'] ?? false) && is_dir(rtrim($path, '/') . '/.git');
+            $checks['npm_available'] = $this->resolveNpmBin() !== null;
             $checks['reload_cmd_configured'] = $reloadCmd !== '';
         } elseif ($mode === 'webhook') {
             $checks['hook_url_configured'] = $hookUrl !== '';
@@ -347,23 +347,31 @@ class SystemUpdateController extends Controller
         $homeDir = getenv('HOME') ?: (function_exists('posix_getpwuid') ? posix_getpwuid(posix_geteuid())['dir'] : '/tmp');
         putenv("HOME={$homeDir}");
         $safePath = escapeshellarg($path);
+        $npm = $this->resolveNpmBin() ?: 'npm';
+        $safeNpm = escapeshellarg($npm);
+        $nodeBin = (string) env('NODE_BIN', '');
+        $extraPath = '';
+        if ($nodeBin !== '') $extraPath = 'PATH=' . escapeshellarg(dirname($nodeBin)) . ':$PATH ';
 
         $output = [];
+        $output[] = "[env] HOME={$homeDir}";
+        $output[] = "[env] NPM_BIN={$npm}";
+        if ($nodeBin !== '') $output[] = "[env] NODE_BIN={$nodeBin}";
 
         $gitOut = shell_exec("cd {$safePath} && git pull origin main 2>&1");
-        $output[] = "--- GIT PULL (frontend) ---";
+        $output[] = "\n--- GIT PULL (frontend) ---";
         $output[] = $gitOut ?? "No output from git";
 
         // npm ci is reproducible; fall back to install if lockfile mismatch
-        $npmOut = shell_exec("cd {$safePath} && HOME={$homeDir} npm ci --no-audit --no-fund 2>&1");
+        $npmOut = shell_exec("cd {$safePath} && {$extraPath}HOME={$homeDir} {$safeNpm} ci --no-audit --no-fund 2>&1");
         if (!$npmOut || stripos($npmOut, 'ERR') !== false) {
             $npmOut .= "\n[fallback] retrying with npm install…\n";
-            $npmOut .= shell_exec("cd {$safePath} && HOME={$homeDir} npm install --no-audit --no-fund 2>&1");
+            $npmOut .= shell_exec("cd {$safePath} && {$extraPath}HOME={$homeDir} {$safeNpm} install --no-audit --no-fund 2>&1");
         }
         $output[] = "\n--- NPM INSTALL ---";
         $output[] = $npmOut ?? "No output from npm";
 
-        $buildOut = shell_exec("cd {$safePath} && HOME={$homeDir} npm run build 2>&1");
+        $buildOut = shell_exec("cd {$safePath} && {$extraPath}HOME={$homeDir} {$safeNpm} run build 2>&1");
         $output[] = "\n--- NEXT BUILD ---";
         $output[] = $buildOut ?? "No output from build";
 
@@ -423,6 +431,32 @@ class SystemUpdateController extends Controller
         $which = PHP_OS_FAMILY === 'Windows' ? 'where' : 'which';
         $out = @shell_exec("{$which} " . escapeshellarg($bin) . " 2>&1");
         return is_string($out) && trim($out) !== '';
+    }
+
+    /**
+     * Resolve npm binary: prefer env NPM_BIN if set and executable; otherwise
+     * look in PATH; otherwise try common nvm/node locations.
+     */
+    private function resolveNpmBin(): ?string
+    {
+        $explicit = (string) env('NPM_BIN', '');
+        if ($explicit !== '' && is_file($explicit) && is_executable($explicit)) return $explicit;
+
+        if ($this->binaryAvailable('npm')) return 'npm';
+
+        $homeDir = getenv('HOME') ?: '';
+        $candidates = [
+            '/usr/bin/npm', '/usr/local/bin/npm', '/opt/homebrew/bin/npm',
+        ];
+        if ($homeDir) {
+            foreach (glob($homeDir . '/.nvm/versions/node/*/bin/npm') ?: [] as $p) {
+                $candidates[] = $p;
+            }
+        }
+        foreach ($candidates as $c) {
+            if (is_file($c) && is_executable($c)) return $c;
+        }
+        return null;
     }
 
     private function parseGitLog(?string $out): array
