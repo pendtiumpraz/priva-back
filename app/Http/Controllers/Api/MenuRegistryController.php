@@ -196,15 +196,50 @@ class MenuRegistryController extends Controller
             return response()->json(['message' => 'Hanya root atau admin tenant yang bisa akses'], 403);
         }
 
+        // Root may also toggle platform roles (root, superadmin).
+        // Tenant admins are constrained to the 4 tenant roles.
+        $allowedRoles = $user->role === 'root'
+            ? 'root,superadmin,admin,dpo,maker,viewer'
+            : 'admin,dpo,maker,viewer';
+
         $data = $request->validate([
             'menu_id' => 'required|uuid|exists:menu_items,id',
-            'role' => 'required|string|in:admin,dpo,maker,viewer',
+            'role' => "required|string|in:{$allowedRoles}",
             'is_visible' => 'required|boolean',
         ]);
 
         $menu = MenuItem::findOrFail($data['menu_id']);
         if (!$menu->hideable) {
             return response()->json(['message' => 'Menu ini tidak bisa di-hide'], 422);
+        }
+
+        // Platform roles (root/superadmin) aren't scoped to any org — they
+        // live in role_menu_whitelist, not tenant_menu_override. So when root
+        // toggles visibility for those roles, upsert the whitelist row
+        // directly (is_allowed = is_visible) and return.
+        if (in_array($data['role'], ['root', 'superadmin'], true)) {
+            if ($user->role !== 'root') {
+                return response()->json(['message' => 'Hanya root yang boleh mengatur role platform'], 403);
+            }
+            $before = RoleMenuWhitelist::where('menu_id', $data['menu_id'])
+                ->where('role', $data['role'])->value('is_allowed');
+            $wl = RoleMenuWhitelist::updateOrCreate(
+                ['menu_id' => $data['menu_id'], 'role' => $data['role']],
+                ['is_allowed' => $data['is_visible']]
+            );
+
+            try {
+                AuditLog::log('menu_registry', $wl->id, 'whitelist_toggled_via_preferences', [
+                    'menu_id' => $data['menu_id'], 'role' => $data['role'],
+                    'before' => $before, 'after' => $data['is_visible'],
+                ], 'whitelist');
+            } catch (\Throwable $e) { \Log::warning('Audit log failed: ' . $e->getMessage()); }
+
+            return response()->json([
+                'message' => 'Whitelist platform diperbarui',
+                'data' => $wl,
+                'scope' => 'whitelist',
+            ]);
         }
 
         // Non-root must respect whitelist

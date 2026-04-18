@@ -12,12 +12,28 @@ use Illuminate\Database\Seeder;
  */
 class MenuRegistrySeeder extends Seeder
 {
-    private const ALL = ['root', 'superadmin', 'admin', 'dpo', 'maker', 'viewer'];
+    // Platform hierarchy (matches the role-matrix product decision):
+    //   ROOT = infrastructure + platform-level ops (OTA, terminal, logs,
+    //          api hub, menu control, tenant offboarding, shared KB,
+    //          AI providers config, branding). Hides tenant compliance.
+    //   SUPERADMIN = customer success (license, master AI audit,
+    //          feature status, user mgmt, holding dashboard). Does NOT
+    //          see tenant-offboarding, KB, AI providers/agent/credits,
+    //          settings sub-tabs beyond profile/security/notifications.
+    //   TENANT (admin/dpo/maker/viewer) = actual compliance work.
+    private const TENANT_ALL = ['admin', 'dpo', 'maker', 'viewer'];
     private const COMPLIANCE = ['admin', 'dpo', 'maker', 'viewer'];
     private const EDITOR = ['admin', 'dpo', 'maker'];
-    private const PLATFORM_ROOT = ['root']; // strict root-only (platform infra)
-    private const PLATFORM_SUPERADMIN = ['root', 'superadmin']; // root inherits
-    private const ADMIN_SUPERADMIN = ['root', 'superadmin', 'admin'];
+    private const ROOT_ONLY = ['root'];
+    private const SA_ONLY = ['superadmin'];
+    private const SA_ADMIN = ['superadmin', 'admin'];
+    private const EVERYONE = ['root', 'superadmin', 'admin', 'dpo', 'maker', 'viewer'];
+    // Kept for legacy tabs that should be visible to everyone-ish. Prefer
+    // the more specific lists above.
+    private const ALL = self::EVERYONE;
+    private const PLATFORM_ROOT = self::ROOT_ONLY;
+    private const PLATFORM_SUPERADMIN = self::SA_ONLY;
+    private const ADMIN_SUPERADMIN = self::SA_ADMIN;
 
     // Package gates: null → all tiers; array → only listed packages
     private const PKG_AI_ONLY = ['ai', 'ai_agent', 'perpetual'];
