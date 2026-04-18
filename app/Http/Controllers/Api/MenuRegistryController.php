@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\MenuItem;
 use App\Models\Organization;
 use App\Models\RoleMenuWhitelist;
@@ -64,10 +65,18 @@ class MenuRegistryController extends Controller
             return response()->json(['message' => 'Root role cannot be restricted'], 422);
         }
 
+        $before = RoleMenuWhitelist::where('menu_id', $data['menu_id'])->where('role', $data['role'])->value('is_allowed');
         $row = RoleMenuWhitelist::updateOrCreate(
             ['menu_id' => $data['menu_id'], 'role' => $data['role']],
             ['is_allowed' => $data['is_allowed']]
         );
+
+        try {
+            AuditLog::log('menu_registry', $row->id, 'whitelist_updated', [
+                'menu_id' => $data['menu_id'], 'role' => $data['role'],
+                'before' => $before, 'after' => $data['is_allowed'],
+            ], 'role_whitelist');
+        } catch (\Throwable $e) { \Log::warning('Audit log failed: ' . $e->getMessage()); }
 
         return response()->json(['message' => 'Whitelist diperbarui', 'data' => $row]);
     }
@@ -107,6 +116,7 @@ class MenuRegistryController extends Controller
             'notes' => 'nullable|string|max:500',
         ]);
 
+        $before = TenantModuleEntitlement::where('org_id', $data['org_id'])->where('menu_id', $data['menu_id'])->first();
         $row = TenantModuleEntitlement::updateOrCreate(
             ['org_id' => $data['org_id'], 'menu_id' => $data['menu_id']],
             [
@@ -115,6 +125,14 @@ class MenuRegistryController extends Controller
                 'notes' => $data['notes'] ?? null,
             ]
         );
+
+        try {
+            AuditLog::log('menu_registry', $row->id, 'entitlement_updated', [
+                'org_id' => $data['org_id'], 'menu_id' => $data['menu_id'],
+                'before' => $before?->is_entitled, 'after' => $data['is_entitled'],
+                'valid_until' => $data['valid_until'] ?? null, 'notes' => $data['notes'] ?? null,
+            ], 'tenant_entitlement');
+        } catch (\Throwable $e) { \Log::warning('Audit log failed: ' . $e->getMessage()); }
 
         return response()->json(['message' => 'Entitlement diperbarui', 'data' => $row]);
     }
@@ -174,10 +192,19 @@ class MenuRegistryController extends Controller
             }
         }
 
+        $before = TenantMenuOverride::where('org_id', $orgId)
+            ->where('menu_id', $data['menu_id'])->where('role', $data['role'])->value('is_visible');
         $row = TenantMenuOverride::updateOrCreate(
             ['org_id' => $orgId, 'menu_id' => $data['menu_id'], 'role' => $data['role']],
             ['is_visible' => $data['is_visible']]
         );
+
+        try {
+            AuditLog::log('menu_registry', $row->id, 'tenant_override_updated', [
+                'org_id' => $orgId, 'menu_id' => $data['menu_id'], 'role' => $data['role'],
+                'before' => $before, 'after' => $data['is_visible'],
+            ], 'tenant_override');
+        } catch (\Throwable $e) { \Log::warning('Audit log failed: ' . $e->getMessage()); }
 
         return response()->json(['message' => 'Override diperbarui', 'data' => $row]);
     }

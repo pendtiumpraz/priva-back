@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\License;
 use App\Models\MenuItem;
 use App\Models\RoleMenuWhitelist;
 use App\Models\TenantMenuOverride;
@@ -65,12 +66,28 @@ class MenuRegistryService
             $hidden = array_flip($rows);
         }
 
+        // Layer 0.5: license package gate. Tenant's active license package_type
+        // must match menu_item.required_packages (if set). Null → available to all.
+        $packageType = null;
+        if ($orgId) {
+            $packageType = License::where('org_id', $orgId)
+                ->where('status', 'active')
+                ->value('package_type');
+        }
+
         $visible = [];
         $visibleIds = [];
         foreach ($all as $menu) {
             if (!in_array($menu->id, $whitelistedMenuIds, true)) continue;
             if (isset($revoked[$menu->id])) continue;
             if (isset($hidden[$menu->id])) continue;
+
+            // License package gate
+            $required = $menu->required_packages;
+            if (is_array($required) && count($required) > 0) {
+                if (!$packageType || !in_array($packageType, $required, true)) continue;
+            }
+
             // If this is a sub-item, its parent must also be visible.
             if ($menu->parent_menu_id && !isset($visibleIds[$menu->parent_menu_id])) continue;
             $visible[] = self::toArray($menu);

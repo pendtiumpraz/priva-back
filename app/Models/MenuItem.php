@@ -10,7 +10,14 @@ class MenuItem extends Model
     use HasUuids;
 
     protected $fillable = [
-        'parent_menu_id', 'menu_key', 'label', 'href', 'icon', 'section', 'sort_order', 'hideable',
+        'parent_menu_id', 'menu_key', 'label', 'href', 'icon', 'section',
+        'sort_order', 'hideable', 'required_packages',
+    ];
+
+    protected $casts = [
+        'hideable' => 'boolean',
+        'sort_order' => 'integer',
+        'required_packages' => 'array',
     ];
 
     public function parent()
@@ -22,11 +29,6 @@ class MenuItem extends Model
     {
         return $this->hasMany(self::class, 'parent_menu_id')->orderBy('sort_order');
     }
-
-    protected $casts = [
-        'hideable' => 'boolean',
-        'sort_order' => 'integer',
-    ];
 
     public function whitelists()
     {

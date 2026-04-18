@@ -19,6 +19,11 @@ class MenuRegistrySeeder extends Seeder
     private const PLATFORM_SUPERADMIN = ['root', 'superadmin']; // root inherits
     private const ADMIN_SUPERADMIN = ['root', 'superadmin', 'admin'];
 
+    // Package gates: null → all tiers; array → only listed packages
+    private const PKG_AI_ONLY = ['ai', 'ai_agent', 'perpetual'];
+    private const PKG_AI_AGENT_ONLY = ['ai_agent', 'perpetual'];
+    private const PKG_PRO_UP = ['pro', 'ai', 'ai_agent', 'perpetual'];
+
     public function run(): void
     {
         $menus = [
@@ -46,9 +51,9 @@ class MenuRegistrySeeder extends Seeder
             ['menu_key' => 'dsr', 'label' => 'DSR Request', 'href' => '/dsr', 'icon' => 'UserCheck', 'section' => 'Subject Rights', 'sort' => 310, 'roles' => array_merge(['root'], self::EDITOR)],
             ['menu_key' => 'consent', 'label' => 'Consent Mgmt', 'href' => '/consent', 'icon' => 'FolderLock', 'section' => 'Subject Rights', 'sort' => 320, 'roles' => array_merge(['root'], self::EDITOR)],
 
-            // AI Enterprise
-            ['menu_key' => 'ai-agent', 'label' => 'AI Agent', 'href' => '/ai-agent', 'icon' => 'Bot', 'section' => 'AI Enterprise', 'sort' => 410, 'roles' => self::ALL],
-            ['menu_key' => 'ai-credits', 'label' => 'AI Credits', 'href' => '/ai-credits', 'icon' => 'Zap', 'section' => 'AI Enterprise', 'sort' => 420, 'roles' => ['root', 'superadmin', 'admin']],
+            // AI Enterprise (license-gated)
+            ['menu_key' => 'ai-agent', 'label' => 'AI Agent', 'href' => '/ai-agent', 'icon' => 'Bot', 'section' => 'AI Enterprise', 'sort' => 410, 'roles' => self::ALL, 'packages' => self::PKG_AI_AGENT_ONLY],
+            ['menu_key' => 'ai-credits', 'label' => 'AI Credits', 'href' => '/ai-credits', 'icon' => 'Zap', 'section' => 'AI Enterprise', 'sort' => 420, 'roles' => ['root', 'superadmin', 'admin'], 'packages' => self::PKG_AI_ONLY],
 
             // Data Security
             ['menu_key' => 'breach', 'label' => 'Data Breach Mgmt', 'href' => '/breach', 'icon' => 'AlertTriangle', 'section' => 'Data Security', 'sort' => 510, 'roles' => array_merge(['root'], self::COMPLIANCE)],
@@ -90,6 +95,7 @@ class MenuRegistrySeeder extends Seeder
                     'section' => $m['section'] ?? null,
                     'sort_order' => $m['sort'] ?? 0,
                     'hideable' => $m['hideable'] ?? true,
+                    'required_packages' => $m['packages'] ?? null,
                 ]
             );
 
