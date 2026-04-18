@@ -466,6 +466,36 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         });
 
         // =============================================
+        // Menu Registry — 3-layer visibility (root + admin)
+        // =============================================
+        Route::prefix('menu-registry')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\MenuRegistryController::class, 'me']);
+            // Root-only
+            Route::get('/all', [\App\Http\Controllers\Api\MenuRegistryController::class, 'allMenus']);
+            Route::get('/whitelist', [\App\Http\Controllers\Api\MenuRegistryController::class, 'whitelist']);
+            Route::put('/whitelist', [\App\Http\Controllers\Api\MenuRegistryController::class, 'updateWhitelist']);
+            Route::get('/entitlements', [\App\Http\Controllers\Api\MenuRegistryController::class, 'entitlements']);
+            Route::put('/entitlements', [\App\Http\Controllers\Api\MenuRegistryController::class, 'updateEntitlement']);
+            Route::post('/bulk-entitlement', [\App\Http\Controllers\Api\MenuRegistryController::class, 'bulkEntitlement']);
+            Route::post('/copy-entitlement', [\App\Http\Controllers\Api\MenuRegistryController::class, 'copyEntitlement']);
+            Route::get('/audit-log', [\App\Http\Controllers\Api\MenuRegistryController::class, 'auditLog']);
+            // Admin + Root
+            Route::get('/tenant-overrides', [\App\Http\Controllers\Api\MenuRegistryController::class, 'tenantOverrides']);
+            Route::put('/tenant-overrides', [\App\Http\Controllers\Api\MenuRegistryController::class, 'updateTenantOverride']);
+        });
+
+        // =============================================
+        // Tenant Lifecycle / Offboarding (root + superadmin)
+        // =============================================
+        Route::prefix('tenant-offboard')->group(function () {
+            Route::get('/{id}/status', [\App\Http\Controllers\Api\TenantOffboardController::class, 'status']);
+            Route::post('/{id}/freeze', [\App\Http\Controllers\Api\TenantOffboardController::class, 'freeze']);
+            Route::post('/{id}/unfreeze', [\App\Http\Controllers\Api\TenantOffboardController::class, 'unfreeze']);
+            Route::post('/{id}/transfer', [\App\Http\Controllers\Api\TenantOffboardController::class, 'transfer']);
+            Route::post('/{id}/archive', [\App\Http\Controllers\Api\TenantOffboardController::class, 'archive']);
+        });
+
+        // =============================================
         // Sprint C4: Module Comments (threaded, cross-module)
         // =============================================
         Route::prefix('comments')->group(function () {

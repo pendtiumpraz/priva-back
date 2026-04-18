@@ -31,6 +31,14 @@ class CreateRootUser extends Command
             return self::FAILURE;
         }
 
+        // Enforce single-root constraint at the platform level.
+        $existingRoot = User::where('role', 'root')->first();
+        if ($existingRoot) {
+            $this->error("A root user already exists: [{$existingRoot->email}]. Only one root account is allowed per platform.");
+            $this->warn('To replace the root user, demote the existing one first: php artisan tinker --execute="User::where(id,\"...\")->update([\"role\"=>\"superadmin\"]);"');
+            return self::FAILURE;
+        }
+
         User::create([
             'id' => (string) Str::uuid(),
             'name' => $name,

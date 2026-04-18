@@ -210,6 +210,99 @@ class MenuRegistryController extends Controller
     }
 
     // ──────────────────────────────────────────────
+    // Root-only: bulk entitlement (apply same config to many tenants)
+    // ──────────────────────────────────────────────
+    public function bulkEntitlement(Request $request)
+    {
+        $this->requireRoot($request);
+        $data = $request->validate([
+            'org_ids' => 'required|array|min:1|max:100',
+            'org_ids.*' => 'uuid|exists:organizations,id',
+            'menu_ids' => 'required|array|min:1',
+            'menu_ids.*' => 'uuid|exists:menu_items,id',
+            'is_entitled' => 'required|boolean',
+            'valid_until' => 'nullable|date',
+            'notes' => 'nullable|string|max:500',
+        ]);
+
+        $count = 0;
+        foreach ($data['org_ids'] as $orgId) {
+            foreach ($data['menu_ids'] as $menuId) {
+                TenantModuleEntitlement::updateOrCreate(
+                    ['org_id' => $orgId, 'menu_id' => $menuId],
+                    [
+                        'is_entitled' => $data['is_entitled'],
+                        'valid_until' => $data['valid_until'] ?? null,
+                        'notes' => $data['notes'] ?? null,
+                    ]
+                );
+                $count++;
+            }
+        }
+
+        try {
+            AuditLog::log('menu_registry', (string) \Illuminate\Support\Str::uuid(), 'bulk_entitlement_applied', [
+                'org_count' => count($data['org_ids']), 'menu_count' => count($data['menu_ids']),
+                'total_rows' => $count, 'is_entitled' => $data['is_entitled'],
+            ], 'bulk_entitlement');
+        } catch (\Throwable $e) { \Log::warning('Audit log failed: ' . $e->getMessage()); }
+
+        return response()->json(['message' => "{$count} entitlement row diperbarui", 'count' => $count]);
+    }
+
+    public function copyEntitlement(Request $request)
+    {
+        $this->requireRoot($request);
+        $data = $request->validate([
+            'source_org_id' => 'required|uuid|exists:organizations,id',
+            'target_org_ids' => 'required|array|min:1|max:100',
+            'target_org_ids.*' => 'uuid|exists:organizations,id',
+        ]);
+
+        $source = TenantModuleEntitlement::where('org_id', $data['source_org_id'])->get();
+        if ($source->isEmpty()) {
+            return response()->json(['message' => 'Source tenant tidak memiliki entitlement config'], 422);
+        }
+
+        $count = 0;
+        foreach ($data['target_org_ids'] as $targetId) {
+            if ($targetId === $data['source_org_id']) continue;
+            foreach ($source as $e) {
+                TenantModuleEntitlement::updateOrCreate(
+                    ['org_id' => $targetId, 'menu_id' => $e->menu_id],
+                    [
+                        'is_entitled' => $e->is_entitled,
+                        'valid_until' => $e->valid_until,
+                        'notes' => "Copied from tenant {$data['source_org_id']}",
+                    ]
+                );
+                $count++;
+            }
+        }
+
+        try {
+            AuditLog::log('menu_registry', (string) \Illuminate\Support\Str::uuid(), 'entitlement_copied', [
+                'source_org_id' => $data['source_org_id'],
+                'target_count' => count($data['target_org_ids']),
+                'total_rows' => $count,
+            ], 'entitlement_copy');
+        } catch (\Throwable $e) { \Log::warning('Audit log failed: ' . $e->getMessage()); }
+
+        return response()->json(['message' => "Copy berhasil ke {$count} entry", 'count' => $count]);
+    }
+
+    public function auditLog(Request $request)
+    {
+        $this->requireRoot($request);
+        $rows = AuditLog::where('module', 'menu_registry')
+            ->with('user:id,name,email,role')
+            ->orderByDesc('created_at')
+            ->limit($request->get('limit', 100))
+            ->get();
+        return response()->json(['data' => $rows]);
+    }
+
+    // ──────────────────────────────────────────────
     private function requireRoot(Request $request): void
     {
         if (($request->user()->role ?? null) !== 'root') {

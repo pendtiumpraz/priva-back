@@ -23,6 +23,9 @@ class Organization extends Model
         'has_dpo', 'onboarding_completed',
         // AI Credits
         'ai_credits_monthly', 'ai_credits_remaining', 'ai_credits_purchased', 'ai_credits_reset_at',
+        // Lifecycle (offboarding)
+        'lifecycle_status', 'offboarded_at', 'offboarded_by', 'offboard_reason', 'offboard_notes',
+        'hard_delete_at', 'transferred_from',
     ];
 
     protected function casts(): array
@@ -37,6 +40,8 @@ class Organization extends Model
             'ai_credits_remaining' => 'float',
             'ai_credits_purchased' => 'float',
             'ai_credits_reset_at' => 'datetime',
+            'offboarded_at' => 'datetime',
+            'hard_delete_at' => 'datetime',
             // PII Encryption — AES-256-CBC
             'phone' => EncryptedString::class,
             'address' => EncryptedString::class,

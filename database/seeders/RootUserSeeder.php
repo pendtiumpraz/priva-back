@@ -33,6 +33,13 @@ class RootUserSeeder extends Seeder
             return;
         }
 
+        // Enforce single-root — do not create a second root even via seeder.
+        $existingRoot = User::where('role', 'root')->first();
+        if ($existingRoot) {
+            $this->command?->warn("A root user already exists: [{$existingRoot->email}]. Skipping creation of {$email}.");
+            return;
+        }
+
         User::create([
             'id' => (string) Str::uuid(),
             'name' => env('ROOT_NAME', 'Platform Root'),
