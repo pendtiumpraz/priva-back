@@ -11,7 +11,7 @@ class TenantRoleController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        if ($user->role === 'superadmin') {
+        if (in_array($user->role, ['root','superadmin'], true)) {
             $query = TenantRole::with('organization:id,name');
             if ($request->filled('org_id')) {
                 $query->where('org_id', $request->org_id);

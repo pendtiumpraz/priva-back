@@ -28,7 +28,7 @@ class CheckPermission
         }
 
         // Superadmin bypasses all permission checks
-        if ($user->role === 'superadmin') {
+        if (in_array($user->role, ['root','superadmin'], true)) {
             return $next($request);
         }
 

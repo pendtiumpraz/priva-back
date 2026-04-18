@@ -73,7 +73,7 @@ class AiAgentController extends Controller
 
         $user = $request->user();
         $orgId = $user->org_id;
-        $isSuperAdmin = $user->role === 'superadmin';
+        $isSuperAdmin = in_array($user->role, ['root','superadmin'], true);
 
         // Regular users must have org_id
         if (!$orgId && !$isSuperAdmin) {
@@ -498,7 +498,7 @@ PROMPT;
         $user = $request->user();
         $conversation = ChatConversation::with('messages')->findOrFail($id);
 
-        if ($conversation->user_id !== $user->id && $user->role !== 'superadmin') {
+        if ($conversation->user_id !== $user->id && ! in_array($user->role, ['root','superadmin'], true)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 

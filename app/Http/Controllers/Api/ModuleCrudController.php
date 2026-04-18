@@ -27,7 +27,7 @@ class ModuleCrudController extends Controller
     {
         $user = $request->user();
         if (!$user) return response()->json(['message' => 'Unauthenticated.'], 401);
-        if ($user->role === 'superadmin') return null;
+        if (in_array($user->role, ['root','superadmin'], true)) return null;
 
         if (!$user->relationLoaded('tenantRole')) {
             $user->load('tenantRole');

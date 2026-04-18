@@ -17,7 +17,7 @@ class UserController extends Controller
     private function checkPerm(Request $request, string $action = 'read')
     {
         $user = $request->user();
-        if (!$user || $user->role === 'superadmin') return null;
+        if (!$user || in_array($user->role, ['root','superadmin'], true)) return null;
 
         if (!$user->relationLoaded('tenantRole')) {
             $user->load('tenantRole');
@@ -59,7 +59,7 @@ class UserController extends Controller
         $auth = $request->user();
         $query = User::with(['organization', 'tenantRole']);
 
-        if ($auth->role === 'superadmin') {
+        if (in_array($auth->role, ['root','superadmin'], true)) {
             // Superadmin can filter by org_id optionally
             if ($request->filled('org_id')) {
                 $query->where('org_id', $request->org_id);
@@ -137,11 +137,11 @@ class UserController extends Controller
         // Role restriction modification
         $isCreatingNewOrg = $request->input('role') === 'admin' && empty($request->input('org_id'));
         
-        if ($auth->role === 'superadmin' || ($auth->role === 'admin' && $isCreatingNewOrg)) {
+        if (in_array($auth->role, ['root','superadmin'], true) || ($auth->role === 'admin' && $isCreatingNewOrg)) {
             $rules['role'] = ['sometimes'];
             $rules['tenant_role_id'] = ['nullable', 'exists:tenant_roles,id'];
             
-            if ($auth->role === 'superadmin') {
+            if (in_array($auth->role, ['root','superadmin'], true)) {
                 if (in_array($request->input('role'), ['dpo', 'maker', 'viewer'])) {
                     $rules['org_id'] = 'required|exists:organizations,id';
                 } else {
@@ -152,7 +152,7 @@ class UserController extends Controller
             }
         } else {
             // Admin users creating staff will automatically get the org_id from their parent
-            if ($auth->role !== 'superadmin') {
+            if (! in_array($auth->role, ['root','superadmin'], true)) {
                 $rules['org_id'] = 'nullable';
             }
         }
@@ -161,7 +161,7 @@ class UserController extends Controller
         $validated['password'] = Hash::make($validated['password']);
 
         // Auto-create Organization if admin creates an 'admin' with org creation data
-        if (($auth->role === 'superadmin' || $auth->role === 'admin') && $validated['role'] === 'admin' && empty($validated['org_id'])) {
+        if ((in_array($auth->role, ['root','superadmin'], true) || $auth->role === 'admin') && $validated['role'] === 'admin' && empty($validated['org_id'])) {
             $orgName = $request->input('org_name', $validated['name'] . "'s Organization");
             $orgSlug = $request->input('org_slug', \Illuminate\Support\Str::slug($orgName . '-' . uniqid()));
             $orgIndustry = $request->input('org_industry', 'Other');
@@ -193,7 +193,7 @@ class UserController extends Controller
             \App\Models\TenantRole::create(['org_id' => $org->id, 'name' => 'Viewer', 'is_system' => true, 'description' => 'Akses read-only', 'permissions' => $allRead]);
             
             $validated['tenant_role_id'] = $adminRole->id;
-        } else if ($auth->role !== 'superadmin' && empty($validated['org_id'])) {
+        } else if (! in_array($auth->role, ['root','superadmin'], true) && empty($validated['org_id'])) {
             $validated['org_id'] = $auth->org_id;
         }
 
@@ -228,7 +228,7 @@ class UserController extends Controller
 
         // Scope check
         $descendantIds = ($auth->role === 'admin' && $auth->organization) ? $auth->organization->getDescendantIds() : [];
-        if ($auth->role !== 'superadmin' && $user->org_id !== $auth->org_id) {
+        if (! in_array($auth->role, ['root','superadmin'], true) && $user->org_id !== $auth->org_id) {
             if ($auth->role === 'admin' && in_array($user->org_id, $descendantIds) && $user->role === 'admin') {
                 // Allowed
             } else {
@@ -250,7 +250,7 @@ class UserController extends Controller
 
         // Scope check
         $descendantIds = ($auth->role === 'admin' && $auth->organization) ? $auth->organization->getDescendantIds() : [];
-        if ($auth->role !== 'superadmin' && $user->org_id !== $auth->org_id) {
+        if (! in_array($auth->role, ['root','superadmin'], true) && $user->org_id !== $auth->org_id) {
             if ($auth->role === 'admin' && in_array($user->org_id, $descendantIds) && $user->role === 'admin') {
                 // Allowed
             } else {
@@ -273,7 +273,7 @@ class UserController extends Controller
             'is_active' => 'sometimes|boolean',
         ];
 
-        if ($auth->role === 'superadmin') {
+        if (in_array($auth->role, ['root','superadmin'], true)) {
             $rules['role'] = ['sometimes'];
             $rules['org_id'] = 'nullable|exists:organizations,id';
         }
@@ -297,7 +297,7 @@ class UserController extends Controller
         $newRole = $validated['role'] ?? $user->role;
         $newOrgId = array_key_exists('org_id', $validated) ? $validated['org_id'] : $user->org_id;
 
-        if ($auth->role === 'superadmin') {
+        if (in_array($auth->role, ['root','superadmin'], true)) {
             if ($newRole === 'admin' && empty($newOrgId)) {
                 $orgName = ($validated['name'] ?? $user->name) . "'s Organization";
                 $org = \App\Models\Organization::create([
@@ -325,14 +325,14 @@ class UserController extends Controller
         }
 
         // Update User's Organization Name/Level/Parent
-        if (($auth->role === 'superadmin' || ($auth->role === 'admin' && in_array($user->org_id, $descendantIds))) && $user->org_id) {
+        if ((in_array($auth->role, ['root','superadmin'], true) || ($auth->role === 'admin' && in_array($user->org_id, $descendantIds))) && $user->org_id) {
             $orgUpdateData = [];
             
             if ($request->has('org_name')) {
                 $orgUpdateData['name'] = $request->input('org_name');
             }
 
-            if ($auth->role === 'superadmin' && ($request->has('org_level') || $request->has('parent_id'))) {
+            if (in_array($auth->role, ['root','superadmin'], true) && ($request->has('org_level') || $request->has('parent_id'))) {
                 $orgLevelUpdate = $request->input('org_level');
                 $parentIdUpdate = $request->input('parent_id');
                 
@@ -361,7 +361,7 @@ class UserController extends Controller
         $auth = $request->user();
         $user = User::findOrFail($id);
 
-        if ($auth->role !== 'superadmin' && $user->org_id !== $auth->org_id) {
+        if (! in_array($auth->role, ['root','superadmin'], true) && $user->org_id !== $auth->org_id) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -387,7 +387,7 @@ class UserController extends Controller
         $auth = $request->user();
         $user = User::onlyTrashed()->findOrFail($id);
 
-        if ($auth->role !== 'superadmin' && $user->org_id !== $auth->org_id) {
+        if (! in_array($auth->role, ['root','superadmin'], true) && $user->org_id !== $auth->org_id) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 

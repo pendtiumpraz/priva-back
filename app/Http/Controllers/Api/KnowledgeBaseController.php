@@ -20,7 +20,7 @@ class KnowledgeBaseController extends Controller
         $user = $request->user();
         $q = KnowledgeBaseSection::query()->orderBy('sort_order');
 
-        if ($user->role === 'superadmin') {
+        if (in_array($user->role, ['root','superadmin'], true)) {
             // Superadmin melihat shared rules + bisa preview per-tenant via ?org_id=.
             if ($request->filled('org_id')) {
                 $q->where('org_id', $request->org_id);
@@ -52,9 +52,9 @@ class KnowledgeBaseController extends Controller
         // Role-locked ownership:
         //   Superadmin → selalu buat shared rule (org_id = null)
         //   Tenant     → selalu org_id = user.org_id
-        $orgId = $user->role === 'superadmin' ? null : $user->org_id;
+        $orgId = in_array($user->role, ['root','superadmin'], true) ? null : $user->org_id;
 
-        if (!$orgId && $user->role !== 'superadmin') {
+        if (!$orgId && ! in_array($user->role, ['root','superadmin'], true)) {
             return response()->json(['message' => 'User tanpa org_id tidak bisa membuat section'], 422);
         }
 
@@ -85,7 +85,7 @@ class KnowledgeBaseController extends Controller
         $section = KnowledgeBaseSection::findOrFail($id);
 
         // Superadmin hanya boleh edit shared rule (org_id = null).
-        if ($user->role === 'superadmin') {
+        if (in_array($user->role, ['root','superadmin'], true)) {
             if ($section->org_id !== null) {
                 return response()->json(['message' => 'Superadmin hanya boleh mengelola shared rule. Minta tenant admin untuk edit KB tenant-nya sendiri.'], 403);
             }
@@ -113,7 +113,7 @@ class KnowledgeBaseController extends Controller
         $user = $request->user();
         $section = KnowledgeBaseSection::findOrFail($id);
 
-        if ($user->role === 'superadmin') {
+        if (in_array($user->role, ['root','superadmin'], true)) {
             if ($section->org_id !== null) {
                 return response()->json(['message' => 'Superadmin hanya boleh menghapus shared rule.'], 403);
             }

@@ -22,7 +22,7 @@ class LicenseController extends Controller
         // Admin: see only their org's license
         $query = License::query();
 
-        if ($user->role !== 'superadmin') {
+        if (! in_array($user->role, ['root','superadmin'], true)) {
             $query->where('org_id', $user->org_id);
         }
 
@@ -213,7 +213,7 @@ class LicenseController extends Controller
     public function update(Request $request, string $id)
     {
         $user = $request->user();
-        if ($user->role !== 'superadmin') {
+        if (! in_array($user->role, ['root','superadmin'], true)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -240,7 +240,7 @@ class LicenseController extends Controller
     public function destroy(string $id)
     {
         $user = request()->user();
-        if ($user->role !== 'superadmin') {
+        if (! in_array($user->role, ['root','superadmin'], true)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -251,7 +251,7 @@ class LicenseController extends Controller
     public function restore(string $id)
     {
         $user = request()->user();
-        if ($user->role !== 'superadmin') {
+        if (! in_array($user->role, ['root','superadmin'], true)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -262,7 +262,7 @@ class LicenseController extends Controller
     public function revoke(Request $request, string $id)
     {
         $user = $request->user();
-        if ($user->role !== 'superadmin') {
+        if (! in_array($user->role, ['root','superadmin'], true)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -459,7 +459,7 @@ class LicenseController extends Controller
 
         $license = null;
 
-        if ($user->role === 'superadmin') {
+        if (in_array($user->role, ['root','superadmin'], true)) {
             // SuperAdmin: check for ANY platform license (org_id = NULL)
             // All super admins share ONE platform license
             $license = License::where('status', 'active')
@@ -483,7 +483,7 @@ class LicenseController extends Controller
         }
 
         if (!$license) {
-            $msg = $user->role === 'superadmin'
+            $msg = in_array($user->role, ['root','superadmin'], true)
                 ? 'Belum ada platform license. Silakan aktivasi license.'
                 : 'Tenant ini belum memiliki license aktif. Hubungi administrator.';
             return response()->json([
@@ -548,7 +548,7 @@ class LicenseController extends Controller
     public function pricingUpdate(Request $request)
     {
         $user = $request->user();
-        if ($user->role !== 'superadmin') {
+        if (! in_array($user->role, ['root','superadmin'], true)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 

@@ -100,7 +100,7 @@ class AuthController extends Controller
             if ($license && $license->isActive()) {
                 $packageType = $license->getTrustedPackageType();
             }
-        } elseif ($user->role === 'superadmin') {
+        } elseif (in_array($user->role, ['root','superadmin'], true)) {
             $packageType = 'ai_agent'; // SA always has full access
         }
 

@@ -239,7 +239,7 @@ PROMPT;
 
         // PUT — update
         $user = $request->user();
-        if ($user->role !== 'superadmin') {
+        if (! in_array($user->role, ['root','superadmin'], true)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -255,7 +255,7 @@ PROMPT;
     public function apiSettings(Request $request)
     {
         $user = $request->user();
-        if ($user->role !== 'superadmin') {
+        if (! in_array($user->role, ['root','superadmin'], true)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -280,7 +280,7 @@ PROMPT;
     public function testConnection(Request $request)
     {
         $user = $request->user();
-        if ($user->role !== 'superadmin') {
+        if (! in_array($user->role, ['root','superadmin'], true)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -368,7 +368,7 @@ KB;
         $user = $request->user();
         $query = ChatConversation::query()->withCount('messages');
 
-        if ($user->role !== 'superadmin') {
+        if (! in_array($user->role, ['root','superadmin'], true)) {
             $query->where('user_id', $user->id);
         }
 
@@ -393,7 +393,7 @@ KB;
         $conversation = ChatConversation::with('messages')->findOrFail($id);
 
         // Only owner or superadmin can view
-        if ($user->role !== 'superadmin' && $conversation->user_id !== $user->id) {
+        if (! in_array($user->role, ['root','superadmin'], true) && $conversation->user_id !== $user->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -406,7 +406,7 @@ KB;
     public function adminReply(Request $request, string $id)
     {
         $user = $request->user();
-        if ($user->role !== 'superadmin') {
+        if (! in_array($user->role, ['root','superadmin'], true)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -433,7 +433,7 @@ KB;
         $user = $request->user();
         $conversation = ChatConversation::findOrFail($id);
 
-        if ($user->role !== 'superadmin' && $conversation->user_id !== $user->id) {
+        if (! in_array($user->role, ['root','superadmin'], true) && $conversation->user_id !== $user->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 

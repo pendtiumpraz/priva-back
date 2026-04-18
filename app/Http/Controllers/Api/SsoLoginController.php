@@ -92,7 +92,7 @@ class SsoLoginController extends Controller
                 ]);
             } else {
                 // Ensure the user actually belongs to this org
-                if ($user->org_id !== $org->id && $user->role !== 'superadmin') {
+                if ($user->org_id !== $org->id && ! in_array($user->role, ['root','superadmin'], true)) {
                     abort(403, 'User belongs to a different organization');
                 }
             }

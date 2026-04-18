@@ -18,7 +18,7 @@ class HoldingDashboardController extends Controller
         $user = $request->user();
 
         // Superadmin can see entire tree; holding-admin sees their branch
-        if ($user->role === 'superadmin') {
+        if (in_array($user->role, ['root','superadmin'], true)) {
             $roots = Organization::whereNull('parent_id')
                 ->orWhere('org_level', 'holding')
                 ->with(['descendants' => fn($q) => $q->withCount('users')])
@@ -118,7 +118,7 @@ class HoldingDashboardController extends Controller
      */
     private function resolveOrgIds($user): ?array
     {
-        if ($user->role === 'superadmin') {
+        if (in_array($user->role, ['root','superadmin'], true)) {
             return Organization::pluck('id')->toArray();
         }
 
@@ -141,7 +141,7 @@ class HoldingDashboardController extends Controller
         $subHoldingQuery = Organization::where('org_level', 'sub_holding');
         
         // Scope: superadmin sees all, holding admin sees their sub_holdings only
-        if ($user->role !== 'superadmin') {
+        if (! in_array($user->role, ['root','superadmin'], true)) {
             $org = Organization::find($user->org_id);
             if (!$org) return response()->json(['data' => []]);
             
