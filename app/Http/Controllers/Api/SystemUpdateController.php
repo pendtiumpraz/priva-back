@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class SystemUpdateController extends Controller
@@ -233,5 +234,208 @@ class SystemUpdateController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    //  FRONTEND OTA (hybrid: shell OR webhook)
+    // ═════════════════════════════════════════════════════════════════════
+
+    /**
+     * Report the current frontend deploy config + preflight so the UI can
+     * show whether updates are possible without calling them.
+     */
+    public function frontendStatus(Request $request)
+    {
+        if (($request->user()->role ?? null) !== 'root') {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $mode = strtolower((string) env('FRONTEND_DEPLOY_MODE', 'shell'));
+        $path = (string) env('FRONTEND_PATH', '');
+        $hookUrl = (string) env('FRONTEND_DEPLOY_HOOK_URL', '');
+        $reloadCmd = (string) env('FRONTEND_RELOAD_CMD', '');
+
+        $checks = [];
+        if ($mode === 'shell') {
+            $checks['path_configured'] = $path !== '';
+            $checks['path_exists'] = $path !== '' && is_dir($path);
+            $checks['git_repo'] = $checks['path_exists'] && is_dir(rtrim($path, '/') . '/.git');
+            $checks['npm_available'] = $this->binaryAvailable('npm');
+            $checks['reload_cmd_configured'] = $reloadCmd !== '';
+        } elseif ($mode === 'webhook') {
+            $checks['hook_url_configured'] = $hookUrl !== '';
+            $checks['hook_url_https'] = $hookUrl !== '' && str_starts_with($hookUrl, 'https://');
+        } else {
+            $checks['mode_invalid'] = false;
+        }
+
+        $ready = $mode === 'shell'
+            ? ($checks['path_exists'] ?? false) && ($checks['git_repo'] ?? false) && ($checks['npm_available'] ?? false)
+            : ($checks['hook_url_configured'] ?? false);
+
+        $pendingCommits = [];
+        $installedHead = null;
+        if ($mode === 'shell' && ($checks['git_repo'] ?? false)) {
+            try {
+                $safePath = escapeshellarg($path);
+                shell_exec("cd {$safePath} && git fetch origin main 2>&1");
+                $logOut = shell_exec("cd {$safePath} && git log HEAD..origin/main --pretty=format:\"%h|%s|%cd\" --date=short 2>&1");
+                $pendingCommits = $this->parseGitLog($logOut);
+                $headOut = shell_exec("cd {$safePath} && git log -1 --pretty=format:\"%h|%s|%cd\" --date=short 2>&1");
+                $installedHead = $this->parseGitLog($headOut)[0] ?? null;
+            } catch (\Throwable $e) {
+                Log::warning('Frontend status git probe failed: ' . $e->getMessage());
+            }
+        }
+
+        return response()->json([
+            'mode' => $mode,
+            'ready' => $ready,
+            'checks' => $checks,
+            'path' => $path ?: null,
+            'hook_url_masked' => $hookUrl ? preg_replace('/^(https?:\/\/[^\/]+).*/', '$1/…', $hookUrl) : null,
+            'pending_commits' => $pendingCommits,
+            'installed_head' => $installedHead,
+            'up_to_date' => count($pendingCommits) === 0,
+        ]);
+    }
+
+    /**
+     * Fire the configured frontend deploy. Dispatches by FRONTEND_DEPLOY_MODE.
+     */
+    public function updateFrontend(Request $request)
+    {
+        $user = $request->user();
+        if (($user->role ?? null) !== 'root') {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $mode = strtolower((string) env('FRONTEND_DEPLOY_MODE', 'shell'));
+
+        try {
+            if ($mode === 'shell') {
+                return $this->updateFrontendShell($user);
+            }
+            if ($mode === 'webhook') {
+                return $this->updateFrontendWebhook($user);
+            }
+            return response()->json([
+                'message' => "FRONTEND_DEPLOY_MODE '{$mode}' tidak dikenal. Pilih 'shell' atau 'webhook'.",
+            ], 422);
+        } catch (\Throwable $e) {
+            Log::error('Frontend update failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Frontend update gagal',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    private function updateFrontendShell($user)
+    {
+        $path = (string) env('FRONTEND_PATH', '');
+        $reloadCmd = (string) env('FRONTEND_RELOAD_CMD', '');
+
+        if ($path === '' || !is_dir($path)) {
+            return response()->json(['message' => 'FRONTEND_PATH tidak valid. Set env var ke folder frontend.'], 422);
+        }
+        if (!is_dir(rtrim($path, '/') . '/.git')) {
+            return response()->json(['message' => 'Path frontend bukan git repo.'], 422);
+        }
+
+        set_time_limit(900);
+        $homeDir = getenv('HOME') ?: (function_exists('posix_getpwuid') ? posix_getpwuid(posix_geteuid())['dir'] : '/tmp');
+        putenv("HOME={$homeDir}");
+        $safePath = escapeshellarg($path);
+
+        $output = [];
+
+        $gitOut = shell_exec("cd {$safePath} && git pull origin main 2>&1");
+        $output[] = "--- GIT PULL (frontend) ---";
+        $output[] = $gitOut ?? "No output from git";
+
+        // npm ci is reproducible; fall back to install if lockfile mismatch
+        $npmOut = shell_exec("cd {$safePath} && HOME={$homeDir} npm ci --no-audit --no-fund 2>&1");
+        if (!$npmOut || stripos($npmOut, 'ERR') !== false) {
+            $npmOut .= "\n[fallback] retrying with npm install…\n";
+            $npmOut .= shell_exec("cd {$safePath} && HOME={$homeDir} npm install --no-audit --no-fund 2>&1");
+        }
+        $output[] = "\n--- NPM INSTALL ---";
+        $output[] = $npmOut ?? "No output from npm";
+
+        $buildOut = shell_exec("cd {$safePath} && HOME={$homeDir} npm run build 2>&1");
+        $output[] = "\n--- NEXT BUILD ---";
+        $output[] = $buildOut ?? "No output from build";
+
+        if ($reloadCmd !== '') {
+            $reloadOut = shell_exec("cd {$safePath} && {$reloadCmd} 2>&1");
+            $output[] = "\n--- RELOAD ({$reloadCmd}) ---";
+            $output[] = $reloadOut ?? "No output from reload";
+        } else {
+            $output[] = "\n[info] FRONTEND_RELOAD_CMD empty — skip reload. Restart the Next.js process manually if needed.";
+        }
+
+        $log = implode("\n", $output);
+        Log::info("Frontend OTA by {$user->email}");
+        Log::info($log);
+
+        return response()->json(['message' => 'Frontend update berhasil', 'mode' => 'shell', 'log' => $log]);
+    }
+
+    private function updateFrontendWebhook($user)
+    {
+        $hookUrl = (string) env('FRONTEND_DEPLOY_HOOK_URL', '');
+        if ($hookUrl === '') {
+            return response()->json(['message' => 'FRONTEND_DEPLOY_HOOK_URL belum di-set.'], 422);
+        }
+
+        $response = Http::timeout(30)->withoutVerifying()->post($hookUrl, [
+            'triggered_by' => $user->email ?? 'root',
+            'timestamp' => now()->toIso8601String(),
+        ]);
+
+        $log = "--- WEBHOOK TRIGGER ---\n" .
+            "URL: " . preg_replace('/^(https?:\/\/[^\/]+).*/', '$1/…', $hookUrl) . "\n" .
+            "Status: {$response->status()}\n" .
+            "Body: " . substr($response->body(), 0, 1000);
+
+        Log::info("Frontend webhook deploy by {$user->email}: {$response->status()}");
+
+        if ($response->failed()) {
+            return response()->json([
+                'message' => 'Webhook response non-success',
+                'mode' => 'webhook',
+                'status' => $response->status(),
+                'log' => $log,
+            ], 502);
+        }
+
+        return response()->json([
+            'message' => 'Webhook triggered. Deploy berjalan di platform hosting frontend.',
+            'mode' => 'webhook',
+            'status' => $response->status(),
+            'log' => $log,
+        ]);
+    }
+
+    private function binaryAvailable(string $bin): bool
+    {
+        $which = PHP_OS_FAMILY === 'Windows' ? 'where' : 'which';
+        $out = @shell_exec("{$which} " . escapeshellarg($bin) . " 2>&1");
+        return is_string($out) && trim($out) !== '';
+    }
+
+    private function parseGitLog(?string $out): array
+    {
+        $res = [];
+        if (!$out || trim($out) === '') return $res;
+        foreach (explode("\n", trim($out)) as $line) {
+            if (trim($line) === '') continue;
+            $parts = explode('|', $line, 3);
+            if (count($parts) === 3) {
+                $res[] = ['hash' => trim($parts[0]), 'message' => trim($parts[1]), 'date' => trim($parts[2])];
+            }
+        }
+        return $res;
     }
 }

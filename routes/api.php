@@ -599,6 +599,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/system/check-update', [\App\Http\Controllers\Api\SystemUpdateController::class, 'checkUpdate']);
         Route::post('/system/update-backend', [\App\Http\Controllers\Api\SystemUpdateController::class, 'updateBackend']);
         Route::post('/system/checkout-version', [\App\Http\Controllers\Api\SystemUpdateController::class, 'checkoutVersion']);
+        Route::get('/system/frontend-status', [\App\Http\Controllers\Api\SystemUpdateController::class, 'frontendStatus']);
+        Route::post('/system/update-frontend', [\App\Http\Controllers\Api\SystemUpdateController::class, 'updateFrontend']);
 
         // =============================================
         // API Keys (Developer/Tenant Integration)
