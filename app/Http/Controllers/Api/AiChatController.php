@@ -52,7 +52,7 @@ class AiChatController extends Controller
         }
 
         $userMessage = $request->message;
-        $knowledgeBase = $this->getKnowledgeBase($userMessage);
+        $knowledgeBase = $this->getKnowledgeBase($userMessage, $request->user()->org_id ?? null);
         $history = $request->history ?? [];
         $user = $request->user();
 
@@ -323,13 +323,15 @@ PROMPT;
         }
     }
 
-    private function getKnowledgeBase(string $query = ''): string
+    private function getKnowledgeBase(string $query = '', ?string $orgId = null): string
     {
-        // Try RAG: find relevant sections from DB
-        $sections = KnowledgeBaseSection::where('is_active', true)->count();
+        // Try RAG: find relevant sections from DB (scoped to tenant + shared)
+        $sections = KnowledgeBaseSection::where('is_active', true)
+            ->visibleTo($orgId)
+            ->count();
 
         if ($sections > 0) {
-            $relevant = KnowledgeBaseSection::findRelevant($query);
+            $relevant = KnowledgeBaseSection::findRelevant($query, $orgId);
             if (!empty($relevant)) {
                 $kb = "";
                 foreach ($relevant as $section) {

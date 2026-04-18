@@ -9,7 +9,7 @@ class KnowledgeBaseSection extends Model
     use HasUuids;
 
     protected $fillable = [
-        'module_key', 'title', 'content', 'keywords', 'sort_order', 'is_active',
+        'org_id', 'module_key', 'title', 'content', 'keywords', 'sort_order', 'is_active',
     ];
 
     protected $casts = [
@@ -17,46 +17,60 @@ class KnowledgeBaseSection extends Model
     ];
 
     /**
-     * Simple RAG: find relevant sections based on keyword matching.
-     * Returns max 3 most relevant sections + always includes 'general'.
+     * Scope: sections visible to a given tenant — includes rows with this
+     * org_id AND the shared system rows where org_id IS NULL.
      */
-    public static function findRelevant(string $query): array
+    public function scopeVisibleTo($query, ?string $orgId)
     {
-        $sections = self::where('is_active', true)->orderBy('sort_order')->get();
-        $query = mb_strtolower($query);
+        if (!$orgId) return $query;
+        return $query->where(function ($q) use ($orgId) {
+            $q->where('org_id', $orgId)->orWhereNull('org_id');
+        });
+    }
 
+    /**
+     * Simple RAG: find relevant sections based on keyword matching.
+     * Returns max 3 most relevant + always includes 'general'. If $orgId is
+     * provided, tenant-owned sections are considered alongside shared ones
+     * and tenant-owned entries beat shared ones on tie-break.
+     */
+    public static function findRelevant(string $query, ?string $orgId = null): array
+    {
+        $sections = self::where('is_active', true)
+            ->visibleTo($orgId)
+            ->orderBy('sort_order')
+            ->get();
+
+        $query = mb_strtolower($query);
         $scored = [];
         foreach ($sections as $section) {
-            $keywords = array_map('trim', explode(',', mb_strtolower($section->keywords)));
+            $keywords = array_map('trim', explode(',', mb_strtolower((string) $section->keywords)));
             $score = 0;
 
-            // Always include 'general'
             if ($section->module_key === 'general') {
                 $score = 1;
             }
 
             foreach ($keywords as $keyword) {
                 if (!empty($keyword) && str_contains($query, $keyword)) {
-                    $score += 3; // Direct keyword match
+                    $score += 3;
                 }
             }
 
-            // Also check title match
             if (str_contains($query, mb_strtolower($section->title))) {
                 $score += 5;
             }
 
+            // Tenant-owned entries get a small boost so they override shared content.
+            if ($section->org_id) $score += 1;
+
             $scored[] = ['section' => $section, 'score' => $score];
         }
 
-        // Sort by score descending
         usort($scored, fn($a, $b) => $b['score'] - $a['score']);
-
-        // Take top 3 with score > 0
         $relevant = array_filter($scored, fn($s) => $s['score'] > 0);
         $relevant = array_slice($relevant, 0, 3);
 
-        // If no matches, return general + first 2 sections
         if (count($relevant) === 0) {
             $relevant = array_slice($scored, 0, 2);
         }

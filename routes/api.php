@@ -456,6 +456,16 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         });
 
         // =============================================
+        // Knowledge Base (per-tenant + shared)
+        // =============================================
+        Route::prefix('knowledge-base')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'store']);
+            Route::put('/{id}', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'update']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'destroy']);
+        });
+
+        // =============================================
         // Sprint C4: Module Comments (threaded, cross-module)
         // =============================================
         Route::prefix('comments')->group(function () {
