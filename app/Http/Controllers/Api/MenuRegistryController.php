@@ -138,13 +138,45 @@ class MenuRegistryController extends Controller
     }
 
     // ──────────────────────────────────────────────
-    // Tenant admin (+ superadmin + root): Layer 2 override
+    // Tenant admin (+ root): Layer 2 override
+    // Root (no org_id) → edits apply globally to every tenant.
+    // Superadmin is NOT allowed here — manage their scope via /menu-control.
     // ──────────────────────────────────────────────
     public function tenantOverrides(Request $request)
     {
         $user = $request->user();
-        if (!in_array($user->role, ['root', 'superadmin', 'admin'], true)) {
-            return response()->json(['message' => 'Hanya admin tenant yang bisa akses'], 403);
+        if (!in_array($user->role, ['root', 'admin'], true)) {
+            return response()->json(['message' => 'Hanya root atau admin tenant yang bisa akses'], 403);
+        }
+
+        // Root without org_id → aggregate "consensus" view across all tenants:
+        // return one row per (menu,role) only when every tenant agrees on the value.
+        if ($user->role === 'root' && !$user->org_id && !$request->filled('org_id')) {
+            $orgCount = \App\Models\Organization::count();
+            $grouped = TenantMenuOverride::select('menu_id', 'role', 'is_visible')
+                ->selectRaw('COUNT(*) as c')
+                ->groupBy('menu_id', 'role', 'is_visible')
+                ->get();
+
+            $agg = [];
+            foreach ($grouped as $g) {
+                $k = $g->menu_id . ':' . $g->role;
+                if (!isset($agg[$k])) $agg[$k] = ['menu_id' => $g->menu_id, 'role' => $g->role, 'votes' => []];
+                $agg[$k]['votes'][$g->is_visible ? '1' : '0'] = (int) $g->c;
+            }
+            $rows = [];
+            foreach ($agg as $a) {
+                $total = array_sum($a['votes']);
+                if ($total !== $orgCount || count($a['votes']) > 1) continue; // consensus requires unanimous
+                $rows[] = [
+                    'id' => '_global_' . $a['menu_id'] . '_' . $a['role'],
+                    'org_id' => null,
+                    'menu_id' => $a['menu_id'],
+                    'role' => $a['role'],
+                    'is_visible' => (bool) array_key_first($a['votes']),
+                ];
+            }
+            return response()->json(['data' => $rows, 'scope' => 'global']);
         }
 
         $orgId = $user->role === 'root' && $request->filled('org_id')
@@ -154,14 +186,14 @@ class MenuRegistryController extends Controller
         if (!$orgId) return response()->json(['data' => []]);
 
         $rows = TenantMenuOverride::where('org_id', $orgId)->get();
-        return response()->json(['data' => $rows]);
+        return response()->json(['data' => $rows, 'scope' => 'tenant']);
     }
 
     public function updateTenantOverride(Request $request)
     {
         $user = $request->user();
-        if (!in_array($user->role, ['root', 'superadmin', 'admin'], true)) {
-            return response()->json(['message' => 'Hanya admin tenant yang bisa akses'], 403);
+        if (!in_array($user->role, ['root', 'admin'], true)) {
+            return response()->json(['message' => 'Hanya root atau admin tenant yang bisa akses'], 403);
         }
 
         $data = $request->validate([
@@ -170,18 +202,12 @@ class MenuRegistryController extends Controller
             'is_visible' => 'required|boolean',
         ]);
 
-        $orgId = $user->role === 'root' && $request->filled('org_id')
-            ? $request->org_id
-            : $user->org_id;
-        if (!$orgId) return response()->json(['message' => 'org_id tidak ditemukan'], 422);
-
-        // Guard: admin tenant hanya bisa toggle menu yang whitelisted untuk role tsb
-        // AND tidak boleh menyentuh menu yg hideable=false
         $menu = MenuItem::findOrFail($data['menu_id']);
         if (!$menu->hideable) {
             return response()->json(['message' => 'Menu ini tidak bisa di-hide'], 422);
         }
 
+        // Non-root must respect whitelist
         if ($user->role !== 'root') {
             $whitelisted = RoleMenuWhitelist::where('menu_id', $menu->id)
                 ->where('role', $data['role'])
@@ -191,6 +217,35 @@ class MenuRegistryController extends Controller
                 return response()->json(['message' => 'Menu ini tidak di-whitelist oleh root untuk role tsb — tidak ada yg bisa di-toggle'], 422);
             }
         }
+
+        // Root without org_id → bulk-apply to every organization.
+        if ($user->role === 'root' && !$user->org_id && !$request->filled('org_id')) {
+            $orgIds = \App\Models\Organization::pluck('id');
+            foreach ($orgIds as $orgId) {
+                TenantMenuOverride::updateOrCreate(
+                    ['org_id' => $orgId, 'menu_id' => $data['menu_id'], 'role' => $data['role']],
+                    ['is_visible' => $data['is_visible']]
+                );
+            }
+
+            try {
+                AuditLog::log('menu_registry', null, 'tenant_override_global', [
+                    'menu_id' => $data['menu_id'], 'role' => $data['role'],
+                    'is_visible' => $data['is_visible'], 'affected_tenants' => $orgIds->count(),
+                ], 'tenant_override');
+            } catch (\Throwable $e) { \Log::warning('Audit log failed: ' . $e->getMessage()); }
+
+            return response()->json([
+                'message' => "Override diterapkan ke {$orgIds->count()} tenant",
+                'scope' => 'global',
+                'affected' => $orgIds->count(),
+            ]);
+        }
+
+        $orgId = $user->role === 'root' && $request->filled('org_id')
+            ? $request->org_id
+            : $user->org_id;
+        if (!$orgId) return response()->json(['message' => 'org_id tidak ditemukan'], 422);
 
         $before = TenantMenuOverride::where('org_id', $orgId)
             ->where('menu_id', $data['menu_id'])->where('role', $data['role'])->value('is_visible');
@@ -206,7 +261,7 @@ class MenuRegistryController extends Controller
             ], 'tenant_override');
         } catch (\Throwable $e) { \Log::warning('Audit log failed: ' . $e->getMessage()); }
 
-        return response()->json(['message' => 'Override diperbarui', 'data' => $row]);
+        return response()->json(['message' => 'Override diperbarui', 'data' => $row, 'scope' => 'tenant']);
     }
 
     // ──────────────────────────────────────────────
