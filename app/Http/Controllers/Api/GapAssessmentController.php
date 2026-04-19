@@ -128,13 +128,35 @@ class GapAssessmentController extends Controller
     public function store(Request $request)
     {
         $code = $request->query('regulation', 'uupdp');
-        
+
+        // GUARD: if there is an UNFINISHED assessment for this regulation
+        // (any regulation, actually — prevents juggling multiple drafts),
+        // user must finish it before starting a new one.
+        $unfinished = GapAssessment::where('org_id', $request->user()->org_id)
+            ->where(function ($q) {
+                $q->where('progress', '<', 100)
+                  ->orWhereNull('progress');
+            })
+            ->orderBy('created_at', 'desc')
+            ->first();
+        if ($unfinished) {
+            return response()->json([
+                'message' => 'Assessment "' . ($unfinished->version ?? 'sebelumnya') . '" belum selesai (progress ' . (int) ($unfinished->progress ?? 0) . '%). Selesaikan atau hapus sebelum membuat assessment baru.',
+                'unfinished' => [
+                    'id' => $unfinished->id,
+                    'version' => $unfinished->version,
+                    'progress' => (int) ($unfinished->progress ?? 0),
+                    'created_at' => $unfinished->created_at,
+                ],
+            ], 409);
+        }
+
         // Check cooldown (90 days)
         $lastAssessment = GapAssessment::where('org_id', $request->user()->org_id)
             ->where('regulation_code', $code)
             ->orderBy('created_at', 'desc')
             ->first();
-        
+
         $cooldownWarning = null;
         if ($lastAssessment) {
             $daysSince = (int) $lastAssessment->created_at->diffInDays(now());

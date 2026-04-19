@@ -1013,10 +1013,18 @@ class TemplateExportController extends Controller
             $pdpAlerts      = (int) $q(\App\Models\InformationSystem::class)->whereNull('deleted_at')->sum('pdp_alert_count');
             $piiAlerts      = (int) $q(\App\Models\InformationSystem::class)->whereNull('deleted_at')->sum('pii_alert_count');
 
-            $latestGap      = $q(\App\Models\GapAssessment::class)->whereNull('deleted_at')->latest()->first();
-            $gapScore       = $latestGap->overall_score ?? $latestGap->score ?? 0;
-            $gapLevel       = $latestGap->compliance_level ?? '-';
-            $gapVersion     = $latestGap->version ?? '-';
+            // Prefer the most recent COMPLETED assessment (progress=100). If
+            // none is completed yet, fall back to the latest draft so the
+            // report still shows something — but label it as draft.
+            $latestCompleted = $q(\App\Models\GapAssessment::class)->whereNull('deleted_at')
+                ->where('progress', 100)->latest()->first();
+            $latestAny = $q(\App\Models\GapAssessment::class)->whereNull('deleted_at')->latest()->first();
+            $latestGap = $latestCompleted ?: $latestAny;
+            $gapScore = $latestGap->overall_score ?? $latestGap->score ?? 0;
+            $gapLevel = $latestGap->compliance_level ?? '-';
+            $gapVersion = $latestGap
+                ? ($latestGap->version ?? '-') . ($latestCompleted ? '' : ' (draft — ' . (int) ($latestGap->progress ?? 0) . '%)')
+                : '-';
 
             $aiTotal        = \App\Models\AiResult::where('org_id', $orgId)->count();
 
