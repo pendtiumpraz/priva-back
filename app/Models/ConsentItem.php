@@ -16,6 +16,18 @@ class ConsentItem extends Model
 
     protected $casts = ['is_required' => 'boolean', 'is_active' => 'boolean'];
 
+    protected static function booted(): void
+    {
+        // Item writes change the config payload too → bust the parent's cache.
+        $bust = function (self $item) {
+            if ($point = $item->collectionPoint()->withoutGlobalScopes()->first()) {
+                $point->bustConsentCache();
+            }
+        };
+        static::saved($bust);
+        static::deleted($bust);
+    }
+
     public function collectionPoint()
     {
         return $this->belongsTo(ConsentCollectionPoint::class , 'collection_point_id');

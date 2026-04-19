@@ -3,9 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\FireConsentWebhookJob;
+use App\Jobs\PushConsentToCrmJob;
 use App\Models\ConsentCollectionPoint;
 use App\Models\ConsentLog;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class ConsentLogController extends Controller
 {
@@ -38,7 +41,15 @@ class ConsentLogController extends Controller
     }
 
     /**
-     * Public API to get consent configuration (banner settings and items)
+     * Public API to get consent configuration (banner settings and items).
+     * Cached aggressively (5 min) because this endpoint is hit on EVERY
+     * page load of every tenant's public site. Cache is keyed by the
+     * collection_id the caller sent, which is either the human-readable
+     * code or the UUID — both keys map to the same payload so invalidation
+     * must clear both variants.
+     *
+     * Invalidation: see ConsentCollectionPoint::bustConsentCache() and the
+     * observer hooks on ConsentItem writes.
      */
     public function config(Request $request)
     {
@@ -46,31 +57,33 @@ class ConsentLogController extends Controller
             'collection_id' => 'required|string',
         ]);
 
-        $collection = ConsentCollectionPoint::with(['items' => function ($query) {
-            $query->where('is_active', true);
-        }])->where('collection_id', $request->collection_id)
-          ->orWhere('id', $request->collection_id)
-          ->firstOrFail();
+        $key = 'consent:config:' . sha1($request->collection_id);
+        $payload = Cache::remember($key, now()->addMinutes(5), function () use ($request) {
+            $collection = ConsentCollectionPoint::with(['items' => function ($query) {
+                $query->where('is_active', true);
+            }])->where('collection_id', $request->collection_id)
+              ->orWhere('id', $request->collection_id)
+              ->firstOrFail();
 
-        return response()->json([
-            'data' => [
+            return [
                 'collection' => [
                     'name' => $collection->name,
                     'domain' => $collection->domain,
                     'settings' => $collection->settings,
                 ],
-                'items' => $collection->items->map(function ($item) {
-                    return [
-                        'id' => $item->id,
-                        'title' => $item->title,
-                        'description' => $item->description,
-                        'full_text' => $item->full_text,
-                        'version' => $item->version,
-                        'is_required' => $item->is_required,
-                    ];
-                }),
-            ]
-        ]);
+                'items' => $collection->items->map(fn ($item) => [
+                    'id' => $item->id,
+                    'title' => $item->title,
+                    'description' => $item->description,
+                    'full_text' => $item->full_text,
+                    'version' => $item->version,
+                    'is_required' => $item->is_required,
+                ])->all(),
+            ];
+        });
+
+        return response()->json(['data' => $payload])
+            ->header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
     }
 
     /**
@@ -113,9 +126,14 @@ class ConsentLogController extends Controller
             'policy_version' => 'nullable|string',
         ]);
 
-        $collection = ConsentCollectionPoint::where('collection_id', $request->collection_id)
-            ->orWhere('id', $request->collection_id)
-            ->firstOrFail();
+        // Collection lookup cached 10 min so the hot path does ONE cache read
+        // instead of a DB query per capture. Misses fall through to Postgres.
+        $cacheKey = 'consent:collection:' . sha1($request->collection_id);
+        $collection = Cache::remember($cacheKey, now()->addMinutes(10), function () use ($request) {
+            return ConsentCollectionPoint::where('collection_id', $request->collection_id)
+                ->orWhere('id', $request->collection_id)
+                ->firstOrFail();
+        });
 
         $log = ConsentLog::create([
             'org_id' => $collection->org_id,
@@ -127,13 +145,19 @@ class ConsentLogController extends Controller
             'user_agent' => $request->userAgent(),
         ]);
 
-        // Increment the records count on the collection point automatically
-        $collection->increment('records_count');
+        // records_count moved out of the hot path — scheduled command
+        // `consent:recount` (default every 5 min) recomputes from consent_logs.
+        // The old `$collection->increment()` serialized writes + caused
+        // MySQL/PG row-lock contention at high concurrency.
 
-        // Fire webhook if configured
+        // Webhook is async via queue so the response returns in <50ms even if
+        // the tenant's receiver is slow / down / rate-limited. 3 retries with
+        // exponential backoff handled by FireConsentWebhookJob.
         if ($collection->webhook_url) {
-            try {
-                \Http::timeout(5)->post($collection->webhook_url, [
+            FireConsentWebhookJob::dispatch(
+                $collection->webhook_url,
+                $collection->collection_id,
+                [
                     'event' => 'consent.captured',
                     'collection_id' => $collection->collection_id,
                     'user_identifier' => $log->user_identifier,
@@ -141,18 +165,16 @@ class ConsentLogController extends Controller
                     'policy_version' => $log->policy_version,
                     'ip_address' => $log->ip_address,
                     'timestamp' => $log->created_at,
-                ]);
-            } catch (\Throwable $e) {
-                // Non-blocking — log but don't fail the request
-                \Log::warning("Webhook fire failed for collection {$collection->id}: " . $e->getMessage());
-            }
+                ]
+            );
         }
 
-        // Forward to Connected CRMs
+        // CRM push also async — a Salesforce/HubSpot round-trip can be
+        // several seconds, we don't block the user for it.
         $org = \App\Models\Organization::find($collection->org_id);
         $crms = $org->settings['crm_connections'] ?? [];
         foreach ($crms as $providerId => $config) {
-            \App\Services\CrmService::pushConsent($providerId, $config, $log);
+            PushConsentToCrmJob::dispatch($providerId, (array) $config, $log->id);
         }
 
         return response()->json([

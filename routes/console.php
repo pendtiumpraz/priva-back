@@ -10,3 +10,4 @@ Artisan::command('inspire', function () {
 \Illuminate\Support\Facades\Schedule::command('privasimu:scan-scheduled-systems')->daily();
 \Illuminate\Support\Facades\Schedule::command('entitlements:cleanup-expired')->dailyAt('02:00');
 \Illuminate\Support\Facades\Schedule::command('tenants:cleanup-archived')->dailyAt('03:00');
+\Illuminate\Support\Facades\Schedule::command('consent:recount')->everyFiveMinutes()->withoutOverlapping();
