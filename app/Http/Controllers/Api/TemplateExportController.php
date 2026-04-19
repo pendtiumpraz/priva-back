@@ -18,116 +18,332 @@ class TemplateExportController extends Controller
         return htmlspecialchars((string) $text, ENT_COMPAT, 'UTF-8');
     }
 
-    private function addCoverPage(PhpWord $phpWord, string $docType, string $title, string $regNumber, string $status, string $riskLevel, string $orgName)
+    // ────────────────────────────────────────────────────────────────
+    //  DESIGN SYSTEM
+    //
+    //  Palette:
+    //    --ink      #0f172a  headings, body text
+    //    --muted    #64748b  secondary / captions
+    //    --brand    #4f46e5  primary accent (indigo 600)
+    //    --brand-dk #3730a3  dark accent
+    //    --bg-alt   #f8fafc  zebra stripe on tables
+    //    --border   #e2e8f0  separators
+    //    risk colors: low=#16a34a, medium=#eab308, high=#ea580c, critical=#dc2626
+    //
+    //  Typography scale:
+    //    cover title            32 pt bold
+    //    section h2             16 pt bold, white on brand bar
+    //    label                  9.5pt bold uppercase, muted
+    //    value                  11pt regular
+    //    caption/footer         8pt muted
+    // ────────────────────────────────────────────────────────────────
+
+    private function riskColor(string $risk): string
+    {
+        return match (strtolower($risk)) {
+            'low' => '16a34a',
+            'medium', 'med' => 'eab308',
+            'high' => 'ea580c',
+            'critical' => 'dc2626',
+            default => '64748b',
+        };
+    }
+
+    private function statusColor(string $status): string
+    {
+        return match (strtolower($status)) {
+            'approved', 'active', 'completed', 'closed' => '16a34a',
+            'review', 'pending' => 'eab308',
+            'rejected', 'expired' => 'dc2626',
+            default => '64748b', // draft
+        };
+    }
+
+    /**
+     * Cover page — tenant-owned branding.
+     *
+     * The document is the tenant's property; PRIVASIMU does NOT appear in
+     * the visible output. If the tenant has uploaded a logo (via the
+     * Branding page) we place it prominently at the top of the hero. The
+     * hero uses the tenant's name and the tenant's website as the header.
+     *
+     * @param array $orgMeta keys: name, website, dpo_name, dpo_email, logo_path
+     */
+    private function addCoverPage(PhpWord $phpWord, string $docType, string $title, string $regNumber, string $status, string $riskLevel, array $orgMeta)
     {
         $section = $phpWord->addSection([
             'marginTop' => 0, 'marginBottom' => 0, 'marginLeft' => 0, 'marginRight' => 0,
         ]);
 
-        $tableStyle = ['borderSize' => 0, 'cellMargin' => 0, 'width' => 11905, 'unit' => \PhpOffice\PhpWord\SimpleType\TblWidth::TWIP];
-        $phpWord->addTableStyle('CoverTableBase', $tableStyle);
-        $table = $section->addTable('CoverTableBase');
+        $phpWord->addTableStyle('CoverBase', ['borderSize' => 0, 'cellMargin' => 0, 'width' => 11905, 'unit' => \PhpOffice\PhpWord\SimpleType\TblWidth::TWIP]);
 
-        $row = $table->addRow(16840, ['exactHeight' => true]);
-        $cell = $row->addCell(11905, ['bgColor' => '1b143c', 'valign' => 'center']);
-        
-        $cell->addTextBreak(6);
-        $cell->addText('PRIVASIMU', ['size' => 16, 'color' => 'ffffff', 'bold' => true], ['alignment' => Jc::CENTER]);
-        $cell->addText('|', ['size' => 14, 'color' => '4f46e5'], ['alignment' => Jc::CENTER]);
-        $cell->addTextBreak(1);
-        
-        $docTypeMain = explode(' ', $docType)[0];
-        $docTypeSub = str_replace($docTypeMain.' ', '', $docType);
-        
-        $textRun = $cell->addTextRun(['alignment' => Jc::CENTER]);
-        $textRun->addText($docTypeMain, ['size' => 32, 'bold' => true, 'color' => 'ffffff']);
-        if ($docTypeSub) {
-            $textRun->addText(' ' . trim($docTypeSub), ['size' => 32, 'color' => 'e0e7ff']);
-        }
-        
-        $cell->addTextBreak(1);
-        
-        $imgPath = base_path('public/images/doc-cover-bg.png');
-        if (file_exists($imgPath)) {
-            $cell->addImage($imgPath, [
-                'width' => 350,
-                'alignment' => Jc::CENTER,
-            ]);
+        // ── Hero band ──
+        $hero = $section->addTable('CoverBase');
+        $heroRow = $hero->addRow(11900, ['exactHeight' => true]);
+        $heroCell = $heroRow->addCell(11905, ['bgColor' => '0f172a', 'valign' => 'center']);
+
+        $heroCell->addTextBreak(3);
+
+        // Tenant logo (if uploaded) — else tenant name as wordmark
+        $logoPath = $orgMeta['logo_path'] ?? null;
+        if ($logoPath && file_exists($logoPath)) {
+            try {
+                $heroCell->addImage($logoPath, [
+                    'width' => 180, 'height' => 60, 'alignment' => Jc::CENTER,
+                ]);
+                $heroCell->addTextBreak(1);
+            } catch (\Throwable $e) {
+                // fall through to text
+                $heroCell->addText(strtoupper($orgMeta['name'] ?? 'Organization'),
+                    ['size' => 14, 'color' => 'ffffff', 'bold' => true, 'allCaps' => true, 'spacing' => 300],
+                    ['alignment' => Jc::CENTER]);
+            }
         } else {
-            $cell->addTextBreak(12);
+            $heroCell->addText(strtoupper($orgMeta['name'] ?? 'Organization'),
+                ['size' => 14, 'color' => 'ffffff', 'bold' => true, 'allCaps' => true, 'spacing' => 300],
+                ['alignment' => Jc::CENTER]);
         }
-        
-        $cell->addTextBreak(4);
-        $cell->addText($this->t($title ?: 'Untitled'), ['size' => 16, 'color' => 'ffffff'], ['alignment' => Jc::CENTER]);
-        
-        $cell->addTextBreak(6);
 
-        $metaTable = $cell->addTable(['borderSize' => 8, 'borderColor' => 'ffffff', 'cellMargin' => 100, 'alignment' => Jc::CENTER]);
+        if (!empty($orgMeta['website'])) {
+            $heroCell->addText($this->t($orgMeta['website']),
+                ['size' => 9, 'color' => '94a3b8', 'italic' => true],
+                ['alignment' => Jc::CENTER]);
+        }
+
+        $heroCell->addTextBreak(4);
+
+        // Document type chip
+        $chipTable = $heroCell->addTable(['cellMargin' => 120, 'alignment' => Jc::CENTER]);
+        $chipRow = $chipTable->addRow();
+        $chipRow->addCell(3500, ['bgColor' => '4f46e5', 'valign' => 'center'])
+            ->addText($this->t(strtoupper($docType)), ['size' => 10, 'bold' => true, 'color' => 'ffffff', 'allCaps' => true, 'spacing' => 100], ['alignment' => Jc::CENTER]);
+
+        $heroCell->addTextBreak(3);
+
+        // Document title
+        $heroCell->addText($this->t($title ?: 'Untitled Record'), ['size' => 28, 'bold' => true, 'color' => 'ffffff'], ['alignment' => Jc::CENTER, 'spaceAfter' => 0]);
+
+        $heroCell->addTextBreak(1);
+
+        // Registration number
+        if ($regNumber) {
+            $heroCell->addText($this->t($regNumber), ['size' => 12, 'color' => '94a3b8', 'spacing' => 200], ['alignment' => Jc::CENTER]);
+        }
+
+        $heroCell->addTextBreak(5);
+
+        // Divider line
+        $heroCell->addText('────────────', ['size' => 8, 'color' => '4f46e5', 'bold' => true], ['alignment' => Jc::CENTER]);
+
+        $heroCell->addTextBreak(3);
+
+        // Meta row
+        $metaTable = $heroCell->addTable(['cellMargin' => 140, 'alignment' => Jc::CENTER]);
         $metaRow = $metaTable->addRow();
-        
-        $metaRow->addCell(4000)->addText($this->t("ROPA for:\n" . ($orgName ?: '-')), ['size' => 10, 'bold' => true, 'color' => 'ffffff']);
-        $metaRow->addCell(2500)->addText($this->t("Status:\n" . strtoupper($status)), ['size' => 10, 'bold' => true, 'color' => 'ffffff']);
-        $metaRow->addCell(2500)->addText($this->t("Date:\n" . now()->format('d M Y')), ['size' => 10, 'bold' => true, 'color' => 'ffffff']);
+
+        $this->coverMetaCell($metaRow, 'Controller', $orgMeta['name'] ?? '-');
+        $this->coverMetaCell($metaRow, 'Status', strtoupper($status ?: 'DRAFT'), $this->statusColor($status ?: 'draft'));
+        $this->coverMetaCell($metaRow, 'Risk', strtoupper($riskLevel ?: 'N/A'), $this->riskColor($riskLevel ?: ''));
+        $this->coverMetaCell($metaRow, 'Issued', now()->format('d M Y'));
+
+        // ── Footer band ──
+        $foot = $section->addTable('CoverBase');
+        $footRow = $foot->addRow(4900, ['exactHeight' => true]);
+        $footCell = $footRow->addCell(11905, ['bgColor' => 'ffffff', 'valign' => 'center']);
+
+        $footCell->addTextBreak(4);
+        $footCell->addText('CONFIDENTIAL', ['size' => 10, 'color' => 'dc2626', 'bold' => true, 'allCaps' => true, 'spacing' => 300], ['alignment' => Jc::CENTER]);
+        $footCell->addTextBreak(1);
+        $footCell->addText(
+            'This document contains confidential personal data processing information.',
+            ['size' => 9, 'color' => '64748b', 'italic' => true], ['alignment' => Jc::CENTER]
+        );
+        $footCell->addText(
+            'Distribution outside the intended recipient requires Data Protection Officer approval.',
+            ['size' => 9, 'color' => '64748b', 'italic' => true], ['alignment' => Jc::CENTER]
+        );
+
+        $footCell->addTextBreak(3);
+
+        $contactTable = $footCell->addTable(['cellMargin' => 100, 'alignment' => Jc::CENTER]);
+        $contactRow = $contactTable->addRow();
+        $contactCell = $contactRow->addCell(11000, []);
+        if (!empty($orgMeta['dpo_name']) || !empty($orgMeta['dpo_email'])) {
+            $contactCell->addText(
+                'Data Protection Officer: ' . trim(($orgMeta['dpo_name'] ?? '') . (isset($orgMeta['dpo_email']) ? ' · ' . $orgMeta['dpo_email'] : ''), ' ·'),
+                ['size' => 8, 'color' => '64748b'], ['alignment' => Jc::CENTER]
+            );
+        }
+        $contactCell->addText('Issued on ' . now()->format('d F Y H:i') . ' WIB',
+            ['size' => 8, 'color' => '94a3b8'], ['alignment' => Jc::CENTER]);
 
         return $section;
     }
 
-    private function addContentSection(PhpWord $phpWord, string $headerText)
+    private function coverMetaCell($metaRow, string $label, string $value, ?string $accent = null): void
+    {
+        $cell = $metaRow->addCell(2400, ['valign' => 'center']);
+        $cell->addText(strtoupper($label), ['size' => 8, 'color' => '94a3b8', 'bold' => true, 'spacing' => 150], ['alignment' => Jc::CENTER]);
+        $cell->addText($this->t($value), [
+            'size' => 11, 'bold' => true, 'color' => $accent ?: 'ffffff',
+        ], ['alignment' => Jc::CENTER]);
+    }
+
+    /**
+     * Inner content section — running header uses the TENANT's name (not
+     * Privasimu) so the exported document is fully white-labeled.
+     *
+     * @param string $headerText  Free-text shown on the right of the header
+     *                            (typically "<DocType> · <reg number>")
+     * @param array  $orgMeta     Optional tenant meta (name, website) to show
+     *                            on the left of the header + footer.
+     */
+    private function addContentSection(PhpWord $phpWord, string $headerText, array $orgMeta = [])
     {
         $section = $phpWord->addSection([
-            'marginTop' => 800, 'marginBottom' => 800,
-            'marginLeft' => 800, 'marginRight' => 800,
-            'bgColor' => 'fcfcfd'
+            'marginTop' => 1200, 'marginBottom' => 1000,
+            'marginLeft' => 900, 'marginRight' => 900,
+            'headerHeight' => 600, 'footerHeight' => 400,
+            'bgColor' => 'ffffff',
         ]);
-        
+
+        $tenantName = strtoupper($orgMeta['name'] ?? 'Organization');
+        $tenantSite = $orgMeta['website'] ?? '';
+
+        // Running header: tenant name left, doc ref right
         $header = $section->addHeader();
-        $headerTable = $header->addTable(['borderBottomSize' => 12, 'borderBottomColor' => '94a3b8', 'width' => 100 * 50]);
-        $headerTable->addRow();
-        $docTypeMain = explode(' ', $headerText)[0];
-        $textRun = $headerTable->addCell(10000)->addTextRun();
-        $textRun->addText($docTypeMain, ['size' => 12, 'bold' => true, 'color' => '8b9cd4']);
-        $textRun->addText(' DATA EXPORT', ['size' => 12, 'color' => '8b9cd4']);
-        
+        $hdrTable = $header->addTable(['width' => 100 * 50, 'borderBottomSize' => 6, 'borderBottomColor' => '4f46e5']);
+        $hdrTable->addRow(400, ['exactHeight' => true]);
+        $hdrLeft = $hdrTable->addCell(5500, ['valign' => 'center']);
+        $hdrLeft->addText($this->t($tenantName), ['size' => 8, 'bold' => true, 'color' => '0f172a', 'allCaps' => true, 'spacing' => 150]);
+        $hdrRight = $hdrTable->addCell(5500, ['valign' => 'center']);
+        $hdrRight->addText($this->t($headerText), ['size' => 8, 'color' => '64748b', 'italic' => true], ['alignment' => Jc::END]);
+
+        // Footer: confidentiality + tenant website + page number
         $footer = $section->addFooter();
-        $footerTable = $footer->addTable(['width' => 100 * 50]);
-        $footerTable->addRow();
-        $footerTable->addCell(3000)->addText('PRIVASIMU', ['size' => 12, 'bold' => true, 'color' => '8b9cd4']);
-        $footerTable->addCell(7000)->addPreserveText('Your Trusted Personal Data Protection Technology and Compliance Solution | {PAGE}', ['size' => 8, 'color' => '94a3b8', 'italic' => true], ['alignment' => Jc::END]);
-        
+        $footTable = $footer->addTable(['width' => 100 * 50, 'borderTopSize' => 4, 'borderTopColor' => 'e2e8f0']);
+        $footTable->addRow(300, ['exactHeight' => true]);
+        $footTable->addCell(4000, ['valign' => 'center'])
+            ->addText('CONFIDENTIAL · Personal Data', ['size' => 7, 'color' => '94a3b8', 'allCaps' => true, 'spacing' => 100]);
+        $footTable->addCell(3000, ['valign' => 'center'])
+            ->addText($this->t($tenantSite), ['size' => 7, 'color' => '94a3b8'], ['alignment' => Jc::CENTER]);
+        $pageCell = $footTable->addCell(4000, ['valign' => 'center']);
+        $pageRun = $pageCell->addTextRun(['alignment' => Jc::END]);
+        $pageRun->addText('Page ', ['size' => 7, 'color' => '94a3b8']);
+        $pageRun->addField('PAGE', ['format' => 'ARABIC'], [], ['size' => 7, 'color' => '4f46e5', 'bold' => true]);
+        $pageRun->addText(' of ', ['size' => 7, 'color' => '94a3b8']);
+        $pageRun->addField('NUMPAGES', ['format' => 'ARABIC'], [], ['size' => 7, 'color' => '4f46e5', 'bold' => true]);
+
         return $section;
     }
 
-    private function addSectionTitle($section, string $title)
+    /**
+     * Resolve tenant metadata used across the header/footer/cover. Looks
+     * up logo path from the Organization row; if a public URL is stored
+     * we don't fetch it (would require HTTP), we only use locally stored
+     * files reachable via public disk.
+     */
+    private function resolveOrgMeta(?\App\Models\Organization $org): array
     {
-        $section->addTextBreak();
-        $table = $section->addTable(['bgColor' => 'ffffff', 'cellMargin' => 0]);
-        $table->addRow();
-        $cell = $table->addCell(10000);
-        $cleanTitle = ltrim($title, '0123456789. ');
-        $cell->addText($this->t('■  ' . $cleanTitle), ['size' => 14, 'bold' => true, 'color' => '1b143c'], ['spaceBefore' => 200, 'spaceAfter' => 100]);
+        if (!$org) return ['name' => 'Organization'];
+        $meta = [
+            'name' => $org->name ?? 'Organization',
+            'website' => $org->website ?? '',
+            'dpo_name' => $org->dpo_name ?? '',
+            'dpo_email' => $org->dpo_email ?? '',
+        ];
+
+        if ($org->logo_url) {
+            $url = $org->logo_url;
+            // Only try local files via the public disk
+            if (str_starts_with($url, '/storage/')) {
+                $rel = substr($url, strlen('/storage/'));
+                $local = storage_path('app/public/' . $rel);
+                if (is_file($local)) $meta['logo_path'] = $local;
+            }
+        }
+        return $meta;
     }
 
+    /**
+     * Section title — coloured brand bar with section number.
+     */
+    private function addSectionTitle($section, string $title)
+    {
+        $section->addTextBreak(1);
+
+        // Extract leading "1." / "1.1" as badge
+        $num = '';
+        $clean = $title;
+        if (preg_match('/^([0-9]+(?:\.[0-9]+)*)\.?\s+(.*)$/', trim($title), $m)) {
+            $num = $m[1];
+            $clean = $m[2];
+        }
+
+        $table = $section->addTable(['cellMargin' => 0, 'width' => 100 * 50]);
+        $row = $table->addRow(520, ['exactHeight' => true]);
+
+        if ($num !== '') {
+            $badge = $row->addCell(700, ['bgColor' => '4f46e5', 'valign' => 'center']);
+            $badge->addText($num, ['size' => 11, 'bold' => true, 'color' => 'ffffff'], ['alignment' => Jc::CENTER]);
+        }
+        $titleCell = $row->addCell($num !== '' ? 10300 : 11000, ['bgColor' => '0f172a', 'valign' => 'center']);
+        $titleCell->addText('  ' . $this->t($clean), ['size' => 12, 'bold' => true, 'color' => 'ffffff', 'spacing' => 100]);
+
+        $section->addTextBreak(1);
+    }
+
+    /**
+     * Label/value 2-column row with zebra striping. Much denser + easier
+     * to scan than the previous stacked layout.
+     */
     private function addInfoRow($table, string $label, string $value)
     {
-        $rowHeader = $table->addRow();
-        $rowHeader->addCell(10000, ['bgColor' => 'f4f5f9', 'borderSize' => 0])
-            ->addText($this->t($label), ['size' => 10, 'bold' => true, 'color' => '1e293b'], ['spaceBefore' => 60, 'spaceAfter' => 60]);
-            
-        $rowValue = $table->addRow();
-        $rowValue->addCell(10000, ['bgColor' => 'ffffff', 'borderSize' => 0])
-            ->addText($this->t($value ?: '-'), ['size' => 10, 'color' => '475569'], ['spaceBefore' => 40, 'spaceAfter' => 100]);
-            
-        $table->addRow()->addCell(10000)->addText('', [], ['spaceBefore' => 40]);
+        // zebra stripe based on table row count
+        static $rowCounter = [];
+        $tableKey = spl_object_hash($table);
+        $rowCounter[$tableKey] = ($rowCounter[$tableKey] ?? 0) + 1;
+        $zebra = ($rowCounter[$tableKey] % 2 === 0) ? 'f8fafc' : 'ffffff';
+
+        $row = $table->addRow(null, ['cantSplit' => true]);
+
+        $labelCell = $row->addCell(3400, [
+            'bgColor' => $zebra, 'valign' => 'top',
+            'borderRightSize' => 6, 'borderRightColor' => 'e2e8f0',
+        ]);
+        $labelCell->addText($this->t($label), [
+            'size' => 9, 'bold' => true, 'color' => '64748b', 'allCaps' => true, 'spacing' => 100,
+        ], ['spaceBefore' => 100, 'spaceAfter' => 100]);
+
+        $valueCell = $row->addCell(7600, ['bgColor' => $zebra, 'valign' => 'top']);
+        $valueCell->addText($this->t($value ?: '—'), [
+            'size' => 11, 'color' => '0f172a',
+        ], ['spaceBefore' => 100, 'spaceAfter' => 100]);
     }
 
     private function makeInfoTable($section)
     {
         return $section->addTable([
             'borderSize' => 0,
-            'cellMargin' => 40,
+            'cellMargin' => 120,
             'width' => 100 * 50,
-            'alignment' => Jc::CENTER
+            'unit' => \PhpOffice\PhpWord\SimpleType\TblWidth::PERCENT,
+            'alignment' => Jc::CENTER,
         ]);
+    }
+
+    /**
+     * Coloured status/risk badge rendered inline in a single-cell table.
+     */
+    private function addBadge($section, string $label, string $value, string $bgColor): void
+    {
+        $t = $section->addTable(['cellMargin' => 100, 'alignment' => Jc::START]);
+        $r = $t->addRow(320, ['exactHeight' => true]);
+        $c = $r->addCell(3500, ['bgColor' => $bgColor, 'valign' => 'center']);
+        $c->addText(strtoupper($label) . ': ' . $this->t($value), [
+            'size' => 10, 'bold' => true, 'color' => 'ffffff', 'allCaps' => true, 'spacing' => 200,
+        ], ['alignment' => Jc::CENTER]);
+        $section->addTextBreak(1);
     }
 
     private function fmtArray($arr): string
@@ -155,7 +371,7 @@ class TemplateExportController extends Controller
             $penggunaan = $wiz['penggunaan_penyimpanan'] ?? [];
             $pengiriman = $wiz['pengiriman_data'] ?? [];
             $retensi = $wiz['retensi_keamanan'] ?? [];
-            $orgName = auth()->user()->organization->name ?? '-';
+            $orgMeta = $this->resolveOrgMeta(auth()->user()->organization);
 
             // Cover Page
             $this->addCoverPage(
@@ -164,11 +380,11 @@ class TemplateExportController extends Controller
                 $ropa->registration_number ?? '-',
                 $ropa->status ?? 'draft',
                 $ropa->risk_level ?? 'low',
-                $orgName
+                $orgMeta
             );
 
             // Content Page
-            $sec = $this->addContentSection($phpWord, 'ROPA - ' . ($ropa->registration_number ?? ''));
+            $sec = $this->addContentSection($phpWord, 'ROPA · ' . ($ropa->registration_number ?? ''), $orgMeta);
 
             // 1. Detail Pemrosesan
             $this->addSectionTitle($sec, '1. Detail Pemrosesan');
@@ -276,7 +492,7 @@ class TemplateExportController extends Controller
             $koneksi = $wiz['koneksi_ropa'] ?? [];
             $risiko = $wiz['potensi_risiko'] ?? [];
             $ra = $dpia->risk_assessment ?? [];
-            $orgName = auth()->user()->organization->name ?? '-';
+            $orgMeta = $this->resolveOrgMeta(auth()->user()->organization);
 
             // Cover Page
             $this->addCoverPage(
@@ -285,11 +501,11 @@ class TemplateExportController extends Controller
                 $dpia->registration_number ?? '-',
                 $dpia->status ?? 'draft',
                 $dpia->risk_level ?? 'low',
-                $orgName
+                $orgMeta
             );
 
             // Content Page
-            $sec = $this->addContentSection($phpWord, 'DPIA - ' . ($dpia->registration_number ?? ''));
+            $sec = $this->addContentSection($phpWord, 'DPIA · ' . ($dpia->registration_number ?? ''), $orgMeta);
 
             // 1. Informasi DPIA
             $this->addSectionTitle($sec, '1. Informasi DPIA');
@@ -565,7 +781,7 @@ class TemplateExportController extends Controller
 
         try {
             $phpWord = new PhpWord();
-            $orgName = auth()->user()->organization->name ?? '-';
+            $orgMeta = $this->resolveOrgMeta(auth()->user()->organization);
             $regCode = $gap->regulation_code ?? 'uupdp';
             $regName = \App\Models\RegulationFramework::where('code', $regCode)->value('name') ?? 'UU No. 27 Tahun 2022 (UU PDP)';
             $scoreData = GapAssessment::calculateScore($gap->answers ?: [], $regCode);
@@ -577,11 +793,11 @@ class TemplateExportController extends Controller
                 $regName,
                 $gap->compliance_level ?? 'low',
                 $gap->compliance_level ?? 'low',
-                $orgName
+                $orgMeta
             );
 
             // Content Page
-            $sec = $this->addContentSection($phpWord, 'GAP ASSESSMENT - ' . ($gap->version ?? ''));
+            $sec = $this->addContentSection($phpWord, 'GAP ASSESSMENT · ' . ($gap->version ?? ''), $orgMeta);
 
             // 1. Informasi Assessment
             $this->addSectionTitle($sec, '1. Informasi Assessment');
