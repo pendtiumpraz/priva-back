@@ -109,12 +109,12 @@ class TemplateExportController extends Controller
                 $heroCell->addTextBreak(1);
             } catch (\Throwable $e) {
                 $heroCell->addText(strtoupper($orgMeta['name'] ?? 'Organization'),
-                    ['size' => 14, 'color' => 'ffffff', 'bold' => true, 'allCaps' => true, 'spacing' => 300, 'name' => self::HEAD_FONT],
+                    ['size' => 14, 'color' => 'ffffff', 'bold' => true, 'allCaps' => true, 'name' => self::HEAD_FONT],
                     ['alignment' => Jc::CENTER]);
             }
         } else {
             $heroCell->addText(strtoupper($orgMeta['name'] ?? 'Organization'),
-                ['size' => 14, 'color' => 'ffffff', 'bold' => true, 'allCaps' => true, 'spacing' => 300, 'name' => self::HEAD_FONT],
+                ['size' => 14, 'color' => 'ffffff', 'bold' => true, 'allCaps' => true, 'name' => self::HEAD_FONT],
                 ['alignment' => Jc::CENTER]);
         }
 
@@ -132,7 +132,7 @@ class TemplateExportController extends Controller
         $chipRow->addCell(3500, [
             'bgColor' => 'FFFFFF', 'valign' => 'center',
         ])->addText($this->t(strtoupper($docType)), [
-            'size' => 10, 'bold' => true, 'color' => self::NAVY, 'allCaps' => true, 'spacing' => 100,
+            'size' => 10, 'bold' => true, 'color' => self::NAVY, 'allCaps' => true,
             'name' => self::HEAD_FONT,
         ], ['alignment' => Jc::CENTER]);
 
@@ -147,7 +147,7 @@ class TemplateExportController extends Controller
 
         if ($regNumber) {
             $heroCell->addText($this->t($regNumber), [
-                'size' => 12, 'color' => 'D9D9D9', 'spacing' => 200, 'name' => self::BODY_FONT,
+                'size' => 12, 'color' => 'D9D9D9', 'name' => self::BODY_FONT,
             ], ['alignment' => Jc::CENTER]);
         }
 
@@ -173,7 +173,7 @@ class TemplateExportController extends Controller
         $footCell = $footRow->addCell(11905, ['bgColor' => 'ffffff', 'valign' => 'center']);
 
         $footCell->addTextBreak(4);
-        $footCell->addText('CONFIDENTIAL', ['size' => 10, 'color' => 'dc2626', 'bold' => true, 'allCaps' => true, 'spacing' => 300], ['alignment' => Jc::CENTER]);
+        $footCell->addText('CONFIDENTIAL', ['size' => 10, 'color' => 'dc2626', 'bold' => true, 'allCaps' => true], ['alignment' => Jc::CENTER]);
         $footCell->addTextBreak(1);
         $footCell->addText(
             'This document contains confidential personal data processing information.',
@@ -204,7 +204,7 @@ class TemplateExportController extends Controller
     private function coverMetaCell($metaRow, string $label, string $value, ?string $accent = null): void
     {
         $cell = $metaRow->addCell(2400, ['valign' => 'center']);
-        $cell->addText(strtoupper($label), ['size' => 8, 'color' => 'D9D9D9', 'bold' => true, 'spacing' => 150, 'name' => self::HEAD_FONT], ['alignment' => Jc::CENTER]);
+        $cell->addText(strtoupper($label), ['size' => 8, 'color' => 'D9D9D9', 'bold' => true, 'name' => self::HEAD_FONT], ['alignment' => Jc::CENTER]);
         $cell->addText($this->t($value), [
             'size' => 11, 'bold' => true, 'color' => $accent ?: 'ffffff',
             'name' => self::HEAD_FONT,
@@ -237,7 +237,7 @@ class TemplateExportController extends Controller
         $hdrTable = $header->addTable(['width' => 100 * 50, 'borderBottomSize' => 6, 'borderBottomColor' => self::NAVY]);
         $hdrTable->addRow(400, ['exactHeight' => true]);
         $hdrLeft = $hdrTable->addCell(5500, ['valign' => 'center']);
-        $hdrLeft->addText($this->t($tenantName), ['size' => 8, 'bold' => true, 'color' => self::NAVY, 'allCaps' => true, 'spacing' => 150, 'name' => self::HEAD_FONT]);
+        $hdrLeft->addText($this->t($tenantName), ['size' => 8, 'bold' => true, 'color' => self::NAVY, 'allCaps' => true, 'name' => self::HEAD_FONT]);
         $hdrRight = $hdrTable->addCell(5500, ['valign' => 'center']);
         $hdrRight->addText($this->t($headerText), ['size' => 8, 'color' => self::GRAY, 'italic' => true], ['alignment' => Jc::END]);
 
@@ -246,7 +246,7 @@ class TemplateExportController extends Controller
         $footTable = $footer->addTable(['width' => 100 * 50, 'borderTopSize' => 4, 'borderTopColor' => self::RULE]);
         $footTable->addRow(300, ['exactHeight' => true]);
         $footTable->addCell(4000, ['valign' => 'center'])
-            ->addText('CONFIDENTIAL · Personal Data', ['size' => 7, 'color' => self::GRAY, 'allCaps' => true, 'spacing' => 100]);
+            ->addText('CONFIDENTIAL · Personal Data', ['size' => 7, 'color' => self::GRAY, 'allCaps' => true]);
         $footTable->addCell(3000, ['valign' => 'center'])
             ->addText($this->t($tenantSite), ['size' => 7, 'color' => self::GRAY], ['alignment' => Jc::CENTER]);
         $pageCell = $footTable->addCell(4000, ['valign' => 'center']);
@@ -309,7 +309,7 @@ class TemplateExportController extends Controller
         }
         $titleCell = $row->addCell($num !== '' ? 10300 : 11000, ['bgColor' => self::NAVY, 'valign' => 'center']);
         $titleCell->addText('  ' . $this->t($clean), [
-            'size' => 12, 'bold' => true, 'color' => 'ffffff', 'spacing' => 100,
+            'size' => 12, 'bold' => true, 'color' => 'ffffff',
             'name' => self::HEAD_FONT,
         ]);
 
@@ -416,7 +416,7 @@ class TemplateExportController extends Controller
         $r = $t->addRow(320, ['exactHeight' => true]);
         $c = $r->addCell(3500, ['bgColor' => $bgColor, 'valign' => 'center']);
         $c->addText(strtoupper($label) . ': ' . $this->t($value), [
-            'size' => 10, 'bold' => true, 'color' => 'ffffff', 'allCaps' => true, 'spacing' => 200,
+            'size' => 10, 'bold' => true, 'color' => 'ffffff', 'allCaps' => true,
         ], ['alignment' => Jc::CENTER]);
         $section->addTextBreak(1);
     }
@@ -1032,7 +1032,7 @@ class TemplateExportController extends Controller
                     'borderTopSize' => 24, 'borderTopColor' => $s['color'] ?? self::NAVY,
                 ]);
                 $cell->addText(strtoupper($s['label'] ?? ''), [
-                    'size' => 8, 'color' => self::GRAY, 'bold' => true, 'spacing' => 150,
+                    'size' => 8, 'color' => self::GRAY, 'bold' => true,
                 ], ['alignment' => Jc::CENTER, 'spaceBefore' => 120, 'spaceAfter' => 60]);
                 $cell->addText($this->t((string) ($s['value'] ?? '0')), [
                     'size' => 22, 'color' => self::NAVY, 'bold' => true, 'name' => self::HEAD_FONT,
