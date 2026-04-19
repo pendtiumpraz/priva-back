@@ -20,24 +20,36 @@ class TemplateExportController extends Controller
     }
 
     // ────────────────────────────────────────────────────────────────
-    //  DESIGN SYSTEM
+    //  DESIGN SYSTEM  —  book-layouter proportions
     //
-    //  Palette:
-    //    --ink      #0f172a  headings, body text
-    //    --muted    #64748b  secondary / captions
-    //    --brand    #4f46e5  primary accent (indigo 600)
-    //    --brand-dk #3730a3  dark accent
-    //    --bg-alt   #f8fafc  zebra stripe on tables
-    //    --border   #e2e8f0  separators
-    //    risk colors: low=#16a34a, medium=#eab308, high=#ea580c, critical=#dc2626
+    //  Palette (matches reference book design):
+    //    --navy     #16284C  primary (cover bg, headings, label accent)
+    //    --lav      #F4F2FE  subtle fill for label columns & headers
+    //    --ink      #0f172a  body text
+    //    --gray     #767171  muted / captions
+    //    --rule     #D9D9D9  table borders
+    //    --white    #FFFFFF
+    //  Risk palette kept for status badges only.
     //
-    //  Typography scale:
-    //    cover title            32 pt bold
-    //    section h2             16 pt bold, white on brand bar
-    //    label                  9.5pt bold uppercase, muted
-    //    value                  11pt regular
-    //    caption/footer         8pt muted
+    //  Typography:
+    //    Headings  → Poppins bold (navy)
+    //    Body      → Roboto 10pt (ink)
+    //    Caption   → Roboto 8pt (gray)
     // ────────────────────────────────────────────────────────────────
+
+    private const NAVY  = '16284C';
+    private const LAV   = 'F4F2FE';
+    private const INK   = '0F172A';
+    private const GRAY  = '767171';
+    private const RULE  = 'D9D9D9';
+    private const HEAD_FONT = 'Poppins';
+    private const BODY_FONT = 'Roboto';
+
+    private function applyDefaultFont(PhpWord $phpWord): void
+    {
+        $phpWord->setDefaultFontName(self::BODY_FONT);
+        $phpWord->setDefaultFontSize(10);
+    }
 
     private function riskColor(string $risk): string
     {
@@ -61,17 +73,19 @@ class TemplateExportController extends Controller
     }
 
     /**
-     * Cover page — tenant-owned branding.
+     * Cover page — tenant-owned, book-layout style.
      *
      * The document is the tenant's property; PRIVASIMU does NOT appear in
-     * the visible output. If the tenant has uploaded a logo (via the
-     * Branding page) we place it prominently at the top of the hero. The
-     * hero uses the tenant's name and the tenant's website as the header.
+     * the visible output. Hero is solid navy with the tenant's logo or
+     * name centered high, then document-type badge, title, reg number,
+     * and a 4-column meta strip. Bottom band is a white confidentiality
+     * and issue-date block.
      *
      * @param array $orgMeta keys: name, website, dpo_name, dpo_email, logo_path
      */
     private function addCoverPage(PhpWord $phpWord, string $docType, string $title, string $regNumber, string $status, string $riskLevel, array $orgMeta)
     {
+        $this->applyDefaultFont($phpWord);
         $section = $phpWord->addSection([
             'marginTop' => 0, 'marginBottom' => 0, 'marginLeft' => 0, 'marginRight' => 0,
         ]);
@@ -81,7 +95,7 @@ class TemplateExportController extends Controller
         // ── Hero band ──
         $hero = $section->addTable('CoverBase');
         $heroRow = $hero->addRow(11900, ['exactHeight' => true]);
-        $heroCell = $heroRow->addCell(11905, ['bgColor' => '0f172a', 'valign' => 'center']);
+        $heroCell = $heroRow->addCell(11905, ['bgColor' => self::NAVY, 'valign' => 'center']);
 
         $heroCell->addTextBreak(3);
 
@@ -94,47 +108,53 @@ class TemplateExportController extends Controller
                 ]);
                 $heroCell->addTextBreak(1);
             } catch (\Throwable $e) {
-                // fall through to text
                 $heroCell->addText(strtoupper($orgMeta['name'] ?? 'Organization'),
-                    ['size' => 14, 'color' => 'ffffff', 'bold' => true, 'allCaps' => true, 'spacing' => 300],
+                    ['size' => 14, 'color' => 'ffffff', 'bold' => true, 'allCaps' => true, 'spacing' => 300, 'name' => self::HEAD_FONT],
                     ['alignment' => Jc::CENTER]);
             }
         } else {
             $heroCell->addText(strtoupper($orgMeta['name'] ?? 'Organization'),
-                ['size' => 14, 'color' => 'ffffff', 'bold' => true, 'allCaps' => true, 'spacing' => 300],
+                ['size' => 14, 'color' => 'ffffff', 'bold' => true, 'allCaps' => true, 'spacing' => 300, 'name' => self::HEAD_FONT],
                 ['alignment' => Jc::CENTER]);
         }
 
         if (!empty($orgMeta['website'])) {
             $heroCell->addText($this->t($orgMeta['website']),
-                ['size' => 9, 'color' => '94a3b8', 'italic' => true],
+                ['size' => 9, 'color' => 'D9D9D9', 'italic' => true],
                 ['alignment' => Jc::CENTER]);
         }
 
         $heroCell->addTextBreak(4);
 
-        // Document type chip
+        // Document type chip — white outline on navy bg so it reads like a badge
         $chipTable = $heroCell->addTable(['cellMargin' => 120, 'alignment' => Jc::CENTER]);
         $chipRow = $chipTable->addRow();
-        $chipRow->addCell(3500, ['bgColor' => '4f46e5', 'valign' => 'center'])
-            ->addText($this->t(strtoupper($docType)), ['size' => 10, 'bold' => true, 'color' => 'ffffff', 'allCaps' => true, 'spacing' => 100], ['alignment' => Jc::CENTER]);
+        $chipRow->addCell(3500, [
+            'bgColor' => 'FFFFFF', 'valign' => 'center',
+        ])->addText($this->t(strtoupper($docType)), [
+            'size' => 10, 'bold' => true, 'color' => self::NAVY, 'allCaps' => true, 'spacing' => 100,
+            'name' => self::HEAD_FONT,
+        ], ['alignment' => Jc::CENTER]);
 
         $heroCell->addTextBreak(3);
 
-        // Document title
-        $heroCell->addText($this->t($title ?: 'Untitled Record'), ['size' => 28, 'bold' => true, 'color' => 'ffffff'], ['alignment' => Jc::CENTER, 'spaceAfter' => 0]);
+        // Document title — Poppins bold large
+        $heroCell->addText($this->t($title ?: 'Untitled Record'), [
+            'size' => 28, 'bold' => true, 'color' => 'ffffff', 'name' => self::HEAD_FONT,
+        ], ['alignment' => Jc::CENTER, 'spaceAfter' => 0]);
 
         $heroCell->addTextBreak(1);
 
-        // Registration number
         if ($regNumber) {
-            $heroCell->addText($this->t($regNumber), ['size' => 12, 'color' => '94a3b8', 'spacing' => 200], ['alignment' => Jc::CENTER]);
+            $heroCell->addText($this->t($regNumber), [
+                'size' => 12, 'color' => 'D9D9D9', 'spacing' => 200, 'name' => self::BODY_FONT,
+            ], ['alignment' => Jc::CENTER]);
         }
 
         $heroCell->addTextBreak(5);
 
         // Divider line
-        $heroCell->addText('────────────', ['size' => 8, 'color' => '4f46e5', 'bold' => true], ['alignment' => Jc::CENTER]);
+        $heroCell->addText('────────────', ['size' => 8, 'color' => 'FFFFFF', 'bold' => true], ['alignment' => Jc::CENTER]);
 
         $heroCell->addTextBreak(3);
 
@@ -157,11 +177,11 @@ class TemplateExportController extends Controller
         $footCell->addTextBreak(1);
         $footCell->addText(
             'This document contains confidential personal data processing information.',
-            ['size' => 9, 'color' => '64748b', 'italic' => true], ['alignment' => Jc::CENTER]
+            ['size' => 9, 'color' => self::GRAY, 'italic' => true], ['alignment' => Jc::CENTER]
         );
         $footCell->addText(
             'Distribution outside the intended recipient requires Data Protection Officer approval.',
-            ['size' => 9, 'color' => '64748b', 'italic' => true], ['alignment' => Jc::CENTER]
+            ['size' => 9, 'color' => self::GRAY, 'italic' => true], ['alignment' => Jc::CENTER]
         );
 
         $footCell->addTextBreak(3);
@@ -172,11 +192,11 @@ class TemplateExportController extends Controller
         if (!empty($orgMeta['dpo_name']) || !empty($orgMeta['dpo_email'])) {
             $contactCell->addText(
                 'Data Protection Officer: ' . trim(($orgMeta['dpo_name'] ?? '') . (isset($orgMeta['dpo_email']) ? ' · ' . $orgMeta['dpo_email'] : ''), ' ·'),
-                ['size' => 8, 'color' => '64748b'], ['alignment' => Jc::CENTER]
+                ['size' => 8, 'color' => self::GRAY], ['alignment' => Jc::CENTER]
             );
         }
         $contactCell->addText('Issued on ' . now()->format('d F Y H:i') . ' WIB',
-            ['size' => 8, 'color' => '94a3b8'], ['alignment' => Jc::CENTER]);
+            ['size' => 8, 'color' => self::GRAY], ['alignment' => Jc::CENTER]);
 
         return $section;
     }
@@ -184,9 +204,10 @@ class TemplateExportController extends Controller
     private function coverMetaCell($metaRow, string $label, string $value, ?string $accent = null): void
     {
         $cell = $metaRow->addCell(2400, ['valign' => 'center']);
-        $cell->addText(strtoupper($label), ['size' => 8, 'color' => '94a3b8', 'bold' => true, 'spacing' => 150], ['alignment' => Jc::CENTER]);
+        $cell->addText(strtoupper($label), ['size' => 8, 'color' => 'D9D9D9', 'bold' => true, 'spacing' => 150, 'name' => self::HEAD_FONT], ['alignment' => Jc::CENTER]);
         $cell->addText($this->t($value), [
             'size' => 11, 'bold' => true, 'color' => $accent ?: 'ffffff',
+            'name' => self::HEAD_FONT,
         ], ['alignment' => Jc::CENTER]);
     }
 
@@ -213,24 +234,24 @@ class TemplateExportController extends Controller
 
         // Running header: tenant name left, doc ref right
         $header = $section->addHeader();
-        $hdrTable = $header->addTable(['width' => 100 * 50, 'borderBottomSize' => 6, 'borderBottomColor' => '4f46e5']);
+        $hdrTable = $header->addTable(['width' => 100 * 50, 'borderBottomSize' => 6, 'borderBottomColor' => self::NAVY]);
         $hdrTable->addRow(400, ['exactHeight' => true]);
         $hdrLeft = $hdrTable->addCell(5500, ['valign' => 'center']);
-        $hdrLeft->addText($this->t($tenantName), ['size' => 8, 'bold' => true, 'color' => '0f172a', 'allCaps' => true, 'spacing' => 150]);
+        $hdrLeft->addText($this->t($tenantName), ['size' => 8, 'bold' => true, 'color' => self::NAVY, 'allCaps' => true, 'spacing' => 150, 'name' => self::HEAD_FONT]);
         $hdrRight = $hdrTable->addCell(5500, ['valign' => 'center']);
-        $hdrRight->addText($this->t($headerText), ['size' => 8, 'color' => '64748b', 'italic' => true], ['alignment' => Jc::END]);
+        $hdrRight->addText($this->t($headerText), ['size' => 8, 'color' => self::GRAY, 'italic' => true], ['alignment' => Jc::END]);
 
         // Footer: confidentiality + tenant website + page number
         $footer = $section->addFooter();
-        $footTable = $footer->addTable(['width' => 100 * 50, 'borderTopSize' => 4, 'borderTopColor' => 'e2e8f0']);
+        $footTable = $footer->addTable(['width' => 100 * 50, 'borderTopSize' => 4, 'borderTopColor' => self::RULE]);
         $footTable->addRow(300, ['exactHeight' => true]);
         $footTable->addCell(4000, ['valign' => 'center'])
-            ->addText('CONFIDENTIAL · Personal Data', ['size' => 7, 'color' => '94a3b8', 'allCaps' => true, 'spacing' => 100]);
+            ->addText('CONFIDENTIAL · Personal Data', ['size' => 7, 'color' => self::GRAY, 'allCaps' => true, 'spacing' => 100]);
         $footTable->addCell(3000, ['valign' => 'center'])
-            ->addText($this->t($tenantSite), ['size' => 7, 'color' => '94a3b8'], ['alignment' => Jc::CENTER]);
+            ->addText($this->t($tenantSite), ['size' => 7, 'color' => self::GRAY], ['alignment' => Jc::CENTER]);
         $pageCell = $footTable->addCell(4000, ['valign' => 'center']);
         $pageCell->addPreserveText('Page {PAGE} of {NUMPAGES}',
-            ['size' => 7, 'color' => '4f46e5', 'bold' => true],
+            ['size' => 7, 'color' => self::NAVY, 'bold' => true],
             ['alignment' => Jc::END]);
 
         return $section;
@@ -271,7 +292,6 @@ class TemplateExportController extends Controller
     {
         $section->addTextBreak(1);
 
-        // Extract leading "1." / "1.1" as badge
         $num = '';
         $clean = $title;
         if (preg_match('/^([0-9]+(?:\.[0-9]+)*)\.?\s+(.*)$/', trim($title), $m)) {
@@ -279,45 +299,101 @@ class TemplateExportController extends Controller
             $clean = $m[2];
         }
 
+        // Navy title bar, Poppins bold on white — matches the reference book.
         $table = $section->addTable(['cellMargin' => 0, 'width' => 100 * 50]);
         $row = $table->addRow(520, ['exactHeight' => true]);
 
         if ($num !== '') {
-            $badge = $row->addCell(700, ['bgColor' => '4f46e5', 'valign' => 'center']);
-            $badge->addText($num, ['size' => 11, 'bold' => true, 'color' => 'ffffff'], ['alignment' => Jc::CENTER]);
+            $badge = $row->addCell(700, ['bgColor' => self::NAVY, 'valign' => 'center']);
+            $badge->addText($num, ['size' => 11, 'bold' => true, 'color' => 'ffffff', 'name' => self::HEAD_FONT], ['alignment' => Jc::CENTER]);
         }
-        $titleCell = $row->addCell($num !== '' ? 10300 : 11000, ['bgColor' => '0f172a', 'valign' => 'center']);
-        $titleCell->addText('  ' . $this->t($clean), ['size' => 12, 'bold' => true, 'color' => 'ffffff', 'spacing' => 100]);
+        $titleCell = $row->addCell($num !== '' ? 10300 : 11000, ['bgColor' => self::NAVY, 'valign' => 'center']);
+        $titleCell->addText('  ' . $this->t($clean), [
+            'size' => 12, 'bold' => true, 'color' => 'ffffff', 'spacing' => 100,
+            'name' => self::HEAD_FONT,
+        ]);
 
         $section->addTextBreak(1);
     }
 
     /**
-     * Label/value 2-column row with zebra striping. Much denser + easier
-     * to scan than the previous stacked layout.
+     * Label / value 2-column row. Label column sits on the lavender fill
+     * so it reads as a tag, value sits on white. Matches the book-style
+     * reference design.
      */
     private function addInfoRow($table, string $label, string $value)
     {
-        // zebra stripe based on table row count
-        static $rowCounter = [];
-        $tableKey = spl_object_hash($table);
-        $rowCounter[$tableKey] = ($rowCounter[$tableKey] ?? 0) + 1;
-        $zebra = ($rowCounter[$tableKey] % 2 === 0) ? 'f8fafc' : 'ffffff';
-
         $row = $table->addRow(null, ['cantSplit' => true]);
 
         $labelCell = $row->addCell(3400, [
-            'bgColor' => $zebra, 'valign' => 'top',
-            'borderRightSize' => 6, 'borderRightColor' => 'e2e8f0',
+            'bgColor' => self::LAV, 'valign' => 'top',
+            'borderTopSize' => 4, 'borderTopColor' => self::RULE,
+            'borderBottomSize' => 4, 'borderBottomColor' => self::RULE,
+            'borderLeftSize' => 4, 'borderLeftColor' => self::RULE,
+            'borderRightSize' => 4, 'borderRightColor' => 'FFFFFF',
         ]);
         $labelCell->addText($this->t($label), [
-            'size' => 9, 'bold' => true, 'color' => '64748b', 'allCaps' => true, 'spacing' => 100,
+            'size' => 10, 'bold' => true, 'color' => self::NAVY, 'name' => self::HEAD_FONT,
         ], ['spaceBefore' => 100, 'spaceAfter' => 100]);
 
-        $valueCell = $row->addCell(7600, ['bgColor' => $zebra, 'valign' => 'top']);
+        $valueCell = $row->addCell(7600, [
+            'bgColor' => 'FFFFFF', 'valign' => 'top',
+            'borderTopSize' => 4, 'borderTopColor' => self::RULE,
+            'borderBottomSize' => 4, 'borderBottomColor' => self::RULE,
+            'borderRightSize' => 4, 'borderRightColor' => self::RULE,
+        ]);
         $valueCell->addText($this->t($value ?: '—'), [
-            'size' => 11, 'color' => '0f172a',
+            'size' => 10, 'color' => self::INK, 'name' => self::BODY_FONT,
         ], ['spaceBefore' => 100, 'spaceAfter' => 100]);
+    }
+
+    /**
+     * Tabular data (N-column headers + rows). Used for DPO teams, PIC lists,
+     * recipient lists — anything that's naturally a grid. Header row is navy
+     * with white Poppins text, body rows alternate white / lavender.
+     *
+     * @param array $headers  ['Nomor', 'Nama', 'Email', 'Phone']
+     * @param array $rows     [['1', 'DPO Corp', 'dpo@x.com', '+62…'], ...]
+     * @param array $widths   Optional twip widths per col; defaults equal split
+     */
+    private function addDataTable($section, array $headers, array $rows, array $widths = []): void
+    {
+        if (empty($headers)) return;
+        $n = count($headers);
+        if (empty($widths)) {
+            $total = 100 * 50;
+            $widths = array_fill(0, $n, (int) floor($total / $n));
+        }
+
+        $t = $section->addTable([
+            'borderSize' => 4, 'borderColor' => self::RULE,
+            'cellMargin' => 80, 'width' => 100 * 50,
+            'unit' => \PhpOffice\PhpWord\SimpleType\TblWidth::PERCENT,
+        ]);
+
+        // Header row
+        $hr = $t->addRow(null, ['cantSplit' => true]);
+        foreach ($headers as $i => $h) {
+            $cell = $hr->addCell($widths[$i] ?? 2000, ['bgColor' => self::NAVY, 'valign' => 'center']);
+            $cell->addText($this->t((string) $h), [
+                'size' => 10, 'bold' => true, 'color' => 'FFFFFF', 'name' => self::HEAD_FONT,
+            ], ['spaceBefore' => 80, 'spaceAfter' => 80]);
+        }
+
+        // Body rows
+        foreach ($rows as $ri => $row) {
+            $bg = $ri % 2 === 0 ? 'FFFFFF' : self::LAV;
+            $br = $t->addRow(null, ['cantSplit' => true]);
+            for ($i = 0; $i < $n; $i++) {
+                $v = $row[$i] ?? '';
+                $cell = $br->addCell($widths[$i] ?? 2000, ['bgColor' => $bg, 'valign' => 'top']);
+                $cell->addText($this->t((string) ($v === '' ? '—' : $v)), [
+                    'size' => 10, 'color' => self::INK, 'name' => self::BODY_FONT,
+                ], ['spaceBefore' => 60, 'spaceAfter' => 60]);
+            }
+        }
+
+        $section->addTextBreak(1);
     }
 
     private function makeInfoTable($section)
@@ -361,6 +437,7 @@ class TemplateExportController extends Controller
 
         try {
             $phpWord = new PhpWord();
+            $this->applyDefaultFont($phpWord);
 
             $wiz = $ropa->wizard_data ?? [];
             $detail = $wiz['detail_pemrosesan'] ?? [];
@@ -485,6 +562,7 @@ class TemplateExportController extends Controller
 
         try {
             $phpWord = new PhpWord();
+            $this->applyDefaultFont($phpWord);
 
             $wiz = $dpia->wizard_data ?? [];
             $infoD = $wiz['informasi_dpia'] ?? [];
@@ -780,6 +858,7 @@ class TemplateExportController extends Controller
 
         try {
             $phpWord = new PhpWord();
+            $this->applyDefaultFont($phpWord);
             $orgMeta = $this->resolveOrgMeta(auth()->user()->organization);
             $regCode = $gap->regulation_code ?? 'uupdp';
             $regName = \App\Models\RegulationFramework::where('code', $regCode)->value('name') ?? 'UU No. 27 Tahun 2022 (UU PDP)';
@@ -841,7 +920,7 @@ class TemplateExportController extends Controller
                 'yes' => ['label' => 'Sudah Memenuhi', 'color' => '22c55e'],
                 'partial' => ['label' => 'Memenuhi Sebagian', 'color' => 'f59e0b'],
                 'no' => ['label' => 'Belum Memenuhi', 'color' => 'ef4444'],
-                'na' => ['label' => 'N/A', 'color' => '94a3b8'],
+                'na' => ['label' => 'N/A', 'color' => self::GRAY],
             ];
 
             $detailTable = $sec->addTable(['borderSize' => 4, 'borderColor' => 'e0e0e0', 'cellMargin' => 60]);
@@ -857,7 +936,7 @@ class TemplateExportController extends Controller
 
             foreach ($questions as $idx => $q) {
                 $ansCode = $gap->answers[$q['id']] ?? 'n/a';
-                $ansInfo = $answerLabels[$ansCode] ?? ['label' => 'Belum Dijawab', 'color' => '94a3b8'];
+                $ansInfo = $answerLabels[$ansCode] ?? ['label' => 'Belum Dijawab', 'color' => self::GRAY];
                 $bgColor = ($idx % 2 === 0) ? 'ffffff' : 'f8f9fa';
 
                 $row = $detailTable->addRow();
@@ -949,14 +1028,14 @@ class TemplateExportController extends Controller
                 $s = $stats[$i + $j] ?? null;
                 if ($s === null) { $row->addCell($cellWidth); continue; }
                 $cell = $row->addCell($cellWidth, [
-                    'bgColor' => 'f8fafc', 'valign' => 'center',
-                    'borderTopSize' => 24, 'borderTopColor' => $s['color'] ?? '4f46e5',
+                    'bgColor' => self::LAV, 'valign' => 'center',
+                    'borderTopSize' => 24, 'borderTopColor' => $s['color'] ?? self::NAVY,
                 ]);
                 $cell->addText(strtoupper($s['label'] ?? ''), [
-                    'size' => 8, 'color' => '64748b', 'bold' => true, 'spacing' => 150,
+                    'size' => 8, 'color' => self::GRAY, 'bold' => true, 'spacing' => 150,
                 ], ['alignment' => Jc::CENTER, 'spaceBefore' => 120, 'spaceAfter' => 60]);
                 $cell->addText($this->t((string) ($s['value'] ?? '0')), [
-                    'size' => 22, 'color' => '0f172a', 'bold' => true,
+                    'size' => 22, 'color' => self::NAVY, 'bold' => true, 'name' => self::HEAD_FONT,
                 ], ['alignment' => Jc::CENTER, 'spaceAfter' => 120]);
             }
         }
@@ -970,7 +1049,7 @@ class TemplateExportController extends Controller
     {
         if (empty($items)) {
             $section->addText($this->t($emptyMessage ?? 'Belum ada data.'),
-                ['size' => 10, 'italic' => true, 'color' => '94a3b8'],
+                ['size' => 10, 'italic' => true, 'color' => self::GRAY],
                 ['spaceBefore' => 100, 'spaceAfter' => 100]);
             return;
         }
@@ -1029,6 +1108,7 @@ class TemplateExportController extends Controller
             $aiTotal        = \App\Models\AiResult::where('org_id', $orgId)->count();
 
             $phpWord = new PhpWord();
+            $this->applyDefaultFont($phpWord);
 
             $this->addCoverPage(
                 $phpWord,
@@ -1048,7 +1128,7 @@ class TemplateExportController extends Controller
                 ['size' => 10, 'color' => '475569'], ['spaceBefore' => 0, 'spaceAfter' => 160]);
 
             $this->addStatGrid($sec, [
-                ['label' => 'ROPA Records',      'value' => $ropaTotal,      'color' => '4f46e5'],
+                ['label' => 'ROPA Records',      'value' => $ropaTotal,      'color' => self::NAVY],
                 ['label' => 'DPIA Records',      'value' => $dpiaTotal,      'color' => '8b5cf6'],
                 ['label' => 'Active Breaches',   'value' => $breachActive,   'color' => $breachActive > 0 ? 'dc2626' : '16a34a'],
                 ['label' => 'Open DSR',          'value' => ($dsrByStatus['new'] ?? 0) + ($dsrByStatus['in_progress'] ?? 0), 'color' => 'f59e0b'],
@@ -1065,9 +1145,9 @@ class TemplateExportController extends Controller
             $this->addSectionTitle($sec, '2. Record of Processing Activities (ROPA)');
             $sec->addText('Status distribusi + sebaran risiko untuk ROPA aktif.',
                 ['size' => 10, 'color' => '475569'], ['spaceAfter' => 120]);
-            $sec->addText('Breakdown by Status', ['size' => 11, 'bold' => true, 'color' => '0f172a'], ['spaceBefore' => 60, 'spaceAfter' => 60]);
+            $sec->addText('Breakdown by Status', ['size' => 11, 'bold' => true, 'color' => self::NAVY, 'name' => self::HEAD_FONT], ['spaceBefore' => 60, 'spaceAfter' => 60]);
             $this->addBreakdown($sec, $ropaByStatus, 'Belum ada ROPA.');
-            $sec->addText('Breakdown by Risk Level', ['size' => 11, 'bold' => true, 'color' => '0f172a'], ['spaceBefore' => 120, 'spaceAfter' => 60]);
+            $sec->addText('Breakdown by Risk Level', ['size' => 11, 'bold' => true, 'color' => self::NAVY, 'name' => self::HEAD_FONT], ['spaceBefore' => 120, 'spaceAfter' => 60]);
             $this->addBreakdown($sec, $ropaByRisk, 'Belum ada data risk.');
 
             // DPIA
@@ -1075,7 +1155,7 @@ class TemplateExportController extends Controller
             $t = $this->makeInfoTable($sec);
             $this->addInfoRow($t, 'Total DPIA', (string) $dpiaTotal);
             $this->addInfoRow($t, 'Approved', (string) $dpiaApproved);
-            $sec->addText('Breakdown by Status', ['size' => 11, 'bold' => true, 'color' => '0f172a'], ['spaceBefore' => 120, 'spaceAfter' => 60]);
+            $sec->addText('Breakdown by Status', ['size' => 11, 'bold' => true, 'color' => self::NAVY, 'name' => self::HEAD_FONT], ['spaceBefore' => 120, 'spaceAfter' => 60]);
             $this->addBreakdown($sec, $dpiaByStatus, 'Belum ada DPIA.');
 
             // Breach
@@ -1083,16 +1163,16 @@ class TemplateExportController extends Controller
             $t = $this->makeInfoTable($sec);
             $this->addInfoRow($t, 'Total Insiden', (string) $breachTotal);
             $this->addInfoRow($t, 'Insiden Aktif (belum closed)', (string) $breachActive);
-            $sec->addText('Breakdown by Severity', ['size' => 11, 'bold' => true, 'color' => '0f172a'], ['spaceBefore' => 120, 'spaceAfter' => 60]);
+            $sec->addText('Breakdown by Severity', ['size' => 11, 'bold' => true, 'color' => self::NAVY, 'name' => self::HEAD_FONT], ['spaceBefore' => 120, 'spaceAfter' => 60]);
             $this->addBreakdown($sec, $breachBySev, 'Tidak ada insiden tercatat.');
 
             // DSR
             $this->addSectionTitle($sec, '5. Data Subject Rights (DSR)');
             $t = $this->makeInfoTable($sec);
             $this->addInfoRow($t, 'Total Permintaan', (string) $dsrTotal);
-            $sec->addText('Breakdown by Status', ['size' => 11, 'bold' => true, 'color' => '0f172a'], ['spaceBefore' => 120, 'spaceAfter' => 60]);
+            $sec->addText('Breakdown by Status', ['size' => 11, 'bold' => true, 'color' => self::NAVY, 'name' => self::HEAD_FONT], ['spaceBefore' => 120, 'spaceAfter' => 60]);
             $this->addBreakdown($sec, $dsrByStatus, 'Belum ada permintaan DSR.');
-            $sec->addText('Breakdown by Type', ['size' => 11, 'bold' => true, 'color' => '0f172a'], ['spaceBefore' => 120, 'spaceAfter' => 60]);
+            $sec->addText('Breakdown by Type', ['size' => 11, 'bold' => true, 'color' => self::NAVY, 'name' => self::HEAD_FONT], ['spaceBefore' => 120, 'spaceAfter' => 60]);
             $this->addBreakdown($sec, $dsrByType, '—');
 
             // Consent + Data Discovery
