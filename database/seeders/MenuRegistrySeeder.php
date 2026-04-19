@@ -87,6 +87,7 @@ class MenuRegistrySeeder extends Seeder
             ['menu_key' => 'system-logs', 'label' => 'System Logs (AI)', 'href' => '/system-logs', 'icon' => 'Server', 'section' => 'Platform (Root)', 'sort' => 730, 'roles' => self::PLATFORM_ROOT],
             ['menu_key' => 'api-hub', 'label' => 'API Hub', 'href' => '/api-hub', 'icon' => 'Globe', 'section' => 'Platform (Root)', 'sort' => 740, 'roles' => self::PLATFORM_ROOT],
             ['menu_key' => 'menu-control', 'label' => 'Menu Control Matrix', 'href' => '/menu-control', 'icon' => 'Layers', 'section' => 'Platform (Root)', 'sort' => 750, 'roles' => self::PLATFORM_ROOT],
+            ['menu_key' => 'platform-config', 'label' => 'Platform Config', 'href' => '/platform-config', 'icon' => 'Settings', 'section' => 'Platform (Root)', 'sort' => 760, 'roles' => self::PLATFORM_ROOT],
 
             // Superadmin (not root)
             ['menu_key' => 'tenant-offboard', 'label' => 'Tenant Offboarding', 'href' => '/tenant-offboard', 'icon' => 'Archive', 'section' => 'Superadmin', 'sort' => 800, 'roles' => self::PLATFORM_SUPERADMIN],

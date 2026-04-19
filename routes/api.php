@@ -596,6 +596,11 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         // =============================================
         // System / Superadmin Tools
         // =============================================
+        // Platform Config (root only) — editable soft knobs + AWS budget estimator
+        Route::get('/platform-config', [\App\Http\Controllers\Api\PlatformConfigController::class, 'index']);
+        Route::put('/platform-config', [\App\Http\Controllers\Api\PlatformConfigController::class, 'update']);
+        Route::get('/platform-config/budget', [\App\Http\Controllers\Api\PlatformConfigController::class, 'budget']);
+
         Route::get('/system/check-update', [\App\Http\Controllers\Api\SystemUpdateController::class, 'checkUpdate']);
         Route::post('/system/update-backend', [\App\Http\Controllers\Api\SystemUpdateController::class, 'updateBackend']);
         Route::post('/system/checkout-version', [\App\Http\Controllers\Api\SystemUpdateController::class, 'checkoutVersion']);
