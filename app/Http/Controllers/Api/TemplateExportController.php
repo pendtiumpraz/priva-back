@@ -228,11 +228,9 @@ class TemplateExportController extends Controller
         $footTable->addCell(3000, ['valign' => 'center'])
             ->addText($this->t($tenantSite), ['size' => 7, 'color' => '94a3b8'], ['alignment' => Jc::CENTER]);
         $pageCell = $footTable->addCell(4000, ['valign' => 'center']);
-        $pageRun = $pageCell->addTextRun(['alignment' => Jc::END]);
-        $pageRun->addText('Page ', ['size' => 7, 'color' => '94a3b8']);
-        $pageRun->addField('PAGE', ['format' => 'ARABIC'], [], ['size' => 7, 'color' => '4f46e5', 'bold' => true]);
-        $pageRun->addText(' of ', ['size' => 7, 'color' => '94a3b8']);
-        $pageRun->addField('NUMPAGES', ['format' => 'ARABIC'], [], ['size' => 7, 'color' => '4f46e5', 'bold' => true]);
+        $pageCell->addPreserveText('Page {PAGE} of {NUMPAGES}',
+            ['size' => 7, 'color' => '4f46e5', 'bold' => true],
+            ['alignment' => Jc::END]);
 
         return $section;
     }
