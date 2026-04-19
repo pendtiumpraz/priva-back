@@ -412,7 +412,10 @@ class AiFeatureController extends Controller
 
         $response = $ai->complianceSummary($stats);
 
-        return $this->saveAndRespond($request, 'dashboard_summary', $response, $stats);
+        // Tie the saved result to the tenant org so the front-end
+        // AiFeatureButton can retrieve the last cached summary via
+        // /ai-features/history/dashboard_summary/{org_id}.
+        return $this->saveAndRespond($request, 'dashboard_summary', $response, $stats, $orgId, 'Organization');
     }
 
     // =============================================
