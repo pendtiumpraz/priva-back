@@ -801,7 +801,7 @@ class TemplateExportController extends Controller
             $this->addSectionTitle($sec, '1. Informasi Assessment');
             $t = $this->makeInfoTable($sec);
             $this->addInfoRow($t, 'Versi Assessment', $gap->version ?? '-');
-            $this->addInfoRow($t, 'Organisasi', $orgName);
+            $this->addInfoRow($t, 'Organisasi', $orgMeta['name'] ?? '-');
             $this->addInfoRow($t, 'Framework Regulasi', $regName);
             $this->addInfoRow($t, 'Skor Kepatuhan', round($gap->overall_score ?? 0) . '%');
             $this->addInfoRow($t, 'Level Kepatuhan', strtoupper($gap->compliance_level ?? '-'));
