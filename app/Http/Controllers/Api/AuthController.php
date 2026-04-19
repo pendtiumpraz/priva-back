@@ -47,7 +47,7 @@ class AuthController extends Controller
         $token = $user->createToken('auth-token')->plainTextToken;
 
         return response()->json([
-            'user' => $user->load('organization'),
+            'user' => $this->userWithPackageType($user),
             'token' => $token,
         ], 201);
     }
@@ -79,7 +79,7 @@ class AuthController extends Controller
         $token = $user->createToken('auth-token')->plainTextToken;
 
         return response()->json([
-            'user' => $user->load('organization', 'tenantRole'),
+            'user' => $this->userWithPackageType($user),
             'token' => $token,
         ]);
     }
@@ -89,9 +89,21 @@ class AuthController extends Controller
      */
     public function me(Request $request): JsonResponse
     {
-        $user = $request->user()->load('organization', 'tenantRole');
+        return response()->json([
+            'user' => $this->userWithPackageType($request->user()),
+        ]);
+    }
 
-        // Attach active license package_type for frontend feature gating
+    /**
+     * Serialize a user with eager-loaded relations and the trusted license
+     * package_type attached for frontend feature gating. Used by both login
+     * and me so the frontend sees the same shape on first render — otherwise
+     * the user has to reload once before AI features appear.
+     */
+    private function userWithPackageType(User $user): array
+    {
+        $user->load('organization', 'tenantRole');
+
         $packageType = null;
         if ($user->org_id) {
             $license = \App\Models\License::where('org_id', $user->org_id)
@@ -101,15 +113,12 @@ class AuthController extends Controller
                 $packageType = $license->getTrustedPackageType();
             }
         } elseif (in_array($user->role, ['root','superadmin'], true)) {
-            $packageType = 'ai_agent'; // SA always has full access
+            $packageType = 'ai_agent';
         }
 
         $userData = $user->toArray();
         $userData['package_type'] = $packageType;
-
-        return response()->json([
-            'user' => $userData,
-        ]);
+        return $userData;
     }
 
     /**
