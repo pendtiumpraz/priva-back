@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpWord\PhpWord;
 use PhpOffice\PhpWord\IOFactory;
 use PhpOffice\PhpWord\SimpleType\Jc;
@@ -916,6 +917,204 @@ class TemplateExportController extends Controller
 
             $outputFileName = 'Gap_Assessment_Report_' . str_replace(' ', '_', $gap->version ?? 'export') . '.docx';
             $tempFile = tempnam(sys_get_temp_dir(), 'gap_report_');
+            $writer = IOFactory::createWriter($phpWord, 'Word2007');
+            $writer->save($tempFile);
+
+            while (ob_get_level() > 0) { ob_end_clean(); }
+
+            return response()->download($tempFile, $outputFileName, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            ])->deleteFileAfterSend(true);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Export error: ' . $e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
+        }
+    }
+
+    // ================================================================
+    //  CONSOLIDATED COMPLIANCE REPORT (all modules summary → DOCX)
+    // ================================================================
+
+    /**
+     * Render a 4-column stat card row. `$stats` is [['label','value','color'], ...]
+     */
+    private function addStatGrid($section, array $stats): void
+    {
+        $t = $section->addTable(['cellMargin' => 120, 'width' => 100 * 50, 'unit' => \PhpOffice\PhpWord\SimpleType\TblWidth::PERCENT]);
+        $colCount = min(4, max(1, count($stats)));
+        $cellWidth = (int) floor(100 * 50 / $colCount);
+
+        for ($i = 0; $i < count($stats); $i += $colCount) {
+            $row = $t->addRow(null, ['cantSplit' => true]);
+            for ($j = 0; $j < $colCount; $j++) {
+                $s = $stats[$i + $j] ?? null;
+                if ($s === null) { $row->addCell($cellWidth); continue; }
+                $cell = $row->addCell($cellWidth, [
+                    'bgColor' => 'f8fafc', 'valign' => 'center',
+                    'borderTopSize' => 24, 'borderTopColor' => $s['color'] ?? '4f46e5',
+                ]);
+                $cell->addText(strtoupper($s['label'] ?? ''), [
+                    'size' => 8, 'color' => '64748b', 'bold' => true, 'spacing' => 150,
+                ], ['alignment' => Jc::CENTER, 'spaceBefore' => 120, 'spaceAfter' => 60]);
+                $cell->addText($this->t((string) ($s['value'] ?? '0')), [
+                    'size' => 22, 'color' => '0f172a', 'bold' => true,
+                ], ['alignment' => Jc::CENTER, 'spaceAfter' => 120]);
+            }
+        }
+    }
+
+    /**
+     * Render a simple breakdown as key/value rows styled as chips.
+     * `$items` is ['label' => count, ...]
+     */
+    private function addBreakdown($section, array $items, ?string $emptyMessage = null): void
+    {
+        if (empty($items)) {
+            $section->addText($this->t($emptyMessage ?? 'Belum ada data.'),
+                ['size' => 10, 'italic' => true, 'color' => '94a3b8'],
+                ['spaceBefore' => 100, 'spaceAfter' => 100]);
+            return;
+        }
+        $t = $this->makeInfoTable($section);
+        foreach ($items as $label => $count) {
+            $this->addInfoRow($t, (string) $label, (string) $count);
+        }
+    }
+
+    public function exportComplianceReport(Request $request)
+    {
+        try {
+            $user = auth()->user();
+            $orgMeta = $this->resolveOrgMeta($user->organization);
+            $orgId = $user->org_id;
+
+            // Same queries as ExportController::complianceReport, scoped to org.
+            $q = fn ($cls) => $cls::where('org_id', $orgId);
+
+            $ropaTotal      = $q(\App\Models\Ropa::class)->whereNull('deleted_at')->count();
+            $ropaByStatus   = $q(\App\Models\Ropa::class)->whereNull('deleted_at')->select('status', DB::raw('count(*) as c'))->groupBy('status')->pluck('c', 'status')->toArray();
+            $ropaByRisk     = $q(\App\Models\Ropa::class)->whereNull('deleted_at')->select('risk_level', DB::raw('count(*) as c'))->groupBy('risk_level')->pluck('c', 'risk_level')->toArray();
+
+            $dpiaTotal      = $q(\App\Models\Dpia::class)->whereNull('deleted_at')->count();
+            $dpiaByStatus   = $q(\App\Models\Dpia::class)->whereNull('deleted_at')->select('status', DB::raw('count(*) as c'))->groupBy('status')->pluck('c', 'status')->toArray();
+            $dpiaApproved   = $q(\App\Models\Dpia::class)->whereNull('deleted_at')->where('status', 'approved')->count();
+
+            $breachTotal    = $q(\App\Models\BreachIncident::class)->whereNull('deleted_at')->where('is_simulation', false)->count();
+            $breachActive   = $q(\App\Models\BreachIncident::class)->whereNull('deleted_at')->where('is_simulation', false)->whereNotIn('status', ['closed'])->count();
+            $breachBySev    = $q(\App\Models\BreachIncident::class)->whereNull('deleted_at')->where('is_simulation', false)->select('severity', DB::raw('count(*) as c'))->groupBy('severity')->pluck('c', 'severity')->toArray();
+
+            $dsrTotal       = $q(\App\Models\DsrRequest::class)->whereNull('deleted_at')->count();
+            $dsrByStatus    = $q(\App\Models\DsrRequest::class)->whereNull('deleted_at')->select('status', DB::raw('count(*) as c'))->groupBy('status')->pluck('c', 'status')->toArray();
+            $dsrByType      = $q(\App\Models\DsrRequest::class)->whereNull('deleted_at')->select('request_type', DB::raw('count(*) as c'))->groupBy('request_type')->pluck('c', 'request_type')->toArray();
+
+            $consentPoints  = $q(\App\Models\ConsentCollectionPoint::class)->whereNull('deleted_at')->count();
+
+            $discoveryTotal = $q(\App\Models\InformationSystem::class)->whereNull('deleted_at')->count();
+            $discoveryScanned = $q(\App\Models\InformationSystem::class)->whereNull('deleted_at')->where('scanning_status', 'done')->count();
+            $pdpAlerts      = (int) $q(\App\Models\InformationSystem::class)->whereNull('deleted_at')->sum('pdp_alert_count');
+            $piiAlerts      = (int) $q(\App\Models\InformationSystem::class)->whereNull('deleted_at')->sum('pii_alert_count');
+
+            $latestGap      = $q(\App\Models\GapAssessment::class)->whereNull('deleted_at')->latest()->first();
+            $gapScore       = $latestGap->overall_score ?? $latestGap->score ?? 0;
+            $gapLevel       = $latestGap->compliance_level ?? '-';
+            $gapVersion     = $latestGap->version ?? '-';
+
+            $aiTotal        = \App\Models\AiResult::where('org_id', $orgId)->count();
+
+            $phpWord = new PhpWord();
+
+            $this->addCoverPage(
+                $phpWord,
+                'Consolidated Compliance Report',
+                'Privacy Compliance Snapshot',
+                now()->format('Y-m-d'),
+                'final',
+                strtolower($gapLevel),
+                $orgMeta
+            );
+
+            $sec = $this->addContentSection($phpWord, 'Compliance Report · ' . now()->format('d M Y'), $orgMeta);
+
+            // Executive summary
+            $this->addSectionTitle($sec, '1. Executive Summary');
+            $sec->addText('Ringkasan status kepatuhan PDP organisasi pada saat laporan ini digenerate. Angka mencerminkan seluruh data aktif (tidak termasuk yang terhapus).',
+                ['size' => 10, 'color' => '475569'], ['spaceBefore' => 0, 'spaceAfter' => 160]);
+
+            $this->addStatGrid($sec, [
+                ['label' => 'ROPA Records',      'value' => $ropaTotal,      'color' => '4f46e5'],
+                ['label' => 'DPIA Records',      'value' => $dpiaTotal,      'color' => '8b5cf6'],
+                ['label' => 'Active Breaches',   'value' => $breachActive,   'color' => $breachActive > 0 ? 'dc2626' : '16a34a'],
+                ['label' => 'Open DSR',          'value' => ($dsrByStatus['new'] ?? 0) + ($dsrByStatus['in_progress'] ?? 0), 'color' => 'f59e0b'],
+            ]);
+            $sec->addTextBreak(1);
+            $this->addStatGrid($sec, [
+                ['label' => 'Gap Score',         'value' => round((float) $gapScore) . '%', 'color' => $this->riskColor($gapLevel)],
+                ['label' => 'Consent Points',    'value' => $consentPoints,                 'color' => '06b6d4'],
+                ['label' => 'Systems Scanned',   'value' => $discoveryScanned . ' / ' . $discoveryTotal, 'color' => '0ea5e9'],
+                ['label' => 'PDP / PII Alerts',  'value' => $pdpAlerts + $piiAlerts,        'color' => ($pdpAlerts + $piiAlerts) > 0 ? 'ea580c' : '16a34a'],
+            ]);
+
+            // ROPA
+            $this->addSectionTitle($sec, '2. Record of Processing Activities (ROPA)');
+            $sec->addText('Status distribusi + sebaran risiko untuk ROPA aktif.',
+                ['size' => 10, 'color' => '475569'], ['spaceAfter' => 120]);
+            $sec->addText('Breakdown by Status', ['size' => 11, 'bold' => true, 'color' => '0f172a'], ['spaceBefore' => 60, 'spaceAfter' => 60]);
+            $this->addBreakdown($sec, $ropaByStatus, 'Belum ada ROPA.');
+            $sec->addText('Breakdown by Risk Level', ['size' => 11, 'bold' => true, 'color' => '0f172a'], ['spaceBefore' => 120, 'spaceAfter' => 60]);
+            $this->addBreakdown($sec, $ropaByRisk, 'Belum ada data risk.');
+
+            // DPIA
+            $this->addSectionTitle($sec, '3. Data Protection Impact Assessment (DPIA)');
+            $t = $this->makeInfoTable($sec);
+            $this->addInfoRow($t, 'Total DPIA', (string) $dpiaTotal);
+            $this->addInfoRow($t, 'Approved', (string) $dpiaApproved);
+            $sec->addText('Breakdown by Status', ['size' => 11, 'bold' => true, 'color' => '0f172a'], ['spaceBefore' => 120, 'spaceAfter' => 60]);
+            $this->addBreakdown($sec, $dpiaByStatus, 'Belum ada DPIA.');
+
+            // Breach
+            $this->addSectionTitle($sec, '4. Data Breach Management');
+            $t = $this->makeInfoTable($sec);
+            $this->addInfoRow($t, 'Total Insiden', (string) $breachTotal);
+            $this->addInfoRow($t, 'Insiden Aktif (belum closed)', (string) $breachActive);
+            $sec->addText('Breakdown by Severity', ['size' => 11, 'bold' => true, 'color' => '0f172a'], ['spaceBefore' => 120, 'spaceAfter' => 60]);
+            $this->addBreakdown($sec, $breachBySev, 'Tidak ada insiden tercatat.');
+
+            // DSR
+            $this->addSectionTitle($sec, '5. Data Subject Rights (DSR)');
+            $t = $this->makeInfoTable($sec);
+            $this->addInfoRow($t, 'Total Permintaan', (string) $dsrTotal);
+            $sec->addText('Breakdown by Status', ['size' => 11, 'bold' => true, 'color' => '0f172a'], ['spaceBefore' => 120, 'spaceAfter' => 60]);
+            $this->addBreakdown($sec, $dsrByStatus, 'Belum ada permintaan DSR.');
+            $sec->addText('Breakdown by Type', ['size' => 11, 'bold' => true, 'color' => '0f172a'], ['spaceBefore' => 120, 'spaceAfter' => 60]);
+            $this->addBreakdown($sec, $dsrByType, '—');
+
+            // Consent + Data Discovery
+            $this->addSectionTitle($sec, '6. Consent & Data Discovery');
+            $t = $this->makeInfoTable($sec);
+            $this->addInfoRow($t, 'Consent Collection Points', (string) $consentPoints);
+            $this->addInfoRow($t, 'Systems Registered', (string) $discoveryTotal);
+            $this->addInfoRow($t, 'Systems Scanned (done)', (string) $discoveryScanned);
+            $this->addInfoRow($t, 'PDP Alerts (total)', (string) $pdpAlerts);
+            $this->addInfoRow($t, 'PII Alerts (total)', (string) $piiAlerts);
+
+            // Gap + AI
+            $this->addSectionTitle($sec, '7. Gap Assessment & AI Usage');
+            $t = $this->makeInfoTable($sec);
+            $this->addInfoRow($t, 'Latest Gap Version', (string) $gapVersion);
+            $this->addInfoRow($t, 'Overall Score', round((float) $gapScore) . '%');
+            $this->addInfoRow($t, 'Compliance Level', strtoupper((string) $gapLevel));
+            $this->addInfoRow($t, 'AI Analysis Runs (total)', (string) $aiTotal);
+
+            // Meta
+            $this->addSectionTitle($sec, '8. Report Metadata');
+            $t = $this->makeInfoTable($sec);
+            $this->addInfoRow($t, 'Report Generated', now()->format('d F Y H:i') . ' WIB');
+            $this->addInfoRow($t, 'Generated By', $user->name ?? '-');
+            $this->addInfoRow($t, 'Organization', $orgMeta['name'] ?? '-');
+            $this->addInfoRow($t, 'DPO', ($orgMeta['dpo_name'] ?? '—') . (isset($orgMeta['dpo_email']) && $orgMeta['dpo_email'] ? ' · ' . $orgMeta['dpo_email'] : ''));
+
+            $safeOrgSlug = preg_replace('/[^a-z0-9]+/i', '_', $orgMeta['name'] ?? 'org') ?: 'org';
+            $outputFileName = 'Compliance_Report_' . $safeOrgSlug . '_' . now()->format('Ymd') . '.docx';
+            $tempFile = tempnam(sys_get_temp_dir(), 'compliance_');
             $writer = IOFactory::createWriter($phpWord, 'Word2007');
             $writer->save($tempFile);
 
