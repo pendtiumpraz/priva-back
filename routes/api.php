@@ -582,6 +582,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         // =============================================
         Route::prefix('ai-agent')->group(function () {
             Route::post('/chat', [\App\Http\Controllers\Api\AiAgentController::class, 'chat']);
+            Route::post('/approve-action', [\App\Http\Controllers\Api\AiAgentController::class, 'approveAction']);
+            Route::post('/reject-action', [\App\Http\Controllers\Api\AiAgentController::class, 'rejectAction']);
             Route::get('/mentions/{type}', [\App\Http\Controllers\Api\AiAgentController::class, 'mentions']);
             Route::get('/history', [\App\Http\Controllers\Api\AiAgentController::class, 'history']);
             Route::get('/history/{id}/messages', [\App\Http\Controllers\Api\AiAgentController::class, 'conversationMessages']);

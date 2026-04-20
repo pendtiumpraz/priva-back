@@ -468,7 +468,10 @@ class DataDiscoveryController extends Controller
             'system_id' => $system->id,
             'user_prompt' => $prompt,
             'generated_sql' => json_encode($queries),
-            'found_rows_count' => null,
+            // 0 = "belum dieksekusi"; found_rows_count column is NOT NULL INTEGER
+            // default 0 in the migration, so we can't store null here. Real count
+            // is written by specificSearchExecute() when the user runs the query.
+            'found_rows_count' => 0,
             'ai_analysis_insight' => null,
             'created_at' => now(),
             'updated_at' => now(),

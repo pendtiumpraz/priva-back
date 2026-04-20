@@ -23,6 +23,20 @@ use App\Models\AuditLog;
  */
 class AiAgentToolExecutor
 {
+    /**
+     * Tools that mutate tenant data. Callers (AiAgentController) should not
+     * execute these from an LLM tool_call round without an explicit user
+     * approval step — the agent can propose them, user confirms, controller
+     * invokes execute() with $approved = true.
+     */
+    public const MUTATION_TOOLS = [
+        'create_ropa', 'update_ropa',
+        'create_dpia', 'update_dpia',
+        'create_breach',
+        'update_dsr',
+        'update_organization',
+    ];
+
     private string $orgId;
 
     public function __construct(string $orgId)
@@ -32,11 +46,35 @@ class AiAgentToolExecutor
 
     /**
      * Execute a tool by name with given arguments.
-     * Returns [result, step_description]
+     * Returns [result, step_description].
+     *
+     * When $approved is false and the tool is in MUTATION_TOOLS, the call is
+     * NOT executed — we return a `pending_approval` envelope so the frontend
+     * can show an approve/cancel prompt. The controller then re-invokes
+     * execute() with $approved=true when the user clicks Approve.
      */
-    public function execute(string $tool, array $args): array
+    public function execute(string $tool, array $args, bool $approved = false): array
     {
-        return match ($tool) {
+        if (in_array($tool, self::MUTATION_TOOLS, true) && !$approved) {
+            return [
+                [
+                    'pending_approval' => true,
+                    'tool' => $tool,
+                    'proposed_args' => self::sanitizeForAi($args),
+                    'message' => 'Aksi ini akan memodifikasi data. User harus approve di UI sebelum dijalankan.',
+                ],
+                "⏸ Approval dibutuhkan untuk: {$tool}",
+            ];
+        }
+
+        // Strip dangerous destructive flags the LLM might try to pass.
+        // Hard delete is never allowed from the agent — only soft delete via
+        // tenant UI by an authenticated human user.
+        foreach (['deleted_at', 'force_delete', 'hard_delete', '_delete'] as $bannedKey) {
+            unset($args[$bannedKey]);
+        }
+
+        [$result, $step] = match ($tool) {
             // ROPA
             'list_ropa' => $this->listRopa($args),
             'get_ropa_detail' => $this->getRopaDetail($args),
@@ -89,6 +127,103 @@ class AiAgentToolExecutor
 
             default => [['error' => "Tool '{$tool}' tidak dikenali."], "❌ Tool tidak dikenali: {$tool}"],
         };
+
+        // Centralized PII redaction — every tool payload going back to the
+        // LLM passes through here. The step description (human string) is not
+        // sanitized since it only contains counts/titles that we generate
+        // ourselves, not raw record fields.
+        if (is_array($result)) {
+            $result = self::sanitizeForAi($result);
+        }
+        return [$result, $step];
+    }
+
+    // =============================================
+    // PII REDACTION — applied before any record reaches the LLM
+    // =============================================
+    /**
+     * Mask PII-heavy fields recursively so the LLM sees structure but never
+     * actual personal data values. Safe keys (status, counts, enums, ids)
+     * pass through. Free-text over 200 chars is truncated with a marker.
+     */
+    private static function sanitizeForAi($data)
+    {
+        if (is_array($data)) {
+            // Associative array: sanitize each key; sequential array: sanitize each element
+            $isAssoc = array_keys($data) !== range(0, count($data) - 1);
+            $out = [];
+            foreach ($data as $k => $v) {
+                if ($isAssoc && is_string($k)) {
+                    $out[$k] = self::sanitizeField((string) $k, $v);
+                } else {
+                    $out[$k] = self::sanitizeForAi($v);
+                }
+            }
+            return $out;
+        }
+        return $data;
+    }
+
+    private static function sanitizeField(string $key, $value)
+    {
+        if (is_array($value)) {
+            return self::sanitizeForAi($value);
+        }
+        if (!is_string($value)) {
+            return $value;
+        }
+
+        $k = strtolower($key);
+
+        // Full redact: credentials, tokens, IDs where knowing the value is pure PII
+        if (preg_match('/(password|secret|token|api_key|credit_card|cvv|rekening|bank_account)/', $k)) {
+            return '[REDACTED]';
+        }
+
+        // National ID numbers (NIK/KTP): keep only first 4 + last 2
+        if (preg_match('/(^|_)(nik|ktp|national_id|identity_number)($|_)/', $k)) {
+            return self::maskDigits($value, 4, 2);
+        }
+
+        // Email → keep domain only
+        if (preg_match('/(^|_)(email|mail|e_mail)($|_)/', $k) && str_contains($value, '@')) {
+            [, $domain] = array_pad(explode('@', $value, 2), 2, '');
+            return '***@' . $domain;
+        }
+
+        // Phone-like → mask middle digits
+        if (preg_match('/(phone|telepon|telp|handphone|hp|mobile|whatsapp|wa_number)/', $k)) {
+            return self::maskDigits($value, 2, 2);
+        }
+
+        // Name-ish or address → partial mask
+        if (preg_match('/(^name$|_name$|^nama$|_nama$|requester_name|full.?name|first.?name|last.?name|address|alamat)/', $k)) {
+            return self::maskString($value, 2);
+        }
+
+        // Long narrative text — truncate so LLM sees context but not full body
+        if (strlen($value) > 200) {
+            return substr($value, 0, 200) . '… [truncated for privacy]';
+        }
+
+        return $value;
+    }
+
+    private static function maskDigits(string $value, int $keepStart, int $keepEnd): string
+    {
+        $digits = preg_replace('/\D/', '', $value);
+        $len = strlen($digits);
+        if ($len <= $keepStart + $keepEnd) return str_repeat('*', $len);
+        return substr($digits, 0, $keepStart)
+            . str_repeat('*', $len - $keepStart - $keepEnd)
+            . substr($digits, -$keepEnd);
+    }
+
+    private static function maskString(string $value, int $keepStart): string
+    {
+        $len = strlen($value);
+        if ($len <= $keepStart + 1) return str_repeat('*', $len);
+        return substr($value, 0, $keepStart) . str_repeat('*', $len - $keepStart);
     }
 
     // =============================================

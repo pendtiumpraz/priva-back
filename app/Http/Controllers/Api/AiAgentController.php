@@ -366,21 +366,34 @@ PROMPT;
                         // Add assistant message with tool_calls to history
                         $messages[] = $assistantMessage;
 
+                        $pendingApprovals = [];
+
                         foreach ($assistantMessage['tool_calls'] as $toolCall) {
                             $fnName = $toolCall['function']['name'];
                             $fnArgs = json_decode($toolCall['function']['arguments'] ?? '{}', true) ?: [];
 
                             // Emit step to frontend immediately
                             $stepDesc = "Menjalankan internal proses..."; // Fallback temporarily
-                            
+
                             // Let the executor handle it and get the translated description
                             [$result, $stepDesc] = $executor->execute($fnName, $fnArgs);
-                            
+
                             $stepData = ['tool' => $fnName, 'description' => $stepDesc, 'args' => $fnArgs];
                             $steps[] = $stepData;
-                            
+
                             echo json_encode(array_merge(['type' => 'step'], $stepData)) . "\n";
                             if (ob_get_level() > 0) ob_flush(); flush();
+
+                            // Mutation tools are blocked at the executor level — they come back
+                            // with pending_approval envelope. Collect them so we can emit a
+                            // single approval_required event after the loop and stop the AI.
+                            if (is_array($result) && !empty($result['pending_approval'])) {
+                                $pendingApprovals[] = [
+                                    'tool_call_id' => $toolCall['id'],
+                                    'tool' => $fnName,
+                                    'proposed_args' => $result['proposed_args'] ?? $fnArgs,
+                                ];
+                            }
 
                             // Add tool result to messages
                             $messages[] = [
@@ -388,6 +401,29 @@ PROMPT;
                                 'tool_call_id' => $toolCall['id'],
                                 'content' => json_encode($result, JSON_UNESCAPED_UNICODE),
                             ];
+                        }
+
+                        // If any mutation was proposed, emit approval_required and stop —
+                        // don't let the LLM retry the blocked tool in a loop.
+                        if (!empty($pendingApprovals)) {
+                            echo json_encode([
+                                'type' => 'approval_required',
+                                'actions' => $pendingApprovals,
+                                'message' => 'AI mengusulkan aksi yang mengubah data. Approve di UI untuk melanjutkan.',
+                            ]) . "\n";
+                            if (ob_get_level() > 0) ob_flush(); flush();
+
+                            $pendingSummary = collect($pendingApprovals)
+                                ->map(fn ($p) => "- {$p['tool']}")
+                                ->implode("\n");
+                            ChatMessage::create([
+                                'conversation_id' => $conversation->id,
+                                'role' => 'assistant',
+                                'content' => "AI mengusulkan aksi perubahan data berikut:\n{$pendingSummary}\n\nSilakan review dan approve di UI sebelum dijalankan.",
+                                'sender_name' => 'PRIVASIMU AI Agent',
+                            ]);
+                            $conversation->update(['last_message_at' => now()]);
+                            break; // exit the outer for loop
                         }
 
                         continue; // Loop again for AI to process tool results
@@ -443,6 +479,85 @@ PROMPT;
             'Cache-Control' => 'no-cache',
             'Connection' => 'keep-alive',
         ]);
+    }
+
+    /**
+     * Execute a mutation tool that was previously proposed by the AI and is
+     * now explicitly approved by the user from the UI. This is the only way
+     * mutation tools ever actually run — the agent's original tool_call is
+     * intercepted and returns a pending_approval envelope instead.
+     */
+    public function approveAction(Request $request)
+    {
+        $request->validate([
+            'conversation_id' => 'required|string',
+            'tool' => 'required|string',
+            'args' => 'nullable|array',
+        ]);
+
+        $user = $request->user();
+        $orgId = $user->org_id;
+
+        $tool = $request->input('tool');
+        if (!in_array($tool, AiAgentToolExecutor::MUTATION_TOOLS, true)) {
+            return response()->json(['error' => 'Tool bukan mutation atau tidak dikenali.'], 400);
+        }
+
+        $conversation = ChatConversation::where('id', $request->conversation_id)
+            ->where('user_id', $user->id)
+            ->first();
+        if (!$conversation) {
+            return response()->json(['error' => 'Conversation tidak ditemukan.'], 404);
+        }
+
+        $args = $request->input('args', []) ?: [];
+        $executor = new AiAgentToolExecutor($orgId ?? '');
+        [$result, $stepDesc] = $executor->execute($tool, $args, approved: true);
+
+        ChatMessage::create([
+            'conversation_id' => $conversation->id,
+            'role' => 'assistant',
+            'content' => "✅ User mengapprove aksi `{$tool}`. {$stepDesc}",
+            'sender_name' => 'PRIVASIMU AI Agent',
+        ]);
+        $conversation->update(['last_message_at' => now()]);
+
+        return response()->json([
+            'message' => 'Aksi dijalankan.',
+            'tool' => $tool,
+            'result' => $result,
+            'step' => $stepDesc,
+        ]);
+    }
+
+    /**
+     * Reject a proposed mutation. Purely a logging/UI courtesy — the action
+     * never reaches the executor since the original tool_call already returned
+     * pending_approval and was not executed.
+     */
+    public function rejectAction(Request $request)
+    {
+        $request->validate([
+            'conversation_id' => 'required|string',
+            'tool' => 'required|string',
+        ]);
+
+        $conversation = ChatConversation::where('id', $request->conversation_id)
+            ->where('user_id', $request->user()->id)
+            ->first();
+        if (!$conversation) {
+            return response()->json(['error' => 'Conversation tidak ditemukan.'], 404);
+        }
+
+        ChatMessage::create([
+            'conversation_id' => $conversation->id,
+            'role' => 'assistant',
+            'content' => "🚫 User menolak aksi `{$request->input('tool')}`. Tidak ada perubahan data yang dilakukan.",
+            'sender_name' => 'PRIVASIMU AI Agent',
+        ]);
+        $conversation->update(['last_message_at' => now()]);
+
+        return response()->json(['message' => 'Aksi ditolak.']);
     }
 
     /**
