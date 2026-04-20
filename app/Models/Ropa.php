@@ -15,7 +15,7 @@ class Ropa extends Model
         'risk_level', 'status', 'purpose', 'legal_basis', 'legal_basis_detail', 'data_categories', 'data_subjects',
         'recipients', 'retention_period', 'retention_due_date', 'security_measures',
         'wizard_data', 'raci_matrix', 'progress',
-        'approved_by', 'approved_at', 'created_by',
+        'approved_by', 'approved_at', 'submitted_at', 'submitted_by', 'review_notes', 'created_by',
     ];
 
     protected $casts = [
@@ -25,6 +25,7 @@ class Ropa extends Model
         'wizard_data' => 'array',
         'raci_matrix' => 'array',
         'approved_at' => 'datetime',
+        'submitted_at' => 'datetime',
         'progress' => 'float',
     ];
 

@@ -180,6 +180,15 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             ->middleware('permission:dpia,read');
 
         // =============================================
+        // ROPA — DPO Approval Workflow
+        // =============================================
+        Route::prefix('ropa/{id}')->group(function () {
+            Route::post('/submit', [\App\Http\Controllers\Api\RopaApprovalController::class, 'submit'])->middleware('permission:ropa,write');
+            Route::post('/approve', [\App\Http\Controllers\Api\RopaApprovalController::class, 'approve'])->middleware('permission:ropa,write');
+            Route::post('/reject', [\App\Http\Controllers\Api\RopaApprovalController::class, 'reject'])->middleware('permission:ropa,write');
+        });
+
+        // =============================================
         // Contract Review CRUD
         // =============================================
         Route::prefix('contract-reviews')->group(function () {
