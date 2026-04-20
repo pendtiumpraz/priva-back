@@ -716,18 +716,21 @@ class DataDiscoveryController extends Controller
         $formatted = $history->map(function ($item) {
             $insight = json_decode($item->ai_analysis_insight, true);
             $rawSample = [];
+            // Execute-step writes `_executed_at` alongside `_raw_sample` — use
+            // that marker to distinguish "never executed" from "executed, 0 rows".
+            $executed = is_array($insight) && isset($insight['_executed_at']);
             if (is_array($insight) && isset($insight['_raw_sample'])) {
                 $rawSample = $insight['_raw_sample'];
-                unset($insight['_raw_sample']);
+                unset($insight['_raw_sample'], $insight['_executed_at']);
             }
             return [
                 'id' => $item->id,
                 'prompt' => $item->user_prompt,
                 'result' => [
                     'queries_generated' => json_decode($item->generated_sql, true) ?? [],
-                    'found_rows' => $item->found_rows_count,
-                    'ai_insight' => $insight,
-                    'raw_data_sample' => $rawSample
+                    'found_rows' => $executed ? $item->found_rows_count : 0,
+                    'raw_data_sample' => $rawSample,
+                    'executed' => $executed,
                 ],
                 'timestamp' => \Carbon\Carbon::parse($item->created_at)->timezone('Asia/Jakarta')->format('d/m/Y, H:i:s')
             ];

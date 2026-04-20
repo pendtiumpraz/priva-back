@@ -408,6 +408,7 @@ PROMPT;
                         if (!empty($pendingApprovals)) {
                             echo json_encode([
                                 'type' => 'approval_required',
+                                'conversation_id' => $conversation->id,
                                 'actions' => $pendingApprovals,
                                 'message' => 'AI mengusulkan aksi yang mengubah data. Approve di UI untuk melanjutkan.',
                             ]) . "\n";
