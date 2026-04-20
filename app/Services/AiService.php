@@ -1000,4 +1000,47 @@ class AiService
     // LLM for "insight analysis" on the Text-to-SQL flow. By policy, the AI
     // provider must never receive actual data rows. SQL generation uses schema
     // metadata only; execution is user-triggered and stays inside the backend.
+
+    /**
+     * Leak-detection step 1: given a list of columns the user suspects were
+     * leaked (e.g. from a dark-web dump header), find which scanned table in
+     * this system matches. The AI only sees column/table NAMES — no data,
+     * no sample values. Returns ranked candidates with confidence.
+     */
+    public function matchLeakedSchema(array $schema, array $leakedColumns, ?string $tableHint = null, string $dialect = 'mysql'): ?array
+    {
+        $system = "Kamu adalah Database Forensic Analyst.\n"
+                . "Tugasmu membandingkan daftar kolom yang diduga bocor dengan skema database terdaftar.\n"
+                . "Output WAJIB berupa JSON valid.\n\n"
+                . "FORMAT OUTPUT JSON:\n"
+                . json_encode([
+                    'matches' => [
+                        [
+                            'table' => 'users_profile',
+                            'confidence' => 0.92,
+                            'matching_columns' => ['email', 'nik', 'name'],
+                            'missing_columns' => ['phone'],
+                            'reason' => 'Penjelasan singkat kenapa match.',
+                        ],
+                    ],
+                ], JSON_PRETTY_PRINT);
+
+        $schemaStr = json_encode($schema, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        $leakedStr = json_encode($leakedColumns, JSON_UNESCAPED_UNICODE);
+        $hintStr = $tableHint ? "User memberi petunjuk nama tabel: \"{$tableHint}\".\n\n" : '';
+
+        $user = "Dialect: {$dialect}\n\n"
+              . "Skema database yang sudah di-scan (nama tabel + daftar kolom, TIDAK ada nilai):\n{$schemaStr}\n\n"
+              . $hintStr
+              . "Urutan kolom yang diduga bocor dari sumber eksternal:\n{$leakedStr}\n\n"
+              . "Cari maksimal 5 tabel di skema yang paling cocok. Kriteria penilaian:\n"
+              . "1. Exact column-name match (tertinggi)\n"
+              . "2. Semantic match (email ≈ email_address, hp ≈ phone_number)\n"
+              . "3. Urutan kolom cocok\n"
+              . "4. Completeness — makin banyak kolom leaked yang ada di tabel, makin tinggi confidence\n"
+              . "5. Confidence 0–1. Jangan melebihi 0.98 kecuali benar-benar exact match.\n\n"
+              . "Keluarkan HANYA JSON valid.";
+
+        return $this->ask($system, $user, 1500);
+    }
 }

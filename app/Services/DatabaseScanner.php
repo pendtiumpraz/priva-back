@@ -625,6 +625,8 @@ class DatabaseScanner
             $sanitized[] = rtrim(trim($query), ';');
         }
 
+        $pdo = null;
+        $txStarted = false;
         try {
             if ($sourceType === 'mysql') {
                 $dsn = "mysql:host={$config['host']};port=" . ($config['port'] ?? 3306) . ";dbname={$config['database']}";
@@ -632,17 +634,17 @@ class DatabaseScanner
                     \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
                     \PDO::MYSQL_ATTR_MULTI_STATEMENTS => false,
                 ]);
-                $pdo->exec("SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ");
-                $pdo->beginTransaction();
-                $pdo->exec("SET TRANSACTION READ ONLY");
+                // MySQL: START TRANSACTION READ ONLY is the atomic form.
+                // SET TRANSACTION READ ONLY mid-transaction is invalid.
+                $pdo->exec('START TRANSACTION READ ONLY');
             } elseif ($sourceType === 'postgresql') {
                 $dsn = "pgsql:host={$config['host']};port=" . ($config['port'] ?? 5432) . ";dbname={$config['database']}";
                 $pdo = new \PDO($dsn, $config['username'], $config['password'], [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
-                $pdo->beginTransaction();
-                $pdo->exec("SET TRANSACTION READ ONLY");
+                $pdo->exec('BEGIN READ ONLY');
             } else {
                 return ['error' => 'Unsupported source_type for raw query execution.'];
             }
+            $txStarted = true;
 
             $results = [];
             foreach ($sanitized as $query) {
@@ -651,12 +653,12 @@ class DatabaseScanner
                 $results[] = ['query' => $query, 'rows' => $rows];
             }
 
-            $pdo->rollBack();
+            $pdo->exec('ROLLBACK');
             return ['results' => $results];
 
         } catch (\Throwable $e) {
-            if (isset($pdo) && $pdo->inTransaction()) {
-                try { $pdo->rollBack(); } catch (\Throwable $ignored) {}
+            if ($pdo && $txStarted) {
+                try { $pdo->exec('ROLLBACK'); } catch (\Throwable $ignored) {}
             }
             Log::error("Failed executing raw read queries: " . $e->getMessage());
             return ['error' => $e->getMessage()];
@@ -665,9 +667,10 @@ class DatabaseScanner
 
     /**
      * Returns true if the query is a safe read-only statement, or a string
-     * describing why it was rejected.
+     * describing why it was rejected. Public so other call sites (leak
+     * verifier, etc.) can reuse the same hardening.
      */
-    private static function validateReadOnlyQuery(string $query): string|bool
+    public static function validateReadOnlyQuery(string $query): string|bool
     {
         $q = trim($query);
         if ($q === '') return 'query kosong';
@@ -705,6 +708,54 @@ class DatabaseScanner
         // and by SET TRANSACTION READ ONLY at runtime as belt-and-braces.
 
         return true;
+    }
+
+    /**
+     * Execute a single parametrized SELECT against the data source. Used by
+     * leak verification where the SQL template has `?` placeholders and the
+     * user-supplied values (potentially leaked PII) must never reach the
+     * LLM. Values bind through PDO prepare/execute — same read-only guards
+     * as executeRawReadQueries.
+     */
+    public static function executeParametrizedReadQuery(string $sourceType, array $config, string $query, array $params): array
+    {
+        $check = self::validateReadOnlyQuery($query);
+        if ($check !== true) {
+            return ['error' => "Query template ditolak (read-only guard): {$check}"];
+        }
+
+        $pdo = null;
+        $txStarted = false;
+        try {
+            if ($sourceType === 'mysql') {
+                $dsn = "mysql:host={$config['host']};port=" . ($config['port'] ?? 3306) . ";dbname={$config['database']}";
+                $pdo = new \PDO($dsn, $config['username'], $config['password'], [
+                    \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+                    \PDO::MYSQL_ATTR_MULTI_STATEMENTS => false,
+                ]);
+                $pdo->exec('START TRANSACTION READ ONLY');
+            } elseif ($sourceType === 'postgresql') {
+                $dsn = "pgsql:host={$config['host']};port=" . ($config['port'] ?? 5432) . ";dbname={$config['database']}";
+                $pdo = new \PDO($dsn, $config['username'], $config['password'], [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
+                $pdo->exec('BEGIN READ ONLY');
+            } else {
+                return ['error' => 'Unsupported source_type for parametrized query.'];
+            }
+            $txStarted = true;
+
+            $stmt = $pdo->prepare(rtrim(trim($query), ';'));
+            $stmt->execute(array_values($params));
+            $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+            $pdo->exec('ROLLBACK');
+            return ['rows' => $rows];
+        } catch (\Throwable $e) {
+            if ($pdo && $txStarted) {
+                try { $pdo->exec('ROLLBACK'); } catch (\Throwable $ignored) {}
+            }
+            Log::error('Failed parametrized read query: ' . $e->getMessage());
+            return ['error' => $e->getMessage()];
+        }
     }
 
     // =========================================================

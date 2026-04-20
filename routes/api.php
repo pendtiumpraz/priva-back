@@ -265,6 +265,12 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             //   POST /search-ai/execute → user explicitly runs the SQL (no AI involved)
             Route::post('/{id}/search-ai', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'specificSearchAi'])->middleware('permission:data_discovery,read');
             Route::post('/{id}/search-ai/execute', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'specificSearchExecute'])->middleware('permission:data_discovery,read');
+
+            // Leak Detection (dark-web style match → parametrized verify)
+            //   POST /leak/match-schema → AI finds candidate table from leaked column sequence (schema only)
+            //   POST /leak/verify       → parametrized query runs with user-supplied values (no AI)
+            Route::post('/{id}/leak/match-schema', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'leakMatchSchema'])->middleware('permission:data_discovery,read');
+            Route::post('/{id}/leak/verify', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'leakVerify'])->middleware('permission:data_discovery,read');
             Route::get('/{id}/search-ai-history', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'getSearchAiHistory'])->middleware('permission:data_discovery,read');
             Route::delete('/{id}/search-ai-history', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'clearSearchAiHistory'])->middleware('permission:data_discovery,write');
             Route::delete('/{id}/search-ai-history/{historyId}', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'deleteSearchAiHistory'])->middleware('permission:data_discovery,write');

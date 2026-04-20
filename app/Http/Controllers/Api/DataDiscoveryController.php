@@ -543,6 +543,143 @@ class DataDiscoveryController extends Controller
         ]);
     }
 
+    /**
+     * Leak Detection — Step 1: AI schema match.
+     *
+     * User pastes a column sequence they believe was leaked (e.g. from a
+     * dark-web dump header). We ask the LLM to find which scanned table
+     * most likely corresponds. Only schema metadata (table + column names)
+     * is sent to the AI — no actual row data.
+     */
+    public function leakMatchSchema(Request $request, string $id)
+    {
+        $request->validate([
+            'columns' => 'required|array|min:1|max:50',
+            'columns.*' => 'required|string|max:100',
+            'table_hint' => 'nullable|string|max:200',
+        ]);
+
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $schema = $system->scan_results ?? null;
+        if (!$schema || empty($schema['tables'])) {
+            return response()->json(['error' => 'Please perform a standard scan first.'], 400);
+        }
+
+        $aiService = new \App\Services\AiService();
+        if (!$aiService->isAvailable()) {
+            return response()->json(['error' => 'AI Provider is not configured.'], 400);
+        }
+
+        $compactSchema = collect($schema['tables'])->map(function ($table) {
+            return [
+                'name' => $table['name'],
+                'columns' => collect($table['columns'])->map(fn($c) => $c['name'])->toArray(),
+            ];
+        })->toArray();
+
+        $result = $aiService->matchLeakedSchema(
+            $compactSchema,
+            $request->input('columns'),
+            $request->input('table_hint'),
+            $system->source_type
+        );
+
+        return response()->json([
+            'matches' => $result['matches'] ?? [],
+            'note' => 'AI hanya melihat nama kolom/tabel. Sample data tidak pernah dikirim ke AI.',
+        ]);
+    }
+
+    /**
+     * Leak Detection — Step 2: verify suspected leak with parametrized query.
+     *
+     * User supplies one or more (column, value) pairs from the suspected
+     * leaked source. We build a parametrized SELECT, whitelist the column
+     * names against the scanned schema, and execute with PDO prepare — so
+     * values bind at the driver level and never pass through AI.
+     */
+    public function leakVerify(Request $request, string $id)
+    {
+        $request->validate([
+            'table' => 'required|string|max:200',
+            'values' => 'required|array|min:1|max:20',
+            'match_mode' => 'nullable|in:exact,contains',
+        ]);
+
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $schema = $system->scan_results ?? null;
+        $config = $system->connection_config ?? [];
+        $sourceType = $system->source_type;
+
+        if (!$schema || empty($schema['tables'])) {
+            return response()->json(['error' => 'Schema belum di-scan.'], 400);
+        }
+
+        $tableName = $request->input('table');
+        $values = $request->input('values'); // [['column' => 'email', 'value' => '...'], ...]
+        $mode = $request->input('match_mode', 'exact');
+
+        $tableMeta = collect($schema['tables'])->firstWhere('name', $tableName);
+        if (!$tableMeta) {
+            return response()->json(['error' => "Tabel '{$tableName}' tidak ditemukan di schema hasil scan."], 400);
+        }
+        $validColumns = collect($tableMeta['columns'])->pluck('name')->all();
+
+        // Whitelist + quote identifiers. Strip any quote chars the client sent
+        // to prevent identifier injection even though we also check against
+        // the scanned schema list.
+        $quote = $sourceType === 'postgresql' ? '"' : '`';
+        $cleanIdent = fn(string $v) => $quote . str_replace([$quote, "\0", "\n", "\r"], '', $v) . $quote;
+
+        $wheres = [];
+        $params = [];
+        foreach ($values as $idx => $pair) {
+            if (!is_array($pair) || !isset($pair['column']) || !array_key_exists('value', $pair)) {
+                return response()->json(['error' => "Format `values[{$idx}]` harus {column, value}."], 422);
+            }
+            $col = (string) $pair['column'];
+            if (!in_array($col, $validColumns, true)) {
+                return response()->json(['error' => "Kolom '{$col}' tidak ada di tabel '{$tableName}'."], 400);
+            }
+            $quotedCol = $cleanIdent($col);
+            if ($mode === 'contains' && is_string($pair['value'])) {
+                $op = $sourceType === 'postgresql' ? 'ILIKE' : 'LIKE';
+                $wheres[] = "{$quotedCol} {$op} ?";
+                $params[] = '%' . $pair['value'] . '%';
+            } else {
+                $wheres[] = "{$quotedCol} = ?";
+                $params[] = $pair['value'];
+            }
+        }
+
+        if (empty($wheres)) {
+            return response()->json(['error' => 'Minimal satu pasangan (column, value) dibutuhkan.'], 422);
+        }
+
+        $quotedTable = $cleanIdent($tableName);
+        $query = "SELECT * FROM {$quotedTable} WHERE " . implode(' AND ', $wheres) . " LIMIT 20";
+
+        $result = DatabaseScanner::executeParametrizedReadQuery($sourceType, $config, $query, $params);
+        if (isset($result['error'])) {
+            return response()->json(['error' => 'Verifikasi gagal: ' . $result['error']], 500);
+        }
+
+        $rows = $result['rows'] ?? [];
+        $maskedSample = array_map([self::class, 'maskSensitiveRow'], array_slice($rows, 0, 10));
+
+        return response()->json([
+            'table' => $tableName,
+            'match_mode' => $mode,
+            'query_template' => $query, // placeholders, no actual values
+            'found_count' => count($rows),
+            'leak_confirmed' => count($rows) > 0,
+            'sample' => $maskedSample,
+            'note' => count($rows) > 0
+                ? '⚠️ LEAK CONFIRMED — nilai yang diduga bocor ditemukan di database Anda.'
+                : '✓ Tidak ada baris cocok — nilai tersebut tidak ada di database Anda.',
+        ]);
+    }
+
     private static function maskSensitiveRow(array $row): array
     {
         $masked = [];
