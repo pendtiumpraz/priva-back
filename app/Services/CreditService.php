@@ -28,10 +28,14 @@ class CreditService
     ];
 
     /**
-     * Lazy reset: check & reset monthly credits if reset_at has passed
+     * Lazy reset: check & reset monthly credits if reset_at has passed.
+     * Nullable orgId so root/superadmin users (who have no tenant org) can
+     * call through without blowing up — they simply have no credits to reset.
      */
-    public static function resetIfNeeded(string $orgId): void
+    public static function resetIfNeeded(?string $orgId): void
     {
+        if ($orgId === null || $orgId === '') return;
+
         $org = Organization::find($orgId);
         if (!$org) return;
 
@@ -47,8 +51,9 @@ class CreditService
     /**
      * Check if org has enough credits for action
      */
-    public static function hasCredit(string $orgId, string $actionType): bool
+    public static function hasCredit(?string $orgId, string $actionType): bool
     {
+        if ($orgId === null || $orgId === '') return false;
         $cost = self::COSTS[$actionType] ?? 1.0;
         $org = Organization::find($orgId);
         if (!$org) return false;

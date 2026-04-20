@@ -619,11 +619,21 @@ class DataDiscoveryController extends Controller
         $values = $request->input('values'); // [['column' => 'email', 'value' => '...'], ...]
         $mode = $request->input('match_mode', 'exact');
 
-        $tableMeta = collect($schema['tables'])->firstWhere('name', $tableName);
+        // Schema entries can use either `name` or `table_name` / `column_name`
+        // depending on which scanner wrote the result — match both.
+        $tableMeta = collect($schema['tables'])->first(function ($t) use ($tableName) {
+            return ($t['name'] ?? $t['table_name'] ?? null) === $tableName;
+        });
         if (!$tableMeta) {
             return response()->json(['error' => "Tabel '{$tableName}' tidak ditemukan di schema hasil scan."], 400);
         }
-        $validColumns = collect($tableMeta['columns'])->pluck('name')->all();
+        $validColumns = collect($tableMeta['columns'] ?? [])
+            ->map(fn ($c) => $c['name'] ?? $c['column_name'] ?? null)
+            ->filter()
+            ->all();
+        if (empty($validColumns)) {
+            return response()->json(['error' => "Tabel '{$tableName}' tidak punya kolom di schema hasil scan."], 400);
+        }
 
         // Whitelist + quote identifiers. Strip any quote chars the client sent
         // to prevent identifier injection even though we also check against
@@ -656,8 +666,24 @@ class DataDiscoveryController extends Controller
             return response()->json(['error' => 'Minimal satu pasangan (column, value) dibutuhkan.'], 422);
         }
 
+        if (!in_array($sourceType, ['mysql', 'postgresql'], true)) {
+            return response()->json(['error' => "Leak Detection belum support source_type '{$sourceType}'. Pakai MySQL / PostgreSQL."], 400);
+        }
+        if (empty($config) || empty($config['host'] ?? null)) {
+            return response()->json(['error' => 'Connection config belum dikonfigurasi untuk sistem ini.'], 400);
+        }
+
         $quotedTable = $cleanIdent($tableName);
         $query = "SELECT * FROM {$quotedTable} WHERE " . implode(' AND ', $wheres) . " LIMIT 20";
+
+        \Illuminate\Support\Facades\Log::info('Leak verify query built', [
+            'system_id' => $id,
+            'source_type' => $sourceType,
+            'table' => $tableName,
+            'columns' => array_keys(array_column($values, null, 'column')),
+            'mode' => $mode,
+            'template' => $query,
+        ]);
 
         $result = DatabaseScanner::executeParametrizedReadQuery($sourceType, $config, $query, $params);
         if (isset($result['error'])) {

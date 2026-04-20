@@ -1106,14 +1106,29 @@ class AiFeatureController extends Controller
 
     public function creditUsage(Request $request)
     {
-        $orgId = $request->user()->org_id;
+        $user = $request->user();
+        $orgId = $user->org_id;
 
-        if ($request->user()->role === 'superadmin') {
+        if ($user->role === 'superadmin') {
             if ($request->has('org_id')) {
                 $orgId = $request->org_id;
             } else {
                 return response()->json(['data' => CreditService::getAllTenantsUsage()]);
             }
+        }
+
+        // Root / system users sometimes have no tenant org — avoid the null
+        // path into CreditService (which would error on the org lookup).
+        if ($orgId === null || $orgId === '') {
+            return response()->json(['data' => [
+                'monthly_limit' => 0,
+                'remaining' => 0,
+                'purchased' => 0,
+                'used_this_month' => 0,
+                'reset_at' => null,
+                'breakdown' => [],
+                'recent_logs' => [],
+            ]]);
         }
 
         CreditService::resetIfNeeded($orgId);
