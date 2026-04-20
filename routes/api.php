@@ -174,6 +174,12 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         });
 
         // =============================================
+        // DPIA — Risk Event Template Library (read-only, seeded)
+        // =============================================
+        Route::get('/dpia/risk-event-templates', [\App\Http\Controllers\Api\DpiaRiskEventTemplateController::class, 'index'])
+            ->middleware('permission:dpia,read');
+
+        // =============================================
         // Contract Review CRUD
         // =============================================
         Route::prefix('contract-reviews')->group(function () {
