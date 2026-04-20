@@ -8,6 +8,13 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('leak_detections')) {
+            // Table already exists (likely from a half-run migration where
+            // MySQL auto-committed the DDL but the migration row wasn't
+            // written). Skip safely so `artisan migrate` can continue.
+            return;
+        }
+
         Schema::create('leak_detections', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('system_id');
