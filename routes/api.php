@@ -189,6 +189,12 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         });
 
         // =============================================
+        // ROPA — Industry Templates (seeded library)
+        // =============================================
+        Route::get('/ropa-templates', [\App\Http\Controllers\Api\RopaTemplateController::class, 'index'])->middleware('permission:ropa,read');
+        Route::get('/ropa-templates/{id}', [\App\Http\Controllers\Api\RopaTemplateController::class, 'show'])->middleware('permission:ropa,read');
+
+        // =============================================
         // Contract Review CRUD
         // =============================================
         Route::prefix('contract-reviews')->group(function () {
