@@ -180,6 +180,20 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             ->middleware('permission:dpia,read');
 
         // =============================================
+        // DPIA — Assessment Framework (DPO-customizable categories + risks)
+        // =============================================
+        Route::prefix('dpia/framework')->group(function () {
+            Route::get('/categories', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'index'])->middleware('permission:dpia,read');
+            Route::post('/categories', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'storeCategory'])->middleware('permission:dpia,write');
+            Route::put('/categories/{id}', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'updateCategory'])->middleware('permission:dpia,write');
+            Route::delete('/categories/{id}', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'destroyCategory'])->middleware('permission:dpia,write');
+            Route::post('/categories/{categoryId}/risks', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'storeRisk'])->middleware('permission:dpia,write');
+            Route::put('/categories/{categoryId}/risks/{id}', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'updateRisk'])->middleware('permission:dpia,write');
+            Route::delete('/categories/{categoryId}/risks/{id}', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'destroyRisk'])->middleware('permission:dpia,write');
+            Route::post('/reset', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'reset'])->middleware('permission:dpia,write');
+        });
+
+        // =============================================
         // ROPA — DPO Approval Workflow
         // =============================================
         Route::prefix('ropa/{id}')->group(function () {
