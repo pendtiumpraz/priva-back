@@ -269,8 +269,14 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             // Leak Detection (dark-web style match → parametrized verify)
             //   POST /leak/match-schema → AI finds candidate table from leaked column sequence (schema only)
             //   POST /leak/verify       → parametrized query runs with user-supplied values (no AI)
+            //   GET  /leak/history      → recent verification history (metadata + masked sample only)
+            //   DELETE /leak/history/{hid} → delete one entry
+            //   DELETE /leak/history     → clear all for this system
             Route::post('/{id}/leak/match-schema', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'leakMatchSchema'])->middleware('permission:data_discovery,read');
             Route::post('/{id}/leak/verify', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'leakVerify'])->middleware('permission:data_discovery,read');
+            Route::get('/{id}/leak/history', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'leakHistory'])->middleware('permission:data_discovery,read');
+            Route::delete('/{id}/leak/history', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'clearLeakHistory'])->middleware('permission:data_discovery,write');
+            Route::delete('/{id}/leak/history/{historyId}', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'deleteLeakHistory'])->middleware('permission:data_discovery,write');
             Route::get('/{id}/search-ai-history', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'getSearchAiHistory'])->middleware('permission:data_discovery,read');
             Route::delete('/{id}/search-ai-history', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'clearSearchAiHistory'])->middleware('permission:data_discovery,write');
             Route::delete('/{id}/search-ai-history/{historyId}', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'deleteSearchAiHistory'])->middleware('permission:data_discovery,write');

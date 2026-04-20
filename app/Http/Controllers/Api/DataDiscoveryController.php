@@ -687,11 +687,33 @@ class DataDiscoveryController extends Controller
 
         $result = DatabaseScanner::executeParametrizedReadQuery($sourceType, $config, $query, $params);
         if (isset($result['error'])) {
-            return response()->json(['error' => 'Verifikasi gagal: ' . $result['error']], 500);
+            $status = self::classifyDbError($result['error']) === 'user'
+                ? 400
+                : 500;
+            return response()->json(['error' => 'Verifikasi gagal: ' . self::humanizeDbError($result['error'])], $status);
         }
 
         $rows = $result['rows'] ?? [];
         $maskedSample = array_map([self::class, 'maskSensitiveRow'], array_slice($rows, 0, 10));
+
+        // Persist history — metadata + masked sample only, no raw user-provided
+        // values (those are bound at PDO level and never serialized here).
+        try {
+            \App\Models\LeakDetection::create([
+                'system_id' => $system->id,
+                'org_id' => $request->user()->org_id,
+                'user_id' => $request->user()->id,
+                'table_name' => $tableName,
+                'match_mode' => $mode,
+                'columns' => array_map(fn ($p) => $p['column'], $values),
+                'query_template' => ['sql' => $query],
+                'found_count' => count($rows),
+                'leak_confirmed' => count($rows) > 0,
+                'sample_masked' => $maskedSample,
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Leak history save failed: ' . $e->getMessage());
+        }
 
         return response()->json([
             'table' => $tableName,
@@ -704,6 +726,85 @@ class DataDiscoveryController extends Controller
                 ? '⚠️ LEAK CONFIRMED — nilai yang diduga bocor ditemukan di database Anda.'
                 : '✓ Tidak ada baris cocok — nilai tersebut tidak ada di database Anda.',
         ]);
+    }
+
+    /**
+     * Classify a database error into "user" (bad input, return 400) vs
+     * "system" (config / driver problem, return 500).
+     */
+    private static function classifyDbError(string $msg): string
+    {
+        $userPatterns = [
+            'Incorrect', 'out of range', 'Data truncated', 'Invalid',
+            'cannot be cast', 'Numeric value out of range',
+            'Unknown column', 'Unknown table',
+        ];
+        foreach ($userPatterns as $p) {
+            if (stripos($msg, $p) !== false) return 'user';
+        }
+        return 'system';
+    }
+
+    /**
+     * Turn raw PDO error text into a message the end user can act on.
+     */
+    private static function humanizeDbError(string $msg): string
+    {
+        if (stripos($msg, 'Incorrect TIMESTAMP') !== false
+            || stripos($msg, 'Incorrect DATETIME') !== false
+            || stripos($msg, 'Incorrect DATE') !== false) {
+            return 'Nilai yang Anda masukkan tidak sesuai dengan tipe kolom tanggal/waktu. Format valid: YYYY-MM-DD atau YYYY-MM-DD HH:MM:SS. Coba kosongkan kolom tanggal jika tidak perlu dicari.';
+        }
+        if (stripos($msg, 'out of range') !== false || stripos($msg, 'Numeric value out of range') !== false) {
+            return 'Nilai numerik di luar range kolom target. Cek apakah Anda mengisi kolom angka dengan digit yang terlalu besar.';
+        }
+        if (stripos($msg, 'Data truncated') !== false || stripos($msg, 'cannot be cast') !== false) {
+            return 'Nilai tidak kompatibel dengan tipe kolom target. Pilih match mode "contains" untuk pencarian longgar, atau kurangi panjang nilai.';
+        }
+        if (stripos($msg, 'Unknown column') !== false || stripos($msg, 'Unknown table') !== false) {
+            return 'Kolom/tabel tidak ditemukan di database. Jalankan ulang Standard Scan agar schema up-to-date.';
+        }
+        // System-level / unexpected — return raw text for debug visibility.
+        return $msg;
+    }
+
+    /**
+     * List recent leak detection history for this system.
+     */
+    public function leakHistory(Request $request, string $id)
+    {
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $rows = \App\Models\LeakDetection::where('system_id', $system->id)
+            ->where('org_id', $request->user()->org_id)
+            ->orderBy('created_at', 'desc')
+            ->limit(30)
+            ->get();
+        return response()->json(['data' => $rows]);
+    }
+
+    /**
+     * Delete a single leak detection history entry.
+     */
+    public function deleteLeakHistory(Request $request, string $id, string $historyId)
+    {
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $deleted = \App\Models\LeakDetection::where('system_id', $system->id)
+            ->where('org_id', $request->user()->org_id)
+            ->where('id', $historyId)
+            ->delete();
+        return response()->json(['deleted' => $deleted]);
+    }
+
+    /**
+     * Clear all leak detection history for this system.
+     */
+    public function clearLeakHistory(Request $request, string $id)
+    {
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $deleted = \App\Models\LeakDetection::where('system_id', $system->id)
+            ->where('org_id', $request->user()->org_id)
+            ->delete();
+        return response()->json(['deleted' => $deleted]);
     }
 
     private static function maskSensitiveRow(array $row): array
