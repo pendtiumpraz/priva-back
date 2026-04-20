@@ -266,6 +266,18 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::post('/{id}/search-ai', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'specificSearchAi'])->middleware('permission:data_discovery,read');
             Route::post('/{id}/search-ai/execute', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'specificSearchExecute'])->middleware('permission:data_discovery,read');
 
+            // Decryptor Profiles (per-system tenant encryption keys, wrapped at rest)
+            //   GET    /decryptor-profiles       → list (metadata only, key hidden)
+            //   POST   /decryptor-profiles       → create with raw key (wrapped & stored)
+            //   PUT    /decryptor-profiles/{pid} → update (optional key rotation)
+            //   DELETE /decryptor-profiles/{pid} → remove
+            //   POST   /decryptor-profiles/{pid}/test → verify key against a sample ciphertext
+            Route::get('/{id}/decryptor-profiles', [\App\Http\Controllers\Api\DecryptorProfileController::class, 'index'])->middleware('permission:data_discovery,read');
+            Route::post('/{id}/decryptor-profiles', [\App\Http\Controllers\Api\DecryptorProfileController::class, 'store'])->middleware('permission:data_discovery,write');
+            Route::put('/{id}/decryptor-profiles/{profileId}', [\App\Http\Controllers\Api\DecryptorProfileController::class, 'update'])->middleware('permission:data_discovery,write');
+            Route::delete('/{id}/decryptor-profiles/{profileId}', [\App\Http\Controllers\Api\DecryptorProfileController::class, 'destroy'])->middleware('permission:data_discovery,write');
+            Route::post('/{id}/decryptor-profiles/{profileId}/test', [\App\Http\Controllers\Api\DecryptorProfileController::class, 'test'])->middleware('permission:data_discovery,write');
+
             // Leak Detection (dark-web style match → parametrized verify)
             //   POST /leak/match-schema → AI finds candidate table from leaked column sequence (schema only)
             //   POST /leak/verify       → parametrized query runs with user-supplied values (no AI)
