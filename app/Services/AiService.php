@@ -996,30 +996,8 @@ class AiService
         return $this->ask($system, $user, 1500);
     }
 
-    /**
-     * Analyze RAW Database response from Text-to-SQL execution
-     */
-    public function analyzeRawSubjectData(array $rawData, string $originalPrompt): ?array
-    {
-        $system = "Kamu adalah Data Protection Officer Ahli UU PDP.\n"
-                . "Tugasmu menganalisa raw data yang ditemukan dari database terkait Data Subject Request (DSR).\n"
-                . "Output WAJIB berupa JSON valid.\n\n"
-                . "FORMAT OUTPUT JSON:\n"
-                . json_encode([
-                    'subject_found' => true,
-                    'insight' => 'Rangkuman analisa terhadap data yang ditemukan, sebutkan sensitivitas data (max 3 kalimat)',
-                    'tables_found' => ['tabel1', 'tabel2'],
-                    'recommendation' => 'Rekomendasi redaction/masking sebelum data dikirim ke subject (max 2 kalimat)'
-                ], JSON_PRETTY_PRINT);
-
-        // Limit the raw data size to prevent hitting context limits
-        $dataStr = json_encode(array_slice($rawData, 0, 50), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-        
-        $user = "Tujuan Pencarian: \"{$originalPrompt}\"\n\n"
-              . "Hasil Eksekusi Raw SQL (Dibatasi 50 row per tabel untuk keamanan):\n{$dataStr}\n\n"
-              . "Berdasarkan record tersebut, buatkan insight risiko (terutama jika ada data spesifik) dan rekomendasi redaction.\n"
-              . "Keluarkan HANYA output JSON valid.";
-
-        return $this->ask($system, $user, 2000);
-    }
+    // Removed: analyzeRawSubjectData — previously sent raw database rows to the
+    // LLM for "insight analysis" on the Text-to-SQL flow. By policy, the AI
+    // provider must never receive actual data rows. SQL generation uses schema
+    // metadata only; execution is user-triggered and stays inside the backend.
 }

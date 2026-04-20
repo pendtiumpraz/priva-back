@@ -425,13 +425,20 @@ class DataDiscoveryController extends Controller
     /**
      * AI Specific Search - Text to SQL Agentic Flow
      */
+    /**
+     * Step 1 — AI generates SQL only, from user prompt + schema metadata.
+     *
+     * Privacy guarantee: the AI service only receives table/column NAMES (no
+     * sample values, no row data). Execution happens in a separate endpoint
+     * that the user explicitly triggers, and results never leave the
+     * application backend.
+     */
     public function specificSearchAi(Request $request, string $id)
     {
         $request->validate(['prompt' => 'required|string|min:5']);
         $prompt = $request->prompt;
 
         $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
-        $config = $system->connection_config ?? [];
         $sourceType = $system->source_type;
 
         $schema = $system->scan_results ?? null;
@@ -444,7 +451,6 @@ class DataDiscoveryController extends Controller
             return response()->json(['error' => 'AI Provider is not configured.'], 400);
         }
 
-        // 1. Text to SQL
         $compactSchema = collect($schema['tables'])->map(function ($table) {
             return [
                 'name' => $table['name'],
@@ -454,11 +460,50 @@ class DataDiscoveryController extends Controller
 
         $aiSqlResult = $aiService->generateSqlFromText($compactSchema, $prompt, $sourceType);
         $queries = $aiSqlResult['sql_queries'] ?? [];
+        $explanation = $aiSqlResult['explanation'] ?? null;
 
-        // 2. Execute SQL safely (assuming DatabaseScanner has a safe method, here simulating or passing raw if testing)
-        // Since we are building the plan, we'll execute safely using PDO via DatabaseScanner
+        $searchId = (string) \Illuminate\Support\Str::uuid();
+        \Illuminate\Support\Facades\DB::table('ai_specific_searches')->insert([
+            'id' => $searchId,
+            'system_id' => $system->id,
+            'user_prompt' => $prompt,
+            'generated_sql' => json_encode($queries),
+            'found_rows_count' => null,
+            'ai_analysis_insight' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'message' => 'SQL generated. User must explicitly run the query to fetch data.',
+            'search_id' => $searchId,
+            'queries_generated' => $queries,
+            'explanation' => $explanation,
+            'executed' => false,
+        ]);
+    }
+
+    /**
+     * Step 2 — Execute generated SQL against the real data source.
+     *
+     * Runs user-approved SQL queries server-side and returns masked results.
+     * No AI call happens here — the rows never reach any LLM provider.
+     */
+    public function specificSearchExecute(Request $request, string $id)
+    {
+        $request->validate([
+            'search_id' => 'nullable|string',
+            'queries' => 'required|array|min:1',
+            'queries.*' => 'required|string',
+        ]);
+
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $config = $system->connection_config ?? [];
+        $sourceType = $system->source_type;
+
+        $queries = $request->input('queries');
+
         $execResults = DatabaseScanner::executeRawReadQueries($sourceType, $config, $queries);
-        
         if (isset($execResults['error'])) {
             return response()->json(['error' => 'Database execution failed: ' . $execResults['error']], 500);
         }
@@ -468,69 +513,56 @@ class DataDiscoveryController extends Controller
             $totalRows += count($res['rows'] ?? []);
         }
 
-        // 3. AI Insight Analysis on Raw Data
-        $insightResult = null;
-        if ($totalRows > 0) {
-            // Flatten results safely
-            $allRows = [];
-            foreach ($execResults['results'] as $r) {
-                foreach ($r['rows'] as $row) {
-                    $allRows[] = array_merge(['_table' => $r['query']], $row);
-                }
-            }
-            $insightResult = $aiService->analyzeRawSubjectData($allRows, $prompt);
-        }
-        // 3.5 Mask sensitive data for frontend display and history
-        $rawDataSample = array_slice($execResults['results'][0]['rows'] ?? [], 0, 5);
-        $maskedDataSample = array_map(function ($row) {
-            $maskedRow = [];
-            foreach ($row as $key => $value) {
-                if (is_string($value)) {
-                    if (preg_match('/(nik|ktp|email|phone|password|secret|token|credit_card|rekening)/i', $key)) {
-                        if (str_contains($value, '@')) {
-                            $parts = explode('@', $value);
-                            $maskedRow[$key] = substr($parts[0], 0, 2) . '***@' . $parts[1];
-                        } else {
-                            $len = strlen($value);
-                            $maskedRow[$key] = $len > 4 ? substr($value, 0, 2) . str_repeat('*', $len - 4) . substr($value, -2) : str_repeat('*', $len);
-                        }
-                    } else if (preg_match('/(name|nama|alamat|address)/i', $key) && strlen($value) > 3) {
-                        $maskedRow[$key] = substr($value, 0, 3) . str_repeat('*', strlen($value) - 3);
-                    } else {
-                        $maskedRow[$key] = $value;
-                    }
-                } else {
-                    $maskedRow[$key] = $value;
-                }
-            }
-            return $maskedRow;
-        }, $rawDataSample);
+        $rawDataSample = array_slice($execResults['results'][0]['rows'] ?? [], 0, 20);
+        $maskedDataSample = array_map([self::class, 'maskSensitiveRow'], $rawDataSample);
 
-        // Pack the masked sample into the insight result so it saves in the existing JSON column
-        $insightToSave = $insightResult ?? [];
-        if (is_array($insightToSave)) {
-            $insightToSave['_raw_sample'] = $maskedDataSample;
+        if ($searchId = $request->input('search_id')) {
+            \Illuminate\Support\Facades\DB::table('ai_specific_searches')
+                ->where('id', $searchId)
+                ->where('system_id', $system->id)
+                ->update([
+                    'found_rows_count' => $totalRows,
+                    'ai_analysis_insight' => json_encode([
+                        '_raw_sample' => $maskedDataSample,
+                        '_executed_at' => now()->toIso8601String(),
+                    ]),
+                    'updated_at' => now(),
+                ]);
         }
-
-        // 4. Save History
-        \Illuminate\Support\Facades\DB::table('ai_specific_searches')->insert([
-            'id' => (string) \Illuminate\Support\Str::uuid(),
-            'system_id' => $system->id,
-            'user_prompt' => $prompt,
-            'generated_sql' => json_encode($queries),
-            'found_rows_count' => $totalRows,
-            'ai_analysis_insight' => json_encode($insightToSave),
-            'created_at' => now(),
-            'updated_at' => now()
-        ]);
 
         return response()->json([
-            'message' => 'Search completed.',
-            'queries_generated' => $queries,
+            'message' => 'Query executed.',
+            'search_id' => $searchId,
+            'queries_executed' => $queries,
             'found_rows' => $totalRows,
-            'ai_insight' => $insightResult,
-            'raw_data_sample' => $maskedDataSample
+            'raw_data_sample' => $maskedDataSample,
+            'executed' => true,
         ]);
+    }
+
+    private static function maskSensitiveRow(array $row): array
+    {
+        $masked = [];
+        foreach ($row as $key => $value) {
+            if (!is_string($value)) {
+                $masked[$key] = $value;
+                continue;
+            }
+            if (preg_match('/(nik|ktp|email|phone|password|secret|token|credit_card|rekening)/i', $key)) {
+                if (str_contains($value, '@')) {
+                    $parts = explode('@', $value);
+                    $masked[$key] = substr($parts[0], 0, 2) . '***@' . $parts[1];
+                } else {
+                    $len = strlen($value);
+                    $masked[$key] = $len > 4 ? substr($value, 0, 2) . str_repeat('*', $len - 4) . substr($value, -2) : str_repeat('*', $len);
+                }
+            } elseif (preg_match('/(name|nama|alamat|address)/i', $key) && strlen($value) > 3) {
+                $masked[$key] = substr($value, 0, 3) . str_repeat('*', strlen($value) - 3);
+            } else {
+                $masked[$key] = $value;
+            }
+        }
+        return $masked;
     }
     public function getSearchAiHistory(Request $request, string $id)
     {
