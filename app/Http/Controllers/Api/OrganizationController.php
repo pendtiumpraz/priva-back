@@ -137,6 +137,37 @@ class OrganizationController extends Controller
     }
 
     /**
+     * Superadmin toggle: enable/disable notification system for a single tenant.
+     * Flag lives in organizations.settings.notifications_enabled.
+     */
+    public function toggleNotifications(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!in_array($user->role, ['root', 'superadmin'], true)) {
+            return response()->json(['message' => 'Hanya root/superadmin.'], 403);
+        }
+
+        $data = $request->validate(['enabled' => 'required|boolean']);
+        $org = Organization::findOrFail($id);
+
+        $settings = $org->settings ?? [];
+        $settings['notifications_enabled'] = $data['enabled'];
+        $org->settings = $settings;
+        $org->save();
+
+        try {
+            \App\Models\AuditLog::log('organization', $org->id, 'notifications_toggle', [
+                'enabled' => $data['enabled'],
+            ], 'admin');
+        } catch (\Throwable $e) { \Log::warning('audit failed: ' . $e->getMessage()); }
+
+        return response()->json([
+            'message' => "Notifikasi untuk tenant {$org->name} " . ($data['enabled'] ? 'diaktifkan' : 'dinonaktifkan'),
+            'notifications_enabled' => $data['enabled'],
+        ]);
+    }
+
+    /**
      * Create a new child organization under a parent (superadmin only).
      */
     public function createChild(Request $request)

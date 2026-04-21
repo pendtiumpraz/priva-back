@@ -6,104 +6,118 @@ use App\Http\Controllers\Controller;
 use App\Models\SecurityAlert;
 use App\Services\AlertEngineService;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AlertController extends Controller
 {
     /**
-     * List alerts for current org (with filters).
+     * List alerts / notifications for the current user.
+     *
+     * Visibility rules:
+     * - root/superadmin: see rows with org_id=null (platform-level) plus any
+     *   where recipient_role matches their role.
+     * - tenant users: see rows matching their org_id AND
+     *     (recipient_id = me
+     *      OR recipient_role = my role
+     *      OR (recipient_id IS NULL AND recipient_role IS NULL))
      */
     public function index(Request $request)
     {
-        $orgId = $request->user()->org_id;
+        $user = $request->user();
+        $query = $this->scopedQuery($request)->orderBy('priority', 'desc')->orderBy('created_at', 'desc');
 
-        $query = SecurityAlert::where('org_id', $orgId)->orderBy('created_at', 'desc');
-
-        if ($request->has('status') && $request->status !== 'all') {
-            $query->where('status', $request->status);
+        foreach (['status', 'kind', 'severity', 'module'] as $filter) {
+            if ($request->filled($filter) && $request->get($filter) !== 'all') {
+                $query->where($filter, $request->get($filter));
+            }
         }
 
-        if ($request->has('severity')) {
-            $query->where('severity', $request->severity);
+        // "unread" shortcut
+        if ($request->boolean('unread')) {
+            $query->whereNull('read_at');
         }
 
-        $alerts = $query->get();
+        // Stats for UI badge counts (per kind + severity)
+        $scoped = $this->scopedQuery($request);
+        $baseOpen = (clone $scoped)->whereIn('status', ['open', 'acknowledged']);
 
-        // Stats
         $stats = [
-            'total' => SecurityAlert::where('org_id', $orgId)->whereIn('status', ['open', 'acknowledged'])->count(),
-            'critical' => SecurityAlert::where('org_id', $orgId)->where('severity', 'critical')->whereIn('status', ['open', 'acknowledged'])->count(),
-            'high' => SecurityAlert::where('org_id', $orgId)->where('severity', 'high')->whereIn('status', ['open', 'acknowledged'])->count(),
-            'medium' => SecurityAlert::where('org_id', $orgId)->where('severity', 'medium')->whereIn('status', ['open', 'acknowledged'])->count(),
-            'low' => SecurityAlert::where('org_id', $orgId)->where('severity', 'low')->whereIn('status', ['open', 'acknowledged'])->count(),
+            'total' => (clone $baseOpen)->count(),
+            'unread' => (clone $scoped)->whereNull('read_at')->count(),
+            'by_kind' => [
+                'alert' => (clone $baseOpen)->where('kind', 'alert')->count(),
+                'warning' => (clone $baseOpen)->where('kind', 'warning')->count(),
+                'info' => (clone $baseOpen)->where('kind', 'info')->count(),
+            ],
+            'by_severity' => [
+                'critical' => (clone $baseOpen)->where('severity', 'critical')->count(),
+                'high' => (clone $baseOpen)->where('severity', 'high')->count(),
+                'medium' => (clone $baseOpen)->where('severity', 'medium')->count(),
+                'low' => (clone $baseOpen)->where('severity', 'low')->count(),
+            ],
         ];
+
+        $alerts = $query->limit(min((int) $request->get('limit', 100), 500))->get();
 
         return response()->json(['data' => $alerts, 'stats' => $stats]);
     }
 
-    /**
-     * Get count of open alerts (for bell badge).
-     */
+    /** Badge count for bell icon. */
     public function count(Request $request)
     {
-        $orgId = $request->user()->org_id;
-        $count = SecurityAlert::where('org_id', $orgId)
-            ->whereIn('status', ['open'])
-            ->count();
-        $criticalCount = SecurityAlert::where('org_id', $orgId)
-            ->where('severity', 'critical')
-            ->whereIn('status', ['open'])
-            ->count();
+        $scoped = $this->scopedQuery($request);
+        $count = (clone $scoped)->whereNull('read_at')->whereIn('status', ['open', 'acknowledged'])->count();
+        $critical = (clone $scoped)->whereNull('read_at')->where('severity', 'critical')->whereIn('status', ['open', 'acknowledged'])->count();
 
         return response()->json([
             'count' => $count,
-            'critical' => $criticalCount,
+            'critical' => $critical,
         ]);
     }
 
-    /**
-     * Acknowledge an alert.
-     */
+    public function markRead(Request $request, $id)
+    {
+        $alert = $this->scopedQuery($request)->findOrFail($id);
+        if (!$alert->read_at) $alert->update(['read_at' => now()]);
+        return response()->json(['data' => $alert]);
+    }
+
+    public function markAllRead(Request $request)
+    {
+        $this->scopedQuery($request)->whereNull('read_at')->update(['read_at' => now()]);
+        return response()->json(['message' => 'All marked read']);
+    }
+
     public function acknowledge(Request $request, $id)
     {
-        $alert = SecurityAlert::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $alert = $this->scopedQuery($request)->findOrFail($id);
         $alert->update([
             'status' => 'acknowledged',
             'acknowledged_by' => $request->user()->id,
             'acknowledged_at' => now(),
+            'read_at' => $alert->read_at ?? now(),
         ]);
-
-        return response()->json(['data' => $alert, 'message' => 'Alert acknowledged.']);
+        return response()->json(['data' => $alert]);
     }
 
-    /**
-     * Resolve an alert.
-     */
     public function resolve(Request $request, $id)
     {
-        $alert = SecurityAlert::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $alert = $this->scopedQuery($request)->findOrFail($id);
         $alert->update([
             'status' => 'resolved',
             'resolved_by' => $request->user()->id,
             'resolved_at' => now(),
         ]);
-
-        return response()->json(['data' => $alert, 'message' => 'Alert resolved.']);
+        return response()->json(['data' => $alert]);
     }
 
-    /**
-     * Dismiss an alert.
-     */
     public function dismiss(Request $request, $id)
     {
-        $alert = SecurityAlert::where('org_id', $request->user()->org_id)->findOrFail($id);
-        $alert->update(['status' => 'dismissed']);
-
-        return response()->json(['data' => $alert, 'message' => 'Alert dismissed.']);
+        $alert = $this->scopedQuery($request)->findOrFail($id);
+        $alert->update(['status' => 'dismissed', 'read_at' => $alert->read_at ?? now()]);
+        return response()->json(['data' => $alert]);
     }
 
-    /**
-     * Manually trigger the alert engine scan.
-     */
     public function scan(Request $request)
     {
         $orgId = $request->user()->org_id;
@@ -114,5 +128,81 @@ class AlertController extends Controller
             'message' => count($newAlerts) . ' anomali baru terdeteksi.',
             'new_alerts' => $newAlerts,
         ]);
+    }
+
+    /**
+     * Export notifications to CSV (finance/sales follow-up use case,
+     * especially for license-expiring module).
+     */
+    public function export(Request $request): StreamedResponse
+    {
+        $query = $this->scopedQuery($request);
+        foreach (['kind', 'severity', 'module', 'status'] as $filter) {
+            if ($request->filled($filter)) {
+                $query->where($filter, $request->get($filter));
+            }
+        }
+        $rows = $query->orderBy('created_at', 'desc')->limit(5000)->get();
+
+        $filename = 'notifications-' . now()->format('Y-m-d-His') . '.csv';
+        return response()->streamDownload(function () use ($rows) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, [
+                'Created', 'Kind', 'Severity', 'Module', 'Type', 'Title', 'Body',
+                'Org', 'Admin Name', 'Admin Email', 'Admin Phone', 'WA Link',
+                'Expires', 'Days Left', 'Status',
+            ]);
+            foreach ($rows as $r) {
+                $m = is_array($r->metadata) ? $r->metadata : [];
+                fputcsv($out, [
+                    $r->created_at?->toDateTimeString(),
+                    $r->kind,
+                    $r->severity,
+                    $r->module,
+                    $r->type ?? $r->rule_code,
+                    $r->title,
+                    $r->description,
+                    $m['org_name'] ?? '',
+                    $m['admin_name'] ?? '',
+                    $m['admin_email'] ?? '',
+                    $m['admin_phone'] ?? '',
+                    $m['wa_url'] ?? '',
+                    $m['expires_at'] ?? '',
+                    $m['days_left'] ?? '',
+                    $r->status,
+                ]);
+            }
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv']);
+    }
+
+    /**
+     * Query builder scoped to the authenticated user's visibility rules.
+     * Centralizes the scoping logic so every endpoint applies it consistently.
+     */
+    private function scopedQuery(Request $request)
+    {
+        $user = $request->user();
+        $q = SecurityAlert::query();
+
+        if (in_array($user->role, ['root', 'superadmin'], true)) {
+            // Platform admins see platform-level (org_id null) + anything
+            // targeted at their role.
+            $q->where(function ($qq) use ($user) {
+                $qq->whereNull('org_id')
+                   ->orWhere('recipient_role', $user->role)
+                   ->orWhere('recipient_id', $user->id);
+            });
+        } else {
+            $q->where('org_id', $user->org_id)
+              ->where(function ($qq) use ($user) {
+                  $qq->where('recipient_id', $user->id)
+                     ->orWhere('recipient_role', $user->role)
+                     ->orWhere(function ($inner) {
+                         $inner->whereNull('recipient_id')->whereNull('recipient_role');
+                     });
+              });
+        }
+        return $q;
     }
 }

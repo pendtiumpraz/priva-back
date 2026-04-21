@@ -370,6 +370,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::put('/organizations/{id}/hierarchy', [\App\Http\Controllers\Api\OrganizationController::class, 'updateHierarchy']);
         Route::post('/organizations/{id}/deactivate', [\App\Http\Controllers\Api\OrganizationController::class, 'deactivate']);
         Route::post('/organizations/{id}/restore', [\App\Http\Controllers\Api\OrganizationController::class, 'restore']);
+        Route::put('/organizations/{id}/notifications-toggle', [\App\Http\Controllers\Api\OrganizationController::class, 'toggleNotifications']);
 
         // CRM Integration
         Route::prefix('crm')->group(function () {
@@ -425,13 +426,29 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::get('/posture', [\App\Http\Controllers\Api\PostureController::class, 'getPosture']);
             Route::get('/posture/trend', [\App\Http\Controllers\Api\PostureController::class, 'getTrend']);
 
-            // Alert Engine
+            // Alert Engine / Notifications
             Route::get('/alerts', [\App\Http\Controllers\Api\AlertController::class, 'index']);
             Route::get('/alerts/count', [\App\Http\Controllers\Api\AlertController::class, 'count']);
+            Route::get('/alerts/export', [\App\Http\Controllers\Api\AlertController::class, 'export']);
             Route::post('/alerts/scan', [\App\Http\Controllers\Api\AlertController::class, 'scan']);
+            Route::post('/alerts/mark-all-read', [\App\Http\Controllers\Api\AlertController::class, 'markAllRead']);
+            Route::post('/alerts/{id}/read', [\App\Http\Controllers\Api\AlertController::class, 'markRead']);
             Route::post('/alerts/{id}/acknowledge', [\App\Http\Controllers\Api\AlertController::class, 'acknowledge']);
             Route::post('/alerts/{id}/resolve', [\App\Http\Controllers\Api\AlertController::class, 'resolve']);
             Route::post('/alerts/{id}/dismiss', [\App\Http\Controllers\Api\AlertController::class, 'dismiss']);
+            // Alias: /notifications → /alerts (semantic preference)
+            Route::get('/notifications', [\App\Http\Controllers\Api\AlertController::class, 'index']);
+            Route::get('/notifications/count', [\App\Http\Controllers\Api\AlertController::class, 'count']);
+            Route::get('/notifications/export', [\App\Http\Controllers\Api\AlertController::class, 'export']);
+            Route::post('/notifications/mark-all-read', [\App\Http\Controllers\Api\AlertController::class, 'markAllRead']);
+            Route::post('/notifications/{id}/read', [\App\Http\Controllers\Api\AlertController::class, 'markRead']);
+        });
+
+        // Notification Preferences (per-user toggles)
+        Route::prefix('notification-preferences')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\NotificationPreferenceController::class, 'index']);
+            Route::put('/', [\App\Http\Controllers\Api\NotificationPreferenceController::class, 'update']);
+            Route::post('/reset', [\App\Http\Controllers\Api\NotificationPreferenceController::class, 'reset']);
         });
 
         // Automation Rules (Phase 4)

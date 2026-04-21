@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\{Ropa, Dpia, DsrRequest, ConsentCollectionPoint, BreachIncident, InformationSystem, AuditLog, ProcessingCategory};
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 
 class ModuleCrudController extends Controller
@@ -300,6 +301,44 @@ class ModuleCrudController extends Controller
                 \Log::warning('Audit log failed: ' . $e->getMessage());
             }
 
+            // ===== Notification hooks on create =====
+            try {
+                // Breach: any new incident is a critical alert to the DPO team.
+                if ($module === 'breach') {
+                    NotificationService::dispatch(
+                        kind: 'alert',
+                        severity: 'critical',
+                        module: 'breach',
+                        type: 'breach.created',
+                        recipient: 'role:dpo',
+                        orgId: $record->org_id,
+                        title: "🚨 Insiden baru: {$record->incident_code}",
+                        body: ($record->description ?? 'Data breach detected') . ' — 72 jam untuk notifikasi.',
+                        actionUrl: "/breach/{$record->id}",
+                        metadata: ['record_id' => $record->id, 'incident_code' => $record->incident_code]
+                    );
+                }
+                // ROPA with assignees → per-user info notification.
+                if ($module === 'ropa' && !empty($data['assignees']) && is_array($data['assignees'])) {
+                    foreach ($data['assignees'] as $uid) {
+                        NotificationService::dispatch(
+                            kind: 'info',
+                            severity: 'low',
+                            module: 'ropa',
+                            type: 'ropa.assigned',
+                            recipient: 'user:' . $uid,
+                            orgId: $record->org_id,
+                            title: "ROPA {$record->registration_number} di-assign ke Anda",
+                            body: $record->processing_activity ?? '',
+                            actionUrl: "/ropa/{$record->id}",
+                            metadata: ['record_id' => $record->id]
+                        );
+                    }
+                }
+            } catch (\Exception $e) {
+                \Log::warning('Notification dispatch failed on create: ' . $e->getMessage());
+            }
+
             // Auto-trigger: if ROPA risk=high → create draft DPIA with inherited wizard_data
             $autoDpiaId = null;
             if ($module === 'ropa' && ($data['risk_level'] ?? '') === 'high') {
@@ -337,6 +376,24 @@ class ModuleCrudController extends Controller
                         'created_by' => $data['created_by'],
                     ]);
                     $autoDpiaId = $autoDpia->id;
+
+                    // Notify DPO: high-risk ROPA spawned an auto-DPIA.
+                    try {
+                        NotificationService::dispatch(
+                            kind: 'warning',
+                            severity: 'high',
+                            module: 'dpia',
+                            type: 'dpia.auto_created',
+                            recipient: 'role:dpo',
+                            orgId: $record->org_id,
+                            title: "⚠️ DPIA otomatis: {$autoDpia->registration_number}",
+                            body: "Dibuat dari ROPA high-risk {$record->registration_number} — review diperlukan.",
+                            actionUrl: "/dpia/{$autoDpia->id}",
+                            metadata: ['record_id' => $autoDpia->id, 'ropa_id' => $record->id]
+                        );
+                    } catch (\Exception $e) {
+                        \Log::warning('DPIA auto-create notification failed: ' . $e->getMessage());
+                    }
                 }
             }
 
@@ -429,7 +486,36 @@ class ModuleCrudController extends Controller
         $oldWizard = $record->wizard_data ?? [];
         $newWizard = $request->input('wizard_data', []);
         $oldStatus = $record->status;
+        $oldAssignees = $record->assignees ?? [];
         $record->update($request->all());
+
+        // Notify new assignees added on this update (ROPA/DPIA).
+        try {
+            if (in_array($module, ['ropa', 'dpia'], true) && $request->has('assignees')) {
+                $newAssignees = $request->input('assignees', []);
+                if (is_array($newAssignees)) {
+                    $added = array_values(array_diff($newAssignees, is_array($oldAssignees) ? $oldAssignees : []));
+                    foreach ($added as $uid) {
+                        $regNum = $record->registration_number ?? '';
+                        $activity = $record->processing_activity ?? $record->description ?? '';
+                        NotificationService::dispatch(
+                            kind: 'info',
+                            severity: 'low',
+                            module: $module,
+                            type: "{$module}.assigned",
+                            recipient: 'user:' . $uid,
+                            orgId: $record->org_id,
+                            title: strtoupper($module) . " {$regNum} di-assign ke Anda",
+                            body: $activity,
+                            actionUrl: "/{$module}/{$record->id}",
+                            metadata: ['record_id' => $record->id]
+                        );
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            \Log::warning('Assignee notification failed: ' . $e->getMessage());
+        }
 
         // Approval Workflow trigger if status changes to 'waiting'
         if ($request->has('status') && $request->input('status') === 'waiting' && $oldStatus !== 'waiting') {
@@ -448,6 +534,24 @@ class ModuleCrudController extends Controller
                     ['module' => $module, 'record_id' => $record->id, 'status' => 'pending'],
                     ['org_id' => $record->org_id, 'steps' => $steps, 'current_step' => 0]
                 );
+
+                // Notify first step reviewer (DPO role) — step pending approval.
+                try {
+                    NotificationService::dispatch(
+                        kind: 'alert',
+                        severity: 'high',
+                        module: 'approval',
+                        type: 'approval.pending',
+                        recipient: 'role:dpo',
+                        orgId: $record->org_id,
+                        title: "✋ Approval pending: " . strtoupper($module) . " {$record->registration_number}",
+                        body: "Menunggu review DPO untuk " . ($record->processing_activity ?? $record->description ?? ''),
+                        actionUrl: "/{$module}/{$record->id}",
+                        metadata: ['record_id' => $record->id, 'workflow_module' => $module]
+                    );
+                } catch (\Exception $e) {
+                    \Log::warning('Approval pending notification failed: ' . $e->getMessage());
+                }
             }
         }
 

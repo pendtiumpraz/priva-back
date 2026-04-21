@@ -699,7 +699,7 @@ class DataDiscoveryController extends Controller
         // Persist history — metadata + masked sample only, no raw user-provided
         // values (those are bound at PDO level and never serialized here).
         try {
-            \App\Models\LeakDetection::create([
+            $leak = \App\Models\LeakDetection::create([
                 'system_id' => $system->id,
                 'org_id' => $request->user()->org_id,
                 'user_id' => $request->user()->id,
@@ -711,6 +711,24 @@ class DataDiscoveryController extends Controller
                 'leak_confirmed' => count($rows) > 0,
                 'sample_masked' => $maskedSample,
             ]);
+
+            // Notify DPO when a leak hit is confirmed.
+            if (count($rows) > 0) {
+                try {
+                    \App\Services\NotificationService::dispatch(
+                        kind: 'alert',
+                        severity: count($rows) > 100 ? 'critical' : 'high',
+                        module: 'data_discovery',
+                        type: 'data_discovery.leak_detected',
+                        recipient: 'role:dpo',
+                        orgId: $request->user()->org_id,
+                        title: "🔍 PII leak: " . count($rows) . " row di {$tableName}",
+                        body: "Scan menemukan " . count($rows) . " row yang cocok dengan value PII pada tabel {$tableName} (sistem: {$system->name}).",
+                        actionUrl: "/data-discovery/{$system->id}",
+                        metadata: ['record_id' => $leak->id, 'system_id' => $system->id, 'found_count' => count($rows)]
+                    );
+                } catch (\Throwable $e) { \Log::warning('Leak notif failed: ' . $e->getMessage()); }
+            }
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning('Leak history save failed: ' . $e->getMessage());
         }

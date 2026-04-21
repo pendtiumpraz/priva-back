@@ -78,6 +78,16 @@ class PlatformConfigController extends Controller
             'unit' => 'bool', 'category' => 'features', 'label' => 'Consent Webhooks',
             'help' => 'Aktifkan fire webhook ke tenant pas consent captured.',
         ],
+        'features.notifications_enabled' => [
+            'default' => 1, 'min' => 0, 'max' => 1, 'step' => 1,
+            'unit' => 'bool', 'category' => 'features', 'label' => 'Notifikasi Sistem',
+            'help' => 'Global kill switch untuk seluruh sistem notifikasi (bell, /notifications, scheduler, WA deep-link). Matikan kalau mau silent mode.',
+        ],
+        'features.notifications_scheduler_enabled' => [
+            'default' => 1, 'min' => 0, 'max' => 1, 'step' => 1,
+            'unit' => 'bool', 'category' => 'features', 'label' => 'Notifikasi Scheduler',
+            'help' => 'Aktifkan daily cron untuk license-expiry, DSR H-24, ROPA review 90d, dll. Independen dari kill switch master.',
+        ],
     ];
 
     public function index(Request $request)

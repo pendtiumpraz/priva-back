@@ -56,6 +56,21 @@ class AiAgentToolExecutor
     public function execute(string $tool, array $args, bool $approved = false): array
     {
         if (in_array($tool, self::MUTATION_TOOLS, true) && !$approved) {
+            // Notify admin role that an AI action is awaiting approval.
+            try {
+                \App\Services\NotificationService::dispatch(
+                    kind: 'alert',
+                    severity: 'high',
+                    module: 'ai',
+                    type: 'ai.approval_required',
+                    recipient: 'role:admin',
+                    orgId: $this->orgId,
+                    title: "🤖 AI butuh persetujuan: {$tool}",
+                    body: 'Aksi AI yang memodifikasi data menunggu approval. Periksa detail di chat.',
+                    actionUrl: '/ai-agent',
+                    metadata: ['tool' => $tool]
+                );
+            } catch (\Throwable $e) { \Log::warning('AI notif failed: ' . $e->getMessage()); }
             return [
                 [
                     'pending_approval' => true,

@@ -232,6 +232,13 @@ class UserController extends Controller
 
         $user = User::create($validated);
 
+        // Seed default notification preferences based on role.
+        try {
+            \App\Services\NotificationPreferenceDefaults::seedForUser($user);
+        } catch (\Exception $e) {
+            \Log::warning('Failed to seed notification preferences: ' . $e->getMessage());
+        }
+
         $user->load(['organization', 'tenantRole']);
 
         return response()->json(['data' => $user, 'message' => 'User created'], 201);

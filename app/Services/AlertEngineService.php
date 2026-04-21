@@ -21,13 +21,175 @@ class AlertEngineService
     {
         $generated = [];
 
+        $generated = array_merge($generated, $this->checkDsrDeadlineWarning($orgId));
         $generated = array_merge($generated, $this->checkDsrOverdue($orgId));
         $generated = array_merge($generated, $this->checkBreachOpen($orgId));
+        $generated = array_merge($generated, $this->checkBreachDeadline72h($orgId));
         $generated = array_merge($generated, $this->checkDpaExpiring($orgId));
         $generated = array_merge($generated, $this->checkRopaHighRiskNoDpia($orgId));
+        $generated = array_merge($generated, $this->checkRopaReview90d($orgId));
+        $generated = array_merge($generated, $this->checkDpiaReviewDue($orgId));
         $generated = array_merge($generated, $this->checkStaleGapAssessment($orgId));
 
         return $generated;
+    }
+
+    /**
+     * Breach 72h notification deadline approaching (H-24).
+     */
+    protected function checkBreachDeadline72h(string $orgId): array
+    {
+        $alerts = [];
+        $near = BreachIncident::where('org_id', $orgId)
+            ->whereNotNull('notification_deadline')
+            ->whereBetween('notification_deadline', [Carbon::now()->addHours(20), Carbon::now()->addHours(28)])
+            ->get();
+
+        foreach ($near as $b) {
+            $exists = SecurityAlert::where('org_id', $orgId)
+                ->where('type', 'breach.deadline.h24')
+                ->where('record_id', $b->id)
+                ->whereIn('status', ['open', 'acknowledged'])
+                ->exists();
+            if ($exists) continue;
+
+            $alerts = array_merge($alerts, \App\Services\NotificationService::dispatch(
+                kind: 'alert',
+                severity: 'critical',
+                module: 'breach',
+                type: 'breach.deadline.h24',
+                recipient: 'role:dpo',
+                orgId: $orgId,
+                title: "🚨 Breach {$b->incident_code} — 24 jam ke deadline notifikasi",
+                body: 'Batas 72 jam notifikasi regulator tinggal 24 jam. Segera finalisasi.',
+                actionUrl: "/breach/{$b->id}",
+                metadata: ['record_id' => $b->id]
+            ));
+        }
+        return $alerts;
+    }
+
+    /**
+     * ROPA that was approved >90 days ago and hasn't been reviewed since.
+     * Fires once per record via type dedup. Reminds assignees to re-review.
+     */
+    protected function checkRopaReview90d(string $orgId): array
+    {
+        $alerts = [];
+        $stale = Ropa::where('org_id', $orgId)
+            ->where('status', 'approved')
+            ->whereNotNull('approved_at')
+            ->where('approved_at', '<', Carbon::now()->subDays(90))
+            ->where('updated_at', '<', Carbon::now()->subDays(90))
+            ->get();
+
+        foreach ($stale as $r) {
+            $exists = SecurityAlert::where('org_id', $orgId)
+                ->where('type', 'ropa.review.90d')
+                ->where('record_id', $r->id)
+                ->whereIn('status', ['open', 'acknowledged'])
+                ->exists();
+            if ($exists) continue;
+
+            $assignees = is_array($r->assignees) ? $r->assignees : [];
+            $recipient = count($assignees) > 0 ? 'user:' . $assignees[0] : 'role:dpo';
+
+            $alerts = array_merge($alerts, \App\Services\NotificationService::dispatch(
+                kind: 'warning',
+                severity: 'medium',
+                module: 'ropa',
+                type: 'ropa.review.90d',
+                recipient: $recipient,
+                orgId: $orgId,
+                title: "📋 Review ROPA {$r->registration_number}",
+                body: 'ROPA sudah disetujui >90 hari — sudah waktunya review ulang akurasi data.',
+                actionUrl: "/ropa/{$r->id}",
+                metadata: ['record_id' => $r->id]
+            ));
+        }
+        return $alerts;
+    }
+
+    /**
+     * DPIA review reminder: 30d for high-risk, 180d for others.
+     */
+    protected function checkDpiaReviewDue(string $orgId): array
+    {
+        $alerts = [];
+        $dpias = Dpia::where('org_id', $orgId)
+            ->where('status', 'approved')
+            ->whereNotNull('approved_at')
+            ->get();
+
+        foreach ($dpias as $d) {
+            $threshold = $d->risk_level === 'high' ? 30 : 180;
+            $dueDate = Carbon::parse($d->approved_at)->addDays($threshold);
+            if ($dueDate->isFuture()) continue;
+
+            $type = 'dpia.review.' . ($d->risk_level === 'high' ? '30d' : '180d');
+            $exists = SecurityAlert::where('org_id', $orgId)
+                ->where('type', $type)
+                ->where('record_id', $d->id)
+                ->whereIn('status', ['open', 'acknowledged'])
+                ->exists();
+            if ($exists) continue;
+
+            $alerts = array_merge($alerts, \App\Services\NotificationService::dispatch(
+                kind: 'warning',
+                severity: $d->risk_level === 'high' ? 'high' : 'medium',
+                module: 'dpia',
+                type: $type,
+                recipient: 'role:dpo',
+                orgId: $orgId,
+                title: "🔄 DPIA {$d->registration_number} perlu review",
+                body: "DPIA {$d->risk_level}-risk sudah lewat siklus review {$threshold} hari.",
+                actionUrl: "/dpia/{$d->id}",
+                metadata: ['record_id' => $d->id]
+            ));
+        }
+        return $alerts;
+    }
+
+    /**
+     * DSR deadline warning: ~24h before the 72h regulatory deadline.
+     * Fires once per record via rule_code dedup.
+     */
+    protected function checkDsrDeadlineWarning(string $orgId): array
+    {
+        $alerts = [];
+        $soon = DsrRequest::where('org_id', $orgId)
+            ->whereIn('status', ['pending', 'in_progress'])
+            ->whereNotNull('deadline_at')
+            ->whereBetween('deadline_at', [Carbon::now()->addHours(20), Carbon::now()->addHours(28)])
+            ->get();
+
+        foreach ($soon as $dsr) {
+            $exists = SecurityAlert::where('org_id', $orgId)
+                ->where('rule_code', 'dsr.deadline.h24')
+                ->where('record_id', $dsr->id)
+                ->whereIn('status', ['open', 'acknowledged'])
+                ->exists();
+            if ($exists) continue;
+
+            $alert = \App\Services\NotificationService::dispatch(
+                kind: 'warning',
+                severity: 'high',
+                module: 'dsr',
+                type: 'dsr.deadline.h24',
+                recipient: 'role:dpo',
+                orgId: $orgId,
+                title: "⏰ DSR #{$dsr->reference_number} — 24 jam tersisa",
+                body: "Batas waktu respon DSR tinggal 24 jam. Segera tangani permintaan subjek data.",
+                actionUrl: "/dsr/{$dsr->id}",
+                metadata: [
+                    'record_id' => $dsr->id,
+                    'deadline_at' => $dsr->deadline_at,
+                    'reference_number' => $dsr->reference_number,
+                ]
+            );
+            $alerts = array_merge($alerts, $alert);
+        }
+        return $alerts;
     }
 
     /**
@@ -49,21 +211,23 @@ class AlertEngineService
                 ->exists();
 
             if (!$exists) {
-                $daysSince = Carbon::parse($dsr->created_at)->diffInDays(now());
-                $alert = SecurityAlert::create([
-                    'org_id' => $orgId,
-                    'rule_code' => 'dsr_overdue',
-                    'severity' => $daysSince > 7 ? 'critical' : 'high',
-                    'title' => "DSR #{$dsr->reference_number} melebihi batas waktu respon",
-                    'description' => "Permintaan subjek data (DSR) belum ditangani selama {$daysSince} hari. Batas maksimal respon adalah 3 hari sesuai regulasi.",
-                    'module' => 'dsr',
-                    'record_id' => $dsr->id,
-                    'metadata' => [
+                $daysSince = (int) Carbon::parse($dsr->created_at)->diffInDays(now());
+                $alerts = array_merge($alerts, \App\Services\NotificationService::dispatch(
+                    kind: 'alert',
+                    severity: $daysSince > 7 ? 'critical' : 'high',
+                    module: 'dsr',
+                    type: 'dsr_overdue',
+                    recipient: 'role:dpo',
+                    orgId: $orgId,
+                    title: "DSR #{$dsr->reference_number} melebihi batas waktu",
+                    body: "Permintaan DSR belum ditangani {$daysSince} hari. Batas maksimal 3 hari.",
+                    actionUrl: "/dsr/{$dsr->id}",
+                    metadata: [
+                        'record_id' => $dsr->id,
                         'registration_number' => $dsr->reference_number ?? null,
                         'days_overdue' => $daysSince,
-                    ],
-                ]);
-                $alerts[] = $alert;
+                    ]
+                ));
             }
         }
         return $alerts;
