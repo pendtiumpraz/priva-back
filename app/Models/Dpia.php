@@ -10,8 +10,10 @@ class Dpia extends Model
     use HasUuids, SoftDeletes;
 
     protected $fillable = [
-        'org_id', 'regulation_code', 'registration_number', 'ropa_id', 'risk_level', 'status',
+        'org_id', 'regulation_code', 'category_id', 'custom_number', 'registration_number',
+        'ropa_id', 'risk_level', 'status',
         'description', 'risk_assessment', 'mitigation_measures',
+        'assign_group', 'assignees',
         'wizard_data', 'raci_matrix', 'progress',
         'approver_id', 'approved_at', 'created_by',
         'assigned_roles',
@@ -23,6 +25,7 @@ class Dpia extends Model
         'wizard_data' => 'array',
         'raci_matrix' => 'array',
         'assigned_roles' => 'array',
+        'assignees' => 'array',
         'approved_at' => 'datetime',
         'progress' => 'float',
     ];
@@ -83,5 +86,10 @@ class Dpia extends Model
         return $this->hasMany(AuditLog::class, 'record_id')
             ->where('module', 'dpia')
             ->orderBy('created_at', 'desc');
+    }
+
+    public function category()
+    {
+        return $this->belongsTo(ProcessingCategory::class, 'category_id');
     }
 }

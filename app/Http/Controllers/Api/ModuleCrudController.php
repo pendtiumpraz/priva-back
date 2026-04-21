@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Ropa, Dpia, DsrRequest, ConsentCollectionPoint, BreachIncident, InformationSystem, AuditLog};
+use App\Models\{Ropa, Dpia, DsrRequest, ConsentCollectionPoint, BreachIncident, InformationSystem, AuditLog, ProcessingCategory};
 use Illuminate\Http\Request;
 
 class ModuleCrudController extends Controller
@@ -74,11 +74,37 @@ class ModuleCrudController extends Controller
             };
     }
 
-    private function nextCode(string $prefix, $model, string $orgId): string
+    /**
+     * Generate the next registration code.
+     *
+     * - Legacy format (no category): `ROPA-2026-001` — counter is max+1
+     *   across the whole tenant for the prefix+year.
+     * - With category: `ROPA-HR-001` — counter is per-category, per-year,
+     *   atomically reserved on the ProcessingCategory row.
+     * - With category + custom number: `ROPA-HR-PAY-001` — custom_number
+     *   is inserted as an extra segment; category counter still advances.
+     */
+    private function nextCode(string $prefix, $model, string $orgId, ?string $categoryId = null, ?string $customNumber = null): string
     {
         $year = date('Y');
+
+        if ($categoryId) {
+            $category = ProcessingCategory::where('org_id', $orgId)->where('id', $categoryId)->first();
+            if ($category) {
+                $module = in_array($prefix, ['ROPA', 'DPIA'], true) ? strtolower($prefix) : 'ropa';
+                $counter = $category->nextCounter($module);
+                $segments = [$prefix, strtoupper($category->code)];
+                if ($customNumber !== null && $customNumber !== '') {
+                    $segments[] = preg_replace('/[^A-Za-z0-9]/', '', strtoupper($customNumber));
+                }
+                $segments[] = str_pad((string) $counter, 3, '0', STR_PAD_LEFT);
+                return implode('-', array_filter($segments, fn($s) => $s !== ''));
+            }
+        }
+
+        // Legacy fallback — no category selected
         $pattern = $prefix . '-' . $year . '-%';
-        
+
         $codeColumn = match ($prefix) {
             'ROPA', 'DPIA' => 'registration_number',
             'DSR' => 'request_id',
@@ -86,19 +112,18 @@ class ModuleCrudController extends Controller
             'BRC' => 'incident_code',
             default => 'registration_number',
         };
-        
-        // Get all existing codes matching the pattern, extract max number
+
         $codes = $model->withTrashed()
             ->where($codeColumn, 'like', $pattern)
             ->pluck($codeColumn)
             ->toArray();
-        
+
         $maxNum = 0;
         foreach ($codes as $code) {
             $num = (int) substr($code, strrpos($code, '-') + 1);
             if ($num > $maxNum) $maxNum = $num;
         }
-        
+
         return $prefix . '-' . $year . '-' . str_pad($maxNum + 1, 3, '0', STR_PAD_LEFT);
     }
 
@@ -201,7 +226,11 @@ class ModuleCrudController extends Controller
             // Auto-generate codes
             switch ($module) {
                 case 'ropa':
-                    $data['registration_number'] = $data['registration_number'] ?? $this->nextCode('ROPA', $model, $data['org_id']);
+                    $data['registration_number'] = $data['registration_number'] ?? $this->nextCode(
+                        'ROPA', $model, $data['org_id'],
+                        $data['category_id'] ?? null,
+                        $data['custom_number'] ?? null
+                    );
                     // Auto-risk: if data_categories contain sensitive types → auto HIGH
                     $sensitiveKeywords = ['kesehatan', 'biometrik', 'genetik', 'anak', 'keuangan', 'ras', 'agama', 'orientasi seksual', 'pandangan politik'];
                     $categories = $data['data_categories'] ?? [];
@@ -216,7 +245,11 @@ class ModuleCrudController extends Controller
                     }
                     break;
                 case 'dpia':
-                    $data['registration_number'] = $data['registration_number'] ?? $this->nextCode('DPIA', $model, $data['org_id']);
+                    $data['registration_number'] = $data['registration_number'] ?? $this->nextCode(
+                        'DPIA', $model, $data['org_id'],
+                        $data['category_id'] ?? null,
+                        $data['custom_number'] ?? null
+                    );
                     break;
                 case 'dsr':
                     $data['request_id'] = $data['request_id'] ?? $this->nextCode('DSR', $model, $data['org_id']);
@@ -292,7 +325,8 @@ class ModuleCrudController extends Controller
 
                     $autoDpia = $dpiaModel->create([
                         'org_id' => $data['org_id'],
-                        'registration_number' => $this->nextCode('DPIA', $dpiaModel, $data['org_id']),
+                        'category_id' => $data['category_id'] ?? null,
+                        'registration_number' => $this->nextCode('DPIA', $dpiaModel, $data['org_id'], $data['category_id'] ?? null),
                         'ropa_id' => $record->id,
                         'risk_level' => 'high',
                         'status' => 'draft',
@@ -376,6 +410,21 @@ class ModuleCrudController extends Controller
             $request->merge(['timeline_log' => $timeline]);
         }
 
+        // Assign-group lock: for ROPA/DPIA, assignees/assign_group can only
+        // change while the record is still in_progress. Waiting/revision/
+        // approved records require re-opening (status flip) before reassign.
+        if (in_array($module, ['ropa', 'dpia'], true)) {
+            $assignFieldsTouched = $request->hasAny(['assignees', 'assign_group']);
+            $currentStatus = $record->status ?? 'in_progress';
+            $assignEditable = in_array($currentStatus, ['in_progress', 'draft'], true);
+            if ($assignFieldsTouched && !$assignEditable) {
+                return response()->json([
+                    'message' => 'Assign group terkunci karena status bukan in_progress.',
+                    'status' => $currentStatus,
+                ], 409);
+            }
+        }
+
         // Detect wizard_data changes for audit logging
         $oldWizard = $record->wizard_data ?? [];
         $newWizard = $request->input('wizard_data', []);
@@ -431,7 +480,8 @@ class ModuleCrudController extends Controller
             if (!$existingDpia) {
                 $dpiaModel->create([
                     'org_id' => $record->org_id,
-                    'registration_number' => $this->nextCode('DPIA', $dpiaModel, $record->org_id),
+                    'category_id' => $record->category_id,
+                    'registration_number' => $this->nextCode('DPIA', $dpiaModel, $record->org_id, $record->category_id),
                     'ropa_id' => $record->id,
                     'risk_level' => 'high',
                     'status' => 'draft',

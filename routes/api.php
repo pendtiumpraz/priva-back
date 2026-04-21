@@ -209,6 +209,17 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/ropa-templates/{id}', [\App\Http\Controllers\Api\RopaTemplateController::class, 'show'])->middleware('permission:ropa,read');
 
         // =============================================
+        // Processing Categories — used for ROPA/DPIA naming (ROPA-HR-001).
+        // Org-scoped, user-extendable via LazySearchSelect allowCreate.
+        // =============================================
+        Route::prefix('processing-categories')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\ProcessingCategoryController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\ProcessingCategoryController::class, 'store']);
+            Route::put('/{id}', [\App\Http\Controllers\Api\ProcessingCategoryController::class, 'update']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\ProcessingCategoryController::class, 'destroy']);
+        });
+
+        // =============================================
         // Contract Review CRUD
         // =============================================
         Route::prefix('contract-reviews')->group(function () {

@@ -10,8 +10,9 @@ class Ropa extends Model
     use HasUuids, SoftDeletes;
 
     protected $fillable = [
-        'org_id', 'regulation_code', 'registration_number', 'processing_activity', 'entity', 'division',
-        'work_unit', 'description', 'kategori_pemrosesan', 'assign_group',
+        'org_id', 'regulation_code', 'category_id', 'custom_number', 'registration_number',
+        'processing_activity', 'entity', 'division',
+        'work_unit', 'description', 'kategori_pemrosesan', 'assign_group', 'assignees',
         'risk_level', 'status', 'purpose', 'legal_basis', 'legal_basis_detail', 'data_categories', 'data_subjects',
         'recipients', 'retention_period', 'retention_due_date', 'security_measures',
         'wizard_data', 'raci_matrix', 'progress',
@@ -24,6 +25,7 @@ class Ropa extends Model
         'recipients' => 'array',
         'wizard_data' => 'array',
         'raci_matrix' => 'array',
+        'assignees' => 'array',
         'approved_at' => 'datetime',
         'submitted_at' => 'datetime',
         'progress' => 'float',
@@ -118,5 +120,10 @@ class Ropa extends Model
         return $this->hasMany(AuditLog::class, 'record_id')
             ->where('module', 'ropa')
             ->orderBy('created_at', 'desc');
+    }
+
+    public function category()
+    {
+        return $this->belongsTo(ProcessingCategory::class, 'category_id');
     }
 }
