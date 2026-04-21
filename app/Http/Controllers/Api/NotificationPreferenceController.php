@@ -87,4 +87,38 @@ class NotificationPreferenceController extends Controller
         \App\Services\NotificationPreferenceDefaults::seedForUser($user);
         return response()->json(['message' => 'Preferences reset to defaults']);
     }
+
+    /**
+     * Public unsubscribe endpoint. Called from email footer via a signed
+     * URL — no auth required; Laravel verifies the signature. Disables
+     * one (user, kind, module, channel) combination and redirects to the
+     * frontend preferences page with a toast flag.
+     */
+    public function unsubscribe(Request $request)
+    {
+        if (!$request->hasValidSignature()) {
+            return response('Tautan tidak valid atau sudah kedaluwarsa.', 403);
+        }
+
+        $data = $request->validate([
+            'user' => 'required|string',
+            'kind' => 'required|in:alert,warning,info',
+            'module' => 'required|string|max:40',
+            'channel' => 'nullable|in:in_app,email,wa,push',
+        ]);
+        $channel = $data['channel'] ?? 'email';
+
+        NotificationPreference::updateOrCreate(
+            [
+                'user_id' => $data['user'],
+                'kind' => $data['kind'],
+                'module' => $data['module'],
+                'channel' => $channel,
+            ],
+            ['enabled' => false, 'digest' => 'off']
+        );
+
+        $frontendUrl = config('app.frontend_url', config('app.url', 'http://localhost:3000'));
+        return redirect(rtrim($frontendUrl, '/') . "/settings/notifications?unsubscribed={$data['kind']}.{$data['module']}");
+    }
 }

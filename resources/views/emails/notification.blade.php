@@ -69,6 +69,9 @@
                             <p style="margin:20px 0 0 0;font-size:12px;color:#9ca3af;">
                                 Dikirim otomatis oleh sistem Privasimu Nexus ·
                                 <a href="{{ rtrim($appUrl,'/') }}/settings/notifications" style="color:#9ca3af;text-decoration:underline;">atur preferensi</a>
+                                @if(!empty($unsubscribeUrl))
+                                    · <a href="{{ $unsubscribeUrl }}" style="color:#9ca3af;text-decoration:underline;">unsubscribe dari notifikasi ini</a>
+                                @endif
                             </p>
                         </td>
                     </tr>

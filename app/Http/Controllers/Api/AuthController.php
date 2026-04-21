@@ -46,6 +46,29 @@ class AuthController extends Controller
 
         $token = $user->createToken('auth-token')->plainTextToken;
 
+        // Notify superadmins — new tenant signup. Platform-level (org_id=null).
+        try {
+            \App\Services\NotificationService::dispatch(
+                kind: 'info',
+                severity: 'low',
+                module: 'tenant',
+                type: 'tenant.signup',
+                recipient: 'role:superadmin',
+                orgId: null,
+                title: "🎉 Tenant baru: {$org->name}",
+                body: "Admin: {$user->name} ({$user->email}) — slug: {$org->slug}",
+                actionUrl: '/license',
+                metadata: [
+                    'org_id' => $org->id,
+                    'org_name' => $org->name,
+                    'admin_name' => $user->name,
+                    'admin_email' => $user->email,
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Log::warning('Tenant signup notif failed: ' . $e->getMessage());
+        }
+
         return response()->json([
             'user' => $this->userWithPackageType($user),
             'token' => $token,

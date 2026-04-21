@@ -36,6 +36,10 @@ Route::get('/sso/callback', [\App\Http\Controllers\Api\SsoLoginController::class
 // Threat Intel Webhook Receiver (SOCRadar, etc.)
 Route::post('/webhooks/threat-intel/{org_id}', [\App\Http\Controllers\Api\ThreatIntelController::class, 'receive']);
 
+// Public: unsubscribe via signed URL (from email footer)
+Route::get('/notifications/unsubscribe', [\App\Http\Controllers\Api\NotificationPreferenceController::class, 'unsubscribe'])
+    ->name('notifications.unsubscribe');
+
 });
 
 // =============================================
