@@ -101,6 +101,25 @@ class UserController extends Controller
             $query->where('role', $request->role);
         }
 
+        // Department filter — either a department UUID or a division *name*
+        // (the latter for Step-0 pickers that only know the divisi label).
+        if ($request->filled('department_id')) {
+            $query->where('department_id', $request->department_id);
+        }
+        if ($request->filled('department_name')) {
+            $query->whereHas('department', function ($q) use ($request) {
+                $q->where('name', $request->department_name);
+            });
+        }
+
+        // Also accept `q` as an alias for search (LazySearchSelect convention).
+        if ($request->filled('q') && !$request->filled('search')) {
+            $s = $request->q;
+            $query->where(function ($qq) use ($s) {
+                $qq->where('name', 'like', "%{$s}%")->orWhere('email', 'like', "%{$s}%");
+            });
+        }
+
         // Include trashed
         if ($request->boolean('trash')) {
             $query->onlyTrashed();
