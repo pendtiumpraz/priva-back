@@ -104,6 +104,26 @@ class NotificationService
                 'metadata' => $metadata,
             ]);
             $created[] = $row;
+
+            // Fire email side-channel if user has opted in AND digest=instant.
+            // For `daily` / `hourly` digest, scheduler batches them.
+            if ($user && $user->email && NotificationPreference::isEnabled($user->id, $kind, $module, 'email')) {
+                $pref = NotificationPreference::where('user_id', $user->id)
+                    ->where('kind', $kind)
+                    ->whereIn('module', [$module, '*'])
+                    ->where('channel', 'email')
+                    ->first();
+                $digest = $pref?->digest ?? 'instant';
+                if ($digest === 'instant' || $digest === null) {
+                    try {
+                        \Mail::to($user->email)->queue(
+                            new \App\Mail\NotificationMail($row, $user->name ?? 'there')
+                        );
+                    } catch (\Throwable $e) {
+                        \Log::warning('NotificationMail queue failed: ' . $e->getMessage());
+                    }
+                }
+            }
         }
 
         return $created;
