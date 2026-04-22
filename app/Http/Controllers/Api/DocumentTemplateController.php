@@ -103,16 +103,38 @@ class DocumentTemplateController extends Controller
         $user = $request->user();
         if (!$this->canEdit($user)) return response()->json(['message' => 'Tidak diizinkan.'], 403);
 
-        $tpl = DocumentTemplate::where('org_id', $user->org_id)->findOrFail($id);
-        if ($tpl->is_system) {
-            return response()->json(['message' => 'Template sistem tidak bisa diedit — gunakan Clone dulu.'], 422);
-        }
+        // Look up target. Tenant-owned → edit in place. System preset →
+        // auto-fork silently to tenant copy (copy-on-write) so "Edit" UX
+        // just works.
+        $tpl = DocumentTemplate::where(function ($q) use ($user) {
+            $q->where('org_id', $user->org_id)->orWhereNull('org_id');
+        })->findOrFail($id);
 
         $data = $request->validate([
             'name' => 'sometimes|string|max:100',
             'description' => 'nullable|string|max:500',
             'config' => 'sometimes|array',
         ]);
+
+        if ($tpl->is_system) {
+            // Root/superadmin at platform scope may edit system defaults directly.
+            if (in_array($user->role, ['root', 'superadmin'], true) && !$user->org_id) {
+                $tpl->update($data);
+                return response()->json(['data' => $tpl]);
+            }
+
+            $fork = DocumentTemplate::create([
+                'org_id' => $user->org_id,
+                'name' => $data['name'] ?? $tpl->name,
+                'description' => array_key_exists('description', $data) ? $data['description'] : $tpl->description,
+                'config' => array_merge($tpl->config ?? [], $data['config'] ?? []),
+                'is_system' => false,
+                'is_default' => false,
+                'created_by' => $user->id,
+            ]);
+            return response()->json(['data' => $fork, 'forked_from' => $tpl->id]);
+        }
+
         $tpl->update($data);
         return response()->json(['data' => $tpl]);
     }

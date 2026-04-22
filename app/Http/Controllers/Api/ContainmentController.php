@@ -106,6 +106,20 @@ class ContainmentController extends Controller
         if ($tpl->is_system) {
             return response()->json(['message' => 'Template sistem tidak bisa dihapus.'], 422);
         }
+
+        // Block soft-delete if any active breach in this tenant still uses it.
+        // Tenant must switch those breaches to another template first.
+        $inUseCount = \App\Models\BreachIncident::where('org_id', $user->org_id)
+            ->where('containment_template_id', $tpl->id)
+            ->whereNull('deleted_at')
+            ->count();
+        if ($inUseCount > 0) {
+            return response()->json([
+                'message' => "Tidak bisa dihapus — masih dipakai oleh {$inUseCount} breach aktif. Ganti template di breach tersebut dulu.",
+                'in_use' => $inUseCount,
+            ], 422);
+        }
+
         $tpl->delete();
         return response()->json(['message' => 'Template dipindahkan ke trash']);
     }
