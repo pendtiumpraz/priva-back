@@ -65,11 +65,37 @@ class ContainmentController extends Controller
     public function updateTemplate(Request $request, string $id)
     {
         $user = $request->user();
-        $tpl = ContainmentTemplate::where('org_id', $user->org_id)->findOrFail($id);
+
+        // Look up the target. Tenant-owned → edit in place. System (org_id=null)
+        // → auto-fork to tenant copy (copy-on-write), keeping UX as "just edit".
+        $tpl = ContainmentTemplate::where(function ($q) use ($user) {
+            $q->where('org_id', $user->org_id)->orWhereNull('org_id');
+        })->findOrFail($id);
+
+        $payload = $request->only(['label', 'description', 'steps']);
+
         if ($tpl->is_system) {
-            return response()->json(['message' => 'Template sistem tidak bisa diedit — buat duplikat dulu.'], 422);
+            // Root/superadmin without org_id can edit system templates directly
+            // (they own the platform defaults). Tenant users get an auto-fork.
+            if (in_array($user->role, ['root', 'superadmin'], true) && !$user->org_id) {
+                $tpl->update($payload);
+                return response()->json(['data' => $tpl]);
+            }
+
+            $fork = ContainmentTemplate::create([
+                'org_id' => $user->org_id,
+                'case_type' => $tpl->case_type,
+                'label' => $payload['label'] ?? $tpl->label,
+                'description' => array_key_exists('description', $payload) ? $payload['description'] : $tpl->description,
+                'steps' => $payload['steps'] ?? $tpl->steps,
+                'is_system' => false,
+                'is_default' => false,
+                'created_by' => $user->id,
+            ]);
+            return response()->json(['data' => $fork, 'forked_from' => $tpl->id]);
         }
-        $tpl->update($request->only(['label', 'description', 'steps']));
+
+        $tpl->update($payload);
         return response()->json(['data' => $tpl]);
     }
 
