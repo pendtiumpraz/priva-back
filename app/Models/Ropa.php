@@ -101,6 +101,151 @@ class Ropa extends Model
         return $statuses;
     }
 
+    /**
+     * Unified DPO list (Sprint E2). Reads wizard_data.dpo_team.dpo_list[]
+     * when set; falls back to legacy single {dpo_name, dpo_email, dpo_phone,
+     * dpo_jabatan} so existing records still render. Always returns an array
+     * of {user_id, name, email, phone, jabatan}.
+     */
+    public function getDpoListAttribute(): array
+    {
+        $wiz = $this->wizard_data ?? [];
+        $dpoTeam = $wiz['dpo_team'] ?? [];
+        $list = $dpoTeam['dpo_list'] ?? null;
+
+        if (is_array($list) && !empty($list)) {
+            return array_values(array_map(fn($d) => [
+                'user_id' => $d['user_id'] ?? null,
+                'name' => $d['name'] ?? '',
+                'email' => $d['email'] ?? '',
+                'phone' => $d['phone'] ?? '',
+                'jabatan' => $d['jabatan'] ?? '',
+            ], $list));
+        }
+
+        // Legacy fallback — single DPO stored in flat fields.
+        if (!empty($dpoTeam['dpo_name']) || !empty($dpoTeam['dpo_email'])) {
+            return [[
+                'user_id' => null,
+                'name' => $dpoTeam['dpo_name'] ?? '',
+                'email' => $dpoTeam['dpo_email'] ?? '',
+                'phone' => $dpoTeam['dpo_phone'] ?? '',
+                'jabatan' => $dpoTeam['dpo_jabatan'] ?? '',
+            ]];
+        }
+        return [];
+    }
+
+    /** Same shape as getDpoListAttribute but for PIC rows. */
+    public function getPicListAttribute(): array
+    {
+        $wiz = $this->wizard_data ?? [];
+        $dpoTeam = $wiz['dpo_team'] ?? [];
+        $list = $dpoTeam['pic_list'] ?? null;
+
+        if (is_array($list) && !empty($list)) {
+            return array_values(array_map(fn($p) => [
+                'user_id' => $p['user_id'] ?? null,
+                'name' => $p['name'] ?? '',
+                'email' => $p['email'] ?? '',
+                'jabatan' => $p['jabatan'] ?? '',
+                'divisi' => $p['divisi'] ?? '',
+            ], $list));
+        }
+
+        if (!empty($dpoTeam['pic_name'])) {
+            return [[
+                'user_id' => null,
+                'name' => $dpoTeam['pic_name'] ?? '',
+                'email' => $dpoTeam['pic_email'] ?? '',
+                'jabatan' => $dpoTeam['pic_jabatan'] ?? '',
+                'divisi' => $dpoTeam['pic_divisi'] ?? '',
+            ]];
+        }
+        return [];
+    }
+
+    /**
+     * Unified sistem_terkait list — either new array [{system_id, name, lokasi}]
+     * or a single legacy string. Always returns an array of objects.
+     */
+    public function getSistemListAttribute(): array
+    {
+        $wiz = $this->wizard_data ?? [];
+        $info = $wiz['informasi_pemrosesan'] ?? [];
+        $raw = $info['sistem_terkait'] ?? null;
+
+        if (is_array($raw) && !empty($raw)) {
+            return array_values(array_map(function ($s) {
+                if (is_array($s)) {
+                    return [
+                        'system_id' => $s['system_id'] ?? null,
+                        'name' => $s['name'] ?? '',
+                        'lokasi' => $s['lokasi'] ?? '',
+                    ];
+                }
+                // Legacy: array of plain strings.
+                return ['system_id' => null, 'name' => (string)$s, 'lokasi' => ''];
+            }, $raw));
+        }
+
+        if (is_string($raw) && $raw !== '') {
+            return [['system_id' => null, 'name' => $raw, 'lokasi' => '']];
+        }
+        return [];
+    }
+
+    /**
+     * Retention policy rows resolved with master data lookup.
+     * wizard_data.retensi_keamanan.retensi_list[] = [{policy_id, scope_data_type, catatan}]
+     * Returns flattened rows with full policy fields joined from
+     * retention_policies (so the export blade can render without extra query).
+     */
+    public function getRetensiRowsAttribute(): array
+    {
+        $wiz = $this->wizard_data ?? [];
+        $ret = $wiz['retensi_keamanan'] ?? [];
+        $list = $ret['retensi_list'] ?? null;
+
+        if (!is_array($list) || empty($list)) {
+            // Legacy: single masa_retensi string fallback.
+            $legacy = $ret['masa_retensi'] ?? $this->retention_period;
+            if (!empty($legacy)) {
+                return [[
+                    'policy_id' => null,
+                    'name' => $legacy,
+                    'duration_value' => null,
+                    'duration_unit' => null,
+                    'trigger_event' => $ret['prosedur_pemusnahan'] ?? null,
+                    'disposal_method' => null,
+                    'scope_data_type' => null,
+                    'catatan' => null,
+                ]];
+            }
+            return [];
+        }
+
+        $policyIds = array_values(array_filter(array_map(fn($r) => $r['policy_id'] ?? null, $list)));
+        $policies = $policyIds
+            ? RetentionPolicy::whereIn('id', $policyIds)->get()->keyBy('id')
+            : collect();
+
+        return array_values(array_map(function ($row) use ($policies) {
+            $p = $policies->get($row['policy_id'] ?? null);
+            return [
+                'policy_id' => $row['policy_id'] ?? null,
+                'name' => $p?->name ?? ($row['name'] ?? ''),
+                'duration_value' => $p?->duration_value,
+                'duration_unit' => $p?->duration_unit,
+                'trigger_event' => $p?->trigger_event,
+                'disposal_method' => $p?->disposal_method,
+                'legal_basis' => $p?->legal_basis,
+                'scope_data_type' => $row['scope_data_type'] ?? null,
+                'catatan' => $row['catatan'] ?? null,
+            ];
+        }, $list));
+    }
+
     public function organization()
     {
         return $this->belongsTo(Organization::class, 'org_id');
