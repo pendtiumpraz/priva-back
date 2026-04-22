@@ -27,7 +27,13 @@ class DocumentTemplateController extends Controller
             })
             ->orderByDesc('is_default')
             ->orderBy('name')
-            ->get();
+            ->get()
+            ->map(function ($t) {
+                // Merge DEFAULT_CONFIG with stored partial so frontend always
+                // has every field populated — avoids UI crashes on undefined.
+                $t->config = $t->mergedConfig();
+                return $t;
+            });
 
         // TenantTheme has several NOT NULL columns (name, palette). We only
         // care about reading active_document_template_id here — do NOT
