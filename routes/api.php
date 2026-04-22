@@ -236,6 +236,11 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::post('/breach/{breachId}/containment', [\App\Http\Controllers\Api\ContainmentController::class, 'addStep'])->middleware('permission:breach,write');
         Route::put('/breach/{breachId}/containment/{stepKey}', [\App\Http\Controllers\Api\ContainmentController::class, 'updateStep'])->middleware('permission:breach,write');
         Route::delete('/breach/{breachId}/containment/{stepKey}', [\App\Http\Controllers\Api\ContainmentController::class, 'removeStep'])->middleware('permission:breach,write');
+
+        // Breach PDF report generators (accept ?size=a4|letter|legal|a3|a5|folio & ?orientation=portrait|landscape)
+        Route::get('/breach/{id}/pdf/komdigi', [\App\Http\Controllers\Api\BreachReportController::class, 'komdigi'])->middleware('permission:breach,read');
+        Route::get('/breach/{id}/pdf/subject-letter', [\App\Http\Controllers\Api\BreachReportController::class, 'subjectLetter'])->middleware('permission:breach,read');
+        Route::get('/breach/{id}/pdf/full-report', [\App\Http\Controllers\Api\BreachReportController::class, 'fullReport'])->middleware('permission:breach,read');
         Route::get('/raci-matrix', [\App\Http\Controllers\Api\ContainmentController::class, 'getRaciMatrix']);
         Route::put('/raci-matrix', [\App\Http\Controllers\Api\ContainmentController::class, 'updateRaciMatrix']);
 
