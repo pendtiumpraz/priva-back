@@ -100,6 +100,13 @@ class UserController extends Controller
         if ($request->filled('role')) {
             $query->where('role', $request->role);
         }
+        // Role exclude — accept comma-separated list, e.g. ?exclude_roles=admin,superadmin,root
+        if ($request->filled('exclude_roles')) {
+            $excluded = array_filter(array_map('trim', explode(',', $request->get('exclude_roles'))));
+            if (!empty($excluded)) {
+                $query->whereNotIn('role', $excluded);
+            }
+        }
 
         // Department filter — either a department UUID or a division *name*
         // (the latter for Step-0 pickers that only know the divisi label).
