@@ -162,6 +162,18 @@ class TenantStorageService
      */
     public function getLocalPathForProcessing(Organization $org, string $path): array
     {
+        // System templates live on the server's `local` disk regardless of
+        // whether the caller's tenant points at S3/MinIO/GCS. Resolving them
+        // via $this->getDisk($org) would send a cloud-storage fetch for a
+        // file that was never uploaded there (seeded only on local disk).
+        if (str_starts_with($path, 'system-templates/')) {
+            $local = Storage::disk('local');
+            if (!$local->exists($path)) {
+                throw new \RuntimeException("System template missing on server: {$path}");
+            }
+            return [$local->path($path), function () { /* noop */ }];
+        }
+
         $disk = $this->getDisk($org);
         $usesCloud = $org->storage_driver && in_array($org->storage_driver, ['s3', 'minio', 'do_spaces', 'gcs'], true);
 

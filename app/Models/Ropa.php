@@ -226,9 +226,18 @@ class Ropa extends Model
         }
 
         $policyIds = array_values(array_filter(array_map(fn($r) => $r['policy_id'] ?? null, $list)));
-        $policies = $policyIds
-            ? RetentionPolicy::whereIn('id', $policyIds)->get()->keyBy('id')
-            : collect();
+        // Guard against a missing retention_policies table: environments where
+        // migration 2026_04_22_000006 hasn't run yet must still be able to
+        // export ROPA docs. Falls back to an empty policy map so row fields
+        // default to the inline values from wizard_data.
+        try {
+            $policies = $policyIds
+                ? RetentionPolicy::whereIn('id', $policyIds)->get()->keyBy('id')
+                : collect();
+        } catch (\Throwable $e) {
+            \Log::warning('RetentionPolicy lookup failed (missing table?): ' . $e->getMessage());
+            $policies = collect();
+        }
 
         return array_values(array_map(function ($row) use ($policies) {
             $p = $policies->get($row['policy_id'] ?? null);
