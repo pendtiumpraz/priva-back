@@ -345,9 +345,22 @@ class TemplateExportController extends Controller
             'borderBottomSize' => 4, 'borderBottomColor' => self::RULE,
             'borderRightSize' => 4, 'borderRightColor' => self::RULE,
         ]);
-        $valueCell->addText($this->t($value ?: '—'), [
-            'size' => 10, 'color' => self::INK, 'name' => self::BODY_FONT,
-        ], ['spaceBefore' => 100, 'spaceAfter' => 100]);
+
+        // Multi-line values (e.g. DPO/PIC blocks) are rendered as separate
+        // paragraphs so PhpWord preserves line breaks in Word/DOCX output.
+        $lines = $value === '' || $value === null
+            ? ['—']
+            : preg_split('/\r\n|\r|\n/', $value);
+        $first = true;
+        foreach ($lines as $line) {
+            $valueCell->addText($this->t($line === '' ? ' ' : $line), [
+                'size' => 10, 'color' => self::INK, 'name' => self::BODY_FONT,
+            ], [
+                'spaceBefore' => $first ? 100 : 20,
+                'spaceAfter' => 20,
+            ]);
+            $first = false;
+        }
     }
 
     /**
@@ -429,6 +442,36 @@ class TemplateExportController extends Controller
         if (!$arr) return '-';
         if (is_array($arr)) return implode(', ', array_filter($arr)) ?: '-';
         return (string) $arr ?: '-';
+    }
+
+    /**
+     * 7-step ROPA trigger helpers — mirror RopaRiskCalculator rules so export
+     * can mark which fields actually contributed to HIGH risk.
+     */
+    private function isHighAi(?string $v): bool
+    {
+        return $v !== null && str_contains(strtolower($v), 'keputusan sepenuhnya menggunakan ai');
+    }
+
+    private function isHighAuto(?string $v): bool
+    {
+        return $v !== null && str_contains(strtolower($v), 'keputusan penuh');
+    }
+
+    private function isProfilingTrigger($v): bool
+    {
+        if (empty($v)) return false;
+        if (is_string($v)) {
+            $s = strtolower(trim($v));
+            return $s !== '' && $s !== 'not applicable';
+        }
+        if (is_array($v)) {
+            foreach ($v as $item) {
+                $s = strtolower(trim((string)$item));
+                if ($s !== '' && $s !== 'not applicable') return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -515,25 +558,55 @@ class TemplateExportController extends Controller
             $this->addInfoRow($t, 'Divisi / Departemen', $ropa->division ?? $detail['divisi'] ?? '-');
             $this->addInfoRow($t, 'Unit Kerja', $ropa->work_unit ?? $detail['unit_kerja'] ?? '-');
             $this->addInfoRow($t, 'Deskripsi Pemrosesan', $detail['deskripsi'] ?? $ropa->description ?? '-');
-            $this->addInfoRow($t, 'Risk Level', strtoupper($ropa->risk_level ?? '-'));
-            $this->addInfoRow($t, 'Sistem / Aplikasi Terkait', $detail['sistem_terkait'] ?? '-');
+            $this->addInfoRow($t, 'Risk Level', strtoupper($ropa->risk_level ?? '-') . ($ropa->risk_level_locked ? ' (override manual)' : ' (otomatis)'));
 
-            // 2. Tim DPO
+            // Multi-system via accessor
+            $sistems = $ropa->sistem_list;
+            if (!empty($sistems)) {
+                $sistemText = implode("\n", array_map(fn($s) => '• ' . $s['name'] . ($s['lokasi'] ? " ({$s['lokasi']})" : ''), $sistems));
+                $this->addInfoRow($t, 'Sistem / Aplikasi Terkait', $sistemText);
+            }
+
+            // 2. Tim DPO dan PIC — multi-row via accessor (Sprint E2)
             $this->addSectionTitle($sec, '2. Tim DPO dan PIC');
             $t = $this->makeInfoTable($sec);
-            $this->addInfoRow($t, 'Nama DPO', $dpo['dpo_name'] ?? '-');
-            $this->addInfoRow($t, 'Email DPO', $dpo['dpo_email'] ?? '-');
-            $this->addInfoRow($t, 'Telepon DPO', $dpo['dpo_phone'] ?? '-');
-            $this->addInfoRow($t, 'Jabatan DPO', $dpo['dpo_jabatan'] ?? '-');
-            $this->addInfoRow($t, 'Nama PIC', $dpo['pic_name'] ?? '-');
             $this->addInfoRow($t, 'Kategori Pemrosesan', $ropa->kategori_pemrosesan ?? $dpo['kategori_pemrosesan'] ?? '-');
+            foreach ($ropa->dpo_list as $i => $d) {
+                $label = 'DPO #' . ($i + 1);
+                $lines = array_filter([
+                    $d['name'] ?? '',
+                    $d['jabatan'] ? "Jabatan: {$d['jabatan']}" : '',
+                    $d['email'] ? "Email: {$d['email']}" : '',
+                    $d['phone'] ? "Telepon: {$d['phone']}" : '',
+                ]);
+                $this->addInfoRow($t, $label, implode("\n", $lines) ?: '-');
+            }
+            foreach ($ropa->pic_list as $i => $p) {
+                $label = 'PIC #' . ($i + 1);
+                $lines = array_filter([
+                    $p['name'] ?? '',
+                    $p['jabatan'] ? "Jabatan: {$p['jabatan']}" : '',
+                    $p['divisi'] ? "Divisi: {$p['divisi']}" : '',
+                    $p['email'] ? "Email: {$p['email']}" : '',
+                ]);
+                $this->addInfoRow($t, $label, implode("\n", $lines) ?: '-');
+            }
 
-            // 3. Informasi Pemrosesan
+            // 3. Informasi Pemrosesan + AI usage triggers (Sprint E4)
             $this->addSectionTitle($sec, '3. Informasi Pemrosesan');
             $t = $this->makeInfoTable($sec);
             $this->addInfoRow($t, 'Tujuan Pemrosesan', $ropa->purpose ?? $info['tujuan'] ?? '-');
             $this->addInfoRow($t, 'Dasar Hukum Pemrosesan', $ropa->legal_basis ?? $info['dasar_pemrosesan'] ?? '-');
             $this->addInfoRow($t, 'Detail / Keterangan Dasar Hukum', $ropa->legal_basis_detail ?? $info['legal_basis_detail'] ?? $info['keterangan_dasar'] ?? '-');
+            // Risk trigger fields — append with ⚠ when they contribute to HIGH
+            $aiLabel = $info['bantuan_ai'] ?? 'Tidak disebutkan';
+            $this->addInfoRow($t, 'Bantuan AI', $aiLabel . ($this->isHighAi($aiLabel) ? ' ⚠ HIGH trigger' : ''));
+            $otoLabel = $info['otomatis'] ?? 'Tidak disebutkan';
+            $this->addInfoRow($t, 'Pengambilan Otomatis', $otoLabel . ($this->isHighAuto($otoLabel) ? ' ⚠ HIGH trigger' : ''));
+            $profLabel = is_array($info['pemrofilan'] ?? null) ? implode(', ', $info['pemrofilan']) : ($info['pemrofilan'] ?? 'Tidak disebutkan');
+            $this->addInfoRow($t, 'Pemrofilan', $profLabel . ($this->isProfilingTrigger($info['pemrofilan'] ?? null) ? ' ⚠ HIGH trigger' : ''));
+            $newTechLabel = $info['teknologi_baru'] ?? 'Tidak disebutkan';
+            $this->addInfoRow($t, 'Teknologi Baru', $newTechLabel . ($newTechLabel === 'Ya' ? ' ⚠ HIGH trigger' : ''));
 
             // 4. Pengumpulan Data
             $this->addSectionTitle($sec, '4. Pengumpulan Data');
@@ -566,13 +639,40 @@ class TemplateExportController extends Controller
                 $this->addInfoRow($t, 'Daftar Penerima', $this->fmtArray(array_map(fn($p) => is_array($p) ? ($p['nama'] ?? $p['name'] ?? json_encode($p)) : $p, $penerima)));
             }
 
-            // 7. Retensi dan Keamanan
+            // 7. Retensi dan Keamanan — master data retensi_list (Sprint E3)
             $this->addSectionTitle($sec, '7. Retensi dan Keamanan Data');
             $t = $this->makeInfoTable($sec);
-            $this->addInfoRow($t, 'Masa Retensi', $ropa->retention_period ?? $retensi['masa_retensi'] ?? '-');
+            foreach ($ropa->retensi_rows as $i => $row) {
+                $label = count($ropa->retensi_rows) > 1 ? "Retensi #" . ($i + 1) : 'Retensi';
+                $dur = ($row['duration_unit'] ?? null) === 'indefinite'
+                    ? 'Tidak terbatas'
+                    : (($row['duration_value'] ?? '?') . ' ' . ($row['duration_unit'] ?? ''));
+                $lines = array_filter([
+                    $row['name'] ?? '',
+                    "Durasi: {$dur}",
+                    $row['trigger_event'] ? "Trigger: {$row['trigger_event']}" : '',
+                    $row['disposal_method'] ? "Metode: " . $row['disposal_method'] : '',
+                    $row['legal_basis'] ? "Dasar hukum: {$row['legal_basis']}" : '',
+                ]);
+                $this->addInfoRow($t, $label, implode("\n", $lines) ?: '-');
+            }
+            if (empty($ropa->retensi_rows)) {
+                $this->addInfoRow($t, 'Masa Retensi', $ropa->retention_period ?? $retensi['masa_retensi'] ?? '-');
+            }
             $this->addInfoRow($t, 'Prosedur Pemusnahan', $retensi['prosedur_pemusnahan'] ?? '-');
-            $this->addInfoRow($t, 'Pernah Insiden', $retensi['pernah_insiden'] ?? '-');
+            $pernahInsiden = $retensi['pernah_insiden'] ?? '-';
+            $this->addInfoRow($t, 'Pernah Insiden', $pernahInsiden . (strtolower(trim((string)$pernahInsiden)) === 'ya' ? ' ⚠ HIGH trigger' : ''));
             $this->addInfoRow($t, 'Kontrol Keamanan', $this->fmtArray($retensi['kontrol_keamanan'] ?? []));
+
+            // Risk triggers summary box (Sprint E5)
+            $triggers = $wiz['risk_triggers'] ?? null;
+            if ($triggers && !empty($triggers['reasons'])) {
+                $this->addSectionTitle($sec, 'Ringkasan Risiko (Otomatis)');
+                $t = $this->makeInfoTable($sec);
+                $this->addInfoRow($t, 'Level Terkomputasi', strtoupper($triggers['level'] ?? '-'));
+                $this->addInfoRow($t, 'Alasan', implode("\n• ", array_merge([''], $triggers['reasons'])));
+                $this->addInfoRow($t, 'Di-compute', $triggers['computed_at'] ?? '-');
+            }
 
             // Status
             $this->addSectionTitle($sec, 'Status Dokumen');

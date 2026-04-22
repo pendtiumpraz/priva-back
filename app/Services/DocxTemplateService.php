@@ -110,25 +110,42 @@ class DocxTemplateService
                     'registration_number' => 'Nomor registrasi (ROPA-YYYY-NNN)',
                     'processing_activity' => 'Deskripsi aktivitas',
                     'processing_purpose' => 'Tujuan pemrosesan',
-                    'legal_basis' => 'Dasar hukum (consent, contract, legal_obligation, dst)',
-                    'risk' => 'Tingkat risiko (LOW/MEDIUM/HIGH)',
+                    'legal_basis' => 'Dasar hukum',
+                    'risk' => 'Tingkat risiko (LOW/MEDIUM/HIGH) — auto-compute',
                     'data_controller' => 'Nama pengendali data',
                     'data_processor' => 'Nama pemroses data',
-                    'retention_period' => 'Periode retensi',
+                    'retention_period' => 'Periode retensi (legacy free-text)',
                     'security_measures' => 'Langkah keamanan (ringkas)',
-                    'dpo_name' => 'Nama DPO',
-                    'dpo_email' => 'Email DPO',
-                    'status' => 'Status dokumen (draft/approved/archived)',
+                    'dpo_name' => 'Nama DPO utama (primary, untuk fallback legacy)',
+                    'dpo_email' => 'Email DPO utama',
+                    'pic_name' => 'Nama PIC utama',
+                    'status' => 'Status dokumen',
                     'created_at' => 'Tanggal dibuat',
                     'org_name' => 'Nama organisasi',
                     'org_address' => 'Alamat organisasi',
-                    'today' => 'Tanggal hari ini (format Indonesia)',
+                    'today' => 'Tanggal hari ini',
+                    // Sprint E4 — 7-step trigger fields
+                    'bantuan_ai' => 'Penggunaan AI dalam pemrosesan',
+                    'otomatis' => 'Pengambilan keputusan otomatis',
+                    'pemrofilan' => 'Jenis pemrofilan (comma)',
+                    'teknologi_baru' => 'Teknologi baru (Ya/Tidak)',
+                    'jumlah_subjek' => 'Jumlah subjek data',
+                    'transfer_luar' => 'Transfer ke luar negeri (Ya/Tidak)',
+                    'negara_tujuan' => 'Negara tujuan transfer (jika ada)',
+                    'pernah_insiden' => 'Pernah insiden (Ya/Tidak)',
+                    'risk_triggers' => 'Ringkasan alasan risiko (bullet-joined)',
                 ],
                 'lists' => [
                     'data_categories' => 'Kategori data (comma-separated)',
                     'data_subjects' => 'Subjek data',
                     'data_recipients' => 'Penerima data',
-                    'sensitive_categories' => 'Kategori sensitif',
+                    'sensitive_categories' => 'Kategori data spesifik/sensitif',
+                    'jenis_data_umum' => 'Jenis data umum',
+                    'jenis_data_pii' => 'Jenis data PII',
+                    'dpo_list' => 'Daftar DPO (Nama · Email · Telepon · Jabatan)',
+                    'pic_list' => 'Daftar PIC (Nama · Jabatan · Divisi)',
+                    'sistem_list' => 'Daftar sistem terkait',
+                    'retensi_list' => 'Daftar retensi (Nama · Durasi · Disposal)',
                 ],
             ],
             'dpia' => [
@@ -186,36 +203,69 @@ class DocxTemplateService
 
     private function ropaPlaceholders(Ropa $r, Organization $org): array
     {
-        $data = [
+        $wiz = $r->wizard_data ?? [];
+        $info = $wiz['informasi_pemrosesan'] ?? [];
+        $peng = $wiz['pengumpulan_data'] ?? [];
+        $kirim = $wiz['pengiriman_data'] ?? [];
+        $ret = $wiz['retensi_keamanan'] ?? [];
+        $triggers = $wiz['risk_triggers']['reasons'] ?? [];
+
+        // Derive primary DPO/PIC from the unified accessor lists so legacy rows still render.
+        $dpoPrimary = $r->dpo_list[0] ?? null;
+        $picPrimary = $r->pic_list[0] ?? null;
+
+        return [
             'scalars' => [
-                'ropa_name' => $r->name ?? '',
+                'ropa_name' => $r->processing_activity ?? '',
                 'registration_number' => $r->registration_number ?? '',
-                'processing_activity' => $r->processing_activity ?? $r->activity ?? '',
-                'processing_purpose' => $r->processing_purpose ?? $r->purpose ?? '',
-                'legal_basis' => $r->legal_basis ?? '',
-                'risk' => strtoupper($r->risk ?? ''),
-                'data_controller' => $r->data_controller ?? '',
-                'data_processor' => $r->data_processor ?? '',
-                'retention_period' => $r->retention_period ?? '',
-                'security_measures' => is_array($r->security_measures)
-                    ? implode(', ', $r->security_measures)
-                    : ($r->security_measures ?? ''),
-                'dpo_name' => $r->dpo_name ?? '',
-                'dpo_email' => $r->dpo_email ?? '',
+                'processing_activity' => $r->processing_activity ?? '',
+                'processing_purpose' => $r->purpose ?? ($info['tujuan'] ?? ''),
+                'legal_basis' => $r->legal_basis ?? ($info['dasar_pemrosesan'] ?? ''),
+                'risk' => strtoupper($r->risk_level ?? ''),
+                'data_controller' => $info['kategori_pemrosesan'] ?? '',
+                'retention_period' => $r->retention_period ?? ($ret['masa_retensi'] ?? ''),
+                'security_measures' => is_array($ret['kontrol_keamanan'] ?? null)
+                    ? implode(', ', $ret['kontrol_keamanan'])
+                    : (is_array($r->security_measures) ? implode(', ', $r->security_measures) : ($r->security_measures ?? '')),
+                'dpo_name' => $dpoPrimary['name'] ?? '',
+                'dpo_email' => $dpoPrimary['email'] ?? '',
+                'pic_name' => $picPrimary['name'] ?? '',
                 'status' => $r->status ?? '',
                 'created_at' => optional($r->created_at)->isoFormat('D MMMM Y') ?? '',
                 'org_name' => $org->name ?? '',
                 'org_address' => $org->address ?? '',
                 'today' => now()->locale('id')->isoFormat('D MMMM Y'),
+                // Sprint E4 — 7-step trigger fields
+                'bantuan_ai' => $info['bantuan_ai'] ?? 'Tidak disebutkan',
+                'otomatis' => $info['otomatis'] ?? 'Tidak disebutkan',
+                'pemrofilan' => is_array($info['pemrofilan'] ?? null) ? implode(', ', $info['pemrofilan']) : ($info['pemrofilan'] ?? 'Tidak disebutkan'),
+                'teknologi_baru' => $info['teknologi_baru'] ?? 'Tidak disebutkan',
+                'jumlah_subjek' => $peng['jumlah_subjek'] ?? 'Tidak disebutkan',
+                'transfer_luar' => $kirim['transfer_luar'] ?? 'Tidak disebutkan',
+                'negara_tujuan' => $kirim['negara_tujuan'] ?? '-',
+                'pernah_insiden' => $ret['pernah_insiden'] ?? 'Tidak disebutkan',
+                'risk_triggers' => empty($triggers) ? '-' : implode(' · ', $triggers),
             ],
             'lists' => [
                 'data_categories' => $this->arr($r->data_categories),
                 'data_subjects' => $this->arr($r->data_subjects),
-                'data_recipients' => $this->arr($r->data_recipients),
-                'sensitive_categories' => $this->arr($r->sensitive_categories ?? $r->sensitive_data_categories ?? []),
+                'data_recipients' => $this->arr($r->recipients ?? []),
+                'sensitive_categories' => $this->arr($peng['jenis_data_spesifik'] ?? []),
+                'jenis_data_umum' => $this->arr($peng['jenis_data_umum'] ?? []),
+                'jenis_data_pii' => $this->arr($peng['jenis_data_pii'] ?? []),
+                // Multi-row lists — rendered as "Name · Email · Phone · Jabatan" rows joined by newline
+                'dpo_list' => array_map(fn($d) => trim("{$d['name']} · {$d['email']} · {$d['phone']} · {$d['jabatan']}", ' ·'), $r->dpo_list),
+                'pic_list' => array_map(fn($p) => trim("{$p['name']} · {$p['jabatan']} · {$p['divisi']}", ' ·'), $r->pic_list),
+                'sistem_list' => array_map(fn($s) => trim("{$s['name']}" . ($s['lokasi'] ? " ({$s['lokasi']})" : ''), ' '), $r->sistem_list),
+                'retensi_list' => array_map(function ($row) {
+                    $dur = $row['duration_unit'] === 'indefinite'
+                        ? 'tidak terbatas'
+                        : (($row['duration_value'] ?? '?') . ' ' . ($row['duration_unit'] ?? ''));
+                    $trigger = $row['trigger_event'] ? " setelah {$row['trigger_event']}" : '';
+                    return "{$row['name']} — {$dur}{$trigger}";
+                }, $r->retensi_rows),
             ],
         ];
-        return $data;
     }
 
     private function dpiaPlaceholders(Dpia $d, Organization $org): array
