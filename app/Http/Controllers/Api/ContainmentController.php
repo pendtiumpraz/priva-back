@@ -103,14 +103,17 @@ class ContainmentController extends Controller
     {
         $user = $request->user();
 
-        // Platform admins (root/superadmin at no-org scope) may delete system templates;
-        // tenants only see their own scope.
+        // Platform admins (root/superadmin at no-org scope) may delete system templates.
+        // Tenants see both their own templates AND system presets (so we can return a
+        // clear 422 instead of a 404 when they click delete on a system preset).
         $q = ContainmentTemplate::query();
         $isPlatform = in_array($user->role, ['root', 'superadmin'], true) && !$user->org_id;
         if ($isPlatform) {
             $q->whereNull('org_id');
         } else {
-            $q->where('org_id', $user->org_id);
+            $q->where(function ($qq) use ($user) {
+                $qq->where('org_id', $user->org_id)->orWhereNull('org_id');
+            });
         }
         $tpl = $q->findOrFail($id);
 

@@ -57,6 +57,22 @@
         transform: rotate({{ $c['watermark_rotate'] ?? -25 }}deg);
         z-index: -1;
     }
+    .watermark-img {
+        position: fixed; top: 25%; left: 15%; right: 15%;
+        text-align: center;
+        opacity: {{ $c['watermark_opacity'] ?? 0.08 }};
+        transform: rotate({{ $c['watermark_rotate'] ?? -25 }}deg);
+        z-index: -1;
+    }
+    .watermark-img img { max-width: 70%; height: auto; }
+    @endif
+
+    @if(($c['cover_enabled'] ?? false) && !empty($c['cover_bg_image']))
+    .cover-bg {
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        z-index: -2;
+    }
+    .cover-bg img { width: 100%; height: 100%; }
     @endif
 
     table { width: 100%; border-collapse: collapse; margin: 10px 0; }

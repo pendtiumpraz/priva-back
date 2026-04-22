@@ -7,8 +7,12 @@
 </head>
 <body>
 
-    @if(($config['watermark_enabled'] ?? false) && $config['watermark_text'])
-        <div class="watermark">{{ $config['watermark_text'] }}</div>
+    @if($config['watermark_enabled'] ?? false)
+        @if(!empty($config['watermark_image']))
+            <div class="watermark-img"><img src="{{ $config['watermark_image'] }}" alt=""></div>
+        @elseif(!empty($config['watermark_text']))
+            <div class="watermark">{{ $config['watermark_text'] }}</div>
+        @endif
     @endif
 
     @if($config['header_enabled'] ?? true)

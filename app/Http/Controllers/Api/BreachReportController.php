@@ -67,7 +67,11 @@ class BreachReportController extends Controller
 
         return Pdf::loadView($view, $payload)
             ->setPaper($size, $orientation)
-            ->setOption(['isHtml5ParserEnabled' => true, 'defaultFont' => $defaultFont]);
+            ->setOption([
+                'isHtml5ParserEnabled' => true,
+                'isRemoteEnabled' => true,
+                'defaultFont' => $defaultFont,
+            ]);
     }
 
     private function loadBreach(Request $request, string $id): BreachIncident
@@ -87,11 +91,16 @@ class BreachReportController extends Controller
         $template = \App\Models\DocumentTemplate::activeForOrg($org->id);
         $config = $template ? $template->mergedConfig() : \App\Models\DocumentTemplate::DEFAULT_CONFIG;
 
+        // Inline asset images as data URIs so dompdf always renders them.
+        $config['watermark_image'] = $this->toDataUri($config['watermark_image'] ?? null, $org);
+        $config['cover_bg_image'] = $this->toDataUri($config['cover_bg_image'] ?? null, $org);
+        $orgLogo = $settings['logo_url'] ?? ($org->logo_url ?? null);
+
         return [
             'breach' => $breach,
             'org' => $org,
             'orgName' => $org->name,
-            'orgLogoUrl' => $settings['logo_url'] ?? ($org->logo_url ?? null),
+            'orgLogoUrl' => $this->toDataUri($orgLogo, $org),
             'orgAddress' => $org->address ?? null,
             'orgWebsite' => $org->website ?? null,
             'orgEmail' => $org->email ?? null,
@@ -107,5 +116,42 @@ class BreachReportController extends Controller
             'generatedAt' => now()->locale('id')->isoFormat('D MMMM Y · HH:mm'),
             'generatedBy' => $user->name,
         ];
+    }
+
+    /**
+     * Resolve an asset URL/path to a data URI for dompdf embedding.
+     * Mirrors DocumentTemplateController::assetUrlToDataUri.
+     */
+    private function toDataUri(?string $urlOrPath, Organization $org): ?string
+    {
+        if (!$urlOrPath || str_starts_with($urlOrPath, 'data:')) return $urlOrPath;
+        try {
+            $parsed = parse_url($urlOrPath);
+            $path = $parsed['path'] ?? $urlOrPath;
+
+            if (str_contains($path, '/storage/')) {
+                $rel = ltrim(preg_replace('#^.*/storage/#', '', $path), '/');
+                $disk = \Illuminate\Support\Facades\Storage::disk('public');
+                if ($disk->exists($rel)) {
+                    return 'data:' . ($disk->mimeType($rel) ?: 'image/png') . ';base64,' . base64_encode($disk->get($rel));
+                }
+            }
+            if (preg_match('#(tenants/[a-f0-9-]+/[^?#]+)#i', $urlOrPath, $m)) {
+                $rel = $m[1];
+                $disk = app(\App\Services\TenantStorageService::class)->getPublicDisk($org);
+                if ($disk->exists($rel)) {
+                    return 'data:' . ($disk->mimeType($rel) ?: 'image/png') . ';base64,' . base64_encode($disk->get($rel));
+                }
+            }
+            if (preg_match('#^https?://#i', $urlOrPath)) {
+                $ctx = stream_context_create(['http' => ['timeout' => 4]]);
+                $bytes = @file_get_contents($urlOrPath, false, $ctx);
+                if ($bytes !== false) {
+                    $ext = strtolower(pathinfo(parse_url($urlOrPath, PHP_URL_PATH) ?? '', PATHINFO_EXTENSION)) ?: 'png';
+                    return 'data:image/' . $ext . ';base64,' . base64_encode($bytes);
+                }
+            }
+        } catch (\Throwable $e) { /* fall through */ }
+        return $urlOrPath;
     }
 }

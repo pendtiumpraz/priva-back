@@ -45,10 +45,14 @@ class DocumentTemplateController extends Controller
             ? TenantTheme::where('org_id', $orgId)->whereNotNull('active_document_template_id')->first()
             : null;
 
+        $customCount = $orgId ? DocumentTemplate::where('org_id', $orgId)->count() : 0;
+
         return response()->json([
             'data' => $rows,
             'active_id' => $theme?->active_document_template_id,
             'default_config' => DocumentTemplate::DEFAULT_CONFIG,
+            'tenant_limit' => self::TENANT_TEMPLATE_LIMIT,
+            'tenant_custom_count' => $customCount,
         ]);
     }
 
@@ -65,10 +69,25 @@ class DocumentTemplateController extends Controller
         ]);
     }
 
+    /** Max custom templates per tenant. */
+    public const TENANT_TEMPLATE_LIMIT = 3;
+
     public function store(Request $request)
     {
         $user = $request->user();
         if (!$this->canEdit($user)) return response()->json(['message' => 'Tidak diizinkan.'], 403);
+
+        // Enforce per-tenant limit on custom templates.
+        if ($user->org_id) {
+            $count = DocumentTemplate::where('org_id', $user->org_id)->count();
+            if ($count >= self::TENANT_TEMPLATE_LIMIT) {
+                return response()->json([
+                    'message' => "Batas maksimal " . self::TENANT_TEMPLATE_LIMIT . " template custom per tenant sudah tercapai. Hapus template yang tidak dipakai terlebih dahulu.",
+                    'limit' => self::TENANT_TEMPLATE_LIMIT,
+                    'current' => $count,
+                ], 422);
+            }
+        }
 
         $data = $request->validate([
             'name' => 'required|string|max:100',
@@ -123,6 +142,18 @@ class DocumentTemplateController extends Controller
             if (in_array($user->role, ['root', 'superadmin'], true) && !$user->org_id) {
                 $tpl->update($data);
                 return response()->json(['data' => $tpl]);
+            }
+
+            // Tenant edits to a system preset → fork to tenant copy. Enforce limit.
+            if ($user->org_id) {
+                $count = DocumentTemplate::where('org_id', $user->org_id)->count();
+                if ($count >= self::TENANT_TEMPLATE_LIMIT) {
+                    return response()->json([
+                        'message' => "Batas maksimal " . self::TENANT_TEMPLATE_LIMIT . " template custom per tenant sudah tercapai. Hapus template yang tidak dipakai terlebih dahulu.",
+                        'limit' => self::TENANT_TEMPLATE_LIMIT,
+                        'current' => $count,
+                    ], 422);
+                }
             }
 
             $fork = DocumentTemplate::create([
@@ -333,10 +364,16 @@ class DocumentTemplateController extends Controller
         $merged = array_merge(DocumentTemplate::DEFAULT_CONFIG, $config);
 
         $org = \App\Models\Organization::find($user->org_id);
+
+        // Inline watermark/cover images as data URIs so dompdf renders them
+        // regardless of storage driver (local /storage/, S3, etc).
+        $merged['watermark_image'] = $this->assetUrlToDataUri($merged['watermark_image'] ?? null, $org);
+        $merged['cover_bg_image'] = $this->assetUrlToDataUri($merged['cover_bg_image'] ?? null, $org);
+
         $payload = [
             'config' => $merged,
             'orgName' => $org?->name ?? 'Sample Organization',
-            'orgLogoUrl' => $org?->logo_url ?? null,
+            'orgLogoUrl' => $this->assetUrlToDataUri($org?->logo_url ?? null, $org),
             'orgAddress' => $org?->address ?? 'Sample Address',
             'orgWebsite' => $org?->website ?? 'example.com',
             'today' => now()->locale('id')->isoFormat('D MMMM Y'),
@@ -346,8 +383,71 @@ class DocumentTemplateController extends Controller
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('reports.templates.preview', $payload)
             ->setPaper($merged['page_size'] ?? 'a4')
-            ->setOption(['isHtml5ParserEnabled' => true, 'defaultFont' => $merged['font_family'] ?? 'DejaVu Sans']);
+            ->setOption([
+                'isHtml5ParserEnabled' => true,
+                'isRemoteEnabled' => true,
+                'defaultFont' => $merged['font_family'] ?? 'DejaVu Sans',
+            ]);
 
         return $pdf->stream('template-preview.pdf');
+    }
+
+    /**
+     * Convert an asset URL/path to a data URI so dompdf can embed it without
+     * needing remote HTTP fetch. Handles:
+     *   - /storage/... → Laravel public disk
+     *   - tenants/{org}/... prefix embedded in URL → tenant cloud disk
+     *   - Remote http/https URL → file_get_contents
+     * Returns the original value on any failure.
+     */
+    private function assetUrlToDataUri(?string $urlOrPath, ?\App\Models\Organization $org): ?string
+    {
+        if (!$urlOrPath) return $urlOrPath;
+
+        // Already a data URI → pass through.
+        if (str_starts_with($urlOrPath, 'data:')) return $urlOrPath;
+
+        $encode = function (string $bytes, string $mime): string {
+            return 'data:' . $mime . ';base64,' . base64_encode($bytes);
+        };
+
+        try {
+            // Local public disk — matches /storage/... path.
+            $parsed = parse_url($urlOrPath);
+            $path = $parsed['path'] ?? $urlOrPath;
+            if (str_contains($path, '/storage/')) {
+                $rel = ltrim(preg_replace('#^.*/storage/#', '', $path), '/');
+                $disk = \Illuminate\Support\Facades\Storage::disk('public');
+                if ($disk->exists($rel)) {
+                    $mime = $disk->mimeType($rel) ?: 'image/png';
+                    return $encode($disk->get($rel), $mime);
+                }
+            }
+
+            // Tenant cloud disk: extract `tenants/{uuid}/...` from URL.
+            if ($org && preg_match('#(tenants/[a-f0-9-]+/[^?#]+)#i', $urlOrPath, $m)) {
+                $rel = $m[1];
+                $ts = app(TenantStorageService::class);
+                $disk = $ts->getPublicDisk($org);
+                if ($disk->exists($rel)) {
+                    $mime = $disk->mimeType($rel) ?: 'image/png';
+                    return $encode($disk->get($rel), $mime);
+                }
+            }
+
+            // Last resort: fetch remotely.
+            if (preg_match('#^https?://#i', $urlOrPath)) {
+                $ctx = stream_context_create(['http' => ['timeout' => 4]]);
+                $bytes = @file_get_contents($urlOrPath, false, $ctx);
+                if ($bytes !== false) {
+                    $mime = 'image/' . (strtolower(pathinfo(parse_url($urlOrPath, PHP_URL_PATH) ?? '', PATHINFO_EXTENSION)) ?: 'png');
+                    return $encode($bytes, $mime);
+                }
+            }
+        } catch (\Throwable $e) {
+            \Log::debug('assetUrlToDataUri failed: ' . $e->getMessage());
+        }
+
+        return $urlOrPath;
     }
 }
