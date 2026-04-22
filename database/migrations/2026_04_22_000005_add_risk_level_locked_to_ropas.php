@@ -13,6 +13,13 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
+        // Idempotent guard: some environments already got this column from an
+        // earlier partial run / hotfix. Running `migrate` again there raised
+        // "column already exists" and blocked every later migration.
+        if (Schema::hasColumn('ropas', 'risk_level_locked')) {
+            return;
+        }
+
         Schema::table('ropas', function (Blueprint $table) {
             $table->boolean('risk_level_locked')->default(false)->after('risk_level');
         });
@@ -20,6 +27,9 @@ return new class extends Migration {
 
     public function down(): void
     {
+        if (!Schema::hasColumn('ropas', 'risk_level_locked')) {
+            return;
+        }
         Schema::table('ropas', function (Blueprint $table) {
             $table->dropColumn('risk_level_locked');
         });

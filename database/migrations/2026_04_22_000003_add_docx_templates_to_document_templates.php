@@ -18,6 +18,9 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
+        if (Schema::hasColumn('document_templates', 'docx_templates')) {
+            return;
+        }
         Schema::table('document_templates', function (Blueprint $table) {
             $table->json('docx_templates')->nullable()->after('config');
         });
@@ -25,6 +28,9 @@ return new class extends Migration {
 
     public function down(): void
     {
+        if (!Schema::hasColumn('document_templates', 'docx_templates')) {
+            return;
+        }
         Schema::table('document_templates', function (Blueprint $table) {
             $table->dropColumn('docx_templates');
         });

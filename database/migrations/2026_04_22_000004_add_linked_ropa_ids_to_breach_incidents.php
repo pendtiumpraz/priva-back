@@ -15,6 +15,9 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
+        if (Schema::hasColumn('breach_incidents', 'linked_ropa_ids')) {
+            return;
+        }
         Schema::table('breach_incidents', function (Blueprint $table) {
             $table->json('linked_ropa_ids')->nullable()->after('linked_ropa_id');
         });
@@ -22,6 +25,9 @@ return new class extends Migration {
 
     public function down(): void
     {
+        if (!Schema::hasColumn('breach_incidents', 'linked_ropa_ids')) {
+            return;
+        }
         Schema::table('breach_incidents', function (Blueprint $table) {
             $table->dropColumn('linked_ropa_ids');
         });

@@ -18,6 +18,9 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
+        if (Schema::hasTable('retention_policies')) {
+            return;
+        }
         Schema::create('retention_policies', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('org_id')->index();
