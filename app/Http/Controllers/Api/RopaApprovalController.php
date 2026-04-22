@@ -70,6 +70,28 @@ class RopaApprovalController extends Controller
 
         $this->log($ropa, 'approved', $user, 'ROPA disetujui DPO' . ($request->input('notes') ? " — catatan: {$request->input('notes')}" : ''));
 
+        // Notify creator + assignees that the ROPA was approved.
+        try {
+            $targets = array_filter(array_merge(
+                [$ropa->created_by],
+                is_array($ropa->assignees) ? $ropa->assignees : []
+            ));
+            foreach (array_unique($targets) as $uid) {
+                \App\Services\NotificationService::dispatch(
+                    kind: 'info',
+                    severity: 'low',
+                    module: 'ropa',
+                    type: 'ropa.approved',
+                    recipient: 'user:' . $uid,
+                    orgId: $ropa->org_id,
+                    title: "✅ ROPA {$ropa->registration_number} disetujui",
+                    body: 'Disetujui DPO' . ($request->input('notes') ? " — catatan: {$request->input('notes')}" : ''),
+                    actionUrl: "/ropa/{$ropa->id}",
+                    metadata: ['record_id' => $ropa->id]
+                );
+            }
+        } catch (\Throwable $e) { \Log::warning('ROPA approved notif failed: ' . $e->getMessage()); }
+
         return response()->json([
             'message' => 'ROPA disetujui.',
             'data' => $ropa->fresh(),
@@ -104,6 +126,28 @@ class RopaApprovalController extends Controller
         ]);
 
         $this->log($ropa, 'rejected', $user, "ROPA di-reject dengan catatan: {$request->input('notes')}");
+
+        // Notify creator + assignees that the ROPA was rejected and needs revision.
+        try {
+            $targets = array_filter(array_merge(
+                [$ropa->created_by],
+                is_array($ropa->assignees) ? $ropa->assignees : []
+            ));
+            foreach (array_unique($targets) as $uid) {
+                \App\Services\NotificationService::dispatch(
+                    kind: 'warning',
+                    severity: 'high',
+                    module: 'ropa',
+                    type: 'ropa.rejected',
+                    recipient: 'user:' . $uid,
+                    orgId: $ropa->org_id,
+                    title: "❌ ROPA {$ropa->registration_number} perlu revisi",
+                    body: "DPO reject dengan catatan: {$request->input('notes')}",
+                    actionUrl: "/ropa/{$ropa->id}",
+                    metadata: ['record_id' => $ropa->id, 'notes' => $request->input('notes')]
+                );
+            }
+        } catch (\Throwable $e) { \Log::warning('ROPA rejected notif failed: ' . $e->getMessage()); }
 
         return response()->json([
             'message' => 'ROPA di-reject; dikembalikan ke maker untuk revisi.',

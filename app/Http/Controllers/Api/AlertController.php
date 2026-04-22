@@ -32,9 +32,13 @@ class AlertController extends Controller
             }
         }
 
-        // "unread" shortcut
+        // "unread" shortcut — only include actionable statuses so bell list
+        // matches count() semantics. Dismissed/resolved never surface here.
         if ($request->boolean('unread')) {
             $query->whereNull('read_at');
+            if (!$request->filled('status')) {
+                $query->whereIn('status', ['open', 'acknowledged']);
+            }
         }
 
         // Stats for UI badge counts (per kind + severity)
@@ -57,17 +61,34 @@ class AlertController extends Controller
             ],
         ];
 
-        $alerts = $query->limit(min((int) $request->get('limit', 100), 500))->get();
+        // Pagination: accept page + per_page, clamp for safety.
+        $perPage = min(max((int) $request->get('per_page', $request->get('limit', 100)), 1), 500);
+        $page = max((int) $request->get('page', 1), 1);
+        $total = (clone $query)->count();
+        $alerts = $query->skip(($page - 1) * $perPage)->take($perPage)->get();
 
-        return response()->json(['data' => $alerts, 'stats' => $stats]);
+        return response()->json([
+            'data' => $alerts,
+            'stats' => $stats,
+            'meta' => [
+                'total' => $total,
+                'page' => $page,
+                'per_page' => $perPage,
+                'last_page' => max(1, (int) ceil($total / $perPage)),
+            ],
+        ]);
     }
 
-    /** Badge count for bell icon. */
+    /**
+     * Badge count for bell icon. Scoped to the same visibility as the list
+     * endpoint and uses the SAME status filter [open, acknowledged] so the
+     * badge number matches the rows the user will see in the bell dropdown.
+     */
     public function count(Request $request)
     {
-        $scoped = $this->scopedQuery($request);
-        $count = (clone $scoped)->whereNull('read_at')->whereIn('status', ['open', 'acknowledged'])->count();
-        $critical = (clone $scoped)->whereNull('read_at')->where('severity', 'critical')->whereIn('status', ['open', 'acknowledged'])->count();
+        $scoped = $this->scopedQuery($request)->whereIn('status', ['open', 'acknowledged']);
+        $count = (clone $scoped)->whereNull('read_at')->count();
+        $critical = (clone $scoped)->whereNull('read_at')->where('severity', 'critical')->count();
 
         return response()->json([
             'count' => $count,

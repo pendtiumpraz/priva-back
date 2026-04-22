@@ -96,10 +96,33 @@ class ApprovalController extends Controller
                 $record = $modelClass::find($workflow->record_id);
                 if ($record) {
                     $record->update([
-                        'status' => 'approved', 
+                        'status' => 'approved',
                         'approver_id' => $user->id,
                         'approved_at' => now(),
                     ]);
+
+                    // Notify creator + assignees that the record was approved.
+                    try {
+                        $targets = array_filter(array_merge(
+                            [$record->created_by ?? null],
+                            is_array($record->assignees) ? $record->assignees : []
+                        ));
+                        $regNum = $record->registration_number ?? '';
+                        foreach (array_unique($targets) as $uid) {
+                            \App\Services\NotificationService::dispatch(
+                                kind: 'info',
+                                severity: 'low',
+                                module: $workflow->module,
+                                type: "{$workflow->module}.approved",
+                                recipient: 'user:' . $uid,
+                                orgId: $record->org_id,
+                                title: "✅ " . strtoupper($workflow->module) . " {$regNum} disetujui",
+                                body: 'Semua step approval sudah selesai.',
+                                actionUrl: "/{$workflow->module}/{$record->id}",
+                                metadata: ['record_id' => $record->id]
+                            );
+                        }
+                    } catch (\Throwable $e) { \Log::warning('Approval approved notif failed: ' . $e->getMessage()); }
                 }
             }
         }
@@ -143,6 +166,29 @@ class ApprovalController extends Controller
             $record = $modelClass::find($workflow->record_id);
             if ($record) {
                 $record->update(['status' => 'revision']);
+
+                // Notify creator + assignees that the record was rejected with reason.
+                try {
+                    $targets = array_filter(array_merge(
+                        [$record->created_by ?? null],
+                        is_array($record->assignees) ? $record->assignees : []
+                    ));
+                    $regNum = $record->registration_number ?? '';
+                    foreach (array_unique($targets) as $uid) {
+                        \App\Services\NotificationService::dispatch(
+                            kind: 'warning',
+                            severity: 'high',
+                            module: $workflow->module,
+                            type: "{$workflow->module}.rejected",
+                            recipient: 'user:' . $uid,
+                            orgId: $record->org_id,
+                            title: "❌ " . strtoupper($workflow->module) . " {$regNum} perlu revisi",
+                            body: "Catatan reviewer: {$request->reason}",
+                            actionUrl: "/{$workflow->module}/{$record->id}",
+                            metadata: ['record_id' => $record->id, 'reason' => $request->reason]
+                        );
+                    }
+                } catch (\Throwable $e) { \Log::warning('Approval rejected notif failed: ' . $e->getMessage()); }
             }
         }
 
