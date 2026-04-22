@@ -388,6 +388,24 @@ class AiService
             'Access Control (RBAC)', 'Backup & Disaster Recovery',
             'Audit Log & Monitoring', 'Vulnerability Assessment', 'Penetration Testing',
         ];
+        // Sprint E4 — risk trigger fields (auto-risk calculator reads these)
+        $validBantuanAi = [
+            'Ya (Keputusan Sepenuhnya menggunakan AI)',
+            'Ya (Keputusan Akhir dari Manusia)',
+            'Sebagian dari Pemrosesan',
+            'Tidak menggunakan bantuan AI',
+        ];
+        $validOtomatis = [
+            'Ya, Keputusan Penuh',
+            'Ya, Keputusan Akhir dari Manusia',
+            'Sebagian dari Pemrosesan',
+            'Tidak',
+        ];
+        $validPemrofilan = [
+            'Marketing', 'Advertisement', 'Penawaran Produk',
+            'Peningkatan Pengalaman Pengguna', 'Personalisasi Konten',
+            'Lainnya', 'Not Applicable',
+        ];
 
         $system = "Kamu adalah DPO (Data Protection Officer) ahli UU PDP Indonesia.\n"
             . "Output WAJIB berupa JSON valid. JANGAN tambahkan teks apapun di luar JSON.\n\n"
@@ -404,7 +422,14 @@ class AiService
             . "— jenis_data_pii (pilih yg relevan): " . json_encode($validDataPii, JSON_UNESCAPED_UNICODE) . "\n"
             . "— kategori_pihak (pilih beberapa): " . json_encode($validKategoriPihak, JSON_UNESCAPED_UNICODE) . "\n"
             . "— kontrol_keamanan (pilih beberapa): " . json_encode($validKontrolKeamanan, JSON_UNESCAPED_UNICODE) . "\n"
-            . "— pihak_ketiga, ada_penerima, transfer_luar (pilih 1): [\"Ya\", \"Tidak\"]\n\n"
+            . "— pihak_ketiga, ada_penerima, transfer_luar, teknologi_baru (pilih 1): [\"Ya\", \"Tidak\"]\n"
+            . "— bantuan_ai (pilih 1): " . json_encode($validBantuanAi, JSON_UNESCAPED_UNICODE) . "\n"
+            . "— otomatis (pilih 1): " . json_encode($validOtomatis, JSON_UNESCAPED_UNICODE) . "\n"
+            . "— pemrofilan (pilih beberapa, array): " . json_encode($validPemrofilan, JSON_UNESCAPED_UNICODE) . "\n\n"
+            . "RISK_LEVEL OTOMATIS: risk_level akan DI-COMPUTE ulang oleh backend dari trigger wizard\n"
+            . "(bantuan_ai=Ya-penuh, otomatis=Ya-penuh, pemrofilan!=Not Applicable, teknologi_baru=Ya,\n"
+            . "jumlah_subjek=>1000, jenis_data_spesifik tidak kosong, transfer_luar=Ya, pernah_insiden=Ya).\n"
+            . "Jadi kamu TIDAK perlu set risk_level manual — cukup isi field wizard dengan jujur.\n\n"
             . "FORMAT OUTPUT:\n"
             . json_encode([
                 'processing_activity' => 'string',
@@ -424,9 +449,13 @@ class AiService
                     ],
                     'dpo_team' => [
                         'kategori_pemrosesan' => 'HARUS dari daftar kategori_pemrosesan',
-                        'dpo_name' => 'string',
-                        'dpo_email' => 'string',
-                        'dpo_phone' => 'string',
+                        // Sprint E2 — multi-DPO / multi-PIC. Isi minimal 1 DPO.
+                        'dpo_list' => [
+                            ['name' => 'string', 'email' => 'string', 'phone' => 'string', 'jabatan' => 'string'],
+                        ],
+                        'pic_list' => [
+                            ['name' => 'string', 'email' => 'string', 'jabatan' => 'string', 'divisi' => 'string'],
+                        ],
                     ],
                     'informasi_pemrosesan' => [
                         'tujuan' => 'string',
@@ -434,6 +463,11 @@ class AiService
                         'jenis_pemrosesan' => ['HARUS dari daftar jenis_pemrosesan, pilih yg relevan'],
                         'dasar_pemrosesan' => 'HARUS dari daftar dasar_pemrosesan',
                         'sistem_terkait' => ['array: nama sistem IT terkait'],
+                        // Sprint E4 — risk trigger fields
+                        'bantuan_ai' => 'HARUS dari daftar bantuan_ai',
+                        'otomatis' => 'HARUS dari daftar otomatis',
+                        'pemrofilan' => ['HARUS dari daftar pemrofilan'],
+                        'teknologi_baru' => 'Ya | Tidak',
                     ],
                     'pengumpulan_data' => [
                         'sumber_data' => 'string',
@@ -461,9 +495,21 @@ class AiService
                     ],
                     'retensi_keamanan' => [
                         'kontrol_keamanan' => ['HARUS dari daftar kontrol_keamanan, pilih yg relevan'],
-                        'masa_retensi' => 'string',
+                        // Sprint E3 — retention master data. AI can only suggest new policy
+                        // definitions; the create flow will persist them. Use inline definition
+                        // shape so the controller can create or match policies after parse.
+                        'retensi_list' => [
+                            [
+                                'name' => 'string — label retensi (e.g. "Retensi Karyawan 5 tahun")',
+                                'duration_value' => 'integer | null (null jika indefinite)',
+                                'duration_unit' => 'day | month | year | indefinite',
+                                'trigger_event' => 'string',
+                                'disposal_method' => 'delete | anonymize | archive',
+                            ],
+                        ],
+                        'masa_retensi' => 'string (legacy free-text, opsional)',
                         'prosedur_pemusnahan' => 'string',
-                        'pernah_insiden' => 'Ya, pernah terjadi | Tidak pernah',
+                        'pernah_insiden' => 'Ya | Tidak',
                     ],
                 ],
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
