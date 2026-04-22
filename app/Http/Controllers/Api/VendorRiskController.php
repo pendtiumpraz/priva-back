@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Organization;
 use App\Models\Vendor;
 use App\Models\VendorAssessment;
 use App\Services\AiService;
+use App\Services\TenantStorageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -122,16 +124,18 @@ class VendorRiskController extends Controller
     //  Sprint D3: TPRM document management
     // =========================================================
 
-    public function uploadDocument(Request $request, string $id)
+    public function uploadDocument(Request $request, string $id, TenantStorageService $storage)
     {
         $request->validate([
             'file' => 'required|file|mimes:pdf,docx,doc,xlsx|max:15360', // 15MB
         ]);
 
         $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $org = Organization::findOrFail($request->user()->org_id);
 
         $file = $request->file('file');
-        $path = $file->store("vendors/{$vendor->id}", 'local');
+        $stored = $storage->storeTenantPrivateFile($org, $file, "vendors/{$vendor->id}");
+        $path = $stored['path'];
 
         $documents = $vendor->documents ?? [];
         $documents[] = [
@@ -140,6 +144,7 @@ class VendorRiskController extends Controller
             'path' => $path,
             'type' => strtolower($file->getClientOriginalExtension()),
             'size' => $file->getSize(),
+            'driver' => $stored['driver'],
             'uploaded_at' => now()->toIso8601String(),
             'uploaded_by' => $request->user()->id,
         ];
@@ -148,22 +153,24 @@ class VendorRiskController extends Controller
         return response()->json(['message' => 'Dokumen terupload', 'data' => $documents]);
     }
 
-    public function deleteDocument(Request $request, string $id, string $docId)
+    public function deleteDocument(Request $request, string $id, string $docId, TenantStorageService $storage)
     {
         $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $org = Organization::findOrFail($request->user()->org_id);
         $docs = $vendor->documents ?? [];
         $doc = collect($docs)->firstWhere('id', $docId);
         if ($doc && !empty($doc['path'])) {
-            \Illuminate\Support\Facades\Storage::disk('local')->delete($doc['path']);
+            try { $storage->getDisk($org)->delete($doc['path']); } catch (\Throwable $e) { /* best-effort */ }
         }
         $vendor->update(['documents' => array_values(array_filter($docs, fn($d) => ($d['id'] ?? null) !== $docId))]);
 
         return response()->json(['message' => 'Dokumen dihapus', 'data' => $vendor->documents]);
     }
 
-    public function screenDocuments(Request $request, string $id)
+    public function screenDocuments(Request $request, string $id, TenantStorageService $storage)
     {
         $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $org = Organization::findOrFail($request->user()->org_id);
         $docs = $vendor->documents ?? [];
         if (count($docs) === 0) {
             return response()->json(['message' => 'Vendor tidak punya dokumen untuk di-screen'], 422);
@@ -175,8 +182,13 @@ class VendorRiskController extends Controller
         $parser = new \App\Services\DocumentParserService();
         $summaries = [];
         foreach ($docs as $d) {
-            $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($d['path'] ?? '');
-            if (!is_file($fullPath)) continue;
+            if (empty($d['path'])) continue;
+            try {
+                [$fullPath, $cleanup] = $storage->getLocalPathForProcessing($org, $d['path']);
+            } catch (\Throwable $e) {
+                \Log::warning("screenDocuments local path resolve failed for {$d['name']}: " . $e->getMessage());
+                continue;
+            }
             try {
                 $parsed = $parser->parse($fullPath, $d['type'] ?? 'pdf');
                 $summaries[] = [
@@ -185,6 +197,8 @@ class VendorRiskController extends Controller
                 ];
             } catch (\Exception $e) {
                 \Log::warning("screenDocuments parse failed for {$d['name']}: " . $e->getMessage());
+            } finally {
+                $cleanup();
             }
         }
 

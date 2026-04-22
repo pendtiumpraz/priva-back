@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\AiService;
 use App\Services\CreditService;
 use App\Services\TenantContextService;
+use App\Services\TenantStorageService;
 use App\Models\{AiResult, AiCreditLog, GapAssessment, Ropa, Dpia, BreachIncident, DsrRequest, BreachSimulation, License, Organization};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -602,15 +603,20 @@ class AiFeatureController extends Controller
 
         $file = $request->file('file');
         $ext = strtolower($file->getClientOriginalExtension());
-        $storedPath = $file->store('contract-uploads/' . $request->user()->org_id, 'local');
-        $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($storedPath);
+        $org = Organization::findOrFail($request->user()->org_id);
+        $ts = app(TenantStorageService::class);
+        $stored = $ts->storeTenantPrivateFile($org, $file, 'contract-uploads');
+        $storedPath = $stored['path'];
+        [$fullPath, $cleanup] = $ts->getLocalPathForProcessing($org, $storedPath);
 
         try {
             $parser = new \App\Services\DocumentParserService();
             $parsed = $parser->parse($fullPath, $ext);
         } catch (\Exception $e) {
+            $cleanup();
             return response()->json(['message' => 'Gagal parse dokumen: ' . $e->getMessage()], 422);
         }
+        $cleanup();
 
         $pages = [];
         foreach (($parsed['sections'] ?? []) as $idx => $sec) {
@@ -666,15 +672,20 @@ class AiFeatureController extends Controller
 
         $file = $request->file('file');
         $ext = strtolower($file->getClientOriginalExtension());
-        $storedPath = $file->store('policy-uploads/' . $request->user()->org_id, 'local');
-        $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($storedPath);
+        $org = Organization::findOrFail($request->user()->org_id);
+        $ts = app(TenantStorageService::class);
+        $stored = $ts->storeTenantPrivateFile($org, $file, 'policy-uploads');
+        $storedPath = $stored['path'];
+        [$fullPath, $cleanup] = $ts->getLocalPathForProcessing($org, $storedPath);
 
         try {
             $parser = new \App\Services\DocumentParserService();
             $parsed = $parser->parse($fullPath, $ext);
         } catch (\Exception $e) {
+            $cleanup();
             return response()->json(['message' => 'Gagal parse dokumen: ' . $e->getMessage()], 422);
         }
+        $cleanup();
 
         $pages = [];
         foreach (($parsed['sections'] ?? []) as $idx => $sec) {
@@ -1263,12 +1274,15 @@ class AiFeatureController extends Controller
         $file = $request->file('file');
         $ext = strtolower($file->getClientOriginalExtension());
 
-        // Store file in Laravel storage (local disk by default)
-        $storedPath = $file->store('contract-uploads/' . $request->user()->org_id, 'local');
+        // Tenant-aware storage (S3/MinIO/GCS when configured, else local).
+        $org = Organization::findOrFail($request->user()->org_id);
+        $ts = app(TenantStorageService::class);
+        $stored = $ts->storeTenantPrivateFile($org, $file, 'contract-uploads');
+        $storedPath = $stored['path'];
+        [$fullPath, $cleanup] = $ts->getLocalPathForProcessing($org, $storedPath);
 
         // Extract text based on file type
         $extractedText = '';
-        $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($storedPath);
 
         try {
             if ($ext === 'pdf') {
@@ -1294,10 +1308,12 @@ class AiFeatureController extends Controller
                 $extractedText = $text;
             }
         } catch (\Exception $e) {
+            $cleanup();
             return response()->json([
                 'message' => 'Gagal mengekstrak teks dari file: ' . $e->getMessage(),
             ], 422);
         }
+        $cleanup();
 
         $extractedText = trim($extractedText);
         if (mb_strlen($extractedText) < 50) {
@@ -1403,8 +1419,12 @@ class AiFeatureController extends Controller
             $file = $request->file('file');
             $ext = strtolower($file->getClientOriginalExtension());
             $fileName = $file->getClientOriginalName();
-            $storedPath = $file->store('policy-uploads/' . $request->user()->org_id, 'local');
-            $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($storedPath);
+
+            $org = Organization::findOrFail($request->user()->org_id);
+            $ts = app(TenantStorageService::class);
+            $stored = $ts->storeTenantPrivateFile($org, $file, 'policy-uploads');
+            $storedPath = $stored['path'];
+            [$fullPath, $cleanup] = $ts->getLocalPathForProcessing($org, $storedPath);
 
             try {
                 if ($ext === 'pdf') {
@@ -1430,8 +1450,10 @@ class AiFeatureController extends Controller
                     $policyText = $text;
                 }
             } catch (\Exception $e) {
+                $cleanup();
                 return response()->json(['message' => 'Gagal mengekstrak teks: ' . $e->getMessage()], 422);
             }
+            $cleanup();
         }
 
         $policyText = trim($policyText);

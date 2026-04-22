@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\Organization;
 use App\Models\TenantTheme;
 use App\Services\AiService;
+use App\Services\TenantStorageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -373,7 +374,7 @@ PROMPT;
         return response()->json(['data' => $theme], 201);
     }
 
-    public function uploadAsset(Request $request)
+    public function uploadAsset(Request $request, TenantStorageService $storage)
     {
         $request->validate([
             'file' => 'required|file|max:2048|mimes:png,jpg,jpeg,svg,webp,ico,gif',
@@ -383,14 +384,19 @@ PROMPT;
         $file = $request->file('file');
         $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension());
         $scope = $this->scope($request);
-        $scopeDir = $scope['value'] ?: 'platform';
         $filename = $request->kind . '_' . Str::random(12) . '.' . $ext;
-        $path = "themes/{$scopeDir}/{$filename}";
 
-        Storage::disk('public')->putFileAs("themes/{$scopeDir}", $file, $filename);
+        // Platform-scope (no org_id): use public disk directly — no tenant context.
+        if ($scope['value'] === null) {
+            $path = "themes/platform/{$filename}";
+            Storage::disk('public')->putFileAs('themes/platform', $file, $filename);
+            return response()->json(['url' => Storage::disk('public')->url($path), 'path' => $path]);
+        }
 
-        $url = Storage::disk('public')->url($path);
-        return response()->json(['url' => $url, 'path' => $path]);
+        // Tenant scope: route through TenantStorageService so it honors tenant cloud config.
+        $org = Organization::findOrFail($scope['value']);
+        $result = $storage->storePublicAsset($org, $file, "themes/{$request->kind}", $filename);
+        return response()->json(['url' => $result['url'], 'path' => $result['path'], 'driver' => $result['driver']]);
     }
 
     private function findScoped(Request $request, string $id): TenantTheme

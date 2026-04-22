@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\DocumentTemplate;
+use App\Models\Organization;
 use App\Models\TenantTheme;
+use App\Services\TenantStorageService;
 use Illuminate\Http\Request;
 
 /**
@@ -195,6 +197,128 @@ class DocumentTemplateController extends Controller
     private function canEdit($user): bool
     {
         return in_array($user->role, ['root', 'superadmin', 'admin'], true);
+    }
+
+    /**
+     * Upload a .docx template with placeholder variables for a specific export kind.
+     * Stores via TenantStorageService as a private tenant file and updates the
+     * active DocumentTemplate's `docx_templates` map.
+     *
+     * POST /document-templates/{id}/upload-docx  { file, kind }
+     * kind: ropa | dpia | gap
+     * Returns: { template: DocumentTemplate, kind }
+     */
+    public function uploadDocx(Request $request, string $id, TenantStorageService $storage)
+    {
+        $user = $request->user();
+        if (!$this->canEdit($user)) return response()->json(['message' => 'Tidak diizinkan.'], 403);
+        if (!$user->org_id) return response()->json(['message' => 'Upload DOCX memerlukan konteks tenant.'], 422);
+
+        $request->validate([
+            'file' => 'required|file|mimes:docx|max:10240',
+            'kind' => 'required|in:ropa,dpia,gap',
+        ]);
+
+        $tpl = DocumentTemplate::where('org_id', $user->org_id)->findOrFail($id);
+        $org = \App\Models\Organization::findOrFail($user->org_id);
+
+        $stored = $storage->storeTenantPrivateFile(
+            $org, $request->file('file'), 'docx-templates'
+        );
+
+        $map = $tpl->docx_templates ?? [];
+        // Clean up old file for this kind.
+        if (!empty($map[$request->kind]['path'])) {
+            try { $storage->getDisk($org)->delete($map[$request->kind]['path']); } catch (\Throwable $e) { /* best-effort */ }
+        }
+        $map[$request->kind] = [
+            'path' => $stored['path'],
+            'name' => $request->file('file')->getClientOriginalName(),
+            'uploaded_at' => now()->toIso8601String(),
+            'driver' => $stored['driver'],
+        ];
+        $tpl->docx_templates = $map;
+        $tpl->save();
+
+        return response()->json([
+            'message' => 'Template DOCX tersimpan.',
+            'data' => $tpl,
+            'kind' => $request->kind,
+        ]);
+    }
+
+    /**
+     * Remove a DOCX template for a kind.
+     * DELETE /document-templates/{id}/docx/{kind}
+     */
+    public function deleteDocx(Request $request, string $id, string $kind, TenantStorageService $storage)
+    {
+        $user = $request->user();
+        if (!$this->canEdit($user)) return response()->json(['message' => 'Tidak diizinkan.'], 403);
+        if (!in_array($kind, ['ropa', 'dpia', 'gap'], true)) {
+            return response()->json(['message' => 'Kind tidak valid.'], 422);
+        }
+
+        $tpl = DocumentTemplate::where('org_id', $user->org_id)->findOrFail($id);
+        $map = $tpl->docx_templates ?? [];
+        $path = $map[$kind]['path'] ?? null;
+
+        if ($path) {
+            $org = \App\Models\Organization::findOrFail($user->org_id);
+            try { $storage->getDisk($org)->delete($path); } catch (\Throwable $e) { /* best-effort */ }
+        }
+
+        unset($map[$kind]);
+        $tpl->docx_templates = $map ?: null;
+        $tpl->save();
+
+        return response()->json(['message' => 'Template DOCX dihapus.', 'data' => $tpl]);
+    }
+
+    /**
+     * Return the placeholder variable catalog for DOCX templates per kind.
+     * GET /document-templates/docx-placeholders
+     */
+    public function docxPlaceholders()
+    {
+        return response()->json([
+            'data' => \App\Services\DocxTemplateService::placeholderCatalog(),
+            'notes' => [
+                'Gunakan sintaks ${field_name} di dalam file .docx.',
+                'Upload .docx Anda per kind (ROPA / DPIA / GAP) di tab Branding → Document → DOCX Templates.',
+                'Lists tampil sebagai teks dipisah koma. Untuk tabel, gunakan TemplateProcessor cloneRow manual.',
+            ],
+        ]);
+    }
+
+    /**
+     * Upload a template asset (watermark image, cover background image, logo).
+     * Writes via TenantStorageService — honors per-tenant storage config when
+     * set, otherwise Laravel's `public` disk.
+     *
+     * POST /document-templates/upload-asset { file, kind }
+     * kind: watermark | cover | logo
+     * Returns: { url, path, driver, kind }
+     */
+    public function uploadAsset(Request $request, TenantStorageService $storage)
+    {
+        $user = $request->user();
+        if (!$this->canEdit($user)) return response()->json(['message' => 'Tidak diizinkan.'], 403);
+        if (!$user->org_id) return response()->json(['message' => 'Upload asset memerlukan konteks tenant.'], 422);
+
+        $request->validate([
+            'file' => 'required|file|max:4096|mimes:png,jpg,jpeg,webp,svg',
+            'kind' => 'required|in:watermark,cover,logo',
+        ]);
+
+        $org = Organization::findOrFail($user->org_id);
+        $result = $storage->storePublicAsset(
+            $org,
+            $request->file('file'),
+            "document-templates/{$request->kind}"
+        );
+
+        return response()->json(array_merge($result, ['kind' => $request->kind]));
     }
 
     /**

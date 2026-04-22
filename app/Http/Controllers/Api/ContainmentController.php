@@ -102,17 +102,31 @@ class ContainmentController extends Controller
     public function deleteTemplate(Request $request, string $id)
     {
         $user = $request->user();
-        $tpl = ContainmentTemplate::where('org_id', $user->org_id)->findOrFail($id);
-        if ($tpl->is_system) {
-            return response()->json(['message' => 'Template sistem tidak bisa dihapus.'], 422);
+
+        // Platform admins (root/superadmin at no-org scope) may delete system templates;
+        // tenants only see their own scope.
+        $q = ContainmentTemplate::query();
+        $isPlatform = in_array($user->role, ['root', 'superadmin'], true) && !$user->org_id;
+        if ($isPlatform) {
+            $q->whereNull('org_id');
+        } else {
+            $q->where('org_id', $user->org_id);
+        }
+        $tpl = $q->findOrFail($id);
+
+        if ($tpl->is_system && !$isPlatform) {
+            return response()->json([
+                'message' => 'Template sistem adalah default bawaan platform yang dibagikan ke semua tenant — tidak dapat dihapus per-tenant. Klik "Edit" untuk membuat salinan yang bisa Anda sesuaikan atau hapus.',
+            ], 422);
         }
 
-        // Block soft-delete if any active breach in this tenant still uses it.
-        // Tenant must switch those breaches to another template first.
-        $inUseCount = \App\Models\BreachIncident::where('org_id', $user->org_id)
-            ->where('containment_template_id', $tpl->id)
-            ->whereNull('deleted_at')
-            ->count();
+        // Block soft-delete if any active breach still uses it (tenant scope or platform scope).
+        $usageQuery = \App\Models\BreachIncident::where('containment_template_id', $tpl->id)
+            ->whereNull('deleted_at');
+        if (!$isPlatform) {
+            $usageQuery->where('org_id', $user->org_id);
+        }
+        $inUseCount = $usageQuery->count();
         if ($inUseCount > 0) {
             return response()->json([
                 'message' => "Tidak bisa dihapus — masih dipakai oleh {$inUseCount} breach aktif. Ganti template di breach tersebut dulu.",

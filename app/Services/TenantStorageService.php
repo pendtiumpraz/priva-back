@@ -79,6 +79,108 @@ class TenantStorageService
     }
 
     /**
+     * Resolve a URL-generating disk for a tenant. Used for assets that must
+     * be web-accessible (logos, watermarks, cover images).
+     *
+     * - If tenant has cloud config (S3/MinIO/GCS): use that (always URL-capable).
+     * - Otherwise: fall back to Laravel's `public` disk (served via storage:link).
+     *   NOT `filesystems.default` (usually `local` which has no public URL).
+     */
+    public function getPublicDisk(Organization $org): FilesystemAdapter
+    {
+        if ($org->storage_driver && $org->storage_config) {
+            return $this->getDisk($org);
+        }
+        return Storage::disk('public');
+    }
+
+    /**
+     * Store a publicly-accessible asset and return {path, url}.
+     *
+     * Uses tenant cloud storage when configured, else the Laravel `public` disk.
+     * Caller provides a stable directory (e.g. "document-templates/watermark").
+     */
+    public function storePublicAsset(Organization $org, UploadedFile $file, string $directory, ?string $filename = null): array
+    {
+        $disk = $this->getPublicDisk($org);
+        $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'bin');
+        $name = $filename ?: (pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME) . '_' . bin2hex(random_bytes(4)) . '.' . $ext);
+        $name = preg_replace('/[^a-zA-Z0-9._-]/', '_', $name);
+        $basePath = "tenants/{$org->id}/" . trim($directory, '/') . '/';
+        $path = $basePath . $name;
+
+        $disk->put($path, file_get_contents($file->getRealPath()), 'public');
+
+        try {
+            $url = $disk->url($path);
+        } catch (\Throwable $e) {
+            $url = $path;
+        }
+
+        return [
+            'path' => $path,
+            'url'  => $url,
+            'driver' => $org->storage_driver ?: 'public',
+        ];
+    }
+
+    /**
+     * Store a private tenant file (evidence, uploaded contract for AI analysis, etc).
+     * Returns {path, driver}. No public URL generated.
+     *
+     * Uses tenant cloud storage when configured, else Laravel's `local` disk.
+     */
+    public function storeTenantPrivateFile(Organization $org, UploadedFile $file, string $directory, ?string $filename = null): array
+    {
+        $disk = $org->storage_driver && $org->storage_config
+            ? $this->getDisk($org)
+            : Storage::disk('local');
+
+        $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'bin');
+        $name = $filename ?: (pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME) . '_' . bin2hex(random_bytes(4)) . '.' . $ext);
+        $name = preg_replace('/[^a-zA-Z0-9._-]/', '_', $name);
+        $basePath = "tenants/{$org->id}/" . trim($directory, '/') . '/';
+        $path = $basePath . $name;
+
+        $disk->put($path, file_get_contents($file->getRealPath()));
+
+        return [
+            'path'   => $path,
+            'driver' => $org->storage_driver ?: 'local',
+        ];
+    }
+
+    /**
+     * Get a local filesystem path for processing (PhpWord/PhpSpreadsheet/OCR).
+     *
+     * - If tenant uses local/default disk: returns native ->path().
+     * - If tenant uses cloud (S3/GCS/MinIO): downloads to a temp file and
+     *   returns that path. Caller is responsible for unlinking the temp file
+     *   after processing (second return value is a cleanup closure).
+     *
+     * Returns [localPath, cleanupClosure].
+     */
+    public function getLocalPathForProcessing(Organization $org, string $path): array
+    {
+        $disk = $this->getDisk($org);
+        $usesCloud = $org->storage_driver && in_array($org->storage_driver, ['s3', 'minio', 'do_spaces', 'gcs'], true);
+
+        if (!$usesCloud) {
+            return [$disk->path($path), function () { /* noop */ }];
+        }
+
+        if (!$disk->exists($path)) {
+            throw new \RuntimeException("Tenant cloud file not found: {$path}");
+        }
+
+        $ext = pathinfo($path, PATHINFO_EXTENSION) ?: 'tmp';
+        $tmp = tempnam(sys_get_temp_dir(), 'privasimu_') . '.' . $ext;
+        file_put_contents($tmp, $disk->get($path));
+
+        return [$tmp, function () use ($tmp) { if (is_file($tmp)) @unlink($tmp); }];
+    }
+
+    /**
      * Get file contents from tenant storage.
      */
     public function getTenantFileContents(Organization $org, string $path): ?string

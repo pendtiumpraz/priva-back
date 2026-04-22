@@ -14,9 +14,11 @@ use App\Models\BreachSimulation;
 use App\Models\DsrRequest;
 use App\Models\ConsentCollectionPoint;
 use App\Models\InformationSystem;
+use App\Models\Organization;
 use App\Services\AiAgentToolExecutor;
 use App\Services\CreditService;
 use App\Services\DocumentParserService;
+use App\Services\TenantStorageService;
 use App\Http\Controllers\Api\AiProviderController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -173,9 +175,17 @@ class AiAgentController extends Controller
                 $attachmentType = $isImage ? 'image' : 'document';
                 $attachmentName = $fileName;
 
-                // Save to storage
-                $storagePath = $file->store('chat-attachments/' . ($orgId ?: 'system'), 'public');
-                $attachmentUrl = '/storage/' . $storagePath;
+                // Route through TenantStorageService so it honors tenant-configured cloud storage.
+                if ($orgId && ($org = Organization::find($orgId))) {
+                    $result = app(TenantStorageService::class)->storePublicAsset(
+                        $org, $file, 'chat-attachments'
+                    );
+                    $attachmentUrl = $result['url'];
+                } else {
+                    // System/no-tenant conversation — fall back to public disk.
+                    $storagePath = $file->store('chat-attachments/system', 'public');
+                    $attachmentUrl = '/storage/' . $storagePath;
+                }
 
             } catch (\Throwable $e) {
                 \Log::error('AI Agent Failed to save attachment: ' . $e->getMessage());

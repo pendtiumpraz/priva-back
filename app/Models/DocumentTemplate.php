@@ -11,11 +11,12 @@ class DocumentTemplate extends Model
 
     protected $fillable = [
         'org_id', 'name', 'description', 'preview_image',
-        'config', 'is_default', 'is_system', 'usage_count', 'created_by',
+        'config', 'docx_templates', 'is_default', 'is_system', 'usage_count', 'created_by',
     ];
 
     protected $casts = [
         'config' => 'array',
+        'docx_templates' => 'array',
         'is_default' => 'boolean',
         'is_system' => 'boolean',
         'usage_count' => 'integer',

@@ -256,6 +256,12 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         });
         // Preview endpoint — generates a sample PDF with given template config
         Route::post('/document-templates/preview', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'preview'])->name('document-templates.preview');
+        // Upload watermark/cover/logo asset → tenant storage (or public disk fallback)
+        Route::post('/document-templates/upload-asset', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'uploadAsset']);
+        // DOCX template upload/delete + placeholder catalog
+        Route::get('/document-templates/docx-placeholders', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'docxPlaceholders']);
+        Route::post('/document-templates/{id}/upload-docx', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'uploadDocx']);
+        Route::delete('/document-templates/{id}/docx/{kind}', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'deleteDocx']);
         Route::get('/raci-matrix', [\App\Http\Controllers\Api\ContainmentController::class, 'getRaciMatrix']);
         Route::put('/raci-matrix', [\App\Http\Controllers\Api\ContainmentController::class, 'updateRaciMatrix']);
 

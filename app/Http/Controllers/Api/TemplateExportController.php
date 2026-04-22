@@ -11,6 +11,9 @@ use PhpOffice\PhpWord\SimpleType\Jc;
 use App\Models\Ropa;
 use App\Models\Dpia;
 use App\Models\GapAssessment;
+use App\Models\DocumentTemplate;
+use App\Models\Organization;
+use App\Services\DocxTemplateService;
 
 class TemplateExportController extends Controller
 {
@@ -428,12 +431,54 @@ class TemplateExportController extends Controller
         return (string) $arr ?: '-';
     }
 
+    /**
+     * If tenant has uploaded a custom .docx template for `$kind`, render via
+     * DocxTemplateService and return a streamed download. Returns null when
+     * no tenant template exists (caller falls back to built-in generator).
+     *
+     * On render error, logs + returns null (fallback to built-in).
+     */
+    private function tryRenderFromTenantTemplate(string $kind, $model, string $baseFileName)
+    {
+        $user = auth()->user();
+        if (!$user || !$user->org_id) return null;
+
+        $docTpl = DocumentTemplate::activeForOrg($user->org_id);
+        if (!$docTpl || empty(($docTpl->docx_templates ?? [])[$kind]['path'] ?? null)) return null;
+
+        $org = Organization::find($user->org_id);
+        if (!$org) return null;
+
+        try {
+            $svc = app(DocxTemplateService::class);
+            $tempFile = match ($kind) {
+                'ropa' => $svc->renderRopa($model, $docTpl, $org),
+                'dpia' => $svc->renderDpia($model, $docTpl, $org),
+                'gap'  => $svc->renderGap($model, $docTpl, $org),
+                default => null,
+            };
+            if (!$tempFile) return null;
+
+            while (ob_get_level() > 0) { ob_end_clean(); }
+            return response()->download($tempFile, $baseFileName, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            ])->deleteFileAfterSend(true);
+        } catch (\Throwable $e) {
+            \Log::warning("Tenant DOCX template render failed ({$kind}): " . $e->getMessage());
+            return null;
+        }
+    }
+
     // ================================================================
     //  ROPA EXPORT
     // ================================================================
     public function exportRopa($id)
     {
         $ropa = Ropa::where('org_id', auth()->user()->org_id)->findOrFail($id);
+
+        // Custom tenant template wins when present.
+        $outputFileName = 'ROPA_' . ($ropa->registration_number ?? 'export') . '.docx';
+        if ($resp = $this->tryRenderFromTenantTemplate('ropa', $ropa, $outputFileName)) return $resp;
 
         try {
             $phpWord = new PhpWord();
@@ -559,6 +604,9 @@ class TemplateExportController extends Controller
     public function exportDpia($id)
     {
         $dpia = Dpia::with('ropa')->where('org_id', auth()->user()->org_id)->findOrFail($id);
+
+        $outputFileName = 'DPIA_' . ($dpia->registration_number ?? 'export') . '.docx';
+        if ($resp = $this->tryRenderFromTenantTemplate('dpia', $dpia, $outputFileName)) return $resp;
 
         try {
             $phpWord = new PhpWord();
@@ -855,6 +903,9 @@ class TemplateExportController extends Controller
     public function exportGapReport($id)
     {
         $gap = GapAssessment::where('org_id', auth()->user()->org_id)->findOrFail($id);
+
+        $outputFileName = 'Gap_Assessment_Report_' . str_replace(' ', '_', $gap->version ?? 'export') . '.docx';
+        if ($resp = $this->tryRenderFromTenantTemplate('gap', $gap, $outputFileName)) return $resp;
 
         try {
             $phpWord = new PhpWord();

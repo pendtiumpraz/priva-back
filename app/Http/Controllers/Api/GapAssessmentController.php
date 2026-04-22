@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\GapAssessment;
 use App\Models\CustomGapQuestion;
+use App\Models\Organization;
+use App\Services\TenantStorageService;
 use Illuminate\Http\Request;
 
 class GapAssessmentController extends Controller
@@ -278,21 +280,24 @@ class GapAssessmentController extends Controller
     /**
      * Permanent delete
      */
-    public function forceDelete(string $id)
+    public function forceDelete(string $id, TenantStorageService $storage)
     {
         $assessment = GapAssessment::onlyTrashed()->findOrFail($id);
-        
-        // Cleanup attachments
-        if ($assessment->attachments) {
+        $org = Organization::find($assessment->org_id);
+
+        if ($assessment->attachments && $org) {
+            $disk = $storage->getPublicDisk($org);
             foreach ($assessment->attachments as $questionPaths) {
-                if (is_array($questionPaths)) {
-                    foreach ($questionPaths as $path) {
-                        if ($path) \Illuminate\Support\Facades\Storage::disk('public')->delete($path);
+                if (!is_array($questionPaths)) continue;
+                foreach ($questionPaths as $att) {
+                    $path = is_array($att) ? ($att['path'] ?? null) : $att;
+                    if ($path) {
+                        try { $disk->delete($path); } catch (\Throwable $e) { /* best-effort */ }
                     }
                 }
             }
         }
-        
+
         $assessment->forceDelete();
 
         return response()->json(['message' => 'Assessment permanently deleted']);
@@ -302,7 +307,7 @@ class GapAssessmentController extends Controller
     // Evidence Upload (Sprint B3)
     // =============================================
 
-    public function uploadEvidence(Request $request, string $id)
+    public function uploadEvidence(Request $request, string $id, TenantStorageService $storage)
     {
         $request->validate([
             'question_id' => 'required|string',
@@ -310,25 +315,27 @@ class GapAssessmentController extends Controller
         ]);
 
         $assessment = GapAssessment::findOrFail($id);
-        
+        $org = Organization::findOrFail($assessment->org_id);
         $file = $request->file('file');
-        $path = $file->storeAs(
-            "org/{$assessment->org_id}/gap/{$assessment->id}/evidence",
-            uniqid() . '_' . preg_replace('/[^A-Za-z0-9.\-]/', '_', $file->getClientOriginalName()),
-            'public'
+
+        $result = $storage->storePublicAsset(
+            $org,
+            $file,
+            "gap/{$assessment->id}/evidence"
         );
 
         $attachments = $assessment->attachments ?? [];
         $qId = $request->question_id;
-        
+
         if (!isset($attachments[$qId])) {
             $attachments[$qId] = [];
         }
-        
+
         $attachments[$qId][] = [
-            'path' => $path,
-            'url' => asset('storage/' . $path),
+            'path' => $result['path'],
+            'url' => $result['url'],
             'name' => $file->getClientOriginalName(),
+            'driver' => $result['driver'],
             'uploaded_at' => now()->toIso8601String()
         ];
 

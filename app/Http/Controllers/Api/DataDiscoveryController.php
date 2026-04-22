@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\InformationSystem;
 use App\Models\AuditLog;
+use App\Models\Organization;
 use App\Services\DatabaseScanner;
 use App\Services\PiiDetector;
+use App\Services\TenantStorageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -1100,11 +1102,18 @@ class DataDiscoveryController extends Controller
         ]);
 
         $file = $request->file('file');
-        $path = $file->store('ocr-uploads/' . $request->user()->org_id, 'local');
-        $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($path);
+        $org = Organization::findOrFail($request->user()->org_id);
+        $ts = app(TenantStorageService::class);
+        $stored = $ts->storeTenantPrivateFile($org, $file, 'ocr-uploads');
+        $path = $stored['path'];
+        [$fullPath, $cleanup] = $ts->getLocalPathForProcessing($org, $path);
 
-        $ocr = new \App\Services\OcrScannerService();
-        $result = $ocr->extractText($fullPath, $request->user()->org_id);
+        try {
+            $ocr = new \App\Services\OcrScannerService();
+            $result = $ocr->extractText($fullPath, $request->user()->org_id);
+        } finally {
+            $cleanup();
+        }
         $text = $result['text'] ?? '';
 
         // Inline PII regex detection — Indonesian-first patterns
