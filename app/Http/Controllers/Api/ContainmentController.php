@@ -412,4 +412,88 @@ class ContainmentController extends Controller
         $org->save();
         return response()->json(['data' => $data['matrix']]);
     }
+
+    /**
+     * Apply a RACI template to an active breach (Phase G1). Overwrites each
+     * step's `raci` with the template entry whose key matches step.category.
+     * Unknown categories keep their existing RACI.
+     *
+     * POST /breach/{id}/apply-raci-template  { template_id }
+     */
+    public function applyRaciTemplate(Request $request, string $breachId)
+    {
+        $user = $request->user();
+        if (!in_array($user->role, ['root', 'superadmin', 'admin', 'dpo', 'maker'], true)) {
+            return response()->json(['message' => 'Tidak diizinkan.'], 403);
+        }
+
+        $data = $request->validate(['template_id' => 'required|uuid']);
+        $breach = BreachIncident::where('org_id', $user->org_id)->findOrFail($breachId);
+
+        $tpl = \App\Models\RaciTemplate::where(function ($q) use ($user) {
+                $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
+            })->findOrFail($data['template_id']);
+
+        $checklist = $breach->containment_checklist ?? [];
+        if (!is_array($checklist) || empty($checklist)) {
+            return response()->json([
+                'message' => 'Breach ini belum punya containment checklist. Apply SOP template dulu atau isi manual.',
+            ], 422);
+        }
+
+        $matrix = $tpl->matrix ?? [];
+        foreach ($checklist as $key => $step) {
+            $cat = is_array($step) ? ($step['category'] ?? null) : null;
+            if ($cat && isset($matrix[$cat])) {
+                $checklist[$key]['raci'] = $matrix[$cat];
+            }
+        }
+        $breach->update(['containment_checklist' => $checklist]);
+        $tpl->increment('usage_count');
+
+        return response()->json([
+            'data' => $breach->fresh(),
+            'applied_template' => $tpl->only(['id', 'name']),
+        ]);
+    }
+
+    /**
+     * Bulk-save RACI for all steps of a breach from the matrix modal.
+     * Accepts a map of { stepKey: RACIEntry }. Only RACI is touched — other
+     * step fields (done/notes/evidence) are preserved.
+     *
+     * PUT /breach/{id}/containment-raci  { raci: { stepKey: {...} } }
+     */
+    public function updateRaciForBreach(Request $request, string $breachId)
+    {
+        $user = $request->user();
+        if (!in_array($user->role, ['root', 'superadmin', 'admin', 'dpo', 'maker'], true)) {
+            return response()->json(['message' => 'Tidak diizinkan.'], 403);
+        }
+
+        $data = $request->validate([
+            'raci' => 'required|array',
+            'raci.*.responsible' => 'nullable|string|max:100',
+            'raci.*.accountable' => 'nullable|string|max:100',
+            'raci.*.consulted' => 'nullable|array',
+            'raci.*.informed' => 'nullable|array',
+        ]);
+
+        $breach = BreachIncident::where('org_id', $user->org_id)->findOrFail($breachId);
+        $checklist = $breach->containment_checklist ?? [];
+        if (!is_array($checklist)) $checklist = [];
+
+        foreach ($data['raci'] as $stepKey => $entry) {
+            if (!isset($checklist[$stepKey])) continue; // ignore phantom step keys
+            $checklist[$stepKey]['raci'] = [
+                'responsible' => (string) ($entry['responsible'] ?? ''),
+                'accountable' => (string) ($entry['accountable'] ?? ''),
+                'consulted'   => array_values(array_filter(array_map('strval', (array) ($entry['consulted'] ?? [])))),
+                'informed'    => array_values(array_filter(array_map('strval', (array) ($entry['informed'] ?? [])))),
+            ];
+        }
+        $breach->update(['containment_checklist' => $checklist]);
+
+        return response()->json(['data' => $breach->fresh()]);
+    }
 }

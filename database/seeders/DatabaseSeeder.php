@@ -23,6 +23,8 @@ class DatabaseSeeder extends Seeder
             // refreshes config/docx paths without duplicating rows.
             DocumentTemplateSeeder::class,
             NexusCanonicalDocxSeeder::class,
+            // RACI template presets for breach containment matrix editor.
+            RaciTemplateSeeder::class,
         ]);
 
         if (User::where('email', 'superadmin@privasimu.com')->exists()) {

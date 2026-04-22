@@ -265,6 +265,25 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/raci-matrix', [\App\Http\Controllers\Api\ContainmentController::class, 'getRaciMatrix']);
         Route::put('/raci-matrix', [\App\Http\Controllers\Api\ContainmentController::class, 'updateRaciMatrix']);
 
+        // Per-breach RACI matrix edit (Phase G1) — single save endpoint the
+        // matrix modal posts to. Apply-template overlays tenant RACI presets.
+        Route::put('/breach/{id}/containment-raci', [\App\Http\Controllers\Api\ContainmentController::class, 'updateRaciForBreach'])->middleware('permission:breach,write');
+        Route::post('/breach/{id}/apply-raci-template', [\App\Http\Controllers\Api\ContainmentController::class, 'applyRaciTemplate'])->middleware('permission:breach,write');
+
+        // RACI template library (per-tenant, with system presets)
+        Route::prefix('raci-templates')->middleware('permission:breach,read')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\RaciTemplateController::class, 'index']);
+            Route::get('/trash', [\App\Http\Controllers\Api\RaciTemplateController::class, 'trash']);
+            Route::get('/{id}', [\App\Http\Controllers\Api\RaciTemplateController::class, 'show']);
+        });
+        Route::prefix('raci-templates')->middleware('permission:breach,write')->group(function () {
+            Route::post('/', [\App\Http\Controllers\Api\RaciTemplateController::class, 'store']);
+            Route::put('/{id}', [\App\Http\Controllers\Api\RaciTemplateController::class, 'update']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\RaciTemplateController::class, 'destroy']);
+            Route::post('/{id}/restore', [\App\Http\Controllers\Api\RaciTemplateController::class, 'restore']);
+            Route::delete('/{id}/force', [\App\Http\Controllers\Api\RaciTemplateController::class, 'forceDelete']);
+        });
+
         // Retention master data (Sprint E3) — reusable library referenced from ROPA wizard step 7
         Route::prefix('retention-policies')->middleware('permission:ropa,read')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'index']);
