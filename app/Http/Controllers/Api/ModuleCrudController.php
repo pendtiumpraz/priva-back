@@ -143,6 +143,37 @@ class ModuleCrudController extends Controller
     }
 
     /**
+     * Recompute ROPA risk_level from 7-step wizard triggers (Sprint E1).
+     * Writes `wizard_data.risk_triggers` for audit trail and returns the
+     * patched data array (caller reassigns).
+     *
+     * Honors risk_level_locked — if true, user-set level is preserved but
+     * the triggers/reasons are still recorded for transparency.
+     */
+    private function applyRopaAutoRisk(array $data): array
+    {
+        $wizard = $data['wizard_data'] ?? [];
+        if (!is_array($wizard)) $wizard = [];
+
+        $result = app(\App\Services\RopaRiskCalculator::class)->calculate($wizard);
+
+        $wizard['risk_triggers'] = [
+            'level' => $result['level'],
+            'triggers' => $result['triggers'],
+            'reasons' => $result['reasons'],
+            'computed_at' => now()->toIso8601String(),
+        ];
+        $data['wizard_data'] = $wizard;
+
+        $locked = filter_var($data['risk_level_locked'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        if (!$locked) {
+            $data['risk_level'] = $result['level'];
+        }
+
+        return $data;
+    }
+
+    /**
      * Keep `linked_ropa_ids` (array) and legacy `linked_ropa_id` (single FK)
      * in sync so both old queries/views and new multi-select UI work.
      *
@@ -264,18 +295,8 @@ class ModuleCrudController extends Controller
                         $data['category_id'] ?? null,
                         $data['custom_number'] ?? null
                     );
-                    // Auto-risk: if data_categories contain sensitive types → auto HIGH
-                    $sensitiveKeywords = ['kesehatan', 'biometrik', 'genetik', 'anak', 'keuangan', 'ras', 'agama', 'orientasi seksual', 'pandangan politik'];
-                    $categories = $data['data_categories'] ?? [];
-                    if (is_array($categories)) {
-                        $categoriesStr = strtolower(implode(' ', $categories));
-                        foreach ($sensitiveKeywords as $keyword) {
-                            if (str_contains($categoriesStr, $keyword)) {
-                                $data['risk_level'] = 'high';
-                                break;
-                            }
-                        }
-                    }
+                    // Auto-risk from 7-step wizard triggers (Sprint E1).
+                    $data = $this->applyRopaAutoRisk($data);
                     break;
                 case 'dpia':
                     $data['registration_number'] = $data['registration_number'] ?? $this->nextCode(
@@ -552,6 +573,17 @@ class ModuleCrudController extends Controller
         $payload = $request->all();
         if ($module === 'breach') {
             $payload = $this->normalizeBreachRopaLinks($payload);
+        }
+        if ($module === 'ropa') {
+            // Merge current state so calculator sees the union (wizard_data
+            // may come partially).
+            $merged = array_merge(
+                ['wizard_data' => $record->wizard_data, 'risk_level_locked' => $record->risk_level_locked, 'risk_level' => $record->risk_level],
+                $payload
+            );
+            $merged = $this->applyRopaAutoRisk($merged);
+            $payload['risk_level'] = $merged['risk_level'];
+            $payload['wizard_data'] = $merged['wizard_data'];
         }
         $record->update($payload);
 

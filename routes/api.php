@@ -265,6 +265,19 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/raci-matrix', [\App\Http\Controllers\Api\ContainmentController::class, 'getRaciMatrix']);
         Route::put('/raci-matrix', [\App\Http\Controllers\Api\ContainmentController::class, 'updateRaciMatrix']);
 
+        // Retention master data (Sprint E3) — reusable library referenced from ROPA wizard step 7
+        Route::prefix('retention-policies')->middleware('permission:ropa,read')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'index']);
+            Route::get('/{id}', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'show']);
+        });
+        Route::prefix('retention-policies')->middleware('permission:ropa,write')->group(function () {
+            Route::post('/', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'store']);
+            Route::put('/{id}', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'update']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'destroy']);
+            Route::post('/{id}/restore', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'restore']);
+            Route::delete('/{id}/force', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'forceDelete']);
+        });
+
         // =============================================
         // Contract Review CRUD
         // =============================================
