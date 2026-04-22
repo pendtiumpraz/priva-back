@@ -95,8 +95,55 @@ class DocxTemplateService
             'penghapusan_answer' => $ret['penghapusan_answer'] ?? 'Tidak',
             'insiden' => $ret['pernah_insiden'] ?? 'Tidak',
         ];
+
+        // Legacy placeholder names (tenant templates uploaded before the Nexus
+        // canonical schema rewrite). setValue is a no-op when the placeholder
+        // isn't in the template, so emitting both is harmless.
+        $dpoPrimary = $ropa->dpo_list[0] ?? [];
+        $picPrimary = $ropa->pic_list[0] ?? [];
+        $scalars += [
+            'ropa_name' => $scalars['name'] ?? '',
+            'processing_activity' => $scalars['name'] ?? '',
+            'processing_purpose' => $scalars['tujuan'] ?? '',
+            'legal_basis' => $info['dasar_pemrosesan'] ?? $ropa->legal_basis ?? '',
+            'risk' => strtoupper($ropa->risk_level ?? ''),
+            'data_controller' => $scalars['category'] ?? '',
+            'dpo_name' => $dpoPrimary['name'] ?? '',
+            'dpo_email' => $dpoPrimary['email'] ?? '',
+            'dpo_phone' => $dpoPrimary['phone'] ?? '',
+            'pic_name' => $picPrimary['name'] ?? '',
+            'status' => $ropa->status ?? '',
+            'created_at' => optional($ropa->created_at)->isoFormat('D MMMM Y') ?? '',
+            'today' => now()->locale('id')->isoFormat('D MMMM Y'),
+            'org_name' => $org->name ?? '',
+            'org_address' => $org->address ?? '',
+            'transfer_luar' => $kirim['transfer_luar'] ?? 'Tidak',
+            'pernah_insiden' => $ret['pernah_insiden'] ?? 'Tidak',
+            'risk_triggers' => is_array($wiz['risk_triggers']['reasons'] ?? null)
+                ? implode(' · ', $wiz['risk_triggers']['reasons'])
+                : '-',
+            // Some legacy templates used these comma-joined placeholders.
+            'data_categories' => is_array($ropa->data_categories) ? implode(', ', $ropa->data_categories) : '',
+            'data_subjects' => is_array($ropa->data_subjects) ? implode(', ', $ropa->data_subjects) : '',
+            'data_recipients' => is_array($ropa->recipients) ? implode(', ', $ropa->recipients) : '',
+            'sensitive_categories' => is_array($peng['jenis_data_spesifik'] ?? null)
+                ? implode(', ', $peng['jenis_data_spesifik'])
+                : '',
+            'jenis_data_umum' => is_array($peng['jenis_data_umum'] ?? null)
+                ? implode(', ', $peng['jenis_data_umum'])
+                : '',
+            'jenis_data_pii' => is_array($peng['jenis_data_pii'] ?? null)
+                ? implode(', ', $peng['jenis_data_pii'])
+                : '',
+        ];
+
         foreach ($scalars as $k => $v) {
-            $proc->setValue($k, $this->safe($v));
+            try {
+                $proc->setValue($k, $this->safe($v));
+            } catch (\Throwable $e) {
+                // Defensive: one bad placeholder shouldn't kill the whole export.
+                \Log::debug("setValue {$k} skipped: " . $e->getMessage());
+            }
         }
 
         // ─── cloneRow: DPO table ──────────────────────────────────────
@@ -221,9 +268,27 @@ class DocxTemplateService
             'dpia_number' => $dpia->registration_number ?? '',
             'count_ropa' => (string) ($dpia->ropa_id ? 1 : 0),
             'ropa_connections' => optional($dpia->ropa)->registration_number ?? '-',
+            // Legacy placeholder names — emitted alongside so tenant templates
+            // built against the pre-Nexus catalog still render.
+            'dpia_name' => $dpia->name ?? $dpia->registration_number ?? '',
+            'linked_ropa_name' => optional($dpia->ropa)->name ?? '-',
+            'risk_level' => strtoupper($dpia->risk_level ?? $dpia->risk ?? ''),
+            'necessity_assessment' => (string) ($dpia->necessity_assessment ?? ''),
+            'proportionality' => (string) ($dpia->proportionality ?? ''),
+            'residual_risk' => (string) ($dpia->residual_risk ?? ''),
+            'mitigation_plan' => is_array($dpia->mitigation_plan)
+                ? implode("\n", $dpia->mitigation_plan)
+                : (string) ($dpia->mitigation_plan ?? ''),
+            'status' => $dpia->status ?? '',
+            'org_name' => $org->name ?? '',
+            'today' => now()->locale('id')->isoFormat('D MMMM Y'),
         ];
         foreach ($scalars as $k => $v) {
-            $proc->setValue($k, $this->safe($v));
+            try {
+                $proc->setValue($k, $this->safe($v));
+            } catch (\Throwable $e) {
+                \Log::debug("setValue {$k} skipped: " . $e->getMessage());
+            }
         }
 
         // ─── cloneRow: DPO + PIC (shares name/email/phone placeholder) ─

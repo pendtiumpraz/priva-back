@@ -178,7 +178,13 @@ class TenantStorageService
         $usesCloud = $org->storage_driver && in_array($org->storage_driver, ['s3', 'minio', 'do_spaces', 'gcs'], true);
 
         if (!$usesCloud) {
-            return [$disk->path($path), function () { /* noop */ }];
+            $absolute = $disk->path($path);
+            if (!is_file($absolute)) {
+                throw new \RuntimeException(
+                    "Tenant file not found on local disk: {$path}. File mungkin belum ter-upload atau path tidak sinkron antar environment."
+                );
+            }
+            return [$absolute, function () { /* noop */ }];
         }
 
         if (!$disk->exists($path)) {
