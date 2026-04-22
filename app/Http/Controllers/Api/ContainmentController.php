@@ -81,7 +81,37 @@ class ContainmentController extends Controller
             return response()->json(['message' => 'Template sistem tidak bisa dihapus.'], 422);
         }
         $tpl->delete();
-        return response()->json(['message' => 'Template dihapus']);
+        return response()->json(['message' => 'Template dipindahkan ke trash']);
+    }
+
+    /** List trashed templates (tenant-owned only). */
+    public function listTrashed(Request $request)
+    {
+        $user = $request->user();
+        $rows = ContainmentTemplate::onlyTrashed()
+            ->where('org_id', $user->org_id)
+            ->orderByDesc('deleted_at')
+            ->get();
+        return response()->json(['data' => $rows]);
+    }
+
+    public function restoreTemplate(Request $request, string $id)
+    {
+        $user = $request->user();
+        $tpl = ContainmentTemplate::withTrashed()->where('org_id', $user->org_id)->findOrFail($id);
+        $tpl->restore();
+        return response()->json(['data' => $tpl, 'message' => 'Template dipulihkan']);
+    }
+
+    public function forceDeleteTemplate(Request $request, string $id)
+    {
+        $user = $request->user();
+        $tpl = ContainmentTemplate::withTrashed()->where('org_id', $user->org_id)->findOrFail($id);
+        if ($tpl->is_system) {
+            return response()->json(['message' => 'Template sistem tidak bisa di-hard-delete.'], 422);
+        }
+        $tpl->forceDelete();
+        return response()->json(['message' => 'Template dihapus permanen']);
     }
 
     /** Apply a template to a breach — seeds containment_checklist. */
@@ -115,6 +145,8 @@ class ContainmentController extends Controller
 
         $data = $request->validate([
             'done' => 'nullable|boolean',
+            'skipped' => 'nullable|boolean',
+            'skipped_reason' => 'nullable|string|max:500',
             'notes' => 'nullable|string|max:2000',
             'evidence_files' => 'nullable|array',
             'evidence_files.*' => 'string',
@@ -131,12 +163,27 @@ class ContainmentController extends Controller
         $step = $checklist[$stepKey];
         $prevAssignee = $step['assignee_user_id'] ?? null;
 
-        foreach (['done', 'notes', 'evidence_files', 'assignee_user_id', 'assignee_group', 'raci'] as $k) {
+        foreach (['done', 'skipped', 'skipped_reason', 'notes', 'evidence_files', 'assignee_user_id', 'assignee_group', 'raci'] as $k) {
             if (array_key_exists($k, $data)) {
                 $step[$k] = $data[$k];
             }
         }
+        // Mark as skipped — track who + when + reason. Skipping auto-unsets `done`.
+        if (!empty($data['skipped'])) {
+            $step['done'] = false;
+            $step['skipped'] = true;
+            $step['skipped_by'] = $user->id;
+            $step['skipped_at'] = now()->toIso8601String();
+            $step['completed_by'] = null;
+            $step['completed_at'] = null;
+        } elseif (isset($data['skipped']) && !$data['skipped']) {
+            $step['skipped'] = false;
+            $step['skipped_by'] = null;
+            $step['skipped_at'] = null;
+            $step['skipped_reason'] = null;
+        }
         if (!empty($data['done']) && empty($step['completed_by'])) {
+            $step['skipped'] = false; // mutually exclusive
             $step['completed_by'] = $user->id;
             $step['completed_at'] = now()->toIso8601String();
         } elseif (isset($data['done']) && !$data['done']) {

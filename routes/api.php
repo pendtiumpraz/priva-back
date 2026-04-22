@@ -228,9 +228,12 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         // =============================================
         Route::prefix('containment-templates')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\ContainmentController::class, 'listTemplates']);
+            Route::get('/trash', [\App\Http\Controllers\Api\ContainmentController::class, 'listTrashed']);
             Route::post('/', [\App\Http\Controllers\Api\ContainmentController::class, 'createTemplate'])->middleware('permission:breach,write');
             Route::put('/{id}', [\App\Http\Controllers\Api\ContainmentController::class, 'updateTemplate'])->middleware('permission:breach,write');
             Route::delete('/{id}', [\App\Http\Controllers\Api\ContainmentController::class, 'deleteTemplate'])->middleware('permission:breach,write');
+            Route::post('/{id}/restore', [\App\Http\Controllers\Api\ContainmentController::class, 'restoreTemplate'])->middleware('permission:breach,write');
+            Route::delete('/{id}/force', [\App\Http\Controllers\Api\ContainmentController::class, 'forceDeleteTemplate'])->middleware('permission:breach,write');
         });
         Route::post('/breach/{breachId}/apply-template', [\App\Http\Controllers\Api\ContainmentController::class, 'applyTemplate'])->middleware('permission:breach,write');
         Route::post('/breach/{breachId}/containment', [\App\Http\Controllers\Api\ContainmentController::class, 'addStep'])->middleware('permission:breach,write');
