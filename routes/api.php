@@ -241,6 +241,18 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/breach/{id}/pdf/komdigi', [\App\Http\Controllers\Api\BreachReportController::class, 'komdigi'])->middleware('permission:breach,read');
         Route::get('/breach/{id}/pdf/subject-letter', [\App\Http\Controllers\Api\BreachReportController::class, 'subjectLetter'])->middleware('permission:breach,read');
         Route::get('/breach/{id}/pdf/full-report', [\App\Http\Controllers\Api\BreachReportController::class, 'fullReport'])->middleware('permission:breach,read');
+
+        // Document Templates — per-tenant picker + customization
+        Route::prefix('document-templates')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'index']);
+            Route::get('/{id}', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'show']);
+            Route::post('/', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'store']);
+            Route::put('/{id}', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'update']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'destroy']);
+            Route::post('/{id}/activate', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'activate']);
+        });
+        // Preview endpoint — generates a sample PDF with given template config
+        Route::post('/document-templates/preview', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'preview'])->name('document-templates.preview');
         Route::get('/raci-matrix', [\App\Http\Controllers\Api\ContainmentController::class, 'getRaciMatrix']);
         Route::put('/raci-matrix', [\App\Http\Controllers\Api\ContainmentController::class, 'updateRaciMatrix']);
 

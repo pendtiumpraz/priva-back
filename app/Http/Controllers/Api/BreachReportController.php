@@ -55,15 +55,19 @@ class BreachReportController extends Controller
 
     private function buildPdf(Request $request, string $view, BreachIncident $breach)
     {
-        $size = strtolower((string) $request->get('size', 'a4'));
+        $payload = $this->buildPayload($request, $breach);
+        $defaultSize = $payload['config']['page_size'] ?? 'a4';
+        $defaultFont = $payload['config']['font_family'] ?? 'DejaVu Sans';
+
+        $size = strtolower((string) $request->get('size', $defaultSize));
         if (!in_array($size, self::PAPER_SIZES, true)) {
             $size = 'a4';
         }
         $orientation = $request->get('orientation') === 'landscape' ? 'landscape' : 'portrait';
 
-        return Pdf::loadView($view, $this->buildPayload($request, $breach))
+        return Pdf::loadView($view, $payload)
             ->setPaper($size, $orientation)
-            ->setOption(['isHtml5ParserEnabled' => true, 'defaultFont' => 'DejaVu Sans']);
+            ->setOption(['isHtml5ParserEnabled' => true, 'defaultFont' => $defaultFont]);
     }
 
     private function loadBreach(Request $request, string $id): BreachIncident
@@ -79,6 +83,10 @@ class BreachReportController extends Controller
         // DPO pick: anyone with role=dpo, fallback to caller
         $dpo = User::where('org_id', $org->id)->where('role', 'dpo')->first() ?? $user;
 
+        // Pull active document template config (Phase D) — null-safe fallback.
+        $template = \App\Models\DocumentTemplate::activeForOrg($org->id);
+        $config = $template ? $template->mergedConfig() : \App\Models\DocumentTemplate::DEFAULT_CONFIG;
+
         return [
             'breach' => $breach,
             'org' => $org,
@@ -91,9 +99,10 @@ class BreachReportController extends Controller
             'dpoName' => $dpo->name,
             'dpoEmail' => $dpo->email,
             'dpoPhone' => $dpo->phone ?? null,
-            'watermark' => $settings['watermark'] ?? null,
-            'documentHeader' => $settings['document_header'] ?? null,
-            'documentFooter' => $settings['document_footer'] ?? null,
+            'watermark' => $settings['watermark'] ?? ($config['watermark_text'] ?? null),
+            'documentHeader' => $settings['document_header'] ?? ($config['header_text'] ?? null),
+            'documentFooter' => $settings['document_footer'] ?? ($config['footer_text'] ?? null),
+            'config' => $config,
             'today' => now()->locale('id')->isoFormat('D MMMM Y'),
             'generatedAt' => now()->locale('id')->isoFormat('D MMMM Y · HH:mm'),
             'generatedBy' => $user->name,
