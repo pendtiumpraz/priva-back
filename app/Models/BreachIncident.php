@@ -11,7 +11,7 @@ class BreachIncident extends Model
     use HasUuids, SoftDeletes;
 
     protected $fillable = [
-        'org_id', 'incident_code', 'linked_ropa_id', 'title', 'description', 'severity', 'source',
+        'org_id', 'incident_code', 'linked_ropa_id', 'linked_ropa_ids', 'title', 'description', 'severity', 'source',
         'case_type', 'containment_template_id',
         'status', 'is_simulation', 'affected_data_types', 'affected_subjects_count',
         'root_cause', 'containment_actions', 'containment_checklist', 'remediation_plan',
@@ -27,6 +27,7 @@ class BreachIncident extends Model
         'affected_data_types' => 'array', 'containment_checklist' => 'array',
         'notification_template' => 'array', 'timeline_log' => 'array',
         'custom_raci' => 'array', 'containment_steps' => 'array',
+        'linked_ropa_ids' => 'array',
         'notification_deadline' => 'datetime', 'detected_at' => 'datetime',
         'assessed_at' => 'datetime', 'contained_at' => 'datetime', 'closed_at' => 'datetime',
         'notified_komdigi_at' => 'datetime', 'notified_subjects_at' => 'datetime',
@@ -35,8 +36,35 @@ class BreachIncident extends Model
         'description' => EncryptedString::class,
     ];
 
+    protected $appends = ['linked_ropas'];
+
     public function organization()
     {
         return $this->belongsTo(Organization::class , 'org_id');
+    }
+
+    /** Primary (first) ROPA — kept for legacy callers. */
+    public function ropa()
+    {
+        return $this->belongsTo(Ropa::class, 'linked_ropa_id');
+    }
+
+    /**
+     * Materialized list of linked ROPAs. Uses the new linked_ropa_ids array
+     * when populated, else falls back to the legacy single linked_ropa_id.
+     * Returns [{id, registration_number, processing_activity}] so the UI
+     * can label the multi-select without a second query.
+     */
+    public function getLinkedRopasAttribute(): array
+    {
+        $ids = $this->linked_ropa_ids;
+        if (empty($ids) && $this->linked_ropa_id) {
+            $ids = [$this->linked_ropa_id];
+        }
+        if (empty($ids) || !is_array($ids)) return [];
+
+        return Ropa::whereIn('id', $ids)
+            ->get(['id', 'registration_number', 'processing_activity'])
+            ->toArray();
     }
 }

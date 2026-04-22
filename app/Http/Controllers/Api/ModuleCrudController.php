@@ -132,14 +132,44 @@ class ModuleCrudController extends Controller
     {
         $model = $this->getModel($module);
         $query = $model->newQuery();
-        
+
         if ($request->user()->role !== 'superadmin') {
             $query->where('org_id', $request->user()->org_id);
         } elseif ($request->filled('org_id')) {
             $query->where('org_id', $request->org_id);
         }
-        
+
         return $query;
+    }
+
+    /**
+     * Keep `linked_ropa_ids` (array) and legacy `linked_ropa_id` (single FK)
+     * in sync so both old queries/views and new multi-select UI work.
+     *
+     * Resolution rules:
+     *  - If linked_ropa_ids is sent → it wins. linked_ropa_id = first element.
+     *  - Else if linked_ropa_id is sent → linked_ropa_ids = [that id] (or null).
+     *  - Else both untouched.
+     *
+     * Empty arrays / empty strings clear both fields.
+     */
+    private function normalizeBreachRopaLinks(array $data): array
+    {
+        if (array_key_exists('linked_ropa_ids', $data)) {
+            $ids = $data['linked_ropa_ids'];
+            if (is_string($ids)) {
+                $decoded = json_decode($ids, true);
+                $ids = is_array($decoded) ? $decoded : [];
+            }
+            $ids = is_array($ids) ? array_values(array_filter(array_map('strval', $ids), fn($v) => $v !== '')) : [];
+            $data['linked_ropa_ids'] = $ids ?: null;
+            $data['linked_ropa_id'] = $ids[0] ?? null;
+        } elseif (array_key_exists('linked_ropa_id', $data)) {
+            $id = $data['linked_ropa_id'] ?: null;
+            $data['linked_ropa_id'] = $id;
+            $data['linked_ropa_ids'] = $id ? [$id] : null;
+        }
+        return $data;
     }
 
     /**
@@ -222,6 +252,8 @@ class ModuleCrudController extends Controller
                 $data['notification_required'] = filter_var($data['notification_required'] ?? false, FILTER_VALIDATE_BOOLEAN);
                 $data['is_simulation'] = filter_var($data['is_simulation'] ?? false, FILTER_VALIDATE_BOOLEAN);
                 $data['affected_subjects_count'] = (int) ($data['affected_subjects_count'] ?? 0);
+                // Multi-ROPA linkage: normalize linked_ropa_ids + sync legacy linked_ropa_id.
+                $data = $this->normalizeBreachRopaLinks($data);
             }
 
             // Auto-generate codes
@@ -517,7 +549,11 @@ class ModuleCrudController extends Controller
         $newWizard = $request->input('wizard_data', []);
         $oldStatus = $record->status;
         $oldAssignees = $record->assignees ?? [];
-        $record->update($request->all());
+        $payload = $request->all();
+        if ($module === 'breach') {
+            $payload = $this->normalizeBreachRopaLinks($payload);
+        }
+        $record->update($payload);
 
         // Notify new assignees added on this update (ROPA/DPIA).
         try {
