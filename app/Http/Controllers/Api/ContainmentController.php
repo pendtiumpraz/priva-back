@@ -194,6 +194,89 @@ class ContainmentController extends Controller
         return response()->json(['data' => $step]);
     }
 
+    /**
+     * Add a custom step to a breach's containment checklist.
+     * Scope: per-breach only — tenant templates stay untouched.
+     * RACI auto-assigned based on the step's category (or "general").
+     */
+    public function addStep(Request $request, string $breachId)
+    {
+        $user = $request->user();
+        if (!$this->canEditContainment($user)) {
+            return response()->json(['message' => 'Hanya DPO/admin yang boleh mengubah checklist.'], 403);
+        }
+        $breach = BreachIncident::where('org_id', $user->org_id)->findOrFail($breachId);
+
+        $data = $request->validate([
+            'label' => 'required|string|max:255',
+            'category' => 'nullable|string|max:40',
+            'requires_evidence' => 'nullable|boolean',
+            'hint' => 'nullable|string|max:500',
+        ]);
+
+        $category = $data['category'] ?? 'general';
+        $defaultRaci = ContainmentTemplate::CATEGORY_RACI[$category] ?? ContainmentTemplate::CATEGORY_RACI['general'];
+        $key = 'custom_' . substr(md5($data['label'] . microtime()), 0, 8);
+
+        $step = [
+            'label' => $data['label'],
+            'category' => $category,
+            'requires_evidence' => (bool) ($data['requires_evidence'] ?? false),
+            'hint' => $data['hint'] ?? null,
+            'raci' => $defaultRaci,
+            'assignee_user_id' => null,
+            'assignee_group' => null,
+            'done' => false,
+            'notes' => null,
+            'evidence_files' => [],
+            'completed_by' => null,
+            'completed_at' => null,
+            'is_custom' => true,  // flag so UI can show "Custom step" + delete button
+            'added_by' => $user->id,
+            'added_at' => now()->toIso8601String(),
+        ];
+
+        $checklist = $breach->containment_checklist ?? [];
+        $checklist[$key] = $step;
+        $breach->update(['containment_checklist' => $checklist]);
+
+        return response()->json(['data' => ['key' => $key, 'step' => $step]]);
+    }
+
+    /**
+     * Remove a step from the breach checklist. Blocks removal of
+     * already-completed steps (audit trail preservation).
+     */
+    public function removeStep(Request $request, string $breachId, string $stepKey)
+    {
+        $user = $request->user();
+        if (!$this->canEditContainment($user)) {
+            return response()->json(['message' => 'Hanya DPO/admin yang boleh mengubah checklist.'], 403);
+        }
+        $breach = BreachIncident::where('org_id', $user->org_id)->findOrFail($breachId);
+
+        $checklist = $breach->containment_checklist ?? [];
+        if (!isset($checklist[$stepKey])) {
+            return response()->json(['message' => "Step '{$stepKey}' tidak ditemukan."], 404);
+        }
+        $step = $checklist[$stepKey];
+        if (is_array($step) && !empty($step['done'])) {
+            return response()->json(['message' => 'Step yang sudah ditandai selesai tidak bisa dihapus (audit trail).'], 422);
+        }
+
+        unset($checklist[$stepKey]);
+        $breach->update(['containment_checklist' => $checklist]);
+
+        return response()->json(['message' => 'Step dihapus', 'key' => $stepKey]);
+    }
+
+    private function canEditContainment($user): bool
+    {
+        if (in_array($user->role, ['root', 'superadmin', 'admin', 'dpo'], true)) return true;
+        $tenantRole = optional($user->tenantRole)->name ?? '';
+        return str_contains(strtolower($tenantRole), 'dpo');
+    }
+
     /** Tenant-level default RACI matrix (stored in organization.settings). */
     public function getRaciMatrix(Request $request)
     {
