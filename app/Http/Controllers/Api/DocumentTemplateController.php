@@ -29,7 +29,13 @@ class DocumentTemplateController extends Controller
             ->orderBy('name')
             ->get();
 
-        $theme = $orgId ? TenantTheme::firstOrCreate(['org_id' => $orgId]) : null;
+        // TenantTheme has several NOT NULL columns (name, palette). We only
+        // care about reading active_document_template_id here — do NOT
+        // auto-create the theme row; just look it up. If none exists, the
+        // tenant hasn't picked an active template yet — that's fine.
+        $theme = $orgId
+            ? TenantTheme::where('org_id', $orgId)->whereNotNull('active_document_template_id')->first()
+            : null;
 
         return response()->json([
             'data' => $rows,
@@ -134,7 +140,23 @@ class DocumentTemplateController extends Controller
                 $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
             })->findOrFail($id);
 
-        $theme = TenantTheme::firstOrCreate(['org_id' => $user->org_id]);
+        // Create a minimal TenantTheme row if this tenant doesn't have one
+        // yet. palette/name are required NOT NULL — provide safe defaults.
+        $theme = TenantTheme::firstOrCreate(
+            ['org_id' => $user->org_id],
+            [
+                'name' => 'Default',
+                'palette' => [
+                    'primary' => '#2563eb', 'accent' => '#8b5cf6',
+                    'bg' => '#f8fafc', 'card_bg' => '#ffffff',
+                    'text' => '#0f172a', 'text_muted' => '#64748b',
+                    'border' => '#e2e8f0', 'danger' => '#dc2626', 'success' => '#16a34a',
+                ],
+                'layout_preset' => 'classic',
+                'font_family' => 'Inter',
+                'is_active' => false,
+            ]
+        );
         $theme->active_document_template_id = $tpl->id;
         $theme->save();
         $tpl->increment('usage_count');
