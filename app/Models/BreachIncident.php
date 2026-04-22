@@ -12,6 +12,7 @@ class BreachIncident extends Model
 
     protected $fillable = [
         'org_id', 'incident_code', 'linked_ropa_id', 'title', 'description', 'severity', 'source',
+        'case_type', 'containment_template_id',
         'status', 'is_simulation', 'affected_data_types', 'affected_subjects_count',
         'root_cause', 'containment_actions', 'containment_checklist', 'remediation_plan',
         'notification_required', 'notification_deadline', 'notified_komdigi_at',

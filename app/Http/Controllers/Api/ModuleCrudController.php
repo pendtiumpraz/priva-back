@@ -265,20 +265,21 @@ class ModuleCrudController extends Controller
                     if ($data['notification_required']) {
                         $data['notification_deadline'] = $data['notification_deadline'] ?? now()->addHours(72);
                     }
-                    // Auto-init containment checklist
+                    // Auto-apply case-type containment template if case_type provided.
+                    // Falls back to "other" generic template if case_type not set.
                     if (empty($data['containment_checklist'])) {
-                        $data['containment_checklist'] = [
-                            'Isolasi sistem yang terdampak' => false,
-                            'Blokir akses yang tidak sah' => false,
-                            'Preserve evidence (backup log)' => false,
-                            'Ubah credentials yang compromised' => false,
-                            'Aktifkan firewall rules tambahan' => false,
-                            'Identifikasi root cause' => false,
-                            'Hapus malware / tutup vulnerability' => false,
-                            'Patch sistem yang terdampak' => false,
-                            'Restore data dari backup' => false,
-                            'Verifikasi integritas data' => false,
-                        ];
+                        $caseType = $data['case_type'] ?? 'other';
+                        $tpl = \App\Models\ContainmentTemplate::forCase($data['org_id'], $caseType);
+                        if ($tpl) {
+                            $org = \App\Models\Organization::find($data['org_id']);
+                            $tenantRaci = is_array($org?->settings['raci_matrix'] ?? null) ? $org->settings['raci_matrix'] : null;
+                            $data['containment_checklist'] = $tpl->buildChecklistState($tenantRaci);
+                            $data['containment_template_id'] = $tpl->id;
+                            $tpl->increment('usage_count');
+                        } else {
+                            // Legacy fallback (should rarely trigger — seeder covers all case types).
+                            $data['containment_checklist'] = [];
+                        }
                     }
                     // Auto-init timeline
                     if (empty($data['timeline_log'])) {

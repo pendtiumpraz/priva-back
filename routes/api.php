@@ -224,6 +224,20 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         });
 
         // =============================================
+        // Breach Containment Templates + RACI Matrix
+        // =============================================
+        Route::prefix('containment-templates')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\ContainmentController::class, 'listTemplates']);
+            Route::post('/', [\App\Http\Controllers\Api\ContainmentController::class, 'createTemplate'])->middleware('permission:breach,write');
+            Route::put('/{id}', [\App\Http\Controllers\Api\ContainmentController::class, 'updateTemplate'])->middleware('permission:breach,write');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\ContainmentController::class, 'deleteTemplate'])->middleware('permission:breach,write');
+        });
+        Route::post('/breach/{breachId}/apply-template', [\App\Http\Controllers\Api\ContainmentController::class, 'applyTemplate'])->middleware('permission:breach,write');
+        Route::put('/breach/{breachId}/containment/{stepKey}', [\App\Http\Controllers\Api\ContainmentController::class, 'updateStep'])->middleware('permission:breach,write');
+        Route::get('/raci-matrix', [\App\Http\Controllers\Api\ContainmentController::class, 'getRaciMatrix']);
+        Route::put('/raci-matrix', [\App\Http\Controllers\Api\ContainmentController::class, 'updateRaciMatrix']);
+
+        // =============================================
         // Contract Review CRUD
         // =============================================
         Route::prefix('contract-reviews')->group(function () {
