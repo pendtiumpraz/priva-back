@@ -18,6 +18,11 @@ class DatabaseSeeder extends Seeder
         $this->call([
             MenuRegistrySeeder::class,
             RootUserSeeder::class,
+            // Document templates — preset library + Nexus canonical DOCX.
+            // Both are idempotent via updateOrCreate so re-running db:seed
+            // refreshes config/docx paths without duplicating rows.
+            DocumentTemplateSeeder::class,
+            NexusCanonicalDocxSeeder::class,
         ]);
 
         if (User::where('email', 'superadmin@privasimu.com')->exists()) {
