@@ -219,12 +219,16 @@ class IntegrationController extends Controller
     // ==================== Breach Sync (existing functionality) ====================
 
     /**
-     * Send breach to Telegram War Room
+     * Send breach to Telegram War Room.
+     *
+     * Uses the Eloquent model (not raw DB::table) so EncryptedString casts
+     * apply — otherwise the description/title ciphertext gets pushed to
+     * Telegram unreadable. See NOTIFICATION_SYSTEM_PLAN.md.
      */
     public function syncBreachTelegram(Request $request, $id)
     {
         try {
-            $breach = DB::table('breach_incidents')->where('id', $id)->first();
+            $breach = \App\Models\BreachIncident::where('org_id', $request->user()->org_id)->find($id);
             if (!$breach) return response()->json(['error' => 'Breach not found'], 404);
 
             $org = Organization::findOrFail($request->user()->org_id);
@@ -237,13 +241,7 @@ class IntegrationController extends Controller
                 ], 400);
             }
 
-            $message = "🚨 *INCIDENT ALERT: " . mb_strtoupper((string) $breach->severity) . "* 🚨\n\n";
-            $message .= "*Incident Code:* " . $breach->incident_code . "\n";
-            $message .= "*Title:* " . $breach->title . "\n";
-            $message .= "*Status:* " . mb_strtoupper((string) $breach->status) . "\n";
-            $message .= "*Detected At:* " . $breach->detected_at . "\n\n";
-            $message .= "*Description:*\n" . $breach->description . "\n\n";
-            $message .= "🔒 _Please check the Privasimu Dashboard for more details._";
+            $message = \App\Services\NotificationService::buildBreachTelegramMessage($breach);
 
             $response = Http::post("https://api.telegram.org/bot{$config['bot_token']}/sendMessage", [
                 'chat_id' => $config['chat_id'], 'text' => $message, 'parse_mode' => 'Markdown',
@@ -265,7 +263,9 @@ class IntegrationController extends Controller
     public function syncBreachSiem(Request $request, $id)
     {
         try {
-            $breach = DB::table('breach_incidents')->where('id', $id)->first();
+            // Same fix as syncBreachTelegram — use Eloquent so EncryptedString
+            // casts apply; raw DB::table bypasses them and leaks ciphertext.
+            $breach = \App\Models\BreachIncident::where('org_id', $request->user()->org_id)->find($id);
             if (!$breach) return response()->json(['error' => 'Breach not found'], 404);
 
             $org = Organization::findOrFail($request->user()->org_id);

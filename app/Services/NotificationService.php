@@ -126,6 +126,25 @@ class NotificationService
             }
         }
 
+        // Telegram fan-out: fire once per dispatch to the org's shared
+        // Telegram channel (not per-user). Only if org has integration
+        // configured. Org-level preference gate via integration_config.
+        $telegramOrgId = $orgId ?? (count($recipients) > 0 ? $recipients[0]?->org_id : null);
+        if ($telegramOrgId) {
+            try {
+                $emoji = match ($kind) { 'alert' => '🚨', 'warning' => '⚠️', 'info' => 'ℹ️', default => '🔔' };
+                $tgText = "{$emoji} *" . strtoupper($kind) . " · " . strtoupper($severity) . "*\n";
+                $tgText .= "*" . ($title ?: 'Notifikasi') . "*\n\n";
+                if ($body) $tgText .= $body . "\n\n";
+                if ($actionUrl && !str_starts_with($actionUrl, 'https://wa.me/')) {
+                    $tgText .= "_Detail:_ {$actionUrl}";
+                }
+                self::sendTelegram($telegramOrgId, $tgText);
+            } catch (\Throwable $e) {
+                \Log::warning('Telegram dispatch failed: ' . $e->getMessage());
+            }
+        }
+
         return $created;
     }
 
@@ -168,6 +187,55 @@ class NotificationService
             return $val === null || (string) $val === '1' || (string) $val === 'true';
         } catch (\Throwable $e) {
             return true;
+        }
+    }
+
+    /**
+     * Builds a Telegram-formatted Markdown message for a breach row.
+     * Pulls via Eloquent so encryption casts are applied — never receives
+     * ciphertext. Returns an empty string if the breach object is missing.
+     */
+    public static function buildBreachTelegramMessage(\App\Models\BreachIncident $breach): string
+    {
+        $sev = strtoupper($breach->severity ?? '—');
+        $status = strtoupper($breach->status ?? '—');
+        $msg  = "🚨 *INCIDENT ALERT: {$sev}* 🚨\n\n";
+        $msg .= "*Incident Code:* " . ($breach->incident_code ?? '—') . "\n";
+        $msg .= "*Title:* " . ($breach->title ?? '—') . "\n";
+        $msg .= "*Status:* {$status}\n";
+        $msg .= "*Detected At:* " . ($breach->detected_at?->toDateTimeString() ?? '—') . "\n\n";
+        if (!empty($breach->description)) {
+            $msg .= "*Description:*\n" . $breach->description . "\n\n";
+        }
+        if ($breach->affected_subjects_count) {
+            $msg .= "*Affected Subjects:* " . (int) $breach->affected_subjects_count . "\n";
+        }
+        $msg .= "\n🔒 _Check Privasimu Dashboard for full detail._";
+        return $msg;
+    }
+
+    /**
+     * Send a notification to the tenant's configured Telegram bot/chat.
+     * Silently no-op if Telegram is not configured for this org. Used by
+     * dispatch() as a side channel when user preferences have
+     * channel=telegram enabled.
+     */
+    public static function sendTelegram(string $orgId, string $text): bool
+    {
+        try {
+            $org = \App\Models\Organization::find($orgId);
+            if (!$org) return false;
+            $cfg = $org->integration_config['telegram'] ?? [];
+            if (empty($cfg['bot_token']) || empty($cfg['chat_id'])) return false;
+
+            $resp = \Illuminate\Support\Facades\Http::post(
+                "https://api.telegram.org/bot{$cfg['bot_token']}/sendMessage",
+                ['chat_id' => $cfg['chat_id'], 'text' => $text, 'parse_mode' => 'Markdown']
+            );
+            return $resp->successful();
+        } catch (\Throwable $e) {
+            \Log::warning('Telegram send failed: ' . $e->getMessage());
+            return false;
         }
     }
 

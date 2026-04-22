@@ -449,7 +449,7 @@ class ModuleCrudController extends Controller
         if ($denied = $this->checkPermission($request, $module, 'write')) return $denied;
         $record = $this->getQuery($request, $module)->findOrFail($id);
 
-        // Auto-append timeline for breach status changes
+        // Auto-append timeline + fire notifications for breach status changes.
         if ($module === 'breach' && $request->has('status') && $record->status !== $request->input('status')) {
             $statusLabels = [
                 'detected' => '🔴 Insiden terdeteksi',
@@ -459,12 +459,41 @@ class ModuleCrudController extends Controller
                 'closed' => '✅ Insiden ditutup',
             ];
             $newStatus = $request->input('status');
+            $oldBreachStatus = $record->status;
             $timeline = $record->timeline_log ?? [];
             $timeline[] = [
                 'time' => now()->format('d/m/Y H:i'),
                 'event' => $statusLabels[$newStatus] ?? "Status → {$newStatus}",
             ];
             $request->merge(['timeline_log' => $timeline]);
+
+            // Notify DPO + incident commanders on every transition.
+            // Fase notifikasi = URGENT (72h deadline mulai berjalan).
+            try {
+                $kind = $newStatus === 'notification' ? 'alert' : ($newStatus === 'closed' ? 'info' : 'warning');
+                $severity = $newStatus === 'notification' ? 'critical' : ($newStatus === 'closed' ? 'low' : 'high');
+                $body = ($statusLabels[$newStatus] ?? "Status → {$newStatus}")
+                    . ($newStatus === 'notification' ? ' · 72 jam untuk notifikasi KOMDIGI + subjek data.' : '');
+                NotificationService::dispatch(
+                    kind: $kind,
+                    severity: $severity,
+                    module: 'breach',
+                    type: "breach.status.{$newStatus}",
+                    recipient: 'role:dpo',
+                    orgId: $record->org_id,
+                    title: "Breach {$record->incident_code}: {$oldBreachStatus} → {$newStatus}",
+                    body: $body,
+                    actionUrl: "/breach/{$record->id}",
+                    metadata: [
+                        'record_id' => $record->id,
+                        'incident_code' => $record->incident_code,
+                        'old_status' => $oldBreachStatus,
+                        'new_status' => $newStatus,
+                    ]
+                );
+            } catch (\Throwable $e) {
+                \Log::warning('Breach status notif failed: ' . $e->getMessage());
+            }
         }
 
         // Assign-group lock: for ROPA/DPIA, assignees/assign_group can only
