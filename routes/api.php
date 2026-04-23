@@ -246,25 +246,27 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/breach/{id}/pdf/full-report', [\App\Http\Controllers\Api\BreachReportController::class, 'fullReport'])->middleware('permission:breach,read');
 
         // Document Templates — per-tenant picker + customization
+        // NOTE: static-path routes MUST be declared before any `{id}` route
+        // or Laravel matches "/active-map", "/preview", "/docx-placeholders"
+        // as a DocumentTemplate lookup with id="active-map" → 404 findOrFail.
         Route::prefix('document-templates')->group(function () {
+            // Static paths first
+            Route::get('/active-map', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'activeMap']);
+            Route::put('/active-map', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'updateActiveMap']);
+            Route::post('/preview', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'preview'])->name('document-templates.preview');
+            Route::post('/upload-asset', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'uploadAsset']);
+            Route::get('/docx-placeholders', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'docxPlaceholders']);
+
+            // Dynamic `{id}` paths after
             Route::get('/', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'index']);
-            Route::get('/{id}', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'show']);
             Route::post('/', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'store']);
-            Route::put('/{id}', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'update']);
-            Route::delete('/{id}', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'destroy']);
-            Route::post('/{id}/activate', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'activate']);
+            Route::post('/{id}/activate', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'activate'])->where('id', '[0-9a-fA-F-]{36}');
+            Route::post('/{id}/upload-docx', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'uploadDocx'])->where('id', '[0-9a-fA-F-]{36}');
+            Route::delete('/{id}/docx/{kind}', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'deleteDocx'])->where('id', '[0-9a-fA-F-]{36}');
+            Route::get('/{id}', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'show'])->where('id', '[0-9a-fA-F-]{36}');
+            Route::put('/{id}', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'update'])->where('id', '[0-9a-fA-F-]{36}');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'destroy'])->where('id', '[0-9a-fA-F-]{36}');
         });
-        // Preview endpoint — generates a sample PDF with given template config
-        Route::post('/document-templates/preview', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'preview'])->name('document-templates.preview');
-        // Per-kind template assignment (Phase H1)
-        Route::get('/document-templates/active-map', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'activeMap']);
-        Route::put('/document-templates/active-map', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'updateActiveMap']);
-        // Upload watermark/cover/logo asset → tenant storage (or public disk fallback)
-        Route::post('/document-templates/upload-asset', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'uploadAsset']);
-        // DOCX template upload/delete + placeholder catalog
-        Route::get('/document-templates/docx-placeholders', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'docxPlaceholders']);
-        Route::post('/document-templates/{id}/upload-docx', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'uploadDocx']);
-        Route::delete('/document-templates/{id}/docx/{kind}', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'deleteDocx']);
         Route::get('/raci-matrix', [\App\Http\Controllers\Api\ContainmentController::class, 'getRaciMatrix']);
         Route::put('/raci-matrix', [\App\Http\Controllers\Api\ContainmentController::class, 'updateRaciMatrix']);
 
