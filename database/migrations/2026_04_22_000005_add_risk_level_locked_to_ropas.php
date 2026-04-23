@@ -13,25 +13,25 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        // Idempotent guard: some environments already got this column from an
-        // earlier partial run / hotfix. Running `migrate` again there raised
-        // "column already exists" and blocked every later migration.
-        if (Schema::hasColumn('ropas', 'risk_level_locked')) {
-            return;
+        if (Schema::hasColumn('ropas', 'risk_level_locked')) return;
+        try {
+            Schema::table('ropas', function (Blueprint $table) {
+                $table->boolean('risk_level_locked')->default(false)->after('risk_level');
+            });
+        } catch (\Illuminate\Database\QueryException $e) {
+            $code = $e->errorInfo[1] ?? null;
+            if ($code === 1060 || in_array($e->getCode(), ['42701', '42S21'], true)) return;
+            throw $e;
         }
-
-        Schema::table('ropas', function (Blueprint $table) {
-            $table->boolean('risk_level_locked')->default(false)->after('risk_level');
-        });
     }
 
     public function down(): void
     {
-        if (!Schema::hasColumn('ropas', 'risk_level_locked')) {
-            return;
-        }
-        Schema::table('ropas', function (Blueprint $table) {
-            $table->dropColumn('risk_level_locked');
-        });
+        if (!Schema::hasColumn('ropas', 'risk_level_locked')) return;
+        try {
+            Schema::table('ropas', function (Blueprint $table) {
+                $table->dropColumn('risk_level_locked');
+            });
+        } catch (\Illuminate\Database\QueryException $e) { /* already gone */ }
     }
 };

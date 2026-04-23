@@ -21,18 +21,24 @@ return new class extends Migration {
         if (Schema::hasColumn('document_templates', 'docx_templates')) {
             return;
         }
-        Schema::table('document_templates', function (Blueprint $table) {
-            $table->json('docx_templates')->nullable()->after('config');
-        });
+        try {
+            Schema::table('document_templates', function (Blueprint $table) {
+                $table->json('docx_templates')->nullable()->after('config');
+            });
+        } catch (\Illuminate\Database\QueryException $e) {
+            $code = $e->errorInfo[1] ?? null;
+            if ($code === 1060 || in_array($e->getCode(), ['42701', '42S21'], true)) return;
+            throw $e;
+        }
     }
 
     public function down(): void
     {
-        if (!Schema::hasColumn('document_templates', 'docx_templates')) {
-            return;
-        }
-        Schema::table('document_templates', function (Blueprint $table) {
-            $table->dropColumn('docx_templates');
-        });
+        if (!Schema::hasColumn('document_templates', 'docx_templates')) return;
+        try {
+            Schema::table('document_templates', function (Blueprint $table) {
+                $table->dropColumn('docx_templates');
+            });
+        } catch (\Illuminate\Database\QueryException $e) { /* already gone */ }
     }
 };

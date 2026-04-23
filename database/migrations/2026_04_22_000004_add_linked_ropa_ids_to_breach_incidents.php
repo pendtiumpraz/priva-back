@@ -15,21 +15,25 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        if (Schema::hasColumn('breach_incidents', 'linked_ropa_ids')) {
-            return;
+        if (Schema::hasColumn('breach_incidents', 'linked_ropa_ids')) return;
+        try {
+            Schema::table('breach_incidents', function (Blueprint $table) {
+                $table->json('linked_ropa_ids')->nullable()->after('linked_ropa_id');
+            });
+        } catch (\Illuminate\Database\QueryException $e) {
+            $code = $e->errorInfo[1] ?? null;
+            if ($code === 1060 || in_array($e->getCode(), ['42701', '42S21'], true)) return;
+            throw $e;
         }
-        Schema::table('breach_incidents', function (Blueprint $table) {
-            $table->json('linked_ropa_ids')->nullable()->after('linked_ropa_id');
-        });
     }
 
     public function down(): void
     {
-        if (!Schema::hasColumn('breach_incidents', 'linked_ropa_ids')) {
-            return;
-        }
-        Schema::table('breach_incidents', function (Blueprint $table) {
-            $table->dropColumn('linked_ropa_ids');
-        });
+        if (!Schema::hasColumn('breach_incidents', 'linked_ropa_ids')) return;
+        try {
+            Schema::table('breach_incidents', function (Blueprint $table) {
+                $table->dropColumn('linked_ropa_ids');
+            });
+        } catch (\Illuminate\Database\QueryException $e) { /* already gone */ }
     }
 };
