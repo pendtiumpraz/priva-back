@@ -689,8 +689,13 @@ class DocxTemplateService
      */
     private function cloneBlockSafe(TemplateProcessor $proc, string $block, array $rows): void
     {
-        // Duplicate sections in the canonical template mean `${block}…${/block}`
-        // markers can appear twice. Loop until the opening `${block}` is gone.
+        // PhpWord's native cloneBlock requires the opening / closing fence to
+        // sit at the end of its own <w:p>. The Nexus canonical template puts
+        // the fences inline next to the body text (e.g. "${cat_process} …
+        // ${cat_process_name} ${/cat_process}" all in one paragraph), so
+        // native cloneBlock silently no-ops. Try native first — it preserves
+        // paragraph-level formatting when it works — then fall back to a
+        // flexible XML-level replacement that doesn't care about boundaries.
         for ($pass = 0; $pass < 5; $pass++) {
             try {
                 if (empty($rows)) {
@@ -699,12 +704,80 @@ class DocxTemplateService
                     $proc->cloneBlock($block, count($rows), true, false, array_values($rows));
                 }
             } catch (\Throwable $e) {
-                \Log::debug("cloneBlock {$block} pass {$pass} skipped: " . $e->getMessage());
-                return;
+                \Log::debug("cloneBlock {$block} pass {$pass} error: " . $e->getMessage());
             }
             $remaining = $proc->getVariables();
-            if (!in_array($block, $remaining, true)) return;
+            if (!in_array($block, $remaining, true)) break;
         }
+
+        // If native cloneBlock didn't eat the fence, do flexible replacement
+        // directly on the tempDocumentMainPart. Runs until no fence remains
+        // (handles the duplicate-section case too).
+        $remaining = $proc->getVariables();
+        if (in_array($block, $remaining, true) || in_array('/' . $block, $remaining, true)) {
+            for ($pass = 0; $pass < 10; $pass++) {
+                if (!$this->flexibleCloneBlock($proc, $block, $rows)) break;
+                $remaining = $proc->getVariables();
+                if (!in_array($block, $remaining, true) && !in_array('/' . $block, $remaining, true)) break;
+            }
+        }
+    }
+
+    /**
+     * XML-level block replacement. Finds `${block}` → `${/block}` span in
+     * the main document part (including fences), extracts the body, and
+     * replaces the whole span with N concatenated copies (or nothing when
+     * `$rows` is empty). Placeholder values inside each copy get setValue'd
+     * on the run-index-qualified form so they don't collide across copies.
+     *
+     * Returns true when a replacement happened, false when the fence wasn't
+     * found.
+     */
+    private function flexibleCloneBlock(TemplateProcessor $proc, string $block, array $rows): bool
+    {
+        $refl = new \ReflectionClass($proc);
+        $prop = $refl->getProperty('tempDocumentMainPart');
+        $prop->setAccessible(true);
+        $xml = $prop->getValue($proc);
+
+        $openStr = '${' . $block . '}';
+        $closeStr = '${/' . $block . '}';
+
+        $openPos = strpos($xml, $openStr);
+        if ($openPos === false) return false;
+        $closePos = strpos($xml, $closeStr, $openPos + strlen($openStr));
+        if ($closePos === false) return false;
+
+        // Body text WITHOUT fences. We need to remove any `<w:t>` fragments
+        // carrying just the fence and collapse surrounding whitespace-only
+        // runs so the output stays visually tidy.
+        $bodyStart = $openPos + strlen($openStr);
+        $bodyEnd = $closePos;
+        $body = substr($xml, $bodyStart, $bodyEnd - $bodyStart);
+
+        if (empty($rows)) {
+            // Drop the fences and body entirely.
+            $replacement = '';
+        } else {
+            // Build N copies of the body with per-copy variable substitution.
+            $copies = [];
+            foreach ($rows as $row) {
+                $copy = $body;
+                if (is_array($row)) {
+                    foreach ($row as $field => $value) {
+                        // Replace `${field}` with the value everywhere in the copy.
+                        $copy = str_replace('${' . $field . '}', $this->safe((string) $value), $copy);
+                    }
+                }
+                $copies[] = $copy;
+            }
+            $replacement = implode('', $copies);
+        }
+
+        // Swap `fence + body + fence` with the replacement.
+        $patched = substr($xml, 0, $openPos) . $replacement . substr($xml, $closePos + strlen($closeStr));
+        $prop->setValue($proc, $patched);
+        return true;
     }
 
     // ================================================================
