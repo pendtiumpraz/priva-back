@@ -486,7 +486,15 @@ class TemplateExportController extends Controller
         $user = auth()->user();
         if (!$user || !$user->org_id) return null;
 
-        $docTpl = DocumentTemplate::activeForOrg($user->org_id);
+        // Phase H1 — resolve per-kind assignment. tryRenderFromTenantTemplate
+        // is called with kind values that match DocumentTemplate::DOCUMENT_KINDS
+        // ('ropa', 'dpia', 'gap_report'). The map lookup falls through to
+        // default → legacy → system when no specific template is assigned.
+        $mapKind = match ($kind) {
+            'gap'  => 'gap_report',
+            default => $kind,
+        };
+        $docTpl = DocumentTemplate::activeForOrg($user->org_id, $mapKind);
         if (!$docTpl || empty(($docTpl->docx_templates ?? [])[$kind]['path'] ?? null)) return null;
 
         $org = Organization::find($user->org_id);

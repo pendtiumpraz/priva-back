@@ -28,21 +28,21 @@ class BreachReportController extends Controller
     public function komdigi(Request $request, string $id)
     {
         $breach = $this->loadBreach($request, $id);
-        $pdf = $this->buildPdf($request, 'reports.breach.komdigi', $breach);
+        $pdf = $this->buildPdf($request, 'reports.breach.komdigi', $breach, 'breach_komdigi');
         return $pdf->download("Surat-Notifikasi-KOMDIGI_{$breach->incident_code}.pdf");
     }
 
     public function subjectLetter(Request $request, string $id)
     {
         $breach = $this->loadBreach($request, $id);
-        $pdf = $this->buildPdf($request, 'reports.breach.subject', $breach);
+        $pdf = $this->buildPdf($request, 'reports.breach.subject', $breach, 'breach_subject');
         return $pdf->download("Himbauan-Keamanan-Akun_{$breach->incident_code}.pdf");
     }
 
     public function fullReport(Request $request, string $id)
     {
         $breach = $this->loadBreach($request, $id);
-        $pdf = $this->buildPdf($request, 'reports.breach.full-report', $breach);
+        $pdf = $this->buildPdf($request, 'reports.breach.full-report', $breach, 'breach_report');
         return $pdf->download("Breach-Report_{$breach->incident_code}.pdf");
     }
 
@@ -53,9 +53,9 @@ class BreachReportController extends Controller
      */
     private const PAPER_SIZES = ['a3', 'a4', 'a5', 'letter', 'legal', 'folio'];
 
-    private function buildPdf(Request $request, string $view, BreachIncident $breach)
+    private function buildPdf(Request $request, string $view, BreachIncident $breach, ?string $kind = null)
     {
-        $payload = $this->buildPayload($request, $breach);
+        $payload = $this->buildPayload($request, $breach, $kind);
         $defaultSize = $payload['config']['page_size'] ?? 'a4';
         $defaultFont = $payload['config']['font_family'] ?? 'DejaVu Sans';
 
@@ -79,7 +79,7 @@ class BreachReportController extends Controller
         return BreachIncident::where('org_id', $request->user()->org_id)->findOrFail($id);
     }
 
-    private function buildPayload(Request $request, BreachIncident $breach): array
+    private function buildPayload(Request $request, BreachIncident $breach, ?string $kind = null): array
     {
         $user = $request->user();
         $org = Organization::findOrFail($user->org_id);
@@ -87,8 +87,10 @@ class BreachReportController extends Controller
         // DPO pick: anyone with role=dpo, fallback to caller
         $dpo = User::where('org_id', $org->id)->where('role', 'dpo')->first() ?? $user;
 
-        // Pull active document template config (Phase D) — null-safe fallback.
-        $template = \App\Models\DocumentTemplate::activeForOrg($org->id);
+        // Pull active document template config (Phase D) — per-kind aware.
+        // `$kind` is one of 'breach_report' / 'breach_komdigi' / 'breach_subject'
+        // (Phase H1), falling through to map.default → legacy → system default.
+        $template = \App\Models\DocumentTemplate::activeForOrg($org->id, $kind);
         $config = $template ? $template->mergedConfig() : \App\Models\DocumentTemplate::DEFAULT_CONFIG;
 
         // Inline asset images as data URIs so dompdf always renders them.

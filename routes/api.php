@@ -256,6 +256,9 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         });
         // Preview endpoint — generates a sample PDF with given template config
         Route::post('/document-templates/preview', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'preview'])->name('document-templates.preview');
+        // Per-kind template assignment (Phase H1)
+        Route::get('/document-templates/active-map', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'activeMap']);
+        Route::put('/document-templates/active-map', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'updateActiveMap']);
         // Upload watermark/cover/logo asset → tenant storage (or public disk fallback)
         Route::post('/document-templates/upload-asset', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'uploadAsset']);
         // DOCX template upload/delete + placeholder catalog

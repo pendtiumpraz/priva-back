@@ -230,6 +230,103 @@ class DocumentTemplateController extends Controller
         return in_array($user->role, ['root', 'superadmin', 'admin'], true);
     }
 
+    /** Phase H1 — document kinds the per-kind map supports. */
+    public const DOCUMENT_KINDS = [
+        'default'         => 'Default — dipakai kalau kind tertentu tidak di-assign',
+        'ropa'            => 'ROPA Export',
+        'dpia'            => 'DPIA Export',
+        'gap_report'      => 'Gap Assessment Report',
+        'breach_report'   => 'Breach Full Report',
+        'breach_komdigi'  => 'Breach — Surat Notifikasi KOMDIGI',
+        'breach_subject'  => 'Breach — Surat Notifikasi Subjek Data',
+        'posture'         => 'Data Posture Score Report',
+    ];
+
+    /**
+     * GET /document-templates/active-map
+     *
+     * Returns:
+     *   - kinds: list of supported document kinds with labels
+     *   - map: current tenant assignment { kind: template_id }
+     *   - legacy_id: current value of TenantTheme.active_document_template_id
+     *     (shown as "default" fallback when map is empty)
+     *   - default_system_id: id of is_default=true system preset
+     */
+    public function activeMap(Request $request)
+    {
+        $user = $request->user();
+        $orgId = $user->org_id;
+        $theme = $orgId ? TenantTheme::where('org_id', $orgId)->first() : null;
+        $systemDefault = DocumentTemplate::whereNull('org_id')
+            ->where('is_default', true)
+            ->first();
+
+        return response()->json([
+            'kinds' => self::DOCUMENT_KINDS,
+            'map' => is_array($theme->active_template_map ?? null) ? $theme->active_template_map : [],
+            'legacy_id' => $theme?->active_document_template_id,
+            'default_system_id' => $systemDefault?->id,
+        ]);
+    }
+
+    /**
+     * PUT /document-templates/active-map  { map: { kind: id|null } }
+     *
+     * Writes the entire map in one call. null values clear that kind (lookup
+     * falls through to map.default → legacy_id → system default). Also
+     * mirrors `map.default` into the legacy active_document_template_id so
+     * old code paths that haven't migrated still pick up the right template.
+     */
+    public function updateActiveMap(Request $request)
+    {
+        $user = $request->user();
+        if (!$this->canEdit($user)) return response()->json(['message' => 'Tidak diizinkan.'], 403);
+        if (!$user->org_id) return response()->json(['message' => 'Butuh konteks tenant.'], 422);
+
+        $data = $request->validate([
+            'map' => 'required|array',
+            'map.*' => 'nullable|uuid',
+        ]);
+
+        // Only accept known kinds.
+        $clean = [];
+        foreach ($data['map'] as $kind => $id) {
+            if (!array_key_exists($kind, self::DOCUMENT_KINDS)) continue;
+            if ($id) {
+                // Verify the template exists and is accessible to this tenant.
+                $tpl = DocumentTemplate::where('id', $id)
+                    ->where(function ($q) use ($user) {
+                        $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
+                    })->first();
+                if (!$tpl) continue;
+                $clean[$kind] = $id;
+            }
+        }
+
+        $theme = TenantTheme::firstOrCreate(
+            ['org_id' => $user->org_id],
+            [
+                'name' => 'Default',
+                'palette' => TenantTheme::defaultPalette(),
+                'layout_preset' => 'classic',
+                'font_family' => 'Inter',
+                'is_active' => false,
+            ]
+        );
+        $theme->active_template_map = $clean;
+        // Mirror map.default into legacy single field so lookups that still
+        // read active_document_template_id pick it up.
+        if (isset($clean['default'])) {
+            $theme->active_document_template_id = $clean['default'];
+        }
+        $theme->save();
+
+        return response()->json([
+            'map' => $clean,
+            'legacy_id' => $theme->active_document_template_id,
+        ]);
+    }
+
     /**
      * Upload a .docx template with placeholder variables for a specific export kind.
      * Stores via TenantStorageService as a private tenant file and updates the

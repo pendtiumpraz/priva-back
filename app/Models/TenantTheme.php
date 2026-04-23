@@ -13,10 +13,12 @@ class TenantTheme extends Model
     protected $fillable = [
         'org_id', 'name', 'palette', 'logo_url', 'favicon_url',
         'layout_preset', 'font_family', 'is_active', 'created_by',
+        'active_document_template_id', 'active_template_map',
     ];
 
     protected $casts = [
         'palette' => 'array',
+        'active_template_map' => 'array',
         'is_active' => 'boolean',
     ];
 

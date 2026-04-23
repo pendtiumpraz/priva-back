@@ -85,22 +85,39 @@ class DocumentTemplate extends Model
     }
 
     /**
-     * Find active template for an org. Falls back to system default.
-     * Returns a DocumentTemplate (never null) when seeder has run.
+     * Find active template for an org, optionally scoped to a document kind.
+     *
+     * Priority (Phase H1):
+     *   1. tenant_themes.active_template_map[$kind]   — per-kind override
+     *   2. tenant_themes.active_template_map.default  — map-level fallback
+     *   3. tenant_themes.active_document_template_id  — legacy single assign
+     *   4. system is_default=true                     — absolute fallback
+     *
+     * `$kind` values: 'ropa', 'dpia', 'gap_report', 'breach_report',
+     * 'breach_komdigi', 'breach_subject', 'posture'. Any other string is
+     * treated as an unmapped kind and falls through to defaults.
      */
-    public static function activeForOrg(?string $orgId): ?self
+    public static function activeForOrg(?string $orgId, ?string $kind = null): ?self
     {
         if ($orgId) {
             $theme = \App\Models\TenantTheme::where('org_id', $orgId)
-                ->whereNotNull('active_document_template_id')
+                ->whereNotNull('id')
                 ->first();
-            if ($theme && $theme->active_document_template_id) {
-                $t = self::where('id', $theme->active_document_template_id)
-                    ->where(function ($q) use ($orgId) {
-                        $q->where('org_id', $orgId)->orWhereNull('org_id');
-                    })
-                    ->first();
-                if ($t) return $t;
+            if ($theme) {
+                $map = is_array($theme->active_template_map) ? $theme->active_template_map : [];
+                $candidates = array_filter([
+                    $kind ? ($map[$kind] ?? null) : null,
+                    $map['default'] ?? null,
+                    $theme->active_document_template_id,
+                ]);
+                foreach ($candidates as $id) {
+                    $tpl = self::where('id', $id)
+                        ->where(function ($q) use ($orgId) {
+                            $q->where('org_id', $orgId)->orWhereNull('org_id');
+                        })
+                        ->first();
+                    if ($tpl) return $tpl;
+                }
             }
         }
         return self::whereNull('org_id')->where('is_default', true)->first();
