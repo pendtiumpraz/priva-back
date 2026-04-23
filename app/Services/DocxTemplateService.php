@@ -38,14 +38,16 @@ class DocxTemplateService
     {
         $templatePath = $this->resolveTemplatePath($tpl, 'ropa');
         [$localTpl, $cleanup] = $this->storage->getLocalPathForProcessing($org, $templatePath);
+        $cleaned = $this->stripSpellcheckFragments($localTpl);
 
         try {
-            $proc = new TemplateProcessor($localTpl);
+            $proc = new TemplateProcessor($cleaned);
             $this->fillRopa($proc, $ropa, $org);
             $out = tempnam(sys_get_temp_dir(), 'ropa_') . '.docx';
             $proc->saveAs($out);
             return $out;
         } finally {
+            if ($cleaned !== $localTpl && is_file($cleaned)) @unlink($cleaned);
             $cleanup();
         }
     }
@@ -234,6 +236,13 @@ class DocxTemplateService
             ($ret['pernah_insiden'] ?? null) === 'Ya' ? 'Detail Insiden' : null,
             $ret['detail_insiden'] ?? null
         ));
+
+        // Defensive final sweep: any `${sub_question}` / `${answer_sub_question}`
+        // that leaked outside a block (e.g. second occurrence of a block that
+        // had unusual structure) gets blanked so the output never shows raw
+        // placeholder text.
+        try { $proc->setValue('sub_question', ''); } catch (\Throwable $e) {}
+        try { $proc->setValue('answer_sub_question', ''); } catch (\Throwable $e) {}
     }
 
     // ================================================================
@@ -244,14 +253,16 @@ class DocxTemplateService
     {
         $templatePath = $this->resolveTemplatePath($tpl, 'dpia');
         [$localTpl, $cleanup] = $this->storage->getLocalPathForProcessing($org, $templatePath);
+        $cleaned = $this->stripSpellcheckFragments($localTpl);
 
         try {
-            $proc = new TemplateProcessor($localTpl);
+            $proc = new TemplateProcessor($cleaned);
             $this->fillDpia($proc, $dpia, $org);
             $out = tempnam(sys_get_temp_dir(), 'dpia_') . '.docx';
             $proc->saveAs($out);
             return $out;
         } finally {
+            if ($cleaned !== $localTpl && is_file($cleaned)) @unlink($cleaned);
             $cleanup();
         }
     }
@@ -648,12 +659,25 @@ class DocxTemplateService
      * Safely clone a table row. If the marker placeholder isn't in the
      * template (e.g. tenant custom template), quietly skip.
      */
+    /**
+     * The Nexus canonical template contains duplicate table sections (two
+     * copies of each section — the original docx ships them intentionally).
+     * A single cloneRow call only handles the first occurrence, leaving the
+     * second `${marker}` literal in the output. Loop until no more occurrences
+     * remain (capped at 5 passes as a safety net).
+     */
     private function cloneRowSafe(TemplateProcessor $proc, string $marker, array $rows): void
     {
-        try {
-            $proc->cloneRowAndSetValues($marker, $rows);
-        } catch (\Throwable $e) {
-            \Log::debug("cloneRow {$marker} skipped: " . $e->getMessage());
+        for ($pass = 0; $pass < 5; $pass++) {
+            try {
+                $proc->cloneRowAndSetValues($marker, $rows);
+            } catch (\Throwable $e) {
+                \Log::debug("cloneRow {$marker} pass {$pass} skipped: " . $e->getMessage());
+                return;
+            }
+            // Stop when the placeholder is no longer present.
+            $remaining = $proc->getVariables();
+            if (!in_array($marker, $remaining, true)) return;
         }
     }
 
@@ -663,15 +687,21 @@ class DocxTemplateService
      */
     private function cloneBlockSafe(TemplateProcessor $proc, string $block, array $rows): void
     {
-        try {
-            if (empty($rows)) {
-                // Delete the block entirely when no data.
-                $proc->cloneBlock($block, 0, true, false);
+        // Duplicate sections in the canonical template mean `${block}…${/block}`
+        // markers can appear twice. Loop until the opening `${block}` is gone.
+        for ($pass = 0; $pass < 5; $pass++) {
+            try {
+                if (empty($rows)) {
+                    $proc->cloneBlock($block, 0, true, false);
+                } else {
+                    $proc->cloneBlock($block, count($rows), true, false, array_values($rows));
+                }
+            } catch (\Throwable $e) {
+                \Log::debug("cloneBlock {$block} pass {$pass} skipped: " . $e->getMessage());
                 return;
             }
-            $proc->cloneBlock($block, count($rows), true, false, array_values($rows));
-        } catch (\Throwable $e) {
-            \Log::debug("cloneBlock {$block} skipped: " . $e->getMessage());
+            $remaining = $proc->getVariables();
+            if (!in_array($block, $remaining, true)) return;
         }
     }
 
@@ -722,6 +752,114 @@ class DocxTemplateService
             throw new \RuntimeException("Template DOCX untuk {$kind} belum di-upload.");
         }
         return $map[$kind]['path'];
+    }
+
+    /**
+     * Word's spellchecker wraps flagged words (e.g. `dpo_no`) with
+     * <w:proofErr> tags, splitting `${dpo_no}` into three separate <w:t>
+     * runs that PhpWord's fixBrokenMacros regex can't re-merge. Result:
+     * every cloneRow / cloneBlock call silently no-ops and placeholders
+     * survive into the downloaded document.
+     *
+     * Workaround — copy the .docx to a temp file, strip <w:proofErr .../>
+     * tags from document.xml + header/footer parts, and return the cleaned
+     * path. If anything goes wrong, fall back to the original file.
+     */
+    private function stripSpellcheckFragments(string $sourcePath): string
+    {
+        try {
+            $cleaned = tempnam(sys_get_temp_dir(), 'docx_clean_') . '.docx';
+            if (!copy($sourcePath, $cleaned)) return $sourcePath;
+
+            $zip = new \ZipArchive();
+            if ($zip->open($cleaned) !== true) {
+                @unlink($cleaned);
+                return $sourcePath;
+            }
+
+            $targets = ['word/document.xml', 'word/footer1.xml', 'word/footer2.xml',
+                        'word/footer3.xml', 'word/header1.xml', 'word/header2.xml',
+                        'word/header3.xml'];
+            foreach ($targets as $part) {
+                $xml = $zip->getFromName($part);
+                if ($xml === false) continue;
+                $patched = $this->cleanTemplateXml($xml);
+                if ($patched !== $xml) {
+                    $zip->addFromString($part, $patched);
+                }
+            }
+            $zip->close();
+            return $cleaned;
+        } catch (\Throwable $e) {
+            \Log::warning('stripSpellcheckFragments failed, using original: ' . $e->getMessage());
+            return $sourcePath;
+        }
+    }
+
+    /**
+     * Two-pass XML cleanup so PhpWord can reliably detect placeholders:
+     *
+     * 1. Strip <w:proofErr .../> markers that Word injects for its
+     *    spellchecker. These split a single placeholder `${dpo_no}` across
+     *    three <w:r> runs, defeating PhpWord's fixBrokenMacros regex.
+     * 2. Merge adjacent <w:r> runs that together form a single placeholder
+     *    — `<w:r>...<w:t>${</w:t></w:r><w:r>...<w:t>NAME</w:t></w:r><w:r>...<w:t>}</w:t></w:r>`
+     *    collapses into one `<w:r>...<w:t>${NAME}</w:t></w:r>`. Without
+     *    this merge, cloneRow can't find the placeholder's enclosing
+     *    <w:tr> row because the markers look like incidental run boundaries.
+     *
+     * Only merges when the three runs carry IDENTICAL `<w:rPr>` formatting
+     * so we never alter visible styling.
+     */
+    private function cleanTemplateXml(string $xml): string
+    {
+        // (1) strip proofErr tags that split placeholders mid-word.
+        $xml = preg_replace('#<w:proofErr\s+w:type="[^"]*"\s*/>#', '', $xml) ?? $xml;
+        $xml = preg_replace('#<w:proofErr\s+w:type="[^"]*"\s*></w:proofErr>#', '', $xml) ?? $xml;
+
+        // (2) merge arbitrary-fragmented placeholders. Word often splits
+        //     `${pic_Nomor Induk Karyawan}` into 5+ <w:r> runs (one per word
+        //     plus opening/closing braces). We find the shortest XML span
+        //     from `${` to the matching `}`, strip the <w:r>/<w:rPr>/<w:t>
+        //     wrappers inside, concat the text, and re-emit a single clean
+        //     run reusing the first run's rPr.
+        $xml = preg_replace_callback(
+            '#<w:r>(<w:rPr>.*?</w:rPr>)<w:t[^>]*>\$\{</w:t></w:r>(.+?)<w:t[^>]*>\}</w:t></w:r>#s',
+            function ($m) {
+                $rPr = $m[1];
+                $middle = $m[2];
+                // Grab every <w:t>…</w:t> text payload inside the span.
+                if (preg_match_all('#<w:t[^>]*>([^<]*)</w:t>#', $middle, $tm)) {
+                    $placeholderName = implode('', $tm[1]);
+                } else {
+                    $placeholderName = '';
+                }
+                // Drop control chars but KEEP spaces/parens — placeholder names
+                // like `pic_Nomor Induk Karyawan` and `sisfo_Sumber Data (DB)`
+                // are legitimate in this template.
+                $placeholderName = trim($placeholderName);
+                if ($placeholderName === '' || strpbrk($placeholderName, '${}') !== false) {
+                    // Unrecognizable — leave original fragment in place.
+                    return $m[0];
+                }
+                return '<w:r>' . $rPr . '<w:t xml:space="preserve">${' . $placeholderName . '}</w:t></w:r>';
+            },
+            $xml
+        ) ?? $xml;
+
+        // (3) single-run placeholder where `${NAME}` lives in one <w:t> but
+        //     the placeholder got prefixed/suffixed with a stray `<w:proofErr>`
+        //     removed earlier — ensure `<w:t xml:space="preserve">` so trailing
+        //     whitespace in the NAME isn't trimmed by Word.
+        $xml = preg_replace_callback(
+            '#<w:t(?![^>]*xml:space)([^>]*)>(\$\{[^${}]+\})</w:t>#',
+            function ($m) {
+                return '<w:t xml:space="preserve"' . $m[1] . '>' . $m[2] . '</w:t>';
+            },
+            $xml
+        ) ?? $xml;
+
+        return $xml;
     }
 
     private function formatList($v, string $fallback = '-'): string
