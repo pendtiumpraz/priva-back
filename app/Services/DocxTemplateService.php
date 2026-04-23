@@ -45,6 +45,7 @@ class DocxTemplateService
             $this->fillRopa($proc, $ropa, $org);
             $out = tempnam(sys_get_temp_dir(), 'ropa_') . '.docx';
             $proc->saveAs($out);
+            $this->scrubResidualPlaceholders($out);
             return $out;
         } finally {
             if ($cleaned !== $localTpl && is_file($cleaned)) @unlink($cleaned);
@@ -260,6 +261,7 @@ class DocxTemplateService
             $this->fillDpia($proc, $dpia, $org);
             $out = tempnam(sys_get_temp_dir(), 'dpia_') . '.docx';
             $proc->saveAs($out);
+            $this->scrubResidualPlaceholders($out);
             return $out;
         } finally {
             if ($cleaned !== $localTpl && is_file($cleaned)) @unlink($cleaned);
@@ -765,6 +767,51 @@ class DocxTemplateService
      * tags from document.xml + header/footer parts, and return the cleaned
      * path. If anything goes wrong, fall back to the original file.
      */
+    /**
+     * Post-render safety net. After saveAs, any `${xxx}` text that still
+     * exists in document.xml / headers / footers gets removed (block fences
+     * like `${cat_process}` / `${/cat_process}` are collapsed to nothing,
+     * value placeholders `${cat_process_name}` become empty strings). This
+     * catches cases where cloneBlock's paragraph-boundary regex couldn't
+     * match because Word structured the template differently from what
+     * PhpWord expects.
+     */
+    private function scrubResidualPlaceholders(string $docxPath): void
+    {
+        try {
+            $zip = new \ZipArchive();
+            if ($zip->open($docxPath) !== true) return;
+
+            $targets = ['word/document.xml', 'word/footer1.xml', 'word/footer2.xml',
+                        'word/footer3.xml', 'word/header1.xml', 'word/header2.xml',
+                        'word/header3.xml'];
+            foreach ($targets as $part) {
+                $xml = $zip->getFromName($part);
+                if ($xml === false) continue;
+
+                // Only operate on <w:t> text content so we never corrupt markup.
+                $patched = preg_replace_callback(
+                    '#<w:t([^>]*)>([^<]*)</w:t>#',
+                    function ($m) {
+                        $attrs = $m[1];
+                        $text = $m[2];
+                        // Drop every `${...}` surviving placeholder from the text.
+                        $cleaned = preg_replace('/\$\{\/?[^${}]*\}/', '', $text);
+                        if ($cleaned === $text) return $m[0];
+                        return '<w:t' . $attrs . '>' . $cleaned . '</w:t>';
+                    },
+                    $xml
+                );
+                if ($patched !== null && $patched !== $xml) {
+                    $zip->addFromString($part, $patched);
+                }
+            }
+            $zip->close();
+        } catch (\Throwable $e) {
+            \Log::warning('scrubResidualPlaceholders failed: ' . $e->getMessage());
+        }
+    }
+
     private function stripSpellcheckFragments(string $sourcePath): string
     {
         try {
