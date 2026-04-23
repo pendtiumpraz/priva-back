@@ -152,22 +152,43 @@ class ModuleCrudController extends Controller
      */
     private function applyRopaAutoRisk(array $data): array
     {
-        $wizard = $data['wizard_data'] ?? [];
-        if (!is_array($wizard)) $wizard = [];
+        try {
+            $wizard = $data['wizard_data'] ?? [];
+            if (!is_array($wizard)) $wizard = [];
 
-        $result = app(\App\Services\RopaRiskCalculator::class)->calculate($wizard);
+            $result = app(\App\Services\RopaRiskCalculator::class)->calculate($wizard);
 
-        $wizard['risk_triggers'] = [
-            'level' => $result['level'],
-            'triggers' => $result['triggers'],
-            'reasons' => $result['reasons'],
-            'computed_at' => now()->toIso8601String(),
-        ];
-        $data['wizard_data'] = $wizard;
+            $wizard['risk_triggers'] = [
+                'level' => $result['level'],
+                'triggers' => $result['triggers'],
+                'reasons' => $result['reasons'],
+                'computed_at' => now()->toIso8601String(),
+            ];
+            $data['wizard_data'] = $wizard;
 
-        $locked = filter_var($data['risk_level_locked'] ?? false, FILTER_VALIDATE_BOOLEAN);
-        if (!$locked) {
-            $data['risk_level'] = $result['level'];
+            $locked = filter_var($data['risk_level_locked'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            if (!$locked) {
+                $data['risk_level'] = $result['level'];
+            }
+        } catch (\Throwable $e) {
+            // Calculator failure must never block the save — keep whatever
+            // risk_level the caller submitted (or leave unchanged).
+            \Log::warning('applyRopaAutoRisk failed, leaving risk_level untouched: ' . $e->getMessage());
+        }
+
+        // Defensive: drop risk_level_locked if the column doesn't exist yet
+        // on the deployed DB (migration 2026_04_22_000005 not run). Mass-
+        // assigning an unknown column bubbles a SQL error that surfaces as
+        // "save ropa gagal".
+        if (array_key_exists('risk_level_locked', $data)) {
+            try {
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('ropas', 'risk_level_locked')) {
+                    unset($data['risk_level_locked']);
+                }
+            } catch (\Throwable $e) {
+                // If even the schema check fails, strip the field to stay safe.
+                unset($data['risk_level_locked']);
+            }
         }
 
         return $data;
@@ -393,9 +414,11 @@ class ModuleCrudController extends Controller
                 \Log::warning('Notification dispatch failed on create: ' . $e->getMessage());
             }
 
-            // Auto-trigger: if ROPA risk=high → create draft DPIA with inherited wizard_data
+            // Auto-trigger: if ROPA risk=high → create draft DPIA with inherited wizard_data.
+            // Wrapped in try/catch so DPIA-side failures don't roll back ROPA create.
             $autoDpiaId = null;
             if ($module === 'ropa' && ($data['risk_level'] ?? '') === 'high') {
+                try {
                 $dpiaModel = $this->getModel('dpia');
                 $existingDpia = $dpiaModel->where('ropa_id', $record->id)->first();
                 if (!$existingDpia) {
@@ -448,6 +471,9 @@ class ModuleCrudController extends Controller
                     } catch (\Exception $e) {
                         \Log::warning('DPIA auto-create notification failed: ' . $e->getMessage());
                     }
+                }
+                } catch (\Throwable $e) {
+                    \Log::warning('Auto-DPIA on ROPA store failed (non-fatal): ' . $e->getMessage());
                 }
             }
 
@@ -675,23 +701,30 @@ class ModuleCrudController extends Controller
             }
         }
 
-        // Auto-trigger DPIA when ROPA risk changes to high
-        if ($module === 'ropa' && $request->input('risk_level') === 'high') {
-            $dpiaModel = $this->getModel('dpia');
-            $existingDpia = $dpiaModel->where('ropa_id', $record->id)->first();
-            if (!$existingDpia) {
-                $dpiaModel->create([
-                    'org_id' => $record->org_id,
-                    'category_id' => $record->category_id,
-                    'registration_number' => $this->nextCode('DPIA', $dpiaModel, $record->org_id, $record->category_id),
-                    'ropa_id' => $record->id,
-                    'risk_level' => 'high',
-                    'status' => 'draft',
-                    'description' => 'Auto-generated dari ROPA high-risk: ' . $record->processing_activity,
-                    'risk_assessment' => ['likelihood' => 0, 'impact' => 0, 'risks' => []],
-                    'mitigation_measures' => [],
-                    'created_by' => $request->user()->id,
-                ]);
+        // Auto-trigger DPIA when ROPA risk changes to high. Wrapped in
+        // try/catch — DPIA schema quirks (unique collisions, missing optional
+        // columns, soft-deleted twin row, etc.) shouldn't roll back a
+        // successful ROPA update and look like "save ropa gagal" to the user.
+        if ($module === 'ropa' && ($record->risk_level ?? null) === 'high') {
+            try {
+                $dpiaModel = $this->getModel('dpia');
+                $existingDpia = $dpiaModel->where('ropa_id', $record->id)->first();
+                if (!$existingDpia) {
+                    $dpiaModel->create([
+                        'org_id' => $record->org_id,
+                        'category_id' => $record->category_id,
+                        'registration_number' => $this->nextCode('DPIA', $dpiaModel, $record->org_id, $record->category_id),
+                        'ropa_id' => $record->id,
+                        'risk_level' => 'high',
+                        'status' => 'draft',
+                        'description' => 'Auto-generated dari ROPA high-risk: ' . $record->processing_activity,
+                        'risk_assessment' => ['likelihood' => 0, 'impact' => 0, 'risks' => []],
+                        'mitigation_measures' => [],
+                        'created_by' => $request->user()->id,
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                \Log::warning('Auto-DPIA creation for ROPA ' . $record->id . ' failed: ' . $e->getMessage());
             }
         }
 
