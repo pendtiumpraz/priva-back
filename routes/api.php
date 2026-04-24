@@ -198,6 +198,27 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         });
 
         // =============================================
+        // DPIA — Risk Treatment Plan (per-DPIA endpoints)
+        // Track mitigation execution: status, owner, deadline, evidence, residual risk.
+        // =============================================
+        Route::prefix('dpia/{id}/rtp')->where(['id' => '[0-9a-fA-F-]{36}'])->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\DpiaRtpController::class, 'index'])->middleware('permission:dpia,read');
+            Route::post('/', [\App\Http\Controllers\Api\DpiaRtpController::class, 'store'])->middleware('permission:dpia,write');
+            Route::post('/auto-generate', [\App\Http\Controllers\Api\DpiaRtpController::class, 'autoGenerate'])->middleware('permission:dpia,write');
+            Route::put('/{itemId}', [\App\Http\Controllers\Api\DpiaRtpController::class, 'update'])->middleware('permission:dpia,write');
+            Route::delete('/{itemId}', [\App\Http\Controllers\Api\DpiaRtpController::class, 'destroy'])->middleware('permission:dpia,write');
+        });
+
+        // =============================================
+        // RTP — Cross-DPIA Aggregate View (menu terpisah)
+        // =============================================
+        Route::prefix('rtp')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\RiskTreatmentPlanController::class, 'index'])->middleware('permission:dpia,read');
+            Route::get('/facets', [\App\Http\Controllers\Api\RiskTreatmentPlanController::class, 'facets'])->middleware('permission:dpia,read');
+            Route::get('/dashboard', [\App\Http\Controllers\Api\RiskTreatmentPlanController::class, 'dashboard'])->middleware('permission:dpia,read');
+        });
+
+        // =============================================
         // ROPA — DPO Approval Workflow
         // =============================================
         Route::prefix('ropa/{id}')->group(function () {

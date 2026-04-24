@@ -13,6 +13,7 @@ class Dpia extends Model
         'org_id', 'regulation_code', 'category_id', 'custom_number', 'registration_number',
         'ropa_id', 'risk_level', 'status',
         'description', 'risk_assessment', 'mitigation_measures',
+        'mitigation_tracking',
         'assign_group', 'assignees',
         'wizard_data', 'raci_matrix', 'progress',
         'approver_id', 'approved_at', 'created_by',
@@ -22,6 +23,7 @@ class Dpia extends Model
     protected $casts = [
         'risk_assessment' => 'array',
         'mitigation_measures' => 'array',
+        'mitigation_tracking' => 'array',
         'wizard_data' => 'array',
         'raci_matrix' => 'array',
         'assigned_roles' => 'array',

@@ -55,6 +55,7 @@ class MenuRegistrySeeder extends Seeder
             ['menu_key' => 'tia', 'label' => 'TIA', 'href' => '/tia', 'icon' => 'Globe', 'section' => 'PDP Modules', 'sort' => 140, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'maturity', 'label' => 'Maturity Assessment', 'href' => '/maturity', 'icon' => 'BarChart3', 'section' => 'PDP Modules', 'sort' => 150, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'policy-review', 'label' => 'Policy Review', 'href' => '/policy-review', 'icon' => 'BookCheck', 'section' => 'PDP Modules', 'sort' => 160, 'roles' => array_merge(['root'], self::COMPLIANCE)],
+            ['menu_key' => 'risk-treatment-plan', 'label' => 'Risk Treatment Plan', 'href' => '/risk-treatment-plan', 'icon' => 'ShieldAlert', 'section' => 'PDP Modules', 'sort' => 170, 'roles' => array_merge(['root'], self::COMPLIANCE)],
 
             // Data Management
             ['menu_key' => 'data-discovery', 'label' => 'Data Discovery', 'href' => '/data-discovery', 'icon' => 'Scan', 'section' => 'Data Management', 'sort' => 210, 'roles' => array_merge(['root'], self::COMPLIANCE)],
