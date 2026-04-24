@@ -227,6 +227,72 @@ class DpiaRtpController extends Controller
     }
 
     /**
+     * POST /api/dpia/{id}/rtp/clean-orphans
+     * Hapus semua RTP item yang tidak match dengan wizard DPIA current state
+     * (risk event deleted dari wizard, atau penanganan diganti dari mitigate
+     * ke accept/transfer/terminate).
+     *
+     * Matching logic sama dengan smart upsert (category + risk_event).
+     */
+    public function cleanOrphans(Request $request, string $id)
+    {
+        $user = $request->user();
+        $dpia = Dpia::where('id', $id)->where('org_id', $user->org_id)->firstOrFail();
+
+        $existing = $dpia->mitigation_tracking ?? [];
+        if (empty($existing)) {
+            return response()->json(['message' => 'RTP kosong, tidak ada orphan.', 'data' => []]);
+        }
+
+        $candidates = Dpia::buildRtpItemsFromDpia($dpia);
+
+        $kept = [];
+        $removed = [];
+        foreach ($existing as $item) {
+            $hasMatch = false;
+            $itemCat = trim((string)($item['category'] ?? ''));
+            $itemEvent = trim((string)($item['risk_event'] ?? ''));
+            foreach ($candidates as $c) {
+                $cCat = trim((string)($c['category'] ?? ''));
+                $cEvent = trim((string)($c['risk_event'] ?? ''));
+                if ($itemEvent === $cEvent && ($itemCat === $cCat || $itemCat === '' || $cCat === '')) {
+                    $hasMatch = true;
+                    break;
+                }
+            }
+            if ($hasMatch) {
+                $kept[] = $item;
+            } else {
+                $removed[] = $item;
+            }
+        }
+
+        $dpia->mitigation_tracking = $kept;
+        $dpia->save();
+
+        AuditLog::create([
+            'org_id'    => $user->org_id,
+            'user_id'   => $user->id,
+            'module'    => 'dpia',
+            'record_id' => $dpia->id,
+            'action'    => 'rtp.clean_orphans',
+            'details'   => [
+                'removed_count' => count($removed),
+                'removed_risk_events' => array_map(fn($r) => $r['risk_event'] ?? null, $removed),
+            ],
+        ]);
+
+        return response()->json([
+            'message' => count($removed) > 0
+                ? count($removed) . ' orphan items dihapus.'
+                : 'Tidak ada orphan. Semua item sinkron dengan wizard.',
+            'removed_count' => count($removed),
+            'removed' => $removed,
+            'data' => $kept,
+        ]);
+    }
+
+    /**
      * DELETE /api/dpia/{id}/rtp/{itemId}
      * Hapus treatment item.
      */

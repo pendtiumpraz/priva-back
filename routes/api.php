@@ -205,6 +205,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\DpiaRtpController::class, 'index'])->middleware('permission:dpia,read');
             Route::post('/', [\App\Http\Controllers\Api\DpiaRtpController::class, 'store'])->middleware('permission:dpia,write');
             Route::post('/auto-generate', [\App\Http\Controllers\Api\DpiaRtpController::class, 'autoGenerate'])->middleware('permission:dpia,write');
+            Route::post('/clean-orphans', [\App\Http\Controllers\Api\DpiaRtpController::class, 'cleanOrphans'])->middleware('permission:dpia,write');
             Route::put('/{itemId}', [\App\Http\Controllers\Api\DpiaRtpController::class, 'update'])->middleware('permission:dpia,write');
             Route::delete('/{itemId}', [\App\Http\Controllers\Api\DpiaRtpController::class, 'destroy'])->middleware('permission:dpia,write');
         });
