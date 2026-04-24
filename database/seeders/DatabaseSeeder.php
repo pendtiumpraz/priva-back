@@ -378,9 +378,10 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // =============================================
-        // Knowledge Base
+        // Knowledge Base — basic + comprehensive (idempotent)
         // =============================================
         $this->call(KnowledgeBaseSectionsSeeder::class);
+        $this->call(KnowledgeBaseComprehensiveSeeder::class);
         $this->call(AiProviderSeeder::class);
         $this->call(VoiceTtsProviderSeeder::class);
 

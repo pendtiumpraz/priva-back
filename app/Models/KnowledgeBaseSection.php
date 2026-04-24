@@ -9,7 +9,8 @@ class KnowledgeBaseSection extends Model
     use HasUuids;
 
     protected $fillable = [
-        'org_id', 'module_key', 'title', 'content', 'keywords', 'sort_order', 'is_active',
+        'org_id', 'module_key', 'title', 'content', 'summary', 'keywords',
+        'feature_tags', 'category', 'sort_order', 'is_active',
     ];
 
     protected $casts = [
@@ -30,17 +31,34 @@ class KnowledgeBaseSection extends Model
 
     /**
      * Simple RAG: find relevant sections based on keyword matching.
-     * Returns max 3 most relevant + always includes 'general'. If $orgId is
-     * provided, tenant-owned sections are considered alongside shared ones
-     * and tenant-owned entries beat shared ones on tie-break.
+     * Returns max $limit most relevant + always includes 'general'. If
+     * $orgId is provided, tenant-owned sections are considered alongside
+     * shared ones and tenant-owned entries beat shared ones on tie-break.
+     *
+     * @param  string       $query       Free-text user query
+     * @param  string|null  $orgId       Tenant scope (null = system-only)
+     * @param  string|null  $featureTag  Filter to sections tagged for this AI feature
+     *                                   (e.g. 'ropa_autofill', 'contract_review')
+     * @param  int          $limit       Max sections returned (default 3)
      */
-    public static function findRelevant(string $query, ?string $orgId = null): array
-    {
-        $sections = self::where('is_active', true)
-            ->visibleTo($orgId)
-            ->orderBy('sort_order')
-            ->get();
+    public static function findRelevant(
+        string $query,
+        ?string $orgId = null,
+        ?string $featureTag = null,
+        int $limit = 3
+    ): array {
+        $q = self::where('is_active', true)->visibleTo($orgId)->orderBy('sort_order');
 
+        // Feature-tag filter — only consider sections relevant to this AI feature
+        if ($featureTag) {
+            $q->where(function ($sub) use ($featureTag) {
+                $sub->where('feature_tags', 'like', "%{$featureTag}%")
+                    ->orWhereNull('feature_tags')
+                    ->orWhere('module_key', 'general');
+            });
+        }
+
+        $sections = $q->get();
         $query = mb_strtolower($query);
         $scored = [];
         foreach ($sections as $section) {
@@ -64,17 +82,57 @@ class KnowledgeBaseSection extends Model
             // Tenant-owned entries get a small boost so they override shared content.
             if ($section->org_id) $score += 1;
 
+            // Feature-tagged sections get a boost when filter is active
+            if ($featureTag && str_contains((string) $section->feature_tags, $featureTag)) {
+                $score += 2;
+            }
+
             $scored[] = ['section' => $section, 'score' => $score];
         }
 
         usort($scored, fn($a, $b) => $b['score'] - $a['score']);
         $relevant = array_filter($scored, fn($s) => $s['score'] > 0);
-        $relevant = array_slice($relevant, 0, 3);
+        $relevant = array_slice($relevant, 0, $limit);
 
         if (count($relevant) === 0) {
-            $relevant = array_slice($scored, 0, 2);
+            $relevant = array_slice($scored, 0, min(2, $limit));
         }
 
         return array_map(fn($s) => $s['section'], $relevant);
+    }
+
+    /**
+     * Build grounding context string ready to inject into LLM system prompt.
+     *
+     * Token budget modes:
+     *   - 'summary'  : use only summary field (~50-200 tokens per section)
+     *                  Best for tight-budget features (tool calling, small models)
+     *   - 'full'     : use full content (~500-2000 tokens per section)
+     *                  Best for chat & long-context models
+     *   - 'adaptive' : prefer full, fallback to summary if content missing
+     *
+     * Returns markdown-formatted context for direct prompt injection.
+     */
+    public static function buildContext(
+        string $query,
+        ?string $orgId = null,
+        ?string $featureTag = null,
+        string $mode = 'adaptive',
+        int $limit = 3
+    ): string {
+        $sections = self::findRelevant($query, $orgId, $featureTag, $limit);
+        if (empty($sections)) return '';
+
+        $out = "## Knowledge Base Context (grounded from Privasimu KB)\n\n";
+        foreach ($sections as $s) {
+            $out .= "### {$s->title}\n\n";
+            $body = match ($mode) {
+                'summary' => (string) ($s->summary ?: $s->content),
+                'full'    => (string) $s->content,
+                default   => (string) ($s->content ?: $s->summary),
+            };
+            $out .= trim($body) . "\n\n---\n\n";
+        }
+        return $out;
     }
 }
