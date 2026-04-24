@@ -290,7 +290,13 @@ ATURAN KETAT:
 FORMAT RESPONS WAJIB (JSON):
 {"greeting": "...", "sections": [{"type": "text|list|table|tip|warning|info|code", "title": "...", "content": "...", "items": [], "table_data": [{"Col1":"v1","Col2":"v2"}], "headers": ["Col1","Col2"]}], "closing": "..."}
 
-JANGAN gunakan markdown. HANYA JSON valid mentah tanpa code block. Untuk tabel WAJIB pakai type "table" + table_data (bukan embed markdown di content).
+CRITICAL OUTPUT RULES — MELANGGAR = RESPON GAGAL TAMPIL:
+- Response kamu HARUS DIMULAI dengan karakter `{` sebagai karakter pertama. TIDAK BOLEH ada teks, kalimat pengantar, atau spasi apapun sebelum `{`.
+- Response HARUS DIAKHIRI dengan `}` sebagai karakter terakhir.
+- TIDAK BOLEH pakai markdown code block (```json ... ```).
+- TIDAK BOLEH pakai markdown formatting (**, *, #, |) — pakai struktur JSON untuk formatting.
+- Untuk tabel: WAJIB pakai type "table" + field table_data (bukan embed markdown `|col|col|` di content).
+- Kalimat pengantar ("Berikut penjelasannya", "Baik", "Terima kasih") HARUS masuk ke field "greeting" di JSON — BUKAN sebelum JSON.
 
 KNOWLEDGE BASE CONTEXT (grounding authoritative dari PRIVASIMU KB):
 {$kbContext}
