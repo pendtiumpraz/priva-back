@@ -113,10 +113,13 @@ Kamu WAJIB membalas dalam format JSON valid dengan struktur berikut:
   "greeting": "Kalimat pembuka singkat (opsional, boleh null)",
   "sections": [
     {
-      "type": "text|steps|list|tip|warning|info",
+      "type": "text|steps|list|tip|warning|info|table|code",
       "title": "Judul section (opsional)",
-      "content": "Isi teks/deskripsi",
-      "items": ["Item 1", "Item 2"] 
+      "content": "Isi teks/deskripsi (untuk type text/tip/warning/info/code)",
+      "items": ["Item 1", "Item 2"],
+      "table_data": [{"Kolom A": "value", "Kolom B": "value"}],
+      "headers": ["Kolom A", "Kolom B"],
+      "language": "sql (untuk type code, opsional)"
     }
   ],
   "closing": "Kalimat penutup singkat (opsional, boleh null)"
@@ -129,8 +132,13 @@ TIPE SECTION:
 - "tip": tips/saran (highlight hijau)
 - "warning": peringatan penting (highlight kuning)
 - "info": informasi tambahan (highlight biru)
+- "table": tabel perbandingan/data (WAJIB pakai "table_data" array of object, optional "headers" untuk urutan kolom). JANGAN embed table di "content" sebagai markdown.
+- "code": code block / SQL / JSON snippet (content = raw code, opsional "language")
 
-JANGAN gunakan markdown (**bold**, *italic*, #heading). HANYA JSON murni.
+CONTOH TABEL YANG BENAR:
+{"type":"table","title":"Perbandingan A vs B","table_data":[{"Aspek":"Speed","A":"Cepat","B":"Lambat"},{"Aspek":"Cost","A":"Gratis","B":"Mahal"}]}
+
+JANGAN gunakan markdown (**bold**, *italic*, #heading, |tabel|). HANYA JSON murni.
 Jangan bungkus JSON dalam code block. Langsung response JSON mentah.
 
 KNOWLEDGE BASE PRIVASIMU:

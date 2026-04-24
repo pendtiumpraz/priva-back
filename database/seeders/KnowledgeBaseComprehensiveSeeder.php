@@ -46,6 +46,7 @@ class KnowledgeBaseComprehensiveSeeder extends Seeder
             $this->dataDiscoverySections(),
             $this->remediationSections(),
             $this->flowsAndSalesSections(),
+            $this->technicalDeepDiveSections(),
         );
 
         $count = 0;
@@ -3317,6 +3318,1786 @@ Plus roadmap transparan — kami share ke klien tiap kuartal. Feature request da
 5. **Offboarding SLA**: 14 hari untuk full export + data wipe certificate
 
 Plus Privasimu keberlangsungan: kami bootstrapped profitable (not burning VC), revenue diversified (banyak klien, bukan 1 whale), team senior compliance + engineering."
+KB,
+            ],
+
+            // -------------------------------------------------------------
+            // Policy Review — Current Feature Detail (refreshed)
+            // -------------------------------------------------------------
+            [
+                'module_key' => 'policy_review_feature_current',
+                'title' => 'Policy Review — Feature Detail (Privasimu)',
+                'category' => 'workflow',
+                'feature_tags' => 'chat,sales_faq,policy_review',
+                'keywords' => 'policy review,kebijakan privasi,sop,peraturan perusahaan,upload,analisis,audit kebijakan,gap policy,compliance level,recommendation,priority action,cara kerja policy review,fitur policy review,how,bagaimana',
+                'summary' => 'Policy Review Privasimu: upload dokumen (PDF/DOCX) atau paste text → AI analyze compliance UU PDP → output compliance score + per-section analysis (score, gap, recommendation, UU PDP reference) + missing elements + strengths + priority action plan. Support 7 doc type: Kebijakan Privasi, SOP Data Handling, SOP Breach Response, SOP DSR, SOP Retensi, Peraturan Perusahaan, Other.',
+                'content' => <<<'KB'
+# Policy Review — Feature Detail
+
+## Apa Itu Policy Review di Privasimu?
+
+Fitur AI untuk review internal policy + SOP terhadap kepatuhan UU PDP. Platform scan isi dokumen, bandingkan dengan checklist UU PDP per Pasal, kasih gap report + rekomendasi konkrit.
+
+## 7 Tipe Dokumen Supported
+
+1. **🔒 Kebijakan Privasi** (kebijakan_privasi) — Privacy Policy publik
+2. **📋 SOP Penanganan Data** (sop_data_handling) — internal data handling
+3. **🚨 SOP Breach Response** (sop_breach_response) — incident response plan
+4. **🏢 Peraturan Perusahaan** (peraturan_perusahaan) — PP formal
+5. **👤 SOP Hak Subjek Data** (sop_dsr) — DSR handling procedure
+6. **🗄️ SOP Retensi Data** (sop_retensi) — retention + disposal
+7. **📄 Lainnya** (other) — kustom policy
+
+## Input Method
+
+### Method 1: Upload File
+- Supported: PDF, DOCX, DOC (max 10 MB)
+- File parsed via `DocumentParserService`:
+  - PDF digital-born → pdfplumber text extraction
+  - PDF scan → PaddleOCR fallback
+  - DOCX → PHPWord extract
+- Text auto-normalized (strip formatting, preserve structure)
+
+### Method 2: Paste Text
+- Direct paste ke textarea (min 50 karakter)
+- Markdown atau plain text support
+- Cocok untuk quick check policy section tertentu
+
+## Analysis Process
+
+```
+Dokumen → text extraction → chunk ke 2000 token →
+AI Policy Review engine (LLM + RAG grounding UU PDP) →
+Structured output JSON
+```
+
+System prompt inject KB sections:
+- `uu_pdp_prinsip_umum` (Pasal 16)
+- `uu_pdp_hak_subjek` (Pasal 5-10)
+- `uu_pdp_pasal_31_ropa`
+- `uu_pdp_pasal_32_dsr_sla`
+- `uu_pdp_pasal_46_breach`
+- `policy_review_uu_pdp_mapping`
+
+AI assess dokumen per-section + compare vs 15 required elements.
+
+## Output Structure
+
+```json
+{
+  "overall_score": 72,
+  "compliance_level": "Medium",
+  "summary": "Kebijakan Privasi memenuhi basic UU PDP tapi beberapa area kritis perlu diperbaiki.",
+  "sections": [
+    {
+      "section_title": "Identifikasi Pengendali Data",
+      "status": "compliant",
+      "score": 100,
+      "gap_description": "Lengkap + email DPO tersedia",
+      "recommendation": "Pertahankan struktur saat ini",
+      "uu_pdp_reference": "Pasal 31"
+    },
+    {
+      "section_title": "Hak Subjek Data",
+      "status": "partial",
+      "score": 60,
+      "gap_description": "Hanya disebut hak akses dan koreksi. Tidak sebut hak portabilitas, hak objection, hak withdraw consent.",
+      "recommendation": "Tambahkan section tentang 7 hak subjek (Pasal 5-10) dengan cara exercise-nya (email DPO, portal, form).",
+      "uu_pdp_reference": "Pasal 5-10"
+    },
+    ...
+  ],
+  "missing_elements": [
+    "Kontak DPO dedicated (dpo@company.com)",
+    "Retention period per kategori data",
+    "Cross-border transfer disclosure + safeguards",
+    "Mekanisme withdraw consent",
+    "Children's data policy (kalau service bisa diakses minor)"
+  ],
+  "strengths": [
+    "Struktur dokumen well-organized",
+    "Bahasa jelas, mudah dipahami subjek awam",
+    "Include contact information yang jelas"
+  ],
+  "priority_actions": [
+    {
+      "action": "Tambahkan section lengkap 7 hak subjek data dengan mekanisme exercise",
+      "priority": "critical",
+      "deadline_suggestion": "2 minggu"
+    },
+    {
+      "action": "Dedicate email DPO (dpo@company.com) dan publikasikan",
+      "priority": "high",
+      "deadline_suggestion": "1 minggu"
+    },
+    ...
+  ]
+}
+```
+
+## Compliance Score Levels
+
+| Skor | Level | Warna | Makna |
+|---|---|---|---|
+| 85-100 | High | 🟢 | Sangat compliant, minor tweaks |
+| 65-84 | Medium | 🟡 | Compliant dasar, ada area improvement |
+| 40-64 | Low | 🟠 | Major gap, butuh revisi signifikan |
+| 0-39 | Critical | 🔴 | Non-compliant risk tinggi, redesign |
+
+## Per-Section Status
+
+Setiap dokumen di-check terhadap 15 required elements (lihat `policy_review_uu_pdp_mapping`):
+1. Identitas Pengendali Data (Pasal 31)
+2. Data Protection Officer (Pasal 53)
+3. Kategori Data Dikumpulkan (Pasal 16)
+4. Tujuan Pemrosesan (Pasal 16)
+5. Dasar Hukum per Tujuan (Pasal 20)
+6. Retensi Data (Pasal 16)
+7. Penerima Data / 3rd Party (Pasal 31)
+8. Hak Subjek Data (Pasal 5-10)
+9. Withdraw Consent Mechanism (Pasal 8)
+10. Security Measures (Pasal 35-39)
+11. Cookie Policy (Pasal 16)
+12. Children's Data (Permenkominfo 20/2016)
+13. Cross-Border Transfer (Pasal 56)
+14. Breach Notification (Pasal 46)
+15. Policy Update Mechanism
+
+Status per section:
+- **compliant** (score 85-100): requirement fully met
+- **partial** (score 40-84): sebagian ada tapi kurang lengkap
+- **missing** (score 0-39): tidak ada atau salah total
+- **not_applicable**: tidak relevan untuk doc_type ini
+
+## Priority Action Levels
+
+AI kategorikan remediation:
+- **critical** — legal violation, deadline <2 minggu
+- **high** — major gap, deadline <1 bulan
+- **medium** — moderate improvement, deadline <3 bulan
+- **low** — nice-to-have, deadline <6 bulan
+
+## List View & History
+
+Setelah analysis, record tersimpan di `/policy-reviews`:
+- Title, doc_type, risk_score, status, tanggal
+- Click untuk view detail
+- Re-analyze (setelah revisi policy) untuk track improvement
+- Soft-delete + trash + restore + force-delete
+
+## Workflow Typical
+
+```
+Step 1: Upload draft Privacy Policy v1
+  → Score 52% (Low)
+  → 8 missing elements, 12 priority actions
+
+Step 2: DPO revisi policy berdasar recommendation
+
+Step 3: Upload v2
+  → Score 78% (Medium)
+  → 3 missing elements, 4 priority actions (down from 12)
+
+Step 4: Iterate sampai score >85%
+
+Step 5: Publish final version
+  → Export bersih untuk website
+  → Version history preserved
+```
+
+## Integration dengan Module Lain
+
+- **Knowledge Base**: Policy Review contribute ke posture score
+- **GAP Assessment**: Priority action dari Policy Review jadi input Remediation Plan
+- **Audit Log**: setiap upload + analysis tercatat
+- **AI Remediation Plan**: aggregate gap dari Policy + GAP Assessment
+
+## Timing Benchmark
+
+| Metric | Typical |
+|---|---|
+| Upload + parse file (PDF 10 hal) | 5-15 detik |
+| AI analysis + structured output | 30-90 detik |
+| Total end-to-end review | 1-2 menit |
+
+## Cost Consideration (AI Credits)
+
+- Setiap analysis konsumsi token:
+  - Input: policy text (2k-15k token)
+  - RAG grounding: 3k-5k token
+  - Output: structured JSON (2k-4k token)
+- Per review: ~10k-25k token
+- AI Credits tenant ter-decremnet sesuai pricing provider
+
+## Permissions
+
+- **Read** (`policy_review:read`): lihat list + detail + history
+- **Write** (`policy_review:write`): upload + analyze + soft-delete
+- **Force delete**: admin/superadmin only
+
+## API Endpoints
+
+```
+GET    /api/policy-reviews                # list
+GET    /api/policy-reviews/trashed        # trash
+GET    /api/policy-reviews/{id}           # detail
+POST   /api/policy-reviews/analyze        # upload + analyze
+DELETE /api/policy-reviews/{id}           # soft-delete
+POST   /api/policy-reviews/{id}/restore   # restore
+DELETE /api/policy-reviews/{id}/force     # hard-delete
+```
+
+## Use Case per Tipe Dokumen
+
+### Privacy Policy (Website Publik)
+Wajib yang di-review pertama. Frekuensi: tiap major revisi product / feature baru / perubahan pihak 3.
+
+### SOP Data Handling (Internal)
+Review tahunan. Saat onboarding processor baru. Setelah incident / audit finding.
+
+### SOP Breach Response
+Review kuartal. Setelah real incident (update lesson learned). Setelah drill yang reveal gap.
+
+### SOP DSR
+Review saat DSR volume spike. Saat ada regulator inquiry. Saat platform tooling change.
+
+### SOP Retensi
+Review saat regulasi baru rilis (misal perubahan UU retention). Saat coverage ROPA berubah.
+KB,
+            ],
+        ];
+    }
+
+    // ======================================================================
+    // 14. TECHNICAL DEEP DIVE
+    //
+    // Sections untuk jawab pertanyaan teknis DPO/IT klien (sales tidak jawab
+    // langsung). Cover: PII detection method, DB connectivity, AI arch,
+    // API, security, deployment, audit log, backup, OCR.
+    // ======================================================================
+    private function technicalDeepDiveSections(): array
+    {
+        return [
+            [
+                'module_key' => 'tech_data_discovery_detection',
+                'title' => 'Data Discovery — PII Detection Method (Technical)',
+                'category' => 'library',
+                'feature_tags' => 'chat,sales_faq,data_discovery,pii_scan',
+                'keywords' => 'regex,pattern,deteksi,detection,pii detector,algoritma,contentpiiscanner,akurasi,confidence,sample,metode teknis,cara kerja,nlp,ner,entity recognition',
+                'summary' => 'PII Detection Privasimu hybrid 4-layer: (1) Regex pattern Indonesia (NIK, NPWP, rekening), (2) Context clue dari column name, (3) Statistical confidence dari sample 100-1000 rows, (4) AI View via bge-m3 embedding + LLM classification untuk kolom ambiguous. Akurasi 95-98% obvious PII, 85-90% ambiguous.',
+                'content' => <<<'KB'
+# Data Discovery — PII Detection Method
+
+## Pertanyaan DPO Umum
+"Metode scan pakai apa? Regex? ML? Akurasi berapa?"
+
+## Layer 1: Regex Pattern (ContentPiiScanner + PiiDetector)
+
+Regex library untuk PII Indonesia:
+- NIK: `/^\d{16}$/` (16 digit)
+- NPWP: `/^\d{15,16}$/` atau formatted `XX.XXX.XXX.X-XXX.XXX`
+- Telepon ID: `/^(\+62|62|0)8\d{8,12}$/`
+- Email: RFC 5322
+- Rekening BCA/Mandiri/BRI: per-bank format
+- BPJS: 11-13 digit
+- 20+ pattern lain
+
+Scan sample 100-1000 row per kolom → hitung match rate. Kolom dengan >80% value match → classify sebagai PII.
+
+## Layer 2: Context Clue (Column Name Heuristic)
+
+Map nama kolom → kategori:
+- `nik`, `nomor_ktp`, `identity_number` → NIK
+- `email`, `mail`, `e_mail` → email
+- `dob`, `tgl_lahir`, `birthdate` → tanggal lahir
+- `fingerprint`, `biometric_*` → biometrik
+
+Confidence scoring:
+- Regex + context: 95%
+- Regex only: 70%
+- Context only: 50%
+
+## Layer 3: Statistical Confidence
+
+Threshold:
+- **>95%**: auto-classify
+- **80-95%**: flag for review
+- **50-80%**: needs AI view atau manual
+- **<50%**: skip
+
+## Layer 4: AI View (DeepScan / Semantic)
+
+Untuk kolom ambiguous (confidence rendah):
+1. Kirim kolom + sample ke TEI embedding (bge-m3)
+2. Cosine similarity vs PII category reference embeddings
+3. Optional: LLM classify dengan context ("cust_ref_v2 dengan value NS123 di tabel customer_account")
+4. NER (Named Entity Recognition) untuk text field non-structured — detect nama orang, alamat, nomor rekening dalam paragraph teks
+
+## Scan Volume + Performance
+
+- Tidak full-scan — pakai TABLESAMPLE (PostgreSQL) atau ORDER BY RAND() LIMIT (MySQL)
+- 100 kolom: <30 detik
+- 1000 tabel: 30 menit - 2 jam
+- Non-blocking, incremental, pausable
+
+## Accuracy Benchmark
+
+- Obvious PII (NIK kolom nama jelas): 98%
+- Ambiguous kolom legacy: 85% dengan AI View
+- False positive rate: 3-5%
+
+## DeepScan vs Standard Scan
+
+- **Standard Scan** = Layer 1-3 only (regex + context + statistical). Fast, cheap, deterministic.
+- **DeepScan** = Layer 1-4 dengan AI (NER + semantic). Lebih dalam, handle unstructured text, lebih lambat, butuh LLM.
+
+## Standard View vs AI View
+
+- **Standard View**: menampilkan hasil deteksi raw (kolom, kategori, confidence, status shadow data).
+- **AI View**: Standard View + rekomendasi AI per kolom (enkripsi, pseudonimisasi, access control) + ringkasan global + risk mitigation plan.
+
+## Privacy
+
+- Sample data scan tidak disimpan
+- Hanya metadata classification yang tersimpan
+- Audit log untuk trace scan activity
+KB,
+            ],
+
+            [
+                'module_key' => 'tech_data_discovery_db_connection',
+                'title' => 'Data Discovery — Database Connection Specs',
+                'category' => 'library',
+                'feature_tags' => 'chat,sales_faq,data_discovery',
+                'keywords' => 'connect database,mysql,postgresql,mssql,oracle,mongodb,s3,minio,credential,protocol,port,firewall,whitelist,ssl,tls,readonly user,permission,grant',
+                'summary' => 'Privasimu connect ke DB klien via native protocol: MySQL (3306), PostgreSQL (5432), MSSQL (1433), Oracle (1521), MongoDB (27017). Credential AES-256 encrypted. SSL/TLS + SSH tunnel support. Butuh readonly user SELECT + INFORMATION_SCHEMA. Firewall whitelist Privasimu IP (SaaS) atau localhost (on-prem).',
+                'content' => <<<'KB'
+# Database Connection — Technical Specs
+
+## Supported Engines
+
+| Engine | Version | Port | Protocol |
+|---|---|---|---|
+| MySQL | 5.7+/8.0+ | 3306 | Native MySQL protocol |
+| MariaDB | 10.3+ | 3306 | Native MySQL protocol |
+| PostgreSQL | 13+ | 5432 | libpq |
+| MSSQL | 2016+ | 1433 | TDS |
+| Oracle | 19c+ | 1521 | TNS |
+| MongoDB | 5.0+ | 27017 | MongoDB wire |
+
+## Cloud Storage
+
+| Service | Protocol | Auth |
+|---|---|---|
+| AWS S3 | HTTPS + SigV4 | Access key + secret |
+| MinIO | S3-compatible | Access key + secret |
+| Google Cloud Storage | HTTPS | Service account JSON |
+| Azure Blob | HTTPS | Account key + SAS |
+
+## Required Permission (Read-Only)
+
+### MySQL
+```sql
+CREATE USER 'privasimu_scanner'@'%' IDENTIFIED BY '<pwd>';
+GRANT SELECT ON *.* TO 'privasimu_scanner'@'%';
+GRANT SHOW VIEW ON *.* TO 'privasimu_scanner'@'%';
+```
+
+### PostgreSQL
+```sql
+CREATE USER privasimu_scanner WITH PASSWORD '<pwd>';
+GRANT USAGE ON SCHEMA public TO privasimu_scanner;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO privasimu_scanner;
+```
+
+### MSSQL
+```sql
+CREATE LOGIN privasimu_scanner WITH PASSWORD = '<pwd>';
+CREATE USER privasimu_scanner FOR LOGIN privasimu_scanner;
+GRANT SELECT TO privasimu_scanner;
+```
+
+### Oracle
+```sql
+CREATE USER privasimu_scanner IDENTIFIED BY "<pwd>";
+GRANT CONNECT, SELECT ANY TABLE TO privasimu_scanner;
+```
+
+## Network / Firewall
+
+- **SaaS**: whitelist Privasimu outbound IP (`34.128.x.x`, published di docs). Atau reverse tunnel via `privasimu-agent` container (no inbound rule).
+- **On-Prem**: internal VLAN, DMZ→prod firewall rule port DB.
+
+## SSL/TLS
+
+Wajib untuk SaaS. Opsional on-prem. Certificate:
+- Verify full (strict, default)
+- Verify CA (self-signed signed by internal CA)
+- Disable (internal VLAN only)
+
+Upload cert via UI `Settings → Data Discovery → Add System`.
+
+## SSH Tunneling
+
+Untuk DB tidak expose network:
+```
+Privasimu → SSH jump host → DB internal (port forward)
+```
+
+Config: SSH host + key (encrypted storage).
+
+## Credential Storage
+
+- **AES-256-CBC** via Laravel Crypt
+- Master key di `.env` APP_KEY
+- Per-tenant isolation
+- Never log plaintext
+- Decrypted hanya saat scan run
+
+## Performance Impact ke Prod DB
+
+- CPU: <5% overhead saat active scan
+- I/O: 100-500 IOPS extra
+- Memory: ~50 MB per connection
+- Network: low (metadata + sample)
+
+Recommendation: scan off-peak hours untuk prod DB besar.
+
+## Troubleshooting
+
+| Error | Cause | Fix |
+|---|---|---|
+| Connection refused | Firewall block | Whitelist IP |
+| Auth failed | Wrong credential | Re-enter |
+| SSL handshake fail | Cert issue | Upload CA bundle |
+| Permission denied | Missing GRANT | Add SELECT |
+| Timeout | Slow network | Increase timeout |
+
+## Best Practice untuk Klien
+
+1. Dedicated user `privasimu_scanner` (bukan root)
+2. Read-only permission only
+3. Strong password 16+ char
+4. Rotate credential quarterly
+5. Enable DB audit log
+6. Use SSL cross-network
+7. Restrict by IP
+8. Test staging first
+KB,
+            ],
+
+            [
+                'module_key' => 'tech_ai_architecture',
+                'title' => 'AI Features — Architecture + Provider Abstraction',
+                'category' => 'library',
+                'feature_tags' => 'chat,sales_faq',
+                'keywords' => 'ai architecture,provider,openrouter,openai,anthropic,gemini,deepseek,qwen,model,switch,streaming,tool calling,rag,credit metering,multi provider',
+                'summary' => 'AI Privasimu pakai provider abstraction (OpenAI-compatible interface). Support OpenRouter, OpenAI, Anthropic, Gemini, DeepSeek, Groq, Qwen on-prem via vLLM. Single AiService handle routing + RAG + credit metering + retry + streaming + tool calling. Tenant switch provider cuma update env + config:clear.',
+                'content' => <<<'KB'
+# AI Features — Architecture Technical
+
+## Provider Abstraction
+
+`App\Services\AiService` = single entry point semua AI call. Handle:
+1. Load tenant preference (provider, model, temperature)
+2. Credit metering (kalau limit → throw)
+3. RAG grounding injection
+4. Format request per provider
+5. Retry exponential backoff (1s, 2s, 4s)
+6. Stream SSE atau buffer
+7. Log ke `ai_credit_logs` + `audit_logs`
+
+## Supported Providers
+
+| Provider | Models | Deployment |
+|---|---|---|
+| OpenRouter | 150+ model (DeepSeek, Claude, GPT, Gemini) | Cloud aggregator |
+| OpenAI Direct | GPT-4o, o1 | Cloud |
+| Anthropic | Claude Opus 4, Sonnet 4, Haiku | Cloud |
+| Google Gemini | Gemini 2.5 Pro, Flash | Cloud |
+| Azure OpenAI | GPT-4 via Azure | Cloud/Enterprise |
+| DeepSeek | V3, R1 | Cloud |
+| Groq | Llama 3.3, Mixtral | Cloud high-speed |
+| OpenAI-Compatible | Qwen/Llama via vLLM | **On-prem** |
+
+## Config per Tenant
+
+```env
+AI_PROVIDER=openrouter
+AI_PROVIDER_BASE_URL=https://openrouter.ai/api/v1
+AI_PROVIDER_MODEL=deepseek/deepseek-chat
+AI_PROVIDER_API_KEY=sk-or-xxx
+
+# On-prem switch
+AI_PROVIDER=openai-compatible
+AI_PROVIDER_BASE_URL=https://10.0.0.50/v1
+AI_PROVIDER_MODEL=qwen3-32b
+```
+
+Zero code change untuk switch provider.
+
+## OpenAI-Compatible Interface
+
+Semua provider harus implement OpenAI Chat Completion API spec. AiService translate format proprietary (Anthropic Messages API) ke OpenAI format otomatis.
+
+## Retry & Failover
+
+1. Primary provider
+2. 3x retry exponential backoff
+3. Fallback provider (tenant config optional)
+4. Graceful degrade ke manual flow
+
+## Rate Limiting
+
+- Per-tenant: 100 req/min (configurable)
+- Per-user: 20 req/min
+- Global cap: runaway cost protection
+- 429 dengan retry-after header
+
+## Credit Metering
+
+Tabel `ai_credit_logs`:
+- org_id, user_id, feature, provider, model
+- tokens_in, tokens_out, cost_cents
+- latency_ms, request_id
+- created_at
+
+Admin dashboard: konsumsi per-feature, per-tier cap.
+
+## Tool Calling
+
+Function calling untuk AI Agent action. Support:
+- OpenAI GPT-4/4o: native
+- Anthropic Claude: native
+- Gemini: native
+- DeepSeek / Qwen3 / Llama 3.3: hermes parser
+
+Approval gate: tool yang write butuh user confirm sebelum execute.
+
+## Streaming
+
+SSE untuk long response. Frontend render token-by-token. NGINX `proxy_buffering off`.
+
+Streaming features:
+- AI Chat
+- AI Agent conversations
+- AI Auto-Fill (progress feedback)
+
+Buffered (full response):
+- Contract Review (JSON parsing)
+- Policy Review
+- Remediation Plan
+
+## Audit Trail
+
+Setiap AI call tercatat:
+- `ai.chat`, `ai.autofill_ropa`, `ai.tool_call`
+- Actor: human atau "system"
+- Input/output summary
+- Tenant scope
+
+Approval gate untuk write operation: `approval_by` user logged.
+KB,
+            ],
+
+            [
+                'module_key' => 'tech_ai_rag_mechanism',
+                'title' => 'AI Grounding — RAG Mechanism (Anti-Hallucination)',
+                'category' => 'library',
+                'feature_tags' => 'chat,sales_faq',
+                'keywords' => 'rag,grounding,keyword matching,semantic,embedding,bge-m3,halu,hallucination,knowledge base,context injection,retrieval,findrelevant,anti halu',
+                'summary' => 'RAG Privasimu = keyword-based retrieval (Level 2) dari knowledge_base_sections dengan feature-tag filter. Returns top-3 section, inject ke system prompt LLM. Reduce halu rate dari 8% (ungrounded) → 2% (grounded). Phase 2 roadmap: upgrade ke semantic RAG via bge-m3 embedding.',
+                'content' => <<<'KB'
+# RAG (Retrieval-Augmented Generation) Mechanism
+
+## RAG Level
+
+```
+Level 0 — No grounding (pure LLM memory)
+Level 1 — Static prompt (hardcoded)
+Level 2 — Keyword RAG ← PRIVASIMU SAAT INI
+Level 3 — Semantic RAG (embedding)
+Level 4 — Hybrid (keyword + semantic + rerank)
+```
+
+## Storage
+
+Tabel `knowledge_base_sections`:
+- module_key, title, content, summary
+- keywords (csv), feature_tags (csv), category
+- org_id (null = system, specific = tenant-owned)
+
+## Retrieval Method
+
+```php
+KnowledgeBaseSection::findRelevant($query, $orgId, $featureTag, $limit);
+```
+
+Scoring:
+- keyword match: +3 per keyword
+- title match: +5
+- org_id own: +1
+- feature_tag match: +2
+
+Returns top-N (default 3).
+
+## Injection Flow
+
+1. User query diterima
+2. `findRelevant()` return 3 KB section paling match
+3. Build system prompt dengan section di-embed
+4. Send ke LLM → grounded response
+5. Stream ke user
+
+## Feature-Specific Grounding
+
+| Feature | Feature Tag |
+|---|---|
+| AI Chat | chat |
+| AI Auto-Fill ROPA | ropa_autofill |
+| AI Auto-Fill DPIA | dpia_autofill |
+| AI Contract Review | contract_review |
+| AI Policy Review | policy_review |
+| AI Remediation Plan | remediation |
+| AI Agent Tool Calling | tool_calling |
+| Data Discovery AI View | pii_scan |
+
+## Context Budget Management
+
+`KnowledgeBaseSection::buildContext($query, $orgId, $featureTag, $mode, $limit)`:
+- `summary` mode: 50-200 token per section → 3 sections = ~500 token (tight-budget feature)
+- `full` mode: 500-2000 token per section → ~3-6k token (long-context)
+- `adaptive` mode: prefer full, fallback summary
+
+## Quality Measurements
+
+Internal benchmark:
+- Ungrounded: 42% accuracy UU PDP question, halu 8%
+- Keyword RAG: 91% accuracy, halu 2%
+- Semantic RAG (future): projected 94%
+
+## Safety Measures
+
+Selain RAG:
+1. Tool calling JSON validation
+2. Approval gate untuk write operation
+3. Audit log semua AI response
+4. Feedback loop (user flag wrong → improve KB)
+5. Confidence meter (optional output)
+
+## Phase 2 Upgrade Roadmap
+
+Semantic RAG via bge-m3:
+1. Migration: tambah `embedding` vector[1024] kolom
+2. PostgreSQL `pgvector` atau MySQL 8.4 `VECTOR` type
+3. Re-index saat edit section
+4. Cosine similarity retrieval
+5. Hybrid: combine keyword + semantic score
+
+Timeline: Q3 2026.
+KB,
+            ],
+
+            [
+                'module_key' => 'tech_security_multi_tenancy',
+                'title' => 'Security & Multi-Tenancy Implementation',
+                'category' => 'library',
+                'feature_tags' => 'chat,sales_faq',
+                'keywords' => 'security,keamanan,multi tenant,org_id,isolation,encryption,aes,password,bcrypt,sanctum,token,sso,saml,oidc,rbac,permission',
+                'summary' => 'Multi-tenancy: org_id enforced di setiap query + middleware. PII AES-256-CBC via EncryptedString cast. Password bcrypt. Token Laravel Sanctum 60min + refresh. SSO SAML + OIDC + JIT. Permission hierarchical role + module:read/write granular + wildcard. Audit log immutable 5-year retention.',
+                'content' => <<<'KB'
+# Security & Multi-Tenancy Technical
+
+## Multi-Tenancy Pattern
+
+**Shared DB + Row-Level Isolation via `org_id`**
+
+Enforcement:
+1. Model level: `Model::where('org_id', $orgId)`
+2. Service level: `TenantContextService::resolveOrgId()`
+3. Controller level: `UniversalCrudController` auto-inject
+4. Middleware: `TenantScopeMiddleware` reject cross-tenant
+
+Rule: setiap query model tenant-scoped WAJIB filter org_id. CI check.
+
+## Encryption at Rest
+
+### DB PII (EncryptedString cast)
+```php
+protected $casts = [
+    'email' => 'encrypted:string',
+    'nik' => 'encrypted:string',
+    'phone' => 'encrypted:string',
+];
+```
+AES-256-CBC via OpenSSL. Key = `APP_KEY` env.
+
+### Credentials (Crypt::encryptString)
+API key, SMTP password, SSO secret, DB connection → encrypted sebelum DB.
+
+### Files
+- Local: permission 600
+- S3: SSE-S3 atau SSE-KMS
+- MinIO: SSE-C/SSE-KMS
+
+## Password
+
+- bcrypt cost 10
+- Never plaintext stored
+- Reset token expire 1 jam
+- HaveIBeenPwned check (opt-in)
+
+## Session / Token
+
+### Sanctum
+- `Bearer <token>` header
+- TTL 60 menit default
+- Auto-refresh
+- Revoke on logout
+
+### CSRF
+- Per-session token
+- Middleware validated
+
+### Rate Limiting
+- Per IP: 60/min
+- Per user: 100/min
+- Login: 5/min
+- Password reset: 3/min
+
+## RBAC
+
+### Hierarchical Roles
+`root` > `superadmin` > `admin` > `dpo` > `maker` > `reviewer/checker` > `auditor` > `viewer`
+
+### Module Permission (JSON array)
+```json
+["ropa:read", "ropa:write", "breach:*", "*:read"]
+```
+
+Wildcard `*` supported.
+
+### Middleware
+```php
+Route::post('/api/ropa')->middleware('permission:ropa,write');
+```
+
+## SSO
+
+### SAML 2.0
+- IdP: Azure AD, Okta, OneLogin, Ping, Keycloak
+- Metadata: `/sso/saml/metadata`
+- ACS: `/sso/saml/acs`
+- Attribute mapping: email, firstname, lastname, role, groups
+
+### OIDC/OAuth2
+- Google Workspace, M365, Auth0
+- Authorization Code + PKCE
+- Scopes: openid email profile
+- JIT provisioning
+
+## Audit Trail (Immutable)
+
+Tabel `audit_logs`:
+- actor_type: user | ai | system | webhook
+- action (ropa.create, user.login_failed, ai.tool_execute)
+- resource_type + resource_id
+- changes (JSON diff before/after)
+- metadata (ip, user_agent, api_key)
+- severity: info | warning | critical
+
+Retention: 5-10 tahun. Tidak boleh UPDATE/DELETE by application. Enforcement via DB-level role permission.
+
+## API Security
+
+### Auth
+- Bearer Sanctum token
+- Atau Developer API key
+
+### API Key Scope
+- Permission subset
+- Rate limit
+- IP whitelist
+- Expiration
+
+## Certifications (Target 2026)
+
+- ISO 27001 (Q2 2026)
+- SOC 2 Type II (Q4 2026)
+- ISO 27701 (Q4 2026)
+- POJK compliance statement
+
+## Data Isolation Guarantees
+
+1. No cross-tenant leak (test coverage + audit)
+2. Per-tenant backup
+3. 14-hari offboarding export + hard-delete certificate
+4. Incident response: 24-jam notify affected tenant
+KB,
+            ],
+
+            [
+                'module_key' => 'tech_api_integration',
+                'title' => 'API & Integration — Developer Reference',
+                'category' => 'library',
+                'feature_tags' => 'chat,sales_faq',
+                'keywords' => 'api,rest,integration,webhook,developer,swagger,openapi,endpoint,sanctum,api key,siem,splunk,elastic,imap,slack,teams,telegram,whatsapp',
+                'summary' => 'Privasimu REST API full CRUD + webhook. Auth Sanctum token atau Developer API key (per-scope, IP whitelist, rate limit). Endpoint per modul. Webhook push event (ropa.*, breach.*, dsr.*, ai.*). Integration: SIEM (Splunk/Elastic/QRadar), IMAP (DSR intake), Slack/Teams, Telegram, WhatsApp deep-link.',
+                'content' => <<<'KB'
+# API & Integration Reference
+
+## Authentication
+
+### Sanctum Token (User)
+```
+POST /api/login → {token, expires_at}
+Authorization: Bearer <token>
+```
+
+### Developer API Key (Automation)
+Admin create di Settings → API Keys. Format `privasimu_sk_live_xxx`.
+
+Per-key config:
+- Permission scope (subset of user permission)
+- Rate limit
+- IP whitelist
+- Expiration
+
+## Core Endpoints (sample)
+
+### ROPA (Universal CRUD pattern)
+```
+GET    /api/m/ropa              # list
+GET    /api/m/ropa/{id}         # detail
+POST   /api/m/ropa              # create
+PUT    /api/m/ropa/{id}         # update
+DELETE /api/m/ropa/{id}         # soft-delete
+POST   /api/m/ropa/{id}/restore
+GET    /api/m/ropa/{id}/history
+POST   /api/m/ropa/{id}/approve
+GET    /api/m/ropa/{id}/export
+```
+
+Same pattern untuk dpia, gap, dsr, breach, consent, vendor, data-discovery.
+
+### AI Features
+```
+POST /api/ai/chat                      # streaming
+POST /api/ai/autofill/ropa
+POST /api/ai/autofill/dpia
+POST /api/ai/contract-review
+POST /api/ai/policy-review
+POST /api/ai/remediation-plan
+```
+
+### Data Discovery
+```
+POST /api/information-systems
+POST /api/information-systems/{id}/scan
+GET  /api/information-systems/{id}/schema
+```
+
+### DSR SQL Generator (Phase K)
+```
+POST /api/dsr/{id}/sql-pack/generate
+GET  /api/dsr/{id}/sql-pack/download
+POST /api/dsr/{id}/executions/{eid}/mark-executed
+```
+
+## Webhook
+
+### Config
+UI Settings → Webhooks. URL + event filter + HMAC-SHA256 secret. Retry 3x exponential backoff.
+
+### Event Types
+- `ropa.created`, `ropa.updated`, `ropa.approved`, `ropa.deleted`
+- `dpia.*`
+- `dsr.created`, `dsr.deadline_alert`, `dsr.completed`
+- `breach.detected`, `breach.escalated`, `breach.closed`
+- `vendor.risk_changed`
+- `consent.withdrawn`
+- `ai.tool_executed`
+- `audit.suspicious`
+
+### Payload
+```json
+{
+  "id": "evt_xxx",
+  "type": "breach.detected",
+  "created_at": "2026-04-25T10:00:00Z",
+  "org_id": "org_abc",
+  "data": {...},
+  "signature": "sha256=xxx..."
+}
+```
+
+### Signature Verify
+```python
+expected = hmac.new(secret, payload, sha256).hexdigest()
+```
+
+## SIEM Integration
+
+Formats:
+- **Syslog RFC 5424** (UDP/TCP TLS)
+- **Splunk HEC**
+- **Elastic ECS** (JSON to Logstash)
+- **CEF** (Common Event Format)
+
+Events: auth, config change, sensitive action, AI execution, breach, DSR deadline.
+
+## IMAP (DSR Intake)
+
+Tenant inbox `dsr@company.com`. Privasimu fetch via IMAP (credential encrypted):
+- Subject → request type
+- Body → detail
+- Attachment → evidence
+- Auto-create DSR + identity verification flow
+
+## Slack / Teams
+
+Slack Incoming Webhook per tenant. Events:
+- Breach detected → action buttons (Ack, View, Escalate)
+- DSR deadline alert
+- ROPA approval request
+
+Teams: Adaptive Card equivalent.
+
+## Telegram Bot
+
+Built-in `@PrivasimuBot`:
+- User link via `/link <token>`
+- Real-time alerts
+- Reply `/ack` untuk acknowledge
+
+## WhatsApp Deep-Link
+
+Click-to-Chat (no WhatsApp Business API needed):
+- `https://wa.me/<phone>?text=ACK+BREACH+BRC-2026-042`
+- Embed di email breach subject notification
+- Subject klik → compose message ke DPO
+
+## Rate Limit
+
+- 1000 req/min per API key default
+- Burst 100 req/sec sustained
+- Headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `Retry-After`
+
+## Swagger / OpenAPI
+
+- `/api/openapi.json` — spec
+- `/api/docs` — interactive doc
+- Postman collection downloadable
+- Code examples: Python, PHP, Node.js, curl
+KB,
+            ],
+
+            [
+                'module_key' => 'tech_document_generation',
+                'title' => 'Document Generation — PDF + DOCX Engine',
+                'category' => 'library',
+                'feature_tags' => 'chat,sales_faq',
+                'keywords' => 'pdf,docx,word,template,placeholder,generate,export,dompdf,phpword,watermark,logo,cover,cloneRow,cloneBlock',
+                'summary' => 'Document generation: PDF via dompdf 3.x, DOCX via PhpOffice PhpWord 1.x dengan TemplateProcessor. Placeholder library 74 ROPA, 50+ DPIA, 30+ Breach. cloneRow untuk table repeater, cloneBlock untuk section. 10 preset styling + custom upload. Branding white-label per tenant.',
+                'content' => <<<'KB'
+# Document Generation — PDF + DOCX
+
+## Engine
+
+### PDF (dompdf 3.x)
+- Pure PHP, no external binary
+- HTML + CSS rendering (flex, custom fonts)
+- Output: PDF/A compliant optional
+
+### DOCX (PhpOffice/PhpWord 1.x)
+- TemplateProcessor dengan placeholder `${field}`
+- cloneRow untuk tabel repeater
+- cloneBlock untuk section repeater
+- Image embed, conditional section
+
+## Placeholder Library
+
+- **ROPA**: 74 placeholder (number, activity, DPO, legal basis, data cat, retention, security, dll)
+- **DPIA**: 50+ placeholder (risk score matrix, residual, mitigation, 21 category × 4 field)
+- **Breach Report**: 30+ placeholder (timeline, RACI, RCA, notification status)
+
+## Template Types
+
+1. **System Canonical (Nexus)** — default, full-featured
+2. **10 Preset Styling** — Corporate Classic, Government Formal, Modern Minimal, Dark Professional, Draft Watermark, Rounded Soft, Compact Tight, Academic Paper, Startup Vibrant, Legal Formal
+3. **Custom Upload** — tenant upload template Word (3-template limit Professional, unlimited Enterprise)
+
+## White-Label per Tenant
+
+Branding di `/settings/branding`:
+- Primary + accent color hex
+- Logo + favicon + cover bg + watermark
+- Font family (Google Fonts atau upload)
+- Paper size (A3-A5, Letter, Legal, Folio)
+- Margin, table style
+- Email sender
+
+## Generation Flow
+
+### PDF
+Data → load template → render Blade view → HTML → dompdf → PDF stream
+
+### DOCX
+Data → load .docx template → TemplateProcessor replace:
+- Scalar: `${field}` → value
+- List: cloneBlock
+- Table: cloneRow
+→ save temp → stream
+
+## Custom Template Upload
+
+1. Create Word dengan placeholder `${ropa_number}`
+2. Upload UI `/document-templates`
+3. Validator parse + list placeholder found vs expected
+4. Preview dengan sample data
+5. Assign per-kind (ROPA / DPIA / Breach)
+6. Active
+
+## Digital Signature
+
+### PDF
+PKCS#7 signature support. Upload tenant cert (.p12). Verifiable Adobe Reader + country PKI.
+
+### DOCX
+MS Word digital signature metadata embed.
+
+## Performance
+
+- PDF 10-page ROPA: 1-2 detik
+- DOCX generation: <1 detik
+- Bulk export 100 ROPA ZIP: 30-60 detik (queued)
+
+## Troubleshooting
+
+| Issue | Fix |
+|---|---|
+| Placeholder tidak replaced | Check spelling (case-sensitive), verify field exist |
+| PDF rendering aneh | Clear cache, check HTML valid |
+| DOCX corrupt | Harus valid .docx (bukan .doc legacy), max 10 MB, no macro |
+KB,
+            ],
+
+            [
+                'module_key' => 'tech_performance_scale',
+                'title' => 'Performance & Scale — Platform Capacity',
+                'category' => 'library',
+                'feature_tags' => 'chat,sales_faq',
+                'keywords' => 'performance,scale,scalability,concurrent,kapasitas,user,response time,latency,load,benchmark,tps,rps,throughput',
+                'summary' => 'Capacity per tier: Basic 50 concurrent user, Professional 200, AI 500, Enterprise 1000+. Response time p95 <500ms UI, 2-5s AI feature. DB handle 10M+ row per tabel. Horizontal scale via K8s untuk enterprise. Typical AI Auto-Fill 8-12s p50.',
+                'content' => <<<'KB'
+# Performance & Scale
+
+## Concurrent User Capacity
+
+| Tier | Concurrent | DB Pool | App Servers |
+|---|---|---|---|
+| Basic | 50 | 10 | 1 |
+| Professional | 200 | 30 | 2 |
+| AI / AI Agent | 500 | 50 | 3 |
+| Enterprise | 1000+ | 100+ | 5+ (K8s) |
+
+## Response Time p95
+
+### UI / REST API
+- GET list: <500ms (typical 200ms)
+- GET detail: <300ms (120ms)
+- POST create: <500ms (250ms)
+- Search/filter: <800ms (400ms)
+- Complex aggregation: <2000ms (800ms)
+
+### AI Features
+- AI Chat (streaming start): <2s (800ms)
+- AI Chat full short response: 3-5s (3s)
+- AI Auto-Fill ROPA: <30s (12s)
+- AI Auto-Fill DPIA: <60s (25s)
+- AI Contract Review 10p: <90s (40s)
+- AI Policy Review: <60s (30s)
+- AI Remediation Plan: <120s (45s)
+
+### Data Discovery
+- Test DB connect: 1-2s
+- Schema enum 100 tabel: 30-60s
+- PII scan 100 kolom: 2-5 menit
+- Full scan 1000 tabel: 30 menit - 2 jam
+
+## DB Capacity Per-Table
+
+- ROPA: 100k per tenant
+- DPIA: 100k per tenant
+- DSR requests: 10 juta (5-year retention)
+- Audit logs: 100 juta (partitioned per bulan)
+- Consent records: 100 juta (partitioned)
+- Breach: 10k per tenant
+
+Tested 10M row per tabel tanpa degradation dengan indexing.
+
+## Scaling Strategy
+
+### Vertical
+Basic 4vCPU/16GB → Professional 8/32 → Enterprise 16/64 per server.
+
+### Horizontal (K8s)
+- HPA auto-scale 2-10 replica
+- Redis cluster
+- PostgreSQL primary-replica
+- NGINX LB + TLS
+
+### DB Horizontal
+- Read replica (reporting, dashboard)
+- Primary single writer (tidak sharding app DB by design)
+
+## Bottleneck Mitigation
+
+1. PHP-FPM: scale workers, Laravel Octane
+2. DB connection: PgBouncer / ProxySQL
+3. Redis memory: cluster mode, TTL tuning
+4. File I/O: S3/MinIO offload
+5. AI rate limit: multi-provider failover
+
+## Caching
+
+- Session: Redis TTL 60min
+- Permission check: Redis TTL 5min
+- Menu/nav: Redis TTL 1hour
+- Dashboard aggregates: Redis TTL 5min
+- Static: NGINX + CDN
+
+## Queue
+
+Laravel Horizon Redis-backed:
+- AI execution (long-running)
+- Email dispatch
+- PDF generation
+- DB scan
+- Webhook + retry
+- Audit log shipping
+
+500+ job/sec per worker, linear scale.
+
+## SLA
+
+### SaaS
+- Uptime 99.9% Basic, 99.95% Pro, 99.99% Enterprise
+- Response time per target above
+- Support response 4-24h based on tier
+
+### On-Prem
+- Hardware SLA vendor (Dell/HPE 4-hour onsite)
+- Software 4-24h tier-based
+
+## Load Test Sample (Professional)
+
+```
+Concurrent: 200, Duration 30min
+Throughput: 100 req/s
+p50: 120ms, p95: 450ms, p99: 1200ms
+Error rate: 0.03%
+DB CPU 35% avg, App CPU 55% avg
+```
+
+## Monitoring
+
+- Platform status: `status.privasimu.com`
+- Tenant dashboard: real-time health, queue, AI quota
+- Grafana embed (Enterprise)
+- Prometheus + New Relic APM + Sentry
+KB,
+            ],
+
+            // -------------------------------------------------------------
+            // Leak Detection (inside Data Discovery)
+            // -------------------------------------------------------------
+            [
+                'module_key' => 'feature_leak_detection',
+                'title' => 'Leak Detection — Verify PII Value Existence in DB',
+                'category' => 'workflow',
+                'feature_tags' => 'chat,sales_faq,data_discovery',
+                'keywords' => 'leak detection,kebocoran,deteksi leak,verify,cari data,search value,pii lookup,confirm leak,data bocor,exact match,contains match,sample masked',
+                'summary' => 'Leak Detection = fitur di Data Discovery untuk verify apakah PII spesifik (NIK, email, phone, dll) benar-benar ADA di database tenant. Flow: (1) input list kolom yang dicari, (2) platform match schema tabel, (3) pilih tabel + input value, (4) exact/contains mode, (5) output query template + found_count + sample masked + leak_confirmed boolean. Tracked di history per-system.',
+                'content' => <<<'KB'
+# Leak Detection — Feature Detail
+
+## Apa Itu?
+Fitur di dalam **Data Discovery** (tab "Leak Detection") untuk verify apakah PII value spesifik benar-benar tersimpan di database klien. Use case:
+- **DSR Access request**: subjek minta "apakah kamu simpan NIK saya?"
+- **Post-breach confirmation**: verifikasi data yang di-claim bocor beneran ada di sistem
+- **Audit internal**: DPO validate kepatuhan retention (data yang harusnya sudah dihapus, masih ada?)
+- **Data subject verification**: saat identity verification, cek NIK input subjek match dengan DB
+
+## Model Data
+
+Table `leak_detections`:
+- `system_id` — Information System mana
+- `org_id` — tenant
+- `user_id` — siapa trigger
+- `table_name` — tabel target
+- `match_mode` — 'exact' atau 'contains'
+- `columns` (array) — kolom yang di-check
+- `query_template` (array) — SQL yang dihasilkan (untuk audit)
+- `found_count` — berapa row match
+- `leak_confirmed` (boolean) — true kalau found_count > 0
+- `sample_masked` (array) — preview hasil (PII di-mask)
+
+## Flow End-to-End
+
+### Step 1: Input Columns to Match
+User input list kolom yang ingin dicari, misal:
+```
+nik, email, no_hp
+```
+
+Optional: **table hint** (kalau tahu tabel target).
+
+### Step 2: Match Schema
+Platform call `POST /data-discovery/{id}/leak/match-schema`:
+- Scan Schema Registry Information System
+- Cari tabel yang punya kolom match (exact atau fuzzy)
+- Return ranked list: `[{table, confidence, matching_columns, missing_columns}]`
+
+Contoh output:
+```json
+[
+  {"table": "customers", "confidence": 95, "matching_columns": ["nik", "email", "no_hp"], "missing_columns": []},
+  {"table": "leads", "confidence": 67, "matching_columns": ["email", "phone"], "missing_columns": ["nik", "no_hp"]}
+]
+```
+
+### Step 3: Pick Table
+DPO pilih tabel yang paling relevan (biasanya confidence tertinggi).
+
+### Step 4: Input Values
+Per-column, input value yang mau dicari:
+```
+nik: 3271234567890001
+email: budi@example.com
+no_hp: 081234567890
+```
+
+### Step 5: Pilih Match Mode
+- **Exact**: `WHERE nik = '3271234567890001'` — untuk ID exact
+- **Contains**: `WHERE email LIKE '%budi@example.com%'` — untuk partial match
+
+### Step 6: Verify Leak
+Platform call `POST /data-discovery/{id}/leak/verify`:
+- Generate SQL template
+- Execute via connection (kalau live mode) ATAU return SQL untuk admin eksekusi (generate-only mode)
+- Count rows found
+- Return sample with PII masked (e.g. "3271xxxx...xxx0001")
+
+### Step 7: Result
+```json
+{
+  "table": "customers",
+  "match_mode": "exact",
+  "query_template": {"sql": "SELECT * FROM customers WHERE nik = ? AND email = ? LIMIT 10"},
+  "found_count": 3,
+  "leak_confirmed": true,
+  "sample": [
+    {"nik": "3271xxxx...0001", "email": "b***@example.com", "no_hp": "0812xxxx7890"},
+    ...
+  ],
+  "note": "Found 3 matching records. Data confirmed to exist in database."
+}
+```
+
+## History Tracking
+
+Every leak detection run saved di `leak_detections`:
+- Per-system history
+- Pagination
+- Can delete (soft) atau clear all
+- Audit trail dengan user_id + timestamp
+
+## Privacy & Safety
+
+### PII Masking
+Sample return **always masked**:
+- NIK: show first 4 + last 4 digit only, rest `x`
+- Email: first char + `***@domain`
+- Phone: first 4 + last 4 digit
+- Nama: first name only
+
+Platform **tidak pernah** expose raw PII value di UI setelah initial input.
+
+### Authorization
+- User harus punya permission `data_discovery:write`
+- Bulk leak detection >100 rows → audit alert ke DPO
+- High-frequency queries → rate limit (protect against reconnaissance attack)
+
+### Query Safety
+- Prepared statement (parameterized) — no SQL injection
+- LIMIT 10 default (tidak pull data massal)
+- Read-only (SELECT only, no INSERT/UPDATE/DELETE)
+
+## Use Case Banking
+
+Skenario bank nasabah:
+```
+DSR Access request masuk:
+"Subjek NIK 3271234567890001 minta tau data yang Anda simpan."
+
+DPO flow:
+1. Buka Data Discovery → pilih Information System "Core Banking"
+2. Tab Leak Detection
+3. Input: columns = "nik", value = "3271234567890001", exact mode
+4. Match Schema → pilih table "customers"
+5. Verify → found_count = 1, leak_confirmed = true
+6. Check kolom lain yang ada di row itu (nama, alamat, dll)
+7. Output ke DSR response template
+```
+
+## Use Case Breach Investigation
+
+Post-incident:
+```
+Ada claim data leak NIK subjek X + email Y di dark web.
+DPO harus konfirmasi: benar-benar data kita?
+
+Flow:
+1. Leak Detection → input NIK + email dari leak claim
+2. Match schema → find tabel yang simpan
+3. Verify → kalau leak_confirmed TRUE → escalate Breach Module
+4. Kalau FALSE → data bukan dari sistem kita (fake claim atau third-party leak)
+```
+
+## Generate-Only Mode (Bank Ketat)
+
+Kalau klien pakai generate-only mode (platform tidak connect ke prod DB):
+- Step 1-5 sama
+- Step 6: platform generate SQL template + instruksi
+- Admin bank eksekusi SQL di platform mereka
+- Admin upload hasil (CSV atau text) kembali
+- Privasimu parse + update leak_detection record
+
+## API Endpoints
+
+```
+POST /api/data-discovery/{id}/leak/match-schema
+  body: { columns: [], table_hint: string|null }
+  → { matches: [], note: string }
+
+POST /api/data-discovery/{id}/leak/verify
+  body: { table: string, values: [{column, value}], match_mode: 'exact'|'contains' }
+  → LeakVerifyResult (lihat di atas)
+
+GET  /api/data-discovery/{id}/leak/history
+  → { data: LeakHistoryRow[] }
+
+DELETE /api/data-discovery/{id}/leak/history/{history_id}
+  → soft delete
+
+DELETE /api/data-discovery/{id}/leak/history
+  → clear all history
+```
+
+## Integration dengan Module Lain
+
+- **DSR Module**: Leak Detection result bisa langsung jadi input DSR Access response
+- **Breach Module**: Leak Detection confirmed → auto-create Breach incident draft
+- **Posture Score**: leak events contribute ke overall risk metric
+
+## Best Practice
+
+1. **Jangan over-use**: bukan tool untuk browse data. Fokus untuk DSR verify, breach confirmation, retention audit.
+2. **Minimize match mode contains**: lebih banyak row return → risk over-disclosure
+3. **Log alasan** di notes (optional): DPO tulis kenapa run leak detection ini (audit trail)
+4. **Kombinasikan dengan consent check**: kalau data found tapi consent sudah withdrawn → flag retention violation
+KB,
+            ],
+
+            // -------------------------------------------------------------
+            // AI Patrol Scheduler
+            // -------------------------------------------------------------
+            [
+                'module_key' => 'feature_ai_patrol',
+                'title' => 'AI Patrol — Scheduled Data Discovery Scanner',
+                'category' => 'workflow',
+                'feature_tags' => 'chat,sales_faq,data_discovery,pii_scan',
+                'keywords' => 'ai patrol,scheduler,schedule,automatic scan,cron,periodic,otomatis,drift detection,change detection,monitoring',
+                'summary' => 'AI Patrol = scheduled scanner di Data Discovery. DPO set cron schedule (daily/weekly/monthly), platform auto-scan Information System, detect drift (kolom baru, PII classification changed, tabel baru). Alert DPO kalau ada perubahan. Cocok untuk compliance "continuous monitoring" instead of ad-hoc scan.',
+                'content' => <<<'KB'
+# AI Patrol — Scheduled Scanner
+
+## Apa Itu?
+Fitur scheduled scan otomatis di Data Discovery. Platform run scan berkala tanpa manual trigger, detect perubahan schema + PII landscape, alert DPO.
+
+## Use Case
+- **Continuous Compliance Monitoring** — daripada scan sekali setahun, patrol daily/weekly
+- **Schema Drift Detection** — dev team tambah kolom PII baru ke prod tanpa sepengetahuan DPO → detect + alert
+- **New Table Detection** — database migrate tambah tabel baru yang berisi PII → auto-register ke inventory
+- **PII Classification Changes** — kolom yang dulunya dianggap non-PII (mis. kolom "reference") ternyata sekarang berisi NIK (app bug?) → alert
+- **Compliance Reporting** — monthly dashboard "PII landscape change" untuk report ke Direksi
+
+## Config
+
+Admin setup di `/data-discovery/{id}/ai-patrol`:
+- **Schedule**: cron expression
+  - Daily: `0 2 * * *` (2am setiap hari)
+  - Weekly: `0 2 * * 1` (Senin 2am)
+  - Monthly: `0 2 1 * *` (tanggal 1 2am)
+- **Scope**: semua tabel atau subset
+- **Notification channels**: email + Telegram + in-app
+- **Alert severity threshold**: cuma critical? all change?
+
+## What Changes Detected
+
+### Schema Changes
+- Tabel baru yang muncul
+- Tabel yang di-drop
+- Kolom baru yang di-add
+- Kolom di-rename
+- Type change (`VARCHAR(50)` → `TEXT`)
+- Constraint change (NOT NULL → NULL, UNIQUE added/removed)
+
+### PII Classification Drift
+- Kolom previously classified "phone" sekarang data-nya mostly email format
+- Kolom previously "reference_id" ternyata berisi NIK
+- Confidence score turun signifikan (data pattern berubah)
+
+### Volume Changes
+- Jumlah row naik drastis (10x) — unusual intake
+- Jumlah row turun drastis — mungkin bulk delete yang tidak tercatat
+
+## Execution Flow
+
+```
+Cron trigger → AI Patrol Job (Laravel queue)
+  ↓
+1. Load Information System config
+2. Run scan (Standard View + AI View opsional)
+3. Compare hasil vs last scan snapshot
+4. Calculate diff:
+   - Added columns/tables
+   - Removed
+   - Changed classification
+   - Volume delta
+  ↓
+5. Kalau ada diff significant → save to changelog
+6. Kalau severity >= threshold → dispatch notification
+7. Update Posture Score
+```
+
+## Notification Detail
+
+Email/Telegram sample:
+```
+🔔 AI Patrol Alert — Information System "Core Banking"
+
+Changes detected (2026-04-25 02:00 WIB):
+
+🆕 New PII Columns:
+  - customers.loyalty_card_number (classified as: card_number, confidence 92%)
+  - customer_kyc.selfie_url (classified as: biometric, confidence 88%)
+
+⚠️ Classification Changes:
+  - customers.reference_v2 — previously "internal_ref", now classified as "NIK" (98% match)
+    → Possible app bug menyimpan NIK ke kolom yang dimaksud internal ref?
+
+📈 Volume Changes:
+  - transactions table: +2.3M rows sejak last scan (expected growth: ~500k)
+
+Action required:
+→ Review classification changes
+→ Update ROPA kalau new column PII-bearing
+→ Investigate volume anomaly
+```
+
+## History / Changelog
+
+Tab `Changelog` di Data Discovery menunjukkan timeline:
+- Kapan scan run
+- Apa yang berubah
+- Siapa acknowledge (DPO mark reviewed)
+- Link ke affected ROPA yang mungkin perlu update
+
+## Integration
+
+- **ROPA**: auto-suggest update ROPA kalau new PII column detected di sistem yang link ROPA
+- **DPIA**: alert kalau data spesifik (biometrik, health, child) muncul baru
+- **Posture Score**: drift signifikan menurunkan score
+- **Audit Log**: patrol run + detection tercatat
+
+## Performance
+
+- Run saat off-peak (middle of night)
+- Scan incremental — compare cached metadata, bukan full re-scan
+- Typical duration: 5-30 menit per Information System
+- Queue via Horizon — tidak block other operations
+
+## Permissions
+
+- **Enable/disable schedule**: `data_discovery:write`
+- **View changelog**: `data_discovery:read`
+- **Force manual run**: `data_discovery:write`
+
+## Config Override
+
+Per-schedule override:
+- Skip kolom tertentu (blacklist)
+- Focus subset schema saja (whitelist)
+- Different alert severity threshold per environment
+
+## Cost (AI Credits)
+
+- Standard View only: zero AI credit (rule-based)
+- AI View enabled: ~500-2000 token per column, depends on schema size
+- Typical monthly cost untuk medium DB (500 kolom scan daily): ~300k token
+KB,
+            ],
+
+            // -------------------------------------------------------------
+            // Shadow Data + Encryption Keys + Protection
+            // -------------------------------------------------------------
+            [
+                'module_key' => 'feature_shadow_data',
+                'title' => 'Shadow Data Detection & Protection',
+                'category' => 'workflow',
+                'feature_tags' => 'chat,sales_faq,data_discovery,pii_scan',
+                'keywords' => 'shadow data,bayangan,hidden data,undocumented,belum tercatat,ropa coverage,shadow detection,protection,encryption keys,unregistered',
+                'summary' => 'Shadow Data = PII yang ada di DB tapi TIDAK tercatat di ROPA (no legal basis, no retention policy, no safeguards documented). Privasimu auto-detect saat scan: kolom PII-bearing tapi tidak ada ROPA link. Flag sebagai compliance risk. Protection tab kasih recommendation: register ke ROPA atau delete/anonymize.',
+                'content' => <<<'KB'
+# Shadow Data Detection
+
+## Apa Itu?
+**Shadow Data** = data pribadi yang benar-benar ada di sistem tapi **tidak tercatat / tidak terdokumentasi** di ROPA organisasi. Risk besar karena:
+- Tidak ada legal basis documented
+- Tidak ada retention policy → mungkin over-retention
+- Tidak ada safeguards formal
+- Tidak ter-scope DSR (subjek request tidak reach data ini)
+- Compliance gap saat audit
+
+## Cara Detect
+
+Platform cross-reference:
+```
+Schema Registry hasil scan (actual PII in DB)
+  VS
+ROPA records (documented processing activity)
+
+Delta = Shadow Data
+```
+
+Contoh:
+- Data Discovery scan tabel `user_demographics` → detect kolom `salary`, `medical_conditions` classified sebagai sensitive PII
+- ROPA inventory cek: tidak ada ROPA yang mention pemrosesan `user_demographics`
+- **Flag: Shadow Data** — kolom sensitive ada tapi tidak ada ROPA
+
+## Severity Classification
+
+| Shadow Data Type | Severity |
+|---|---|
+| Data sensitif (biometrik/kesehatan/anak) tanpa ROPA | 🔴 Critical |
+| Data umum (nama, email) tanpa ROPA | 🟠 High |
+| Data sensitif dengan ROPA partial (kolom belum listed) | 🟡 Medium |
+| Kolom test/staging yang tidak dihapus | 🟡 Medium |
+
+## UI Flag
+
+Di Data Discovery per-column:
+```
+✅ Documented in ROPA: ROPA-042 "Customer Registration"
+⚠️ Shadow Data: No ROPA coverage
+```
+
+Shadow Data counter di dashboard (overall compliance health metric).
+
+## Protection Tab
+
+Recommendation engine per shadow data:
+1. **Register to ROPA** — create ROPA baru atau update existing
+2. **Delete** — kalau data seharusnya tidak ada (dev leak, old migration)
+3. **Anonymize** — keep data tapi remove PII (untuk analytics)
+4. **Encrypt** — enhanced protection selama investigasi
+5. **Acknowledge as accepted risk** — temporary, dengan legal sign-off
+
+## Encryption Keys Management
+
+Tab `Encryption Keys` per Information System:
+- Generate encryption key per-kolom PII (data-at-rest encryption tambahan)
+- Key rotation schedule
+- HSM integration (Enterprise tier)
+- Audit log key usage
+
+Use case:
+- Kolom NIK super-sensitive → encrypted with dedicated key
+- Key rotation quarterly
+- Compromised key → rotate, decrypt-reencrypt batch job
+
+## Integration
+
+- **ROPA wizard**: "Add from Shadow Data" shortcut auto-populate dari detected
+- **DPIA**: shadow data sensitive → auto-suggest DPIA
+- **Remediation Plan**: shadow data included di priority action
+- **Posture Score**: shadow data count negatif contribute
+
+## Reporting
+
+- Weekly "Shadow Data Report" email ke DPO
+- Trend chart: shadow data count over time (decreasing = improving compliance)
+- Export CSV untuk audit
+KB,
+            ],
+
+            // -------------------------------------------------------------
+            // Generic feature inventory (catch-all untuk AI awareness)
+            // -------------------------------------------------------------
+            [
+                'module_key' => 'platform_feature_inventory',
+                'title' => 'Privasimu Nexus — Complete Feature Inventory',
+                'category' => 'example',
+                'feature_tags' => 'chat,sales_faq',
+                'keywords' => 'fitur,feature,modul,module,inventory,daftar,list,apa saja,semua,complete,lengkap,tersedia,available',
+                'summary' => 'Complete list semua fitur Privasimu Nexus: ROPA, DPIA, GAP, LIA, TIA, Maturity, DSR, Consent, Cross-Border, Breach, Simulation, Vendor TPRM, Data Discovery (+ Leak Detection, AI Patrol, Shadow Data, Encryption Keys), AI Agent, Auto-Fill, Contract Review, Policy Review, Remediation Plan, Document Templates, RACI Templates, Retention Master, Knowledge Base, dan 12+ admin feature.',
+                'content' => <<<'KB'
+# Privasimu Nexus — Complete Feature Inventory
+
+## AI tidak boleh bilang "feature X tidak ada" tanpa cek list ini
+
+Kalau user tanya fitur yang tidak terlihat langsung, **cek list ini dulu**. Feature mungkin ada tapi nested di modul utama.
+
+## 1. Assessment Engine (Compliance Evaluation)
+
+- **ROPA** — Records of Processing Activities (wizard 7-step)
+- **DPIA** — Data Protection Impact Assessment (21 kategori, matrix 5×5)
+- **GAP Assessment** — 33 pertanyaan UU PDP + multi-regulation (GDPR, PDPA, ISO 27701)
+- **LIA** — Legitimate Interest Assessment (3-step balancing test)
+- **TIA** — Transfer Impact Assessment (cross-border scoring)
+- **Maturity Assessment** — 5-level privacy maturity
+
+## 2. Subject Rights & Consent
+
+- **DSR** — Data Subject Rights (7 tipe: access, correction, deletion, portability, withdraw, objection, information)
+- **DSR SQL Generator** — platform generate SQL pack, admin eksekusi (generate-only mode untuk bank)
+- **Consent Management** — Collection Points, Consent Records, version tracking
+- **Preference Center** — public URL per-subjek untuk withdraw consent
+- **Consent Widget** — JS snippet drop-in + iframe embed
+- **Cross-Border Transfer Registry** — SCC/BCR tracker
+
+## 3. Incident Response
+
+- **Breach Management** — 15 SOP containment templates, 72h countdown
+- **RACI Matrix editor per-breach** — R/A/C/I per step editable
+- **Containment Checklist** adaptive per SOP type
+- **Multi-ROPA linkage** — 1 breach ↔ banyak ROPA
+- **KOMDIGI + Subject Notification** auto-generate PDF/email
+- **Breach Simulation (Drill)** — tabletop + full drill + scoring
+
+## 4. Vendor Risk Management
+
+- **Vendor Registry** dengan DPA/MSA/NDA attachment
+- **Assessment Questionnaire** — 50+ pertanyaan
+- **Risk Scoring per-vendor**
+- **Periodic Reassessment Reminder**
+- **AI Document Screening** — DPA parser
+
+## 5. Data Discovery & Inventory
+
+- **PII Scanner** — 2 mode (Live Scan + Generate-Only)
+- **Standard View** — rule-based regex + context
+- **AI View / DeepScan** — LLM + NER semantic classification
+- **Schema Registry** — table + column metadata
+- **Sharded DB Support** — 1 logical system, N physical shards
+- **Leak Detection** — verify PII value existence in DB
+- **AI Patrol** — scheduled auto-scan dengan drift detection
+- **Shadow Data Detection** — PII without ROPA coverage
+- **Encryption Keys Management** — per-column key + rotation
+- **Protection Tab** — recommendation engine per kolom
+- **Changelog** — schema drift history
+- **AI Search** — natural language search DB
+
+## 6. AI Features
+
+- **AI Agent** — Conversational Compliance Assistant dengan function calling
+- **AI Auto-Fill ROPA** — generate 7-section dari deskripsi
+- **AI Auto-Fill DPIA** — generate 21 kategori + matrix
+- **AI Contract Review** — DPA klausul analyzer
+- **AI Policy Review** — Privacy Policy/SOP UU PDP checker
+- **AI Remediation Plan** — dari GAP Assessment ke action plan
+- **AI Document Import** — bulk parse legacy ROPA/DPIA
+- **AI OCR Scanner** — KTP, form fisik, kontrak scan
+- **AI Search di Data Discovery** — natural query → SQL
+
+## 7. Documentation & Templates
+
+- **Document Templates** — 10 preset styling + custom upload
+- **Per-Kind Assignment** — template A untuk ROPA, B untuk DPIA, dll
+- **Nexus Canonical DOCX** — default system template
+- **PhpWord TemplateProcessor** — cloneRow + cloneBlock + placeholder
+- **RACI Templates Library** — reusable preset (DPO-led, IT-led, dll)
+- **Retention Policies Master Data** — reusable across ROPA
+- **Knowledge Base CMS** — markdown editor untuk internal docs
+
+## 8. Admin / Platform
+
+- **User Management + Roles** — hierarchical + RBAC
+- **Custom Tenant Roles** — define role sendiri (enterprise)
+- **SSO** — SAML 2.0 + OIDC + JIT provisioning
+- **Multi-Channel Notifications** — email + Telegram + WhatsApp + Slack + Teams + Push + in-app
+- **Approval Workflow** — multi-level dengan timeout escalation
+- **Audit Log** — immutable 5-year retention
+- **Branding (White-Label)** — color, logo, domain, email sender, watermark
+- **License Manager** — 5 tier (Basic → Enterprise Perpetual)
+- **Menu Control** — enable/disable per tenant, user preferences
+- **Custom Fields** — per-modul tanpa migrasi (JSON)
+- **Cloud Storage** — S3/MinIO/GCS per-tenant (encrypted credential)
+- **API Keys + Developer Hub** — self-service, Swagger, scope
+- **Tenant Offboarding** — 14-day export + hard-delete certificate
+- **Alert Engine** — threshold-based alerting
+- **Automation Engine** — rule-based workflow
+- **Voice TTS Providers** — multi-engine selector
+- **AI Provider Config** — switchable OpenRouter/OpenAI/Anthropic/Gemini/DeepSeek/Qwen
+- **Changelog (Platform)** — release notes per tenant dashboard
+
+## 9. Enterprise Specific
+
+- **Holding Dashboard** — cross-tenant aggregated (parent-child structure)
+- **Document Import Bulk** — legacy ROPA/DPIA migration
+- **Enterprise Roadmap** — priority feature request backlog
+- **Dedicated TAM** — technical account manager
+- **Premium SLA** — 4-hour response mission-critical
+
+## 10. Developer / Integration
+
+- **REST API Full CRUD** — all module
+- **Webhook** — event push dengan HMAC signature
+- **SIEM Integration** — Splunk/Elastic/QRadar/Azure Sentinel
+- **IMAP Intake** — DSR via email
+- **Slack / Teams Bot** — alert + approval
+- **Telegram Bot** — real-time notification
+- **WhatsApp Deep-Link** — no Business API needed
+- **Swagger/OpenAPI 3.0** spec
+
+## 11. Security & Compliance
+
+- **AES-256-CBC Encryption at Rest** (EncryptedString cast)
+- **SSL/TLS in Transit**
+- **bcrypt Password Hashing**
+- **Sanctum Token Auth** (60min + refresh)
+- **Rate Limiting** (per IP, per user, per endpoint)
+- **CSRF Protection**
+- **Org_id Multi-Tenancy Isolation** (enforced)
+- **Certificate Target**: ISO 27001 (Q2 2026), SOC 2 Type II (Q4 2026), ISO 27701 (Q4 2026)
+
+## 12. Business Intelligence
+
+- **Posture Score** — unified compliance dashboard
+- **Trend Charts** — historical tracking
+- **Multi-Regulation Support** — UU PDP + GDPR + PDPA + ISO 27701
+- **Benchmark Industri** — compare dengan sektor
+- **Export Reports** — PDF/DOCX/CSV
+
+## Aturan Penting untuk AI Agent
+
+1. **Jangan bilang "fitur X tidak ada"** — cek list di atas dulu
+2. **Kalau user pakai sinonim** (misal "scan PII" = "Data Discovery Scanner"), match ke fitur yang sesuai
+3. **Kalau tidak yakin fitur ada/tidak**, **jawab "Saya cek dulu di sistem"** → call tool list_information_systems atau similar
+4. **Jangan halu**: jangan invent fitur yang tidak ada di list ini
+5. **Defer ke docs atau sales** kalau benar-benar tidak tahu
 KB,
             ],
         ];

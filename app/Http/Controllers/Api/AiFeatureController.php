@@ -929,7 +929,7 @@ class AiFeatureController extends Controller
             . "Audit item persetujuan (consent items) untuk titik pengumpulan data. Berikan evaluasi komprehensif terkait transparansi, spesifikitas, dan kepatuhan.\n"
             . "Konteks Tenant:\n$context\n\n"
             . "Output WAJIB JSON valid.\n"
-            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info\",\"title\":\"...\",\"content\":\"...\",\"items\":[]}],\"closing\":\"...\"}";
+            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info|table|code\",\"title\":\"...\",\"content\":\"...\",\"items\":[],\"table_data\":[{\"col1\":\"v1\",\"col2\":\"v2\"}],\"headers\":[\"col1\",\"col2\"]}],\"closing\":\"...\"}";
 
         $userPrompt = "Audit consent items berikut untuk domain {$point->domain} (Tujuan: {$point->name}):\n\n$items\n\n"
             . "Berikan:\n"
@@ -1041,7 +1041,7 @@ class AiFeatureController extends Controller
         ];
 
         $systemPrompt = "Kamu adalah cybersecurity trainer dan DPO senior. Output WAJIB JSON valid.\n"
-            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info\",\"title\":\"...\",\"content\":\"...\",\"items\":[]}],\"closing\":\"...\"}";
+            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info|table|code\",\"title\":\"...\",\"content\":\"...\",\"items\":[],\"table_data\":[{\"col1\":\"v1\",\"col2\":\"v2\"}],\"headers\":[\"col1\",\"col2\"]}],\"closing\":\"...\"}";
 
         $userPrompt = "Analisis performa drill simulasi berikut:\n" . json_encode($inputData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . "\n\n"
             . "Berikan:\n"
@@ -1092,7 +1092,7 @@ class AiFeatureController extends Controller
         }
 
         $systemPrompt = "Kamu adalah ahli data governance dan perlindungan data pribadi UU PDP. Output WAJIB JSON valid.\n"
-            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info\",\"title\":\"...\",\"content\":\"...\",\"items\":[]}],\"closing\":\"...\"}\n"
+            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info|table|code\",\"title\":\"...\",\"content\":\"...\",\"items\":[],\"table_data\":[{\"col1\":\"v1\",\"col2\":\"v2\"}],\"headers\":[\"col1\",\"col2\"]}],\"closing\":\"...\"}\n"
             . "Konteks Tenant:\n$context";
 
         $userPrompt = "Klasifikasikan kolom-kolom database berikut berdasarkan UU PDP Indonesia:\n\n"

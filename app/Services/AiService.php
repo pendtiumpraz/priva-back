@@ -153,7 +153,7 @@ class AiService
         )->implode("\n");
 
         $system = "Kamu adalah konsultan kepatuhan UU PDP Indonesia ahli. Output WAJIB JSON valid.\n"
-            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info\",\"title\":\"...\",\"content\":\"...\",\"items\":[]}],\"closing\":\"...\"}";
+            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info|table|code\",\"title\":\"...\",\"content\":\"...\",\"items\":[],\"table_data\":[{\"col1\":\"v1\"}],\"headers\":[\"col1\"]}],\"closing\":\"...\"}";
 
         $user = "Organisasi ini mendapat skor GAP Assessment: {$score}% (level: {$level}).\n\n"
             . "Berikut temuan yang perlu diperbaiki:\n{$recText}\n\n"
@@ -174,7 +174,7 @@ class AiService
     public function ropaAnalysis(array $ropaData): ?array
     {
         $system = "Kamu adalah DPO (Data Protection Officer) ahli UU PDP Indonesia. Output WAJIB JSON valid.\n"
-            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info\",\"title\":\"...\",\"content\":\"...\",\"items\":[]}],\"closing\":\"...\"}";
+            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info|table|code\",\"title\":\"...\",\"content\":\"...\",\"items\":[],\"table_data\":[{\"col1\":\"v1\"}],\"headers\":[\"col1\"]}],\"closing\":\"...\"}";
 
         $dataStr = json_encode($ropaData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         $user = "Analisis ROPA ini dan berikan:\n"
@@ -194,7 +194,7 @@ class AiService
     public function dpiaRiskScoring(array $dpiaData, array $riskAssessment): ?array
     {
         $system = "Kamu adalah ahli penilaian risiko data pribadi. Output WAJIB JSON valid.\n"
-            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info\",\"title\":\"...\",\"content\":\"...\",\"items\":[]}],\"closing\":\"...\"}";
+            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info|table|code\",\"title\":\"...\",\"content\":\"...\",\"items\":[],\"table_data\":[{\"col1\":\"v1\"}],\"headers\":[\"col1\"]}],\"closing\":\"...\"}";
 
         $dataStr = json_encode(['dpia' => $dpiaData, 'risks' => $riskAssessment], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         $user = "Analisis DPIA dan risk assessment ini:\n{$dataStr}\n\n"
@@ -214,7 +214,7 @@ class AiService
     public function breachAdvisor(array $breachData): ?array
     {
         $system = "Kamu adalah ahli incident response dan breach management UU PDP. Output WAJIB JSON valid.\n"
-            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info\",\"title\":\"...\",\"content\":\"...\",\"items\":[]}],\"closing\":\"...\"}";
+            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info|table|code\",\"title\":\"...\",\"content\":\"...\",\"items\":[],\"table_data\":[{\"col1\":\"v1\"}],\"headers\":[\"col1\"]}],\"closing\":\"...\"}";
 
         $dataStr = json_encode($breachData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         $user = "Insiden data breach berikut baru dilaporkan:\n{$dataStr}\n\n"
@@ -236,7 +236,7 @@ class AiService
     public function dsrResponseDraft(array $dsrData): ?array
     {
         $system = "Kamu adalah DPO yang menangani Data Subject Request sesuai UU PDP. Output WAJIB JSON valid.\n"
-            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info\",\"title\":\"...\",\"content\":\"...\",\"items\":[]}],\"closing\":\"...\"}";
+            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info|table|code\",\"title\":\"...\",\"content\":\"...\",\"items\":[],\"table_data\":[{\"col1\":\"v1\"}],\"headers\":[\"col1\"]}],\"closing\":\"...\"}";
 
         $dataStr = json_encode($dsrData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         $user = "Data Subject Request berikut perlu direspons:\n{$dataStr}\n\n"
@@ -257,7 +257,7 @@ class AiService
     public function consentTextGenerator(string $purpose, array $dataTypes, string $domain): ?array
     {
         $system = "Kamu adalah privacy lawyer Indonesia ahli drafted consent text UU PDP. Output WAJIB JSON valid.\n"
-            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info\",\"title\":\"...\",\"content\":\"...\",\"items\":[]}],\"closing\":\"...\"}";
+            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info|table|code\",\"title\":\"...\",\"content\":\"...\",\"items\":[],\"table_data\":[{\"col1\":\"v1\"}],\"headers\":[\"col1\"]}],\"closing\":\"...\"}";
 
         $user = "Generate teks consent yang comply UU PDP untuk:\n"
             . "- Tujuan: {$purpose}\n"
@@ -302,7 +302,7 @@ class AiService
     public function complianceSummary(array $stats): ?array
     {
         $system = "Kamu adalah konsultan kepatuhan UU PDP senior. Output WAJIB JSON valid.\n"
-            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info\",\"title\":\"...\",\"content\":\"...\",\"items\":[]}],\"closing\":\"...\"}";
+            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info|table|code\",\"title\":\"...\",\"content\":\"...\",\"items\":[],\"table_data\":[{\"col1\":\"v1\"}],\"headers\":[\"col1\"]}],\"closing\":\"...\"}";
 
         $dataStr = json_encode($stats, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         $user = "Berikan executive compliance summary berdasarkan data dashboard ini:\n{$dataStr}\n\n"
