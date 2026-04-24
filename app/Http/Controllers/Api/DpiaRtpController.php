@@ -263,69 +263,44 @@ class DpiaRtpController extends Controller
 
     /**
      * POST /api/dpia/{id}/rtp/auto-generate
-     * Auto-generate RTP items dari mitigation_measures array di DPIA.
-     * Useful saat DPIA baru di-approve — skip setup manual.
+     * Auto-generate RTP items dari wizard data DPIA.
+     *
+     * Source priority (via Dpia::buildRtpItemsFromDpia):
+     *   1. mitigation_measures[] (column top-level)
+     *   2. wizard_data.potensi_risiko[category].risk_events[] (fallback untuk
+     *      DPIA yang belum explicit-set mitigation_measures tapi sudah isi
+     *      risk events di wizard section 3)
+     *
+     * Idempotent — skip items dengan action text yang sama (dedup).
      */
     public function autoGenerate(Request $request, string $id)
     {
         $user = $request->user();
         $dpia = Dpia::where('id', $id)->where('org_id', $user->org_id)->firstOrFail();
 
-        $measures = $dpia->mitigation_measures ?? [];
-        $risks = $dpia->risk_assessment ?? [];
+        $candidates = Dpia::buildRtpItemsFromDpia($dpia);
 
-        if (empty($measures)) {
+        if (empty($candidates)) {
             return response()->json([
-                'message' => 'Tidak ada mitigation_measures di DPIA ini untuk di-generate',
+                'message' => 'Tidak ada sumber data untuk generate RTP. Isi dulu "Potensi Risiko" (wizard section 3) atau mitigation_measures sebelum generate.',
+                'hint' => 'Buka wizard DPIA → section Potensi Risiko → pilih kategori → tambah Risk Events dengan penilaian dampak+probabilitas dan strategi penanganan.',
             ], 422);
         }
 
         $existing = $dpia->mitigation_tracking ?? [];
-        $now = now()->toIso8601String();
-        $generated = [];
+        $existingActions = collect($existing)->map(fn($e) => trim((string)($e['action'] ?? '')))->all();
 
-        foreach ($measures as $idx => $measure) {
-            $actionText = is_array($measure) ? ($measure['action'] ?? json_encode($measure)) : (string) $measure;
-            $riskEvent = $risks[$idx]['risk_event'] ?? $risks[$idx]['event'] ?? 'Risk event #' . ($idx + 1);
-            $category = $risks[$idx]['category'] ?? null;
-            $likelihood = $risks[$idx]['likelihood'] ?? null;
-            $impact = $risks[$idx]['impact'] ?? null;
+        $generated = array_values(array_filter($candidates, function ($c) use ($existingActions) {
+            return !in_array(trim((string)$c['action']), $existingActions, true);
+        }));
 
-            // Skip kalau sudah ada item dengan action text yang sama
-            $duplicate = collect($existing)->contains(fn($e) => trim((string)($e['action'] ?? '')) === trim($actionText));
-            if ($duplicate) continue;
-
-            $generated[] = [
-                'id'                 => (string) Str::uuid(),
-                'risk_event'         => mb_substr($riskEvent, 0, 500),
-                'category'           => $category,
-                'treatment_type'     => 'reduce',
-                'action'             => mb_substr($actionText, 0, 2000),
-                'rationale'          => 'Auto-generated dari mitigation_measures saat DPIA di-approve',
-                'owner_user_id'      => null,
-                'priority'           => ($likelihood && $impact && ($likelihood * $impact >= 15)) ? 'critical'
-                                      : (($likelihood && $impact && ($likelihood * $impact >= 10)) ? 'high' : 'medium'),
-                'due_date'           => null,
-                'status'             => 'planned',
-                'inherent_likelihood'=> $likelihood,
-                'inherent_impact'    => $impact,
-                'residual_likelihood'=> null,
-                'residual_impact'    => null,
-                'evidence_files'     => [],
-                'notes'              => '',
-                'started_at'         => null,
-                'completed_at'       => null,
-                'verified_at'        => null,
-                'verified_by'        => null,
-                'created_at'         => $now,
-                'updated_at'         => $now,
-                'created_by'         => $user->id,
-            ];
-        }
+        // Override created_by dengan user saat ini (explicit manual generate)
+        foreach ($generated as &$g) { $g['created_by'] = $user->id; }
+        unset($g);
 
         if (empty($generated)) {
             return response()->json([
-                'message' => 'Semua mitigation_measures sudah ada di RTP — tidak ada yang di-generate.',
+                'message' => 'Semua risk events dari DPIA sudah ada di RTP. Tidak ada yang perlu di-generate.',
                 'data' => $existing,
             ]);
         }
@@ -344,7 +319,7 @@ class DpiaRtpController extends Controller
         ]);
 
         return response()->json([
-            'message' => count($generated) . ' treatment item di-generate dari mitigation_measures',
+            'message' => count($generated) . ' treatment item di-generate dari DPIA',
             'generated' => $generated,
             'data' => $all,
         ]);

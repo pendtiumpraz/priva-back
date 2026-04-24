@@ -4,6 +4,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 class Dpia extends Model
 {
@@ -107,6 +109,11 @@ class Dpia extends Model
     {
         static::updated(function (Dpia $dpia) {
             try {
+                // Guard: kolom mitigation_tracking mungkin belum ada kalau migration
+                // belum run (dev env partial migration). Early return supaya save
+                // tidak gagal karena observer crash.
+                if (!Schema::hasColumn('dpias', 'mitigation_tracking')) return;
+
                 $oldStatus = $dpia->getOriginal('status');
                 $newStatus = $dpia->status;
 
@@ -117,50 +124,7 @@ class Dpia extends Model
                 $existing = $dpia->mitigation_tracking ?? [];
                 if (!empty($existing)) return;
 
-                // Skip kalau mitigation_measures kosong (tidak ada source untuk generate)
-                $measures = $dpia->mitigation_measures ?? [];
-                if (empty($measures)) return;
-
-                $risks = $dpia->risk_assessment ?? [];
-                $now = now()->toIso8601String();
-                $generated = [];
-
-                foreach ($measures as $idx => $measure) {
-                    $actionText = is_array($measure) ? ($measure['action'] ?? json_encode($measure)) : (string) $measure;
-                    $riskEvent = $risks[$idx]['risk_event'] ?? $risks[$idx]['event'] ?? ('Risk event #' . ($idx + 1));
-                    $category = $risks[$idx]['category'] ?? null;
-                    $likelihood = $risks[$idx]['likelihood'] ?? null;
-                    $impact = $risks[$idx]['impact'] ?? null;
-                    $score = ($likelihood && $impact) ? ((int)$likelihood * (int)$impact) : null;
-
-                    $generated[] = [
-                        'id'                 => (string) \Str::uuid(),
-                        'risk_event'         => mb_substr((string)$riskEvent, 0, 500),
-                        'category'           => $category,
-                        'treatment_type'     => 'reduce',
-                        'action'             => mb_substr((string)$actionText, 0, 2000),
-                        'rationale'          => 'Auto-generated dari mitigation_measures saat DPIA di-approve',
-                        'owner_user_id'      => null,
-                        'priority'           => $score !== null
-                            ? ($score >= 15 ? 'critical' : ($score >= 10 ? 'high' : 'medium'))
-                            : 'medium',
-                        'due_date'           => null,
-                        'status'             => 'planned',
-                        'inherent_likelihood'=> $likelihood,
-                        'inherent_impact'    => $impact,
-                        'residual_likelihood'=> null,
-                        'residual_impact'    => null,
-                        'evidence_files'     => [],
-                        'notes'              => '',
-                        'started_at'         => null,
-                        'completed_at'       => null,
-                        'verified_at'        => null,
-                        'verified_by'        => null,
-                        'created_at'         => $now,
-                        'updated_at'         => $now,
-                        'created_by'         => $dpia->approver_id ?? $dpia->created_by,
-                    ];
-                }
+                $generated = self::buildRtpItemsFromDpia($dpia);
 
                 if (!empty($generated)) {
                     // saveQuietly supaya tidak trigger updated event lagi (infinite loop)
@@ -180,10 +144,128 @@ class Dpia extends Model
                 }
             } catch (\Throwable $e) {
                 \Log::warning('RTP auto-generate on DPIA approve failed: ' . $e->getMessage(), [
-                    'dpia_id' => $dpia->id,
-                    'trace' => $e->getTraceAsString(),
+                    'dpia_id' => $dpia->id ?? null,
                 ]);
             }
         });
+    }
+
+    /**
+     * Build RTP items dari berbagai sumber (mitigation_measures → risk_assessment
+     * → wizard_data.potensi_risiko). Return empty array kalau tidak ada source
+     * data sama sekali.
+     *
+     * Priority:
+     *   1. mitigation_measures[] (column top-level — explicit mitigation)
+     *   2. wizard_data.potensi_risiko[category].risk_events[] (wizard section 3
+     *      — 1 risk event = 1 treatment item, action derived dari penanganan)
+     */
+    public static function buildRtpItemsFromDpia(Dpia $dpia): array
+    {
+        $now = now()->toIso8601String();
+        $actor = $dpia->approver_id ?? $dpia->created_by;
+        $generated = [];
+
+        // Source 1: mitigation_measures column
+        $measures = $dpia->mitigation_measures ?? [];
+        $risks = $dpia->risk_assessment ?? [];
+
+        if (!empty($measures)) {
+            foreach ($measures as $idx => $measure) {
+                $actionText = is_array($measure) ? ($measure['action'] ?? json_encode($measure)) : (string) $measure;
+                $riskEvent = $risks[$idx]['risk_event'] ?? $risks[$idx]['event'] ?? ('Risk event #' . ($idx + 1));
+                $category = $risks[$idx]['category'] ?? null;
+                $likelihood = $risks[$idx]['likelihood'] ?? null;
+                $impact = $risks[$idx]['impact'] ?? null;
+                $generated[] = self::buildRtpItem($actionText, $riskEvent, $category, $likelihood, $impact, $now, $actor);
+            }
+            return $generated;
+        }
+
+        // Source 2: wizard_data.potensi_risiko — actual place risk events stored
+        // in Privasimu DPIA wizard. Structure:
+        //   potensi_risiko: {
+        //     "Dasar Hukum Pemrosesan": {
+        //       answer: "sebagian",
+        //       description: "...",
+        //       risk_events: [
+        //         { risk_event: "...", dampak: 4, probabilitas: 3, penanganan: "mitigate", notes: "..." }
+        //       ]
+        //     }
+        //   }
+        $wizard = $dpia->wizard_data ?? [];
+        $potensiRisiko = $wizard['potensi_risiko'] ?? [];
+
+        foreach ($potensiRisiko as $categoryName => $categoryData) {
+            $events = $categoryData['risk_events'] ?? [];
+            foreach ($events as $ev) {
+                $actionText = trim((string)($ev['notes'] ?? '')) !== ''
+                    ? $ev['notes']
+                    : 'Mitigasi untuk: ' . ($ev['risk_event'] ?? 'risk event');
+                $treatmentType = self::mapPenangananToTreatmentType($ev['penanganan'] ?? null);
+                $generated[] = self::buildRtpItem(
+                    actionText: (string)$actionText,
+                    riskEvent: (string)($ev['risk_event'] ?? 'Risk event'),
+                    category: (string)$categoryName,
+                    likelihood: isset($ev['probabilitas']) ? (int)$ev['probabilitas'] : null,
+                    impact: isset($ev['dampak']) ? (int)$ev['dampak'] : null,
+                    now: $now,
+                    actor: $actor,
+                    treatmentType: $treatmentType,
+                );
+            }
+        }
+
+        return $generated;
+    }
+
+    private static function buildRtpItem(
+        string $actionText,
+        string $riskEvent,
+        ?string $category,
+        $likelihood,
+        $impact,
+        string $now,
+        $actor,
+        string $treatmentType = 'reduce'
+    ): array {
+        $score = ($likelihood && $impact) ? ((int)$likelihood * (int)$impact) : null;
+        return [
+            'id'                 => (string) Str::uuid(),
+            'risk_event'         => mb_substr($riskEvent, 0, 500),
+            'category'           => $category,
+            'treatment_type'     => $treatmentType,
+            'action'             => mb_substr($actionText, 0, 2000),
+            'rationale'          => 'Auto-generated dari DPIA wizard data',
+            'owner_user_id'      => null,
+            'priority'           => $score !== null
+                ? ($score >= 15 ? 'critical' : ($score >= 10 ? 'high' : 'medium'))
+                : 'medium',
+            'due_date'           => null,
+            'status'             => 'planned',
+            'inherent_likelihood'=> $likelihood,
+            'inherent_impact'    => $impact,
+            'residual_likelihood'=> null,
+            'residual_impact'    => null,
+            'evidence_files'     => [],
+            'notes'              => '',
+            'started_at'         => null,
+            'completed_at'       => null,
+            'verified_at'        => null,
+            'verified_by'        => null,
+            'created_at'         => $now,
+            'updated_at'         => $now,
+            'created_by'         => $actor,
+        ];
+    }
+
+    private static function mapPenangananToTreatmentType(?string $penanganan): string
+    {
+        return match ($penanganan) {
+            'accept'    => 'accept',
+            'transfer'  => 'transfer',
+            'terminate' => 'avoid',
+            default     => 'reduce',  // mitigate atau null → reduce
+        };
     }
 }
