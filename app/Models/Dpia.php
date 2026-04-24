@@ -199,10 +199,18 @@ class Dpia extends Model
         foreach ($potensiRisiko as $categoryName => $categoryData) {
             $events = $categoryData['risk_events'] ?? [];
             foreach ($events as $ev) {
+                // Hanya risk events dengan penanganan='mitigate' yang butuh RTP execution tracking.
+                // Accept/transfer/terminate = decisions yang tidak punya ongoing action:
+                //   - accept: risiko diterima apa adanya, tidak ada yang dikerjakan
+                //   - transfer: dipindah ke pihak 3 (asuransi/vendor), kontraknya yang track bukan RTP
+                //   - terminate: hentikan pemrosesan — one-off decision, tidak ongoing
+                // Kalau masuk semua ke RTP, dashboard jadi misleading (overdue count, completion %)
+                $penanganan = $ev['penanganan'] ?? null;
+                if ($penanganan !== 'mitigate') continue;
+
                 $actionText = trim((string)($ev['notes'] ?? '')) !== ''
                     ? $ev['notes']
                     : 'Mitigasi untuk: ' . ($ev['risk_event'] ?? 'risk event');
-                $treatmentType = self::mapPenangananToTreatmentType($ev['penanganan'] ?? null);
                 $generated[] = self::buildRtpItem(
                     actionText: (string)$actionText,
                     riskEvent: (string)($ev['risk_event'] ?? 'Risk event'),
@@ -211,7 +219,7 @@ class Dpia extends Model
                     impact: isset($ev['dampak']) ? (int)$ev['dampak'] : null,
                     now: $now,
                     actor: $actor,
-                    treatmentType: $treatmentType,
+                    treatmentType: 'reduce',  // mitigate → reduce (always, since we filter)
                 );
             }
         }
