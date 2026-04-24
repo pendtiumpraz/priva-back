@@ -185,13 +185,14 @@ class RiskTreatmentPlanController extends Controller
                 }
             });
 
-        $ownerIds = array_filter(array_unique(array_map(fn($i) => $i['owner_user_id'] ?? null, $allItems)));
-        $owners = $ownerIds
-            ? User::whereIn('id', $ownerIds)
-                ->select(['id', 'name', 'email'])
-                ->get()
-                ->toArray()
-            : [];
+        // Return ALL active tenant users for owner picker (bukan cuma yang sudah assigned)
+        // Supaya user bisa assign siapa saja ke RTP — bukan terbatas user yang sudah pernah jadi owner.
+        $owners = User::where('org_id', $orgId)
+            ->where('is_active', true)
+            ->select(['id', 'name', 'email', 'role', 'position'])
+            ->orderBy('name')
+            ->get()
+            ->toArray();
 
         return response()->json([
             'dpias' => $dpias,
