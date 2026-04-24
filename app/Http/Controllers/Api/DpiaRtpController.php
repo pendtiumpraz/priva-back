@@ -263,15 +263,19 @@ class DpiaRtpController extends Controller
 
     /**
      * POST /api/dpia/{id}/rtp/auto-generate
-     * Auto-generate RTP items dari wizard data DPIA.
+     * Smart Upsert RTP items dari wizard DPIA.
      *
-     * Source priority (via Dpia::buildRtpItemsFromDpia):
-     *   1. mitigation_measures[] (column top-level)
-     *   2. wizard_data.potensi_risiko[category].risk_events[] (fallback untuk
-     *      DPIA yang belum explicit-set mitigation_measures tapi sudah isi
-     *      risk events di wizard section 3)
+     * Identity key: (category + risk_event text) — match RTP item dengan wizard event.
      *
-     * Idempotent — skip items dengan action text yang sama (dedup).
+     * Behavior per-item:
+     *   - Match found → UPDATE wizard-sourced fields (inherent_L/I, priority,
+     *     action, rationale, treatment_type). PRESERVE user edits (status,
+     *     owner_user_id, due_date, evidence_files, residual_L/I,
+     *     verified_at, started_at, completed_at, notes, verified_by).
+     *   - No match → INSERT new item.
+     *   - RTP item tanpa match di wizard → keep as orphan (user manage manual).
+     *
+     * Idempotent — bisa dipanggil berkali-kali, tidak akan duplicate.
      */
     public function autoGenerate(Request $request, string $id)
     {
@@ -282,31 +286,73 @@ class DpiaRtpController extends Controller
 
         if (empty($candidates)) {
             return response()->json([
-                'message' => 'Tidak ada sumber data untuk generate RTP. Isi dulu "Potensi Risiko" (wizard section 3) atau mitigation_measures sebelum generate.',
+                'message' => 'Tidak ada sumber data untuk generate RTP. Isi dulu "Potensi Risiko" (wizard section 3).',
                 'hint' => 'Buka wizard DPIA → section Potensi Risiko → pilih kategori → tambah Risk Events dengan penilaian dampak+probabilitas dan strategi penanganan.',
             ], 422);
         }
 
         $existing = $dpia->mitigation_tracking ?? [];
-        $existingActions = collect($existing)->map(fn($e) => trim((string)($e['action'] ?? '')))->all();
+        $now = now()->toIso8601String();
 
-        $generated = array_values(array_filter($candidates, function ($c) use ($existingActions) {
-            return !in_array(trim((string)$c['action']), $existingActions, true);
-        }));
+        // Fields yang di-REFRESH dari wizard
+        $refreshFields = ['inherent_likelihood', 'inherent_impact', 'priority', 'action', 'rationale', 'treatment_type', 'category'];
 
-        // Override created_by dengan user saat ini (explicit manual generate)
-        foreach ($generated as &$g) { $g['created_by'] = $user->id; }
-        unset($g);
+        // Fields yang di-PRESERVE (user edits)
+        // status, owner_user_id, due_date, evidence_files, residual_*, verified_at,
+        // started_at, completed_at, notes, verified_by — all preserved
 
-        if (empty($generated)) {
-            return response()->json([
-                'message' => 'Semua risk events dari DPIA sudah ada di RTP. Tidak ada yang perlu di-generate.',
-                'data' => $existing,
-            ]);
+        $stats = [
+            'inserted' => 0,
+            'updated' => 0,
+            'unchanged' => 0,
+            'orphan' => 0,  // items di RTP tapi tidak ada di wizard
+        ];
+
+        $result = [];
+        $processedCandidateIdx = [];
+
+        // PASS 1: untuk setiap existing item, cek apakah masih ada di wizard
+        foreach ($existing as $exist) {
+            $matchIdx = $this->findCandidate($candidates, $exist);
+            if ($matchIdx !== -1) {
+                // Match → refresh wizard fields, preserve user edits
+                $cand = $candidates[$matchIdx];
+                $merged = $exist;
+                $anyChanged = false;
+                foreach ($refreshFields as $f) {
+                    $newVal = $cand[$f] ?? null;
+                    $oldVal = $exist[$f] ?? null;
+                    if ($newVal !== $oldVal) {
+                        $merged[$f] = $newVal;
+                        $anyChanged = true;
+                    }
+                }
+                if ($anyChanged) {
+                    $merged['updated_at'] = $now;
+                    $stats['updated']++;
+                } else {
+                    $stats['unchanged']++;
+                }
+                $result[] = $merged;
+                $processedCandidateIdx[] = $matchIdx;
+            } else {
+                // Orphan: tidak ada di wizard anymore. Keep as-is.
+                $orphan = $exist;
+                $orphan['_is_orphan'] = true;
+                $result[] = $orphan;
+                $stats['orphan']++;
+            }
         }
 
-        $all = array_merge($existing, $generated);
-        $dpia->mitigation_tracking = $all;
+        // PASS 2: insert candidates yang belum di-process (risk event baru)
+        foreach ($candidates as $idx => $cand) {
+            if (in_array($idx, $processedCandidateIdx, true)) continue;
+            $cand['created_by'] = $user->id;
+            $result[] = $cand;
+            $stats['inserted']++;
+        }
+
+        $dpia->mitigation_tracking = $result;
         $dpia->save();
 
         AuditLog::create([
@@ -315,14 +361,50 @@ class DpiaRtpController extends Controller
             'module' => 'dpia',
             'record_id' => $dpia->id,
             'action' => 'rtp.auto_generate',
-            'details' => ['generated_count' => count($generated)],
+            'details' => $stats,
         ]);
 
+        $totalChanged = $stats['inserted'] + $stats['updated'];
+        $message = $totalChanged === 0
+            ? 'Semua risk events sudah sinkron dengan wizard. Tidak ada perubahan.'
+            : "RTP ter-sync: {$stats['inserted']} baru, {$stats['updated']} di-update, {$stats['unchanged']} unchanged"
+                . ($stats['orphan'] > 0 ? ", {$stats['orphan']} orphan (dihapus dari wizard, masih ada di RTP)" : '');
+
         return response()->json([
-            'message' => count($generated) . ' treatment item di-generate dari DPIA',
-            'generated' => $generated,
-            'data' => $all,
+            'message' => $message,
+            'stats' => $stats,
+            'data' => $result,
+            // Legacy compat: 'generated' masih diisi untuk frontend yang cek length
+            'generated' => array_slice($result, count($existing)),
         ]);
+    }
+
+    /**
+     * Match existing RTP item dengan candidate dari wizard, by (category + risk_event).
+     * Fallback: kalau risk_event persis sama tapi category null → match by risk_event only.
+     * Return index di candidates array, atau -1 kalau tidak match.
+     */
+    private function findCandidate(array $candidates, array $exist): int
+    {
+        $existCat = trim((string)($exist['category'] ?? ''));
+        $existEvent = trim((string)($exist['risk_event'] ?? ''));
+        if ($existEvent === '') return -1;
+
+        foreach ($candidates as $idx => $c) {
+            $cCat = trim((string)($c['category'] ?? ''));
+            $cEvent = trim((string)($c['risk_event'] ?? ''));
+            if ($cEvent === '') continue;
+
+            // Primary match: category + risk_event
+            if ($existCat !== '' && $cCat !== '' && $existCat === $cCat && $existEvent === $cEvent) {
+                return $idx;
+            }
+            // Fallback: risk_event saja (untuk data legacy tanpa category)
+            if (($existCat === '' || $cCat === '') && $existEvent === $cEvent) {
+                return $idx;
+            }
+        }
+        return -1;
     }
 
     // =========================================================================
