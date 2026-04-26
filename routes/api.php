@@ -470,6 +470,17 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         
         // Consent Logs & Items
         // =============================================
+        // DSR Scope Picker — DPO assign Information Systems per DSR
+        // =============================================
+        Route::prefix('dsr/{id}')->where(['id' => '[0-9a-fA-F-]{36}'])->group(function () {
+            Route::get('/scopes', [\App\Http\Controllers\Api\DsrRequestScopeController::class, 'index'])->middleware('permission:dsr,read');
+            Route::get('/available-systems', [\App\Http\Controllers\Api\DsrRequestScopeController::class, 'availableSystems'])->middleware('permission:dsr,read');
+            Route::post('/scopes', [\App\Http\Controllers\Api\DsrRequestScopeController::class, 'store'])->middleware('permission:dsr,write');
+            Route::put('/scopes/{scopeId}', [\App\Http\Controllers\Api\DsrRequestScopeController::class, 'update'])->middleware('permission:dsr,write');
+            Route::delete('/scopes/{scopeId}', [\App\Http\Controllers\Api\DsrRequestScopeController::class, 'destroy'])->middleware('permission:dsr,write');
+        });
+
+        // =============================================
         // DSR Apps — registered klien external apps (per-tenant CRUD)
         // =============================================
         Route::prefix('dsr-apps')->group(function () {
