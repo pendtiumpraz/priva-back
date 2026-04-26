@@ -8,6 +8,8 @@ use App\Models\AuditLog;
 use App\Models\Document;
 use App\Models\DsrApp;
 use App\Models\DsrRequest;
+use App\Models\DsrRequestScope;
+use App\Models\InformationSystem;
 use App\Models\Organization;
 use App\Services\CaptchaVerifier;
 use App\Services\DsrEventBroadcaster;
@@ -165,6 +167,10 @@ class DsrPublicController extends Controller
 
         $verifyUrl = url("/public/dsr/verify/{$verificationToken}");
 
+        // Auto-seed scopes from app's default Information Systems (so DPO doesn't
+        // need to manually pick at Scope tab — already pre-populated when they open).
+        $this->seedScopesFromApp($dsr, $app);
+
         $emailDispatched = $this->dispatchVerificationMail($dsr, $app, $verifyUrl);
 
         $this->events->emit(DsrEventBroadcaster::EVENT_CREATED, $dsr);
@@ -178,6 +184,36 @@ class DsrPublicController extends Controller
             // — DPO can copy to send via WhatsApp/SMS manually.
             '_dev_verify_url' => $verifyUrl,
         ], 202);
+    }
+
+    /**
+     * Seed DsrRequestScope from app.default_information_system_ids.
+     * No-op if app missing or has no defaults. Wrapped so failure doesn't block submit.
+     */
+    private function seedScopesFromApp(DsrRequest $dsr, DsrApp $app): void
+    {
+        try {
+            $defaultIds = $app->default_information_system_ids ?? [];
+            if (empty($defaultIds)) return;
+
+            $validIs = InformationSystem::whereIn('id', $defaultIds)
+                ->where('org_id', $app->org_id)
+                ->get(['id', 'is_sharded', 'shards']);
+
+            foreach ($validIs as $is) {
+                DsrRequestScope::create([
+                    'dsr_request_id' => $dsr->id,
+                    'information_system_id' => $is->id,
+                    'request_types' => [$dsr->request_type],
+                    'shards_affected' => $is->is_sharded
+                        ? collect($is->shards ?? [])->map(fn($s) => is_array($s) ? ($s['name'] ?? null) : $s)->filter()->values()->all()
+                        : [],
+                    'sql_pack_status' => 'pending',
+                ]);
+            }
+        } catch (\Throwable $e) {
+            \Log::warning("Auto-seed scope failed for DSR {$dsr->request_id}: " . $e->getMessage());
+        }
     }
 
     /**

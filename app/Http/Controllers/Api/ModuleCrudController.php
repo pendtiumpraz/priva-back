@@ -482,10 +482,46 @@ class ModuleCrudController extends Controller
                 }
             }
 
+            // Auto-trigger: DSR with app_id → seed scopes from app.default_information_system_ids
+            // so DPO doesn't need to manually pick. Tab Scope page langsung pre-populated.
+            $autoScopeCount = 0;
+            if ($module === 'dsr' && !empty($record->app_id)) {
+                try {
+                    $app = \App\Models\DsrApp::where('id', $record->app_id)
+                        ->where('org_id', $record->org_id)->first();
+                    $defaultIds = $app?->default_information_system_ids ?? [];
+                    if (!empty($defaultIds)) {
+                        // Validate IS belong to same org (defensive)
+                        $validIs = \App\Models\InformationSystem::whereIn('id', $defaultIds)
+                            ->where('org_id', $record->org_id)
+                            ->get(['id', 'is_sharded', 'shards']);
+                        foreach ($validIs as $is) {
+                            \App\Models\DsrRequestScope::create([
+                                'dsr_request_id' => $record->id,
+                                'information_system_id' => $is->id,
+                                'request_types' => [$record->request_type],
+                                'shards_affected' => $is->is_sharded
+                                    ? collect($is->shards ?? [])->map(fn($s) => is_array($s) ? ($s['name'] ?? null) : $s)->filter()->values()->all()
+                                    : [],
+                                'sql_pack_status' => 'pending',
+                            ]);
+                            $autoScopeCount++;
+                        }
+                        // Auto-bump status pending_review → in_progress kalau scope assigned
+                        if ($autoScopeCount > 0 && $record->status === 'pending_review') {
+                            $record->update(['status' => 'in_progress']);
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    \Log::warning('Auto-scope on DSR store failed (non-fatal): ' . $e->getMessage());
+                }
+            }
+
             return response()->json([
                 'message' => 'Created',
                 'data' => $record,
                 'auto_dpia_id' => $autoDpiaId,
+                'auto_scope_count' => $autoScopeCount,
             ], 201);
         } catch (\Exception $e) {
             \Log::error('ModuleCrud store error: ' . $e->getMessage(), [
