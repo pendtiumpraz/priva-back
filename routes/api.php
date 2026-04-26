@@ -29,6 +29,14 @@ Route::post('/public/consent', [\App\Http\Controllers\Api\ConsentLogController::
 Route::get('/public/consent/config', [\App\Http\Controllers\Api\ConsentLogController::class, 'config']);
 Route::get('/public/consent/state', [\App\Http\Controllers\Api\ConsentLogController::class, 'state']);
 
+// =============================================
+// Public DSR endpoints (untuk embed widget di klien websites)
+// =============================================
+Route::get('/public/dsr/config/{embed_token}', [\App\Http\Controllers\Api\DsrPublicController::class, 'config']);
+Route::post('/public/dsr/submit/{embed_token}', [\App\Http\Controllers\Api\DsrPublicController::class, 'submit'])
+    ->middleware('throttle:30,1');  // 30 req/min per IP
+Route::get('/public/dsr/verify/{token}', [\App\Http\Controllers\Api\DsrPublicController::class, 'verify']);
+
 // SSO Public Routes
 Route::get('/sso/redirect', [\App\Http\Controllers\Api\SsoLoginController::class, 'redirect']);
 Route::get('/sso/callback', [\App\Http\Controllers\Api\SsoLoginController::class, 'callback']);
@@ -461,6 +469,26 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         });
         
         // Consent Logs & Items
+        // =============================================
+        // DSR Apps — registered klien external apps (per-tenant CRUD)
+        // =============================================
+        Route::prefix('dsr-apps')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\DsrAppController::class, 'index'])->middleware('permission:dsr,read');
+            Route::post('/', [\App\Http\Controllers\Api\DsrAppController::class, 'store'])->middleware('permission:dsr,write');
+            Route::get('/{id}', [\App\Http\Controllers\Api\DsrAppController::class, 'show'])
+                ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,read');
+            Route::put('/{id}', [\App\Http\Controllers\Api\DsrAppController::class, 'update'])
+                ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,write');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\DsrAppController::class, 'destroy'])
+                ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,write');
+            Route::post('/{id}/restore', [\App\Http\Controllers\Api\DsrAppController::class, 'restore'])
+                ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,write');
+            Route::post('/{id}/regenerate-token', [\App\Http\Controllers\Api\DsrAppController::class, 'regenerateToken'])
+                ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,write');
+            Route::get('/{id}/embed-snippet', [\App\Http\Controllers\Api\DsrAppController::class, 'embedSnippet'])
+                ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,read');
+        });
+
         Route::get('/consent-logs', [\App\Http\Controllers\Api\ConsentLogController::class, 'index'])->middleware('permission:consent,read');
         Route::post('/consent-items', [\App\Http\Controllers\Api\ConsentItemController::class, 'store'])->middleware('permission:consent,write');
         Route::put('/consent-items/{id}', [\App\Http\Controllers\Api\ConsentItemController::class, 'update'])->middleware('permission:consent,write');
