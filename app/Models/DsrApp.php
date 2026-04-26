@@ -18,6 +18,7 @@ class DsrApp extends Model
 
     protected $fillable = [
         'org_id', 'name', 'app_code', 'description', 'embed_token',
+        'client_key', 'server_key', 'auth_methods', 'api_keys_last_rotated_at',
         'allowed_domains', 'default_information_system_ids',
         'default_assignee_user_id', 'webhook_url', 'branding',
         'requires_nda_for_access', 'nda_template_doc_id', 'nda_signing_method',
@@ -29,10 +30,36 @@ class DsrApp extends Model
         'allowed_domains' => 'array',
         'default_information_system_ids' => 'array',
         'branding' => 'array',
+        'auth_methods' => 'array',
+        'api_keys_last_rotated_at' => 'datetime',
         'is_active' => 'boolean',
         'requires_nda_for_access' => 'boolean',
         'captcha_secret' => EncryptedString::class,
+        'server_key' => EncryptedString::class,
     ];
+
+    /**
+     * Generate a fresh API key pair. Returns [client_key, server_key_plain].
+     * Caller MUST display server_key plaintext exactly once — it's encrypted at rest.
+     */
+    public static function generateApiKeyPair(): array
+    {
+        do {
+            $clientKey = 'pk_live_' . Str::random(32);
+        } while (self::where('client_key', $clientKey)->exists());
+        $serverKey = 'sk_live_' . Str::random(48);
+        return [$clientKey, $serverKey];
+    }
+
+    public function isWidgetEnabled(): bool
+    {
+        return ($this->auth_methods['widget'] ?? true) === true;
+    }
+
+    public function isApiKeyEnabled(): bool
+    {
+        return ($this->auth_methods['api_key'] ?? false) === true && !empty($this->client_key);
+    }
 
     protected static function booted(): void
     {

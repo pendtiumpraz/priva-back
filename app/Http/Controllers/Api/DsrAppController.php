@@ -90,6 +90,9 @@ class DsrAppController extends Controller
             'captcha_provider' => 'nullable|in:turnstile,hcaptcha,recaptcha_v3',
             'captcha_site_key' => 'nullable|string|max:200',
             'captcha_secret' => 'nullable|string|max:500',
+            'auth_methods' => 'nullable|array',
+            'auth_methods.widget' => 'nullable|boolean',
+            'auth_methods.api_key' => 'nullable|boolean',
             'is_active' => 'nullable|boolean',
         ]);
 
@@ -143,6 +146,9 @@ class DsrAppController extends Controller
             'captcha_provider' => 'sometimes|nullable|in:turnstile,hcaptcha,recaptcha_v3',
             'captcha_site_key' => 'sometimes|nullable|string|max:200',
             'captcha_secret' => 'sometimes|nullable|string|max:500',
+            'auth_methods' => 'sometimes|nullable|array',
+            'auth_methods.widget' => 'sometimes|nullable|boolean',
+            'auth_methods.api_key' => 'sometimes|nullable|boolean',
         ]);
 
         $app->update($data);
@@ -197,6 +203,52 @@ class DsrAppController extends Controller
             'message' => 'Embed token regenerated. Update widget script in production.',
             'embed_token' => $app->embed_token,
             'embed_snippet' => $this->buildEmbedSnippet($app->fresh()),
+        ]);
+    }
+
+    /**
+     * POST /api/dsr-apps/{id}/regenerate-api-keys
+     * Generate fresh client_key + server_key. Returns server_key plaintext ONCE
+     * — caller must capture it (we encrypt at rest, no way to view again).
+     *
+     * Side-effect: invalidates cache, increments api_keys_last_rotated_at.
+     */
+    public function regenerateApiKeys(Request $request, string $id)
+    {
+        $user = $request->user();
+        $app = DsrApp::where('org_id', $user->org_id)->findOrFail($id);
+
+        [$clientKey, $serverKeyPlain] = DsrApp::generateApiKeyPair();
+
+        // Bust cached old client_key resolver
+        if ($app->client_key) {
+            \Cache::forget('dsr_app_by_client_key:' . sha1($app->client_key));
+        }
+
+        // Ensure auth_methods enables api_key
+        $authMethods = $app->auth_methods ?? ['widget' => true, 'api_key' => false];
+        $authMethods['api_key'] = true;
+
+        $app->update([
+            'client_key' => $clientKey,
+            'server_key' => $serverKeyPlain,           // EncryptedString cast wraps it
+            'auth_methods' => $authMethods,
+            'api_keys_last_rotated_at' => now(),
+        ]);
+
+        AuditLog::create([
+            'org_id' => $user->org_id, 'user_id' => $user->id,
+            'module' => 'dsr', 'record_id' => $app->id,
+            'action' => 'dsr_app.regenerate_api_keys',
+            'details' => ['client_key_prefix' => substr($clientKey, 0, 16) . '…'],
+        ]);
+
+        return response()->json([
+            'message' => 'API keys regenerated. SERVER KEY DITAMPILKAN HANYA SEKALI — simpan sekarang!',
+            'client_key' => $clientKey,
+            'server_key' => $serverKeyPlain,
+            'warning' => 'Server key tidak bisa di-view lagi setelah ini. Simpan di password manager / secret store backend Anda.',
+            'rotated_at' => $app->api_keys_last_rotated_at,
         ]);
     }
 

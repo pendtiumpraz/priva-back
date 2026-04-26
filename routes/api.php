@@ -527,6 +527,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,write');
         Route::post('/{id}/regenerate-token', [\App\Http\Controllers\Api\DsrAppController::class, 'regenerateToken'])
             ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,write');
+        Route::post('/{id}/regenerate-api-keys', [\App\Http\Controllers\Api\DsrAppController::class, 'regenerateApiKeys'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,write');
         Route::get('/{id}/embed-snippet', [\App\Http\Controllers\Api\DsrAppController::class, 'embedSnippet'])
             ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,read');
         Route::post('/{id}/upload-logo', [\App\Http\Controllers\Api\DsrAppController::class, 'uploadLogo'])
@@ -955,4 +957,16 @@ Route::prefix('v1')->middleware(\App\Http\Middleware\AuthenticatePartnerApi::cla
     Route::get('/breach/{id}', [\App\Http\Controllers\Api\V1\BreachApiController::class, 'show']);
     Route::post('/breach', [\App\Http\Controllers\Api\V1\BreachApiController::class, 'store']);
     Route::put('/breach/{id}', [\App\Http\Controllers\Api\V1\BreachApiController::class, 'update']);
+});
+
+// =============================================
+// DSR Partner API v1 (per-app HMAC: client_key + server_key)
+// Different middleware than Breach (which uses general PartnerApiKey).
+// Each DSR app has its own client/server key pair, separate from tenant API keys.
+// =============================================
+Route::prefix('v1/dsr')->middleware('dsr.api_key')->withoutMiddleware([\Illuminate\Http\Middleware\HandleCors::class])->group(function () {
+    Route::post('/submit', [\App\Http\Controllers\Api\V1\DsrApiV1Controller::class, 'submit']);
+    Route::post('/submit-preverified', [\App\Http\Controllers\Api\V1\DsrApiV1Controller::class, 'submitPreverified']);
+    Route::get('/{request_id}/status', [\App\Http\Controllers\Api\V1\DsrApiV1Controller::class, 'status'])
+        ->where('request_id', 'DSR-[0-9]{4}-[0-9]+');
 });
