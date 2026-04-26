@@ -29,4 +29,15 @@ class InformationSystem extends Model
     {
         return $this->belongsTo(Organization::class , 'org_id');
     }
+
+    /**
+     * Many-to-many: 1 information system bisa muncul di banyak ROPA processing activity.
+     * Pivot: information_system_ropa (org_id mirrored for fast tenant scoping).
+     */
+    public function ropas()
+    {
+        return $this->belongsToMany(Ropa::class, 'information_system_ropa', 'information_system_id', 'ropa_id')
+            ->withPivot('notes', 'org_id')
+            ->withTimestamps();
+    }
 }

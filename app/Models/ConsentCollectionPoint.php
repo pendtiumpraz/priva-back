@@ -104,4 +104,15 @@ class ConsentCollectionPoint extends Model
     {
         return $this->hasMany(ConsentRecord::class , 'collection_point_id');
     }
+
+    /**
+     * Many-to-many: 1 collection point (banner) bisa terkait banyak ROPA
+     * (cookie banner cover analytics + marketing + cross-border transfer activity).
+     */
+    public function ropas()
+    {
+        return $this->belongsToMany(\App\Models\Ropa::class, 'consent_collection_ropa', 'collection_point_id', 'ropa_id')
+            ->withPivot('notes', 'org_id')
+            ->withTimestamps();
+    }
 }

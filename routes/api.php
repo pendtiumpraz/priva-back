@@ -421,6 +421,13 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/{id}/scan-details', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'scanDetails'])->middleware('permission:data_discovery,read');
         Route::put('/{id}/classify-column', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'updateColumnClassification'])->middleware('permission:data_discovery,write');
         Route::get('/{id}/ropa-links', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'ropaLinks'])->middleware('permission:data_discovery,read');
+
+        // Many-to-many ROPA pivot management
+        Route::get('/{id}/ropas', [\App\Http\Controllers\Api\RopaLinkController::class, 'indexForInformationSystem'])->middleware('permission:data_discovery,read');
+        Route::put('/{id}/ropas', [\App\Http\Controllers\Api\RopaLinkController::class, 'syncForInformationSystem'])->middleware('permission:data_discovery,write');
+        Route::post('/{id}/ropas', [\App\Http\Controllers\Api\RopaLinkController::class, 'attachToInformationSystem'])->middleware('permission:data_discovery,write');
+        Route::delete('/{id}/ropas/{ropaId}', [\App\Http\Controllers\Api\RopaLinkController::class, 'detachFromInformationSystem'])
+            ->where(['ropaId' => '[0-9a-fA-F-]{36}'])->middleware('permission:data_discovery,write');
         Route::get('/search-dsr/subject', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'searchSubject'])->middleware('permission:data_discovery,read');
 
         // AI Specific Search (Text-to-SQL Flow, two-step for privacy)
@@ -506,6 +513,9 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::post('/certificates/regenerate', [\App\Http\Controllers\Api\DsrExecutionController::class, 'regenerateCertificates'])->middleware('permission:dsr,write');
         Route::get('/certificates/{kind}/download', [\App\Http\Controllers\Api\DsrExecutionController::class, 'downloadCertificate'])
             ->where('kind', 'subject|internal')->middleware('permission:dsr,read');
+
+        // Derived ROPAs (via scope.information_system.ropas)
+        Route::get('/affected-ropas', [\App\Http\Controllers\Api\RopaLinkController::class, 'affectedRopasForDsr'])->middleware('permission:dsr,read');
     });
 
     // =============================================
@@ -552,6 +562,10 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/{id}/embed-snippet', [\App\Http\Controllers\Api\ConsentCollectionController::class, 'embedSnippet'])
             ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,read');
         Route::post('/{id}/upload-logo', [\App\Http\Controllers\Api\ConsentCollectionController::class, 'uploadLogo'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+        Route::get('/{id}/ropas', [\App\Http\Controllers\Api\RopaLinkController::class, 'indexForConsent'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,read');
+        Route::put('/{id}/ropas', [\App\Http\Controllers\Api\RopaLinkController::class, 'syncForConsent'])
             ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
     });
 

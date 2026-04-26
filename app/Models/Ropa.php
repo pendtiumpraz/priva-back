@@ -270,6 +270,28 @@ class Ropa extends Model
         return $this->hasMany(Dpia::class, 'ropa_id');
     }
 
+    /**
+     * Many-to-many: ROPA processing activity bisa pakai banyak Information Systems
+     * (1 activity might query customer DB + log DB + analytics warehouse).
+     */
+    public function informationSystems()
+    {
+        return $this->belongsToMany(InformationSystem::class, 'information_system_ropa', 'ropa_id', 'information_system_id')
+            ->withPivot('notes', 'org_id')
+            ->withTimestamps();
+    }
+
+    /**
+     * Many-to-many: ROPA bisa terkait banyak collection point consent
+     * (e.g. activity "marketing campaign" link ke cookie banner + email signup form).
+     */
+    public function consentPoints()
+    {
+        return $this->belongsToMany(ConsentCollectionPoint::class, 'consent_collection_ropa', 'ropa_id', 'collection_point_id')
+            ->withPivot('notes', 'org_id')
+            ->withTimestamps();
+    }
+
     public function auditLogs()
     {
         return $this->hasMany(AuditLog::class, 'record_id')
