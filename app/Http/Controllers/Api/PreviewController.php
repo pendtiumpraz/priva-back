@@ -25,7 +25,6 @@ class PreviewController extends Controller
         $cid = $request->input('collection_id');
         if (!$cid) abort(400, 'collection_id required');
 
-        // Verify collection exists (don't leak which one) — accept embed_token or legacy collection_id
         $cp = ConsentCollectionPoint::where('embed_token', $cid)
             ->orWhere('collection_id', $cid)
             ->orWhere('id', $cid)
@@ -33,11 +32,12 @@ class PreviewController extends Controller
         if (!$cp) abort(404, 'Collection not found');
 
         $base = rtrim(config('app.url') ?: url('/'), '/');
+        $bust = $this->bust(public_path('consent-banner.js'), $cp->updated_at);
         return response()->view('preview.consent_banner', [
             'collection_id' => $cp->embed_token ?: $cp->collection_id,
-            'widget_url' => $base . '/consent-banner.js',
+            'widget_url' => $base . '/consent-banner.js?v=' . $bust,
             'api_base' => $base . '/api',
-        ]);
+        ])->header('Cache-Control', 'no-store, must-revalidate');
     }
 
     public function dsrWidget(Request $request)
@@ -49,10 +49,18 @@ class PreviewController extends Controller
         if (!$app) abort(404, 'App not found');
 
         $base = rtrim(config('app.url') ?: url('/'), '/');
+        $bust = $this->bust(public_path('dsr-widget.js'), $app->updated_at);
         return response()->view('preview.dsr_widget', [
             'embed_token' => $app->embed_token,
-            'widget_url' => $base . '/dsr-widget.js',
+            'widget_url' => $base . '/dsr-widget.js?v=' . $bust,
             'api_base' => $base . '/api',
-        ]);
+        ])->header('Cache-Control', 'no-store, must-revalidate');
+    }
+
+    /** Cache-bust query — preview should always fetch latest widget JS */
+    private function bust(string $filePath, $updatedAt): string
+    {
+        $mtime = file_exists($filePath) ? filemtime($filePath) : time();
+        return substr(md5($mtime . '|' . (string) $updatedAt), 0, 10);
     }
 }

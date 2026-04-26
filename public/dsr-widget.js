@@ -112,9 +112,16 @@
             modal.style.setProperty('--pp-accent', config.branding.accent_color);
         }
 
-        var typeOptions = (config.request_types || []).map(function (t) {
-            return '<option value="' + t + '">' + (REQUEST_TYPE_LABELS[t] || t) + '</option>';
-        }).join('');
+        // Dedupe by display label — backend keeps GDPR aliases (rectification/erasure)
+        // for backwards-compat, but UI hanya tampilkan 1 entry per label biar tidak ada
+        // "Koreksi Data" muncul 2x.
+        var seenLabels = {};
+        var typeOptions = (config.request_types || []).reduce(function (acc, t) {
+            var label = REQUEST_TYPE_LABELS[t] || t;
+            if (seenLabels[label]) return acc; // skip duplicate label
+            seenLabels[label] = true;
+            return acc + '<option value="' + t + '">' + label + '</option>';
+        }, '');
 
         modal.innerHTML = ''
             + '<div class="pp-head">'
