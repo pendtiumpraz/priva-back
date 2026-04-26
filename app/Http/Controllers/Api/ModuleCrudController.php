@@ -264,6 +264,11 @@ class ModuleCrudController extends Controller
             $query->withCount(['items', 'records']);
         }
 
+        // Eager-load DSR app for list view (used by /dsr page App column + filter)
+        if ($module === 'dsr') {
+            $query->with(['app:id,name,app_code']);
+        }
+
         $query->orderBy('created_at', 'desc');
 
         // Pagination
@@ -501,6 +506,9 @@ class ModuleCrudController extends Controller
 
         if ($module === 'consent') {
             $query->with(['items', 'records']);
+        }
+        if ($module === 'dsr') {
+            $query->with(['app:id,name,app_code']);
         }
 
         $record = $query->findOrFail($id);

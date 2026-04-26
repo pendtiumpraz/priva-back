@@ -20,9 +20,13 @@ class DsrAppController extends Controller
         $user = $request->user();
         $query = DsrApp::where('org_id', $user->org_id)->orderBy('created_at', 'desc');
 
-        if ($request->boolean('include_trashed')) {
+        // Trash mode — frontend sends ?trash=1; legacy ?include_trashed kept as alias.
+        if ($request->boolean('trash')) {
+            $query->onlyTrashed();
+        } elseif ($request->boolean('include_trashed')) {
             $query->withTrashed();
         }
+
         if ($request->filled('search')) {
             $s = $request->input('search');
             $query->where(function ($q) use ($s) {
@@ -58,6 +62,10 @@ class DsrAppController extends Controller
             'requires_nda_for_access' => 'nullable|boolean',
             'nda_template_doc_id' => 'nullable|uuid',
             'nda_signing_method' => 'nullable|in:e_signature,typed_acknowledgement,upload_signed_pdf',
+            'captcha_provider' => 'nullable|in:turnstile,hcaptcha,recaptcha_v3',
+            'captcha_site_key' => 'nullable|string|max:200',
+            'captcha_secret' => 'nullable|string|max:500',
+            'is_active' => 'nullable|boolean',
         ]);
 
         $appCode = $data['app_code'] ?? DsrApp::deriveAppCode($data['name']);
@@ -73,7 +81,7 @@ class DsrAppController extends Controller
             'org_id' => $user->org_id,
             'app_code' => $appCode,
             'created_by' => $user->id,
-            'is_active' => true,
+            'is_active' => $data['is_active'] ?? true,
         ]));
 
         AuditLog::create([
@@ -107,6 +115,9 @@ class DsrAppController extends Controller
             'requires_nda_for_access' => 'sometimes|boolean',
             'nda_template_doc_id' => 'sometimes|nullable|uuid',
             'nda_signing_method' => 'sometimes|in:e_signature,typed_acknowledgement,upload_signed_pdf',
+            'captcha_provider' => 'sometimes|nullable|in:turnstile,hcaptcha,recaptcha_v3',
+            'captcha_site_key' => 'sometimes|nullable|string|max:200',
+            'captcha_secret' => 'sometimes|nullable|string|max:500',
         ]);
 
         $app->update($data);
