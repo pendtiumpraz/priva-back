@@ -11,10 +11,24 @@ class ConsentItem extends Model
 
     protected $fillable = [
         'collection_point_id', 'title', 'description', 'specific_purpose', 'full_text',
+        'category', 'cookie_keys',
         'version', 'is_required', 'is_active',
     ];
 
-    protected $casts = ['is_required' => 'boolean', 'is_active' => 'boolean'];
+    protected $casts = [
+        'is_required' => 'boolean',
+        'is_active' => 'boolean',
+        'cookie_keys' => 'array',
+    ];
+
+    public const CATEGORIES = ['essential', 'analytics', 'marketing', 'personalization', 'functional', 'third_party', 'other'];
+
+    /**
+     * Categories typically shown in cookie consent banner (anonymous visitors).
+     * Other categories (third_party with sensitive data, biometric, etc) are
+     * meant for logged-in flows where klien explicitly trigger consent UI.
+     */
+    public const COOKIE_CATEGORIES = ['essential', 'analytics', 'marketing', 'functional'];
 
     protected static function booted(): void
     {

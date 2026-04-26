@@ -25,16 +25,26 @@ class CaptchaVerifier
 
     public function verifyForApp(DsrApp $app, ?string $token, ?string $ip = null): bool
     {
-        $provider = $app->captcha_provider;
-        $secret = $app->captcha_secret;
+        return $this->verify($app->captcha_provider, $app->captcha_secret, $token, $ip, "dsr_app:{$app->id}");
+    }
 
-        // No captcha configured → skip (treat as pass)
+    public function verifyForCollection(\App\Models\ConsentCollectionPoint $cp, ?string $token, ?string $ip = null): bool
+    {
+        return $this->verify($cp->captcha_provider, $cp->captcha_secret, $token, $ip, "consent_cp:{$cp->id}");
+    }
+
+    /**
+     * Generic verifier — pass provider + secret + token. Returns true if no
+     * provider configured (skip), false on any failure.
+     */
+    public function verify(?string $provider, ?string $secret, ?string $token, ?string $ip = null, string $contextTag = ''): bool
+    {
         if (!$provider || !$secret) return true;
         if (!$token) return false;
 
         $endpoint = self::ENDPOINTS[$provider] ?? null;
         if (!$endpoint) {
-            Log::warning("CaptchaVerifier: unknown provider '{$provider}' for app {$app->id}");
+            Log::warning("CaptchaVerifier: unknown provider '{$provider}' for {$contextTag}");
             return false;
         }
 
@@ -50,7 +60,7 @@ class CaptchaVerifier
             if (!$success) {
                 Log::info('Captcha rejected', [
                     'provider' => $provider,
-                    'app_id' => $app->id,
+                    'context' => $contextTag,
                     'errors' => $body['error-codes'] ?? $body['errorCodes'] ?? null,
                 ]);
             }

@@ -6,12 +6,20 @@ use App\Http\Controllers\Controller;
 use App\Jobs\FireConsentWebhookJob;
 use App\Jobs\PushConsentToCrmJob;
 use App\Models\ConsentCollectionPoint;
+use App\Models\ConsentItem;
 use App\Models\ConsentLog;
+use App\Services\CaptchaVerifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\RateLimiter;
 
 class ConsentLogController extends Controller
 {
+    public function __construct(private ?CaptchaVerifier $captcha = null)
+    {
+        $this->captcha = $captcha ?: app(CaptchaVerifier::class);
+    }
+
     /**
      * Get list of collected consent logs (Protected)
      */
@@ -55,27 +63,51 @@ class ConsentLogController extends Controller
     {
         $request->validate([
             'collection_id' => 'required|string',
+            // category_filter=cookie → only essential/analytics/marketing/functional (anonymous)
+            // category_filter=all (default) → semua items active
+            'category_filter' => 'nullable|in:cookie,all',
         ]);
 
-        $key = 'consent:config:' . sha1($request->collection_id);
-        $payload = Cache::remember($key, now()->addMinutes(5), function () use ($request) {
-            $collection = ConsentCollectionPoint::with(['items' => function ($query) {
+        $filter = $request->input('category_filter', 'all');
+        $key = 'consent:config:' . sha1($request->collection_id . '|' . $filter);
+
+        $payload = Cache::remember($key, now()->addMinutes(5), function () use ($request, $filter) {
+            // Resolve by embed_token (preferred) ATAU legacy collection_id ATAU UUID
+            $collection = ConsentCollectionPoint::with(['items' => function ($query) use ($filter) {
                 $query->where('is_active', true);
-            }])->where('collection_id', $request->collection_id)
-              ->orWhere('id', $request->collection_id)
-              ->firstOrFail();
+                if ($filter === 'cookie') {
+                    $query->whereIn('category', ConsentItem::COOKIE_CATEGORIES);
+                }
+                $query->orderByRaw("CASE WHEN category='essential' THEN 0 ELSE 1 END")
+                      ->orderBy('title');
+            }])
+                ->where(function ($q) use ($request) {
+                    $q->where('embed_token', $request->collection_id)
+                      ->orWhere('collection_id', $request->collection_id)
+                      ->orWhere('id', $request->collection_id);
+                })
+                ->firstOrFail();
 
             return [
                 'collection' => [
                     'name' => $collection->name,
                     'domain' => $collection->domain,
                     'settings' => $collection->settings,
+                    'display_mode' => $collection->display_mode ?: 'banner_bottom',
+                    'display_frequency' => $collection->display_frequency ?: 'once',
+                    'audience' => $collection->audience ?: 'anonymous_only',
                 ],
+                'captcha' => $collection->captcha_provider ? [
+                    'provider' => $collection->captcha_provider,
+                    'site_key' => $collection->captcha_site_key,
+                ] : null,
                 'items' => $collection->items->map(fn ($item) => [
                     'id' => $item->id,
                     'title' => $item->title,
                     'description' => $item->description,
                     'full_text' => $item->full_text,
+                    'category' => $item->category ?: 'essential',
+                    'cookie_keys' => $item->cookie_keys ?? [],
                     'version' => $item->version,
                     'is_required' => $item->is_required,
                 ])->all(),
@@ -83,7 +115,9 @@ class ConsentLogController extends Controller
         });
 
         return response()->json(['data' => $payload])
-            ->header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
+            ->header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600')
+            ->header('Access-Control-Allow-Origin', '*')
+            ->header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     }
 
     /**
@@ -121,19 +155,34 @@ class ConsentLogController extends Controller
     {
         $request->validate([
             'collection_id' => 'required|string',
-            'user_identifier' => 'required|string',
+            'user_identifier' => 'required|string|max:200',
             'consented_items' => 'required|array',
-            'policy_version' => 'nullable|string',
+            'policy_version' => 'nullable|string|max:32',
+            'captcha_token' => 'nullable|string|max:4000',
         ]);
 
-        // Collection lookup cached 10 min so the hot path does ONE cache read
-        // instead of a DB query per capture. Misses fall through to Postgres.
+        // Rate limit per IP — generous since legitimate widgets fire 1x per session.
+        $rateKey = 'consent-capture:' . $request->ip();
+        if (RateLimiter::tooManyAttempts($rateKey, 30)) {
+            return response()->json(['error' => 'Too many requests. Try again later.'], 429);
+        }
+        RateLimiter::hit($rateKey, 60);
+
+        // Resolve via embed_token / collection_id / UUID (cached)
         $cacheKey = 'consent:collection:' . sha1($request->collection_id);
         $collection = Cache::remember($cacheKey, now()->addMinutes(10), function () use ($request) {
-            return ConsentCollectionPoint::where('collection_id', $request->collection_id)
+            return ConsentCollectionPoint::where('embed_token', $request->collection_id)
+                ->orWhere('collection_id', $request->collection_id)
                 ->orWhere('id', $request->collection_id)
                 ->firstOrFail();
         });
+
+        // Captcha verify (no-op if provider not configured)
+        if ($collection->captcha_provider) {
+            if (!$this->captcha->verifyForCollection($collection, $request->input('captcha_token'), $request->ip())) {
+                return response()->json(['error' => 'Verifikasi captcha gagal.'], 422);
+            }
+        }
 
         $log = ConsentLog::create([
             'org_id' => $collection->org_id,

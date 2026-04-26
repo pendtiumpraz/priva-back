@@ -26,6 +26,7 @@ Route::middleware('throttle:api')->group(function () {
 
     // Public Consent API (for banner integration)
     Route::post('/public/consent', [\App\Http\Controllers\Api\ConsentLogController::class, 'capture']);
+    Route::post('/public/consent/capture', [\App\Http\Controllers\Api\ConsentLogController::class, 'capture']); // alias for clarity
     Route::get('/public/consent/config', [\App\Http\Controllers\Api\ConsentLogController::class, 'config']);
     Route::get('/public/consent/state', [\App\Http\Controllers\Api\ConsentLogController::class, 'state']);
 
@@ -541,6 +542,19 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::delete('/consent-items/{id}', [\App\Http\Controllers\Api\ConsentItemController::class, 'destroy'])->middleware('permission:consent,write');
     Route::post('/consent/{id}/webhook', [\App\Http\Controllers\Api\ConsentLogController::class, 'saveWebhook'])->middleware('permission:consent,write');
 
+    // Consent Collection Point — app-level helpers (mirror DSR)
+    Route::prefix('consent-collections')->group(function () {
+        Route::post('/upload-logo', [\App\Http\Controllers\Api\ConsentCollectionController::class, 'uploadLogo'])->middleware('permission:consent,write');
+        Route::post('/{id}/regenerate-api-keys', [\App\Http\Controllers\Api\ConsentCollectionController::class, 'regenerateApiKeys'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+        Route::post('/{id}/regenerate-embed-token', [\App\Http\Controllers\Api\ConsentCollectionController::class, 'regenerateEmbedToken'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+        Route::get('/{id}/embed-snippet', [\App\Http\Controllers\Api\ConsentCollectionController::class, 'embedSnippet'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,read');
+        Route::post('/{id}/upload-logo', [\App\Http\Controllers\Api\ConsentCollectionController::class, 'uploadLogo'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+    });
+
     // Organization Profile (Onboarding)
     Route::get('/organizations', [\App\Http\Controllers\Api\OrganizationController::class, 'index']); // Super Admin: list all
     Route::get('/organization', [\App\Http\Controllers\Api\OrganizationController::class, 'show']);
@@ -969,4 +983,13 @@ Route::prefix('v1/dsr')->middleware('dsr.api_key')->withoutMiddleware([\Illumina
     Route::post('/submit-preverified', [\App\Http\Controllers\Api\V1\DsrApiV1Controller::class, 'submitPreverified']);
     Route::get('/{request_id}/status', [\App\Http\Controllers\Api\V1\DsrApiV1Controller::class, 'status'])
         ->where('request_id', 'DSR-[0-9]{4}-[0-9]+');
+});
+
+// =============================================
+// Consent Partner API v1 (per-collection HMAC: client_key + server_key)
+// =============================================
+Route::prefix('v1/consent')->middleware('consent.api_key')->group(function () {
+    Route::post('/capture', [\App\Http\Controllers\Api\V1\ConsentApiV1Controller::class, 'capture']);
+    Route::get('/state', [\App\Http\Controllers\Api\V1\ConsentApiV1Controller::class, 'state']);
+    Route::get('/items', [\App\Http\Controllers\Api\V1\ConsentApiV1Controller::class, 'items']);
 });

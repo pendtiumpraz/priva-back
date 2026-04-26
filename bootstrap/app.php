@@ -15,6 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'permission' => \App\Http\Middleware\CheckPermission::class,
             'dsr.api_key' => \App\Http\Middleware\AuthenticateDsrApiKey::class,
+            'consent.api_key' => \App\Http\Middleware\AuthenticateConsentApiKey::class,
         ]);
         // Prevent "Route [login] not defined" on API auth failures
         $middleware->redirectGuestsTo(fn ($request) => $request->is('api/*') ? null : '/login');
