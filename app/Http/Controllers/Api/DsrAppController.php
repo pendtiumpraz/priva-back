@@ -312,7 +312,9 @@ class DsrAppController extends Controller
 
     private function buildEmbedSnippet(DsrApp $app): string
     {
-        $base = config('app.url') ?: 'https://app.privasimu.com';
+        // Auto-detect base from APP_URL or current request host (white-label safe).
+        // Klien on-prem / localhost / custom domain semua jalan.
+        $base = rtrim(config('app.url') ?: url('/'), '/');
         $token = $app->embed_token;
         $position = $app->branding['position'] ?? 'bottom-right';
         $btnText = $app->branding['button_text'] ?? '🔒 Privacy Request';

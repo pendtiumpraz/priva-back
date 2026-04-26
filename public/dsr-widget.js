@@ -1,15 +1,17 @@
 /*!
- * Privasimu DSR Widget v1.0
- * Self-contained: floating button + modal form + captcha + verification.
+ * DSR Widget v1.0 — embed at klien web for subject DSR submission.
+ * White-label safe: serves from any host (klien on-prem, custom domain, localhost).
  *
- * Embed:
- *   <script src="https://app.privasimu.com/dsr-widget.js"
+ * Embed (replace YOUR-HOST with the actual Privasimu deployment URL —
+ * dashboard "Integration Guide" generates the snippet pre-filled):
+ *
+ *   <script src="https://YOUR-HOST/dsr-widget.js"
  *           data-embed-token="..." async></script>
  *
  * Optional data attributes:
  *   data-button-text="🔒 Privacy Request"   (default)
  *   data-button-position="bottom-right"     (bottom-right|bottom-left|top-right|top-left)
- *   data-api-base="https://app.privasimu.com/api"   (override API)
+ *   data-api-base="https://YOUR-HOST/api"   (override API base — defaults to script.src origin + /api)
  */
 (function () {
     'use strict';
@@ -141,7 +143,7 @@
             +     '</div>'
             +   '</form>'
             + '</div>'
-            + '<div class="pp-foot">Powered by <a href="https://privasimu.com" target="_blank" rel="noopener">Privasimu Nexus</a> · UU PDP</div>';
+            + buildFooter(config);
 
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
@@ -151,6 +153,30 @@
         modal.querySelector('#pp-dsr-form').addEventListener('submit', onSubmit);
 
         if (config.captcha) renderCaptcha(config.captcha);
+    }
+
+    /**
+     * Footer "Powered by" — driven by config.branding from server:
+     *   show_powered_by: false → no footer at all (full white-label)
+     *   powered_by_text: custom text (default: "Powered by Privasimu Nexus · UU PDP")
+     *   powered_by_url:  custom link target (default: empty = no link)
+     * Always shows a thin "compliance reference" line for legal traceability.
+     */
+    function buildFooter(cfg) {
+        var b = (cfg && cfg.branding) || {};
+        if (b.show_powered_by === false) return '';
+        var text = b.powered_by_text || 'Powered by ' + (cfg.app_name || 'DSR Widget') + ' · UU PDP';
+        var url = b.powered_by_url || '';
+        var inner = url
+            ? '<a href="' + url.replace(/"/g, '&quot;') + '" target="_blank" rel="noopener">' + escapeHtml(text) + '</a>'
+            : escapeHtml(text);
+        return '<div class="pp-foot">' + inner + '</div>';
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
     }
 
     function openModal() { document.getElementById('pp-dsr-overlay').classList.add('open'); }
