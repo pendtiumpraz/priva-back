@@ -13,13 +13,17 @@ class ConsentCollectionPoint extends Model
     use HasUuids, SoftDeletes;
 
     protected $fillable = [
-        'org_id', 'collection_id', 'name', 'domain', 'redirect_url',
+        'org_id', 'collection_id', 'name', 'kind', 'domain', 'redirect_url',
         'settings', 'webhook_url', 'created_by',
         'embed_token', 'client_key', 'server_key', 'auth_methods', 'allowed_domains',
         'display_mode', 'display_frequency', 'audience',
         'captcha_provider', 'captcha_site_key', 'captcha_secret',
         'api_keys_last_rotated_at',
     ];
+
+    public const KIND_COOKIE = 'cookie_banner';
+    public const KIND_APP    = 'app_consent';
+    public const KINDS = [self::KIND_COOKIE, self::KIND_APP];
 
     protected $casts = [
         'settings' => 'array',
@@ -82,6 +86,30 @@ class ConsentCollectionPoint extends Model
     public function isApiKeyEnabled(): bool
     {
         return ($this->auth_methods['api_key'] ?? false) === true && !empty($this->client_key);
+    }
+
+    public function isCookieBanner(): bool { return $this->kind === self::KIND_COOKIE; }
+    public function isAppConsent(): bool { return $this->kind === self::KIND_APP; }
+
+    /**
+     * Defaults applied per kind. Klien bisa override individual fields, tapi
+     * preset di sini = recommended starting config.
+     */
+    public static function presetForKind(string $kind): array
+    {
+        if ($kind === self::KIND_APP) {
+            return [
+                'audience' => 'logged_in_only',
+                'display_mode' => 'modal_center',
+                'display_frequency' => 'once',
+            ];
+        }
+        // Cookie banner default (UU PDP + GDPR-friendly)
+        return [
+            'audience' => 'anonymous_only',
+            'display_mode' => 'banner_bottom',
+            'display_frequency' => 'once',
+        ];
     }
 
     public function bustConsentCache(): void

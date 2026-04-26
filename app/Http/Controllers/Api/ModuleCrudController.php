@@ -394,6 +394,15 @@ class ModuleCrudController extends Controller
                     break;
                 case 'consent':
                     $data['collection_id'] = $data['collection_id'] ?? $this->nextCode('CNT', $model, $data['org_id']);
+                    // Apply per-kind preset for fields klien tidak isi (audience/display_mode/frequency)
+                    $kind = $data['kind'] ?? \App\Models\ConsentCollectionPoint::KIND_COOKIE;
+                    if (!in_array($kind, \App\Models\ConsentCollectionPoint::KINDS, true)) {
+                        $kind = \App\Models\ConsentCollectionPoint::KIND_COOKIE;
+                    }
+                    $data['kind'] = $kind;
+                    foreach (\App\Models\ConsentCollectionPoint::presetForKind($kind) as $k => $v) {
+                        if (empty($data[$k])) $data[$k] = $v;
+                    }
                     break;
                 case 'breach':
                     $data['incident_code'] = $data['incident_code'] ?? $this->nextCode('BRC', $model, $data['org_id']);
