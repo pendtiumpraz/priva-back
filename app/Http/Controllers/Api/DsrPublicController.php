@@ -438,6 +438,11 @@ class DsrPublicController extends Controller
 
         $host = parse_url($origin, PHP_URL_HOST) ?: $origin;
 
+        // Allow same-host (preview pages served from own backend) — DPO testing tidak perlu
+        // tambah backend host ke allowed_domains.
+        $appHost = parse_url(config('app.url') ?: url('/'), PHP_URL_HOST);
+        if ($appHost && $host === $appHost) return;
+
         foreach ($allowed as $pattern) {
             $pattern = trim((string) $pattern);
             if ($pattern === '') continue;

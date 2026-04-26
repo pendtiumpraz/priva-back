@@ -165,12 +165,18 @@
     function buildFooter(cfg) {
         var b = (cfg && cfg.branding) || {};
         if (b.show_powered_by === false) return '';
-        var text = b.powered_by_text || 'Powered by ' + (cfg.app_name || 'DSR Widget') + ' · UU PDP';
-        var url = b.powered_by_url || '';
-        var inner = url
-            ? '<a href="' + url.replace(/"/g, '&quot;') + '" target="_blank" rel="noopener">' + escapeHtml(text) + '</a>'
-            : escapeHtml(text);
-        return '<div class="pp-foot">' + inner + '</div>';
+        // Default = Privasimu Nexus logo. Klien override via branding.powered_by_logo.
+        var logoUrl = b.powered_by_logo || (apiBase.replace(/\/api\/?$/, '') + '/nexus.png');
+        var text = b.powered_by_text || 'Powered by';
+        var url = b.powered_by_url || 'https://privasimu.com';
+        var inner = '<span style="display:inline-flex;align-items:center;gap:6px;justify-content:center">'
+                  +   '<span>' + escapeHtml(text) + '</span>'
+                  +   '<img src="' + escapeHtml(logoUrl) + '" alt="Privasimu Nexus" style="height:18px;vertical-align:middle">'
+                  + '</span>';
+        var wrapped = url
+            ? '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">' + inner + '</a>'
+            : inner;
+        return '<div class="pp-foot">' + wrapped + '</div>';
     }
 
     function escapeHtml(s) {
@@ -313,10 +319,20 @@
         fetch(apiBase + '/public/dsr/config/' + encodeURIComponent(token), {
             headers: { 'Accept': 'application/json' },
             credentials: 'omit',
-        }).then(function (r) { return r.json(); }).then(function (cfg) {
-            if (!cfg || cfg.error) {
-                console.warn('[Privasimu DSR] Config error:', cfg && cfg.error);
+        }).then(function (r) {
+            return r.json().then(function (j) { return { status: r.status, body: j }; });
+        }).then(function (resp) {
+            // Reject errors loud — don't silently render broken UI
+            if (resp.status !== 200) {
+                console.warn('[Privasimu DSR] Config request failed:', resp.status, resp.body);
                 return;
+            }
+            var cfg = resp.body;
+            // Defensive: kalau backend gak return request_types (broken response /
+            // origin blocked), fallback ke daftar default supaya dropdown gak kosong
+            if (!cfg.request_types || !Array.isArray(cfg.request_types) || cfg.request_types.length === 0) {
+                console.warn('[Privasimu DSR] request_types empty in config — using fallback list');
+                cfg.request_types = ['access', 'correction', 'deletion', 'portability', 'restriction', 'objection', 'withdraw_consent', 'info'];
             }
             state.config = cfg;
             buildButton(cfg.branding || {});
