@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\EncryptedString;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -20,6 +21,7 @@ class DsrApp extends Model
         'allowed_domains', 'default_information_system_ids',
         'default_assignee_user_id', 'webhook_url', 'branding',
         'requires_nda_for_access', 'nda_template_doc_id', 'nda_signing_method',
+        'captcha_provider', 'captcha_site_key', 'captcha_secret',
         'is_active', 'created_by',
     ];
 
@@ -29,6 +31,7 @@ class DsrApp extends Model
         'branding' => 'array',
         'is_active' => 'boolean',
         'requires_nda_for_access' => 'boolean',
+        'captcha_secret' => EncryptedString::class,
     ];
 
     protected static function booted(): void

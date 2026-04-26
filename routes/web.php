@@ -40,3 +40,16 @@ Route::get('/setup-fresh/{secret}', function (string $secret) {
         return response()->json(['status' => '❌ ERROR', 'message' => $e->getMessage()], 500);
     }
 });
+
+/*
+|--------------------------------------------------------------------------
+| Public DSR — browser-facing pages (verify HTML, NDA preview/sign)
+|--------------------------------------------------------------------------
+| Subject klik link di email → buka di browser. JSON polling (widget)
+| stays on /api/public/dsr/* for clarity.
+*/
+Route::middleware('throttle:30,1')->group(function () {
+    Route::get('/public/dsr/verify/{token}', [\App\Http\Controllers\Api\DsrPublicController::class, 'verify']);
+    Route::get('/public/dsr/{token}/nda', [\App\Http\Controllers\Api\DsrPublicController::class, 'ndaPreview']);
+    Route::post('/public/dsr/{token}/nda/sign', [\App\Http\Controllers\Api\DsrPublicController::class, 'ndaSign']);
+});

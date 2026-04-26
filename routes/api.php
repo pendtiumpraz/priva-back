@@ -487,6 +487,20 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::post('/sql-pack/generate', [\App\Http\Controllers\Api\DsrSqlPackController::class, 'generate'])->middleware('permission:dsr,write');
         Route::get('/sql-pack/download', [\App\Http\Controllers\Api\DsrSqlPackController::class, 'download'])->middleware('permission:dsr,read')->name('dsr.sql_pack.download');
         Route::get('/sql-pack/info', [\App\Http\Controllers\Api\DsrSqlPackController::class, 'info'])->middleware('permission:dsr,read');
+
+        // Execution log — admin klien upload bukti per shard, mark status
+        Route::get('/executions', [\App\Http\Controllers\Api\DsrExecutionController::class, 'index'])->middleware('permission:dsr,read');
+        Route::patch('/executions/{execId}', [\App\Http\Controllers\Api\DsrExecutionController::class, 'update'])
+            ->where('execId', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,write');
+        Route::post('/executions/{execId}/evidence', [\App\Http\Controllers\Api\DsrExecutionController::class, 'uploadEvidence'])
+            ->where('execId', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,write');
+        Route::get('/executions/{execId}/evidence', [\App\Http\Controllers\Api\DsrExecutionController::class, 'streamEvidence'])
+            ->where('execId', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,read');
+
+        // Certificates — generated when allExecutionsComplete; manual regen allowed
+        Route::post('/certificates/regenerate', [\App\Http\Controllers\Api\DsrExecutionController::class, 'regenerateCertificates'])->middleware('permission:dsr,write');
+        Route::get('/certificates/{kind}/download', [\App\Http\Controllers\Api\DsrExecutionController::class, 'downloadCertificate'])
+            ->where('kind', 'subject|internal')->middleware('permission:dsr,read');
     });
 
     // =============================================

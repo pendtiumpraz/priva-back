@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\DsrRequest;
+use App\Services\DsrEventBroadcaster;
 use App\Services\DsrSqlGeneratorService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -20,7 +21,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class DsrSqlPackController extends Controller
 {
-    public function __construct(private DsrSqlGeneratorService $generator) {}
+    public function __construct(
+        private DsrSqlGeneratorService $generator,
+        private DsrEventBroadcaster $events,
+    ) {}
 
     /**
      * POST /api/dsr/{id}/sql-pack/generate
@@ -61,6 +65,11 @@ class DsrSqlPackController extends Controller
             if (in_array($dsr->status, ['pending_review', 'in_progress'], true)) {
                 $dsr->update(['status' => 'pending_execution']);
             }
+
+            $this->events->emit(DsrEventBroadcaster::EVENT_SQL_PACK_READY, $dsr->fresh(), [
+                'file_count' => $result['file_count'],
+                'total_size_bytes' => $result['total_size'],
+            ]);
 
             return response()->json([
                 'message' => 'SQL Pack generated. ' . $result['file_count'] . ' files (' . round($result['total_size'] / 1024, 1) . ' KB).',

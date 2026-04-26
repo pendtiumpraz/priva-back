@@ -15,3 +15,4 @@ Artisan::command('inspire', function () {
 \Illuminate\Support\Facades\Schedule::command('notifications:scan-all')->dailyAt('07:00');
 \Illuminate\Support\Facades\Schedule::command('notifications:digest daily')->dailyAt('08:00');
 \Illuminate\Support\Facades\Schedule::command('notifications:digest weekly')->weeklyOn(1, '08:00'); // Monday 08:00
+\Illuminate\Support\Facades\Schedule::command('dsr:scan-sla')->hourly()->withoutOverlapping();

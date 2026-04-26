@@ -8,6 +8,7 @@ use App\Models\DsrApp;
 use App\Models\DsrRequest;
 use App\Models\DsrRequestScope;
 use App\Models\InformationSystem;
+use App\Services\DsrEventBroadcaster;
 use Illuminate\Http\Request;
 
 /**
@@ -199,6 +200,14 @@ class DsrRequestScopeController extends Controller
         // Auto-update DSR status: kalau masih pending_review + scope assigned → in_progress
         if ($dsr->status === 'pending_review' && !empty($created)) {
             $dsr->update(['status' => 'in_progress']);
+        }
+
+        if (!empty($created) || !empty($updated)) {
+            app(DsrEventBroadcaster::class)->emit(
+                DsrEventBroadcaster::EVENT_SCOPE_ASSIGNED,
+                $dsr->fresh(),
+                ['created_count' => count($created), 'updated_count' => count($updated)]
+            );
         }
 
         return response()->json([
