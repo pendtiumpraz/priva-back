@@ -52,4 +52,8 @@ Route::middleware('throttle:30,1')->group(function () {
     Route::get('/public/dsr/verify/{token}', [\App\Http\Controllers\Api\DsrPublicController::class, 'verify']);
     Route::get('/public/dsr/{token}/nda', [\App\Http\Controllers\Api\DsrPublicController::class, 'ndaPreview']);
     Route::post('/public/dsr/{token}/nda/sign', [\App\Http\Controllers\Api\DsrPublicController::class, 'ndaSign']);
+
+    // Live preview pages — sandbox HTML showing real widgets
+    Route::get('/preview/consent-banner', [\App\Http\Controllers\Api\PreviewController::class, 'consentBanner']);
+    Route::get('/preview/dsr-widget', [\App\Http\Controllers\Api\PreviewController::class, 'dsrWidget']);
 });
