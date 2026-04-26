@@ -246,19 +246,36 @@ class DataDiscoveryController extends Controller
     public function ropaLinks(Request $request, string $id)
     {
         $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $orgId = $request->user()->org_id;
 
-        $ropas = \App\Models\Ropa::where('org_id', $request->user()->org_id)
+        // PRIMARY: pivot (source of truth — synced by ROPA wizard hook).
+        $pivotRopas = $system->ropas()
+            ->select('ropas.id', 'ropas.registration_number', 'ropas.processing_activity', 'ropas.risk_level', 'ropas.status')
+            ->get();
+        $pivotIds = $pivotRopas->pluck('id')->all();
+
+        // FALLBACK: string-match legacy ROPAs yg belum di-resave via wizard.
+        // Legacy seed data + pre-pivot records tetap muncul biar count ≠ 0.
+        // Frontend bisa flag '_source=inferred' utk hint "buka ROPA wizard untuk persist link".
+        $inferredRopas = \App\Models\Ropa::where('org_id', $orgId)
+            ->whereNotIn('id', $pivotIds)
             ->where(function ($q) use ($system) {
                 $q->where('processing_activity', 'like', '%' . $system->name . '%')
                   ->orWhere('wizard_data->section_1->data_source', 'like', '%' . $system->name . '%');
             })
             ->select('id', 'registration_number', 'processing_activity', 'risk_level', 'status')
-            ->get();
+            ->get()
+            ->map(fn($r) => array_merge($r->toArray(), ['_source' => 'inferred']));
+
+        $linked = $pivotRopas->map(fn($r) => array_merge($r->toArray(), ['_source' => 'pivot']))
+            ->concat($inferredRopas);
 
         return response()->json(['data' => [
-            'system'       => ['id' => $system->id, 'name' => $system->name, 'source_type' => $system->source_type],
-            'linked_ropas' => $ropas,
-            'total_links'  => $ropas->count(),
+            'system'         => ['id' => $system->id, 'name' => $system->name, 'source_type' => $system->source_type],
+            'linked_ropas'   => $linked->values(),
+            'total_links'    => $linked->count(),
+            'pivot_count'    => $pivotRopas->count(),
+            'inferred_count' => $inferredRopas->count(),
         ]]);
     }
 
