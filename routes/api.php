@@ -16,37 +16,37 @@ use Illuminate\Support\Facades\Route;
 // Public Routes
 // =============================================
 Route::middleware('throttle:api')->group(function () {
-    Route::post('/auth/register', [AuthController::class , 'register']);
-    Route::post('/auth/login', [AuthController::class , 'login']);
+    Route::post('/auth/register', [AuthController::class, 'register']);
+    Route::post('/auth/login', [AuthController::class, 'login']);
 
-// Public Feature Requests (read-only + upvote)
-Route::get('/public/feature-requests', [\App\Http\Controllers\Api\FeatureRequestController::class, 'publicIndex']);
-Route::post('/public/feature-requests', [\App\Http\Controllers\Api\FeatureRequestController::class, 'publicStore']);
-Route::post('/public/feature-requests/{id}/upvote', [\App\Http\Controllers\Api\FeatureRequestController::class, 'upvote']);
+    // Public Feature Requests (read-only + upvote)
+    Route::get('/public/feature-requests', [\App\Http\Controllers\Api\FeatureRequestController::class, 'publicIndex']);
+    Route::post('/public/feature-requests', [\App\Http\Controllers\Api\FeatureRequestController::class, 'publicStore']);
+    Route::post('/public/feature-requests/{id}/upvote', [\App\Http\Controllers\Api\FeatureRequestController::class, 'upvote']);
 
-// Public Consent API (for banner integration)
-Route::post('/public/consent', [\App\Http\Controllers\Api\ConsentLogController::class, 'capture']);
-Route::get('/public/consent/config', [\App\Http\Controllers\Api\ConsentLogController::class, 'config']);
-Route::get('/public/consent/state', [\App\Http\Controllers\Api\ConsentLogController::class, 'state']);
+    // Public Consent API (for banner integration)
+    Route::post('/public/consent', [\App\Http\Controllers\Api\ConsentLogController::class, 'capture']);
+    Route::get('/public/consent/config', [\App\Http\Controllers\Api\ConsentLogController::class, 'config']);
+    Route::get('/public/consent/state', [\App\Http\Controllers\Api\ConsentLogController::class, 'state']);
 
-// =============================================
+    // =============================================
 // Public DSR endpoints (untuk embed widget di klien websites)
 // =============================================
-Route::get('/public/dsr/config/{embed_token}', [\App\Http\Controllers\Api\DsrPublicController::class, 'config']);
-Route::post('/public/dsr/submit/{embed_token}', [\App\Http\Controllers\Api\DsrPublicController::class, 'submit'])
-    ->middleware('throttle:30,1');  // 30 req/min per IP
-Route::get('/public/dsr/verify/{token}', [\App\Http\Controllers\Api\DsrPublicController::class, 'verify']);
+    Route::get('/public/dsr/config/{embed_token}', [\App\Http\Controllers\Api\DsrPublicController::class, 'config']);
+    Route::post('/public/dsr/submit/{embed_token}', [\App\Http\Controllers\Api\DsrPublicController::class, 'submit'])
+        ->middleware('throttle:30,1');  // 30 req/min per IP
+    Route::get('/public/dsr/verify/{token}', [\App\Http\Controllers\Api\DsrPublicController::class, 'verify']);
 
-// SSO Public Routes
-Route::get('/sso/redirect', [\App\Http\Controllers\Api\SsoLoginController::class, 'redirect']);
-Route::get('/sso/callback', [\App\Http\Controllers\Api\SsoLoginController::class, 'callback']);
+    // SSO Public Routes
+    Route::get('/sso/redirect', [\App\Http\Controllers\Api\SsoLoginController::class, 'redirect']);
+    Route::get('/sso/callback', [\App\Http\Controllers\Api\SsoLoginController::class, 'callback']);
 
-// Threat Intel Webhook Receiver (SOCRadar, etc.)
-Route::post('/webhooks/threat-intel/{org_id}', [\App\Http\Controllers\Api\ThreatIntelController::class, 'receive']);
+    // Threat Intel Webhook Receiver (SOCRadar, etc.)
+    Route::post('/webhooks/threat-intel/{org_id}', [\App\Http\Controllers\Api\ThreatIntelController::class, 'receive']);
 
-// Public: unsubscribe via signed URL (from email footer)
-Route::get('/notifications/unsubscribe', [\App\Http\Controllers\Api\NotificationPreferenceController::class, 'unsubscribe'])
-    ->name('notifications.unsubscribe');
+    // Public: unsubscribe via signed URL (from email footer)
+    Route::get('/notifications/unsubscribe', [\App\Http\Controllers\Api\NotificationPreferenceController::class, 'unsubscribe'])
+        ->name('notifications.unsubscribe');
 
 });
 
@@ -56,15 +56,15 @@ Route::get('/notifications/unsubscribe', [\App\Http\Controllers\Api\Notification
 Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
     // Auth
-    Route::get('/auth/me', [AuthController::class , 'me']);
-    Route::post('/auth/logout', [AuthController::class , 'logout']);
+    Route::get('/auth/me', [AuthController::class, 'me']);
+    Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::put('/user/settings', [AuthController::class, 'updateSettings']);
     Route::put('/user/profile', [AuthController::class, 'updateProfile']);
 
     // Dashboard
-    Route::get('/dashboard/stats', [DashboardController::class , 'stats']);
-    Route::get('/dashboard/charts', [DashboardController::class , 'charts']);
-    Route::get('/dashboard/risk-analytics', [DashboardController::class , 'riskAnalytics']);
+    Route::get('/dashboard/stats', [DashboardController::class, 'stats']);
+    Route::get('/dashboard/charts', [DashboardController::class, 'charts']);
+    Route::get('/dashboard/risk-analytics', [DashboardController::class, 'riskAnalytics']);
 
     // Holding Dashboard (Hierarchical)
     Route::get('/holding/org-tree', [\App\Http\Controllers\Api\HoldingDashboardController::class, 'orgTree']);
@@ -81,8 +81,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/maintenance/execute', [\App\Http\Controllers\Api\MaintenanceController::class, 'execute']);
 
     // Organization
-    Route::get('/organization', [OrganizationController::class , 'show']);
-    Route::put('/organization', [OrganizationController::class , 'update']);
+    Route::get('/organization', [OrganizationController::class, 'show']);
+    Route::put('/organization', [OrganizationController::class, 'update']);
 
     // Organization Configuration (Enterprise SSO)
     Route::get('/tenant-ssos', [\App\Http\Controllers\Api\TenantSsoController::class, 'show']);
@@ -115,19 +115,20 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     // =============================================
     // GAP Assessment — Real Compliance Engine
     // =============================================
-    Route::prefix('gap')->group(function () {
+    Route::prefix('gap')->group(
+        function () {
             Route::post('/comparisons', [\App\Http\Controllers\GapComparisonController::class, 'store'])->middleware('permission:gap_assessment,write');
             Route::get('/comparisons', [\App\Http\Controllers\GapComparisonController::class, 'index'])->middleware('permission:gap_assessment,read');
-            Route::get('/', [GapAssessmentController::class , 'index'])->middleware('permission:gap_assessment,read');
-            Route::get('/compare', [GapAssessmentController::class , 'compare'])->middleware('permission:gap_assessment,read');
-            Route::get('/regulations', [GapAssessmentController::class , 'getRegulations'])->middleware('permission:gap_assessment,read');
-            Route::get('/questions', [GapAssessmentController::class , 'questions'])->middleware('permission:gap_assessment,read');
-            Route::post('/', [GapAssessmentController::class , 'store'])->middleware('permission:gap_assessment,write');
-            Route::get('/{id}', [GapAssessmentController::class , 'show'])->middleware('permission:gap_assessment,read');
-            Route::post('/{id}/submit', [GapAssessmentController::class , 'submitAnswers'])->middleware('permission:gap_assessment,write');
-            Route::delete('/{id}', [GapAssessmentController::class , 'destroy'])->middleware('permission:gap_assessment,write');
-            Route::post('/{id}/restore', [GapAssessmentController::class , 'restore'])->middleware('permission:gap_assessment,write');
-            Route::delete('/{id}/force', [GapAssessmentController::class , 'forceDelete'])->middleware('permission:gap_assessment,write');
+            Route::get('/', [GapAssessmentController::class, 'index'])->middleware('permission:gap_assessment,read');
+            Route::get('/compare', [GapAssessmentController::class, 'compare'])->middleware('permission:gap_assessment,read');
+            Route::get('/regulations', [GapAssessmentController::class, 'getRegulations'])->middleware('permission:gap_assessment,read');
+            Route::get('/questions', [GapAssessmentController::class, 'questions'])->middleware('permission:gap_assessment,read');
+            Route::post('/', [GapAssessmentController::class, 'store'])->middleware('permission:gap_assessment,write');
+            Route::get('/{id}', [GapAssessmentController::class, 'show'])->middleware('permission:gap_assessment,read');
+            Route::post('/{id}/submit', [GapAssessmentController::class, 'submitAnswers'])->middleware('permission:gap_assessment,write');
+            Route::delete('/{id}', [GapAssessmentController::class, 'destroy'])->middleware('permission:gap_assessment,write');
+            Route::post('/{id}/restore', [GapAssessmentController::class, 'restore'])->middleware('permission:gap_assessment,write');
+            Route::delete('/{id}/force', [GapAssessmentController::class, 'forceDelete'])->middleware('permission:gap_assessment,write');
             Route::post('/{id}/upload-evidence', [GapAssessmentController::class, 'uploadEvidence'])->middleware('permission:gap_assessment,write');
 
             // Custom Questions CRUD (Sprint B2)
@@ -136,781 +137,789 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::put('/custom-questions/{id}', [GapAssessmentController::class, 'updateCustomQuestion'])->middleware('permission:gap_assessment,write');
             Route::delete('/custom-questions/{id}', [GapAssessmentController::class, 'destroyCustomQuestion'])->middleware('permission:gap_assessment,write');
         }
-        );
+    );
 
-        // =============================================
-        // Fire Drill Simulation — Interactive Scenarios
-        // =============================================
-        Route::prefix('simulations')->group(function () {
+    // =============================================
+    // Fire Drill Simulation — Interactive Scenarios
+    // =============================================
+    Route::prefix('simulations')->group(
+        function () {
 
-            Route::get('/scenarios', [SimulationController::class , 'scenarios'])->middleware('permission:simulation,read');
-            Route::post('/', [SimulationController::class , 'store'])->middleware('permission:simulation,write');
-            Route::get('/{id}', [SimulationController::class , 'show'])->middleware('permission:simulation,read');
-            Route::post('/{id}/start', [SimulationController::class , 'start'])->middleware('permission:simulation,write');
-            Route::post('/{id}/submit', [SimulationController::class , 'submitResponses'])->middleware('permission:simulation,write');
-            Route::delete('/{id}', [SimulationController::class , 'destroy'])->middleware('permission:simulation,write');
-            Route::post('/{id}/restore', [SimulationController::class , 'restore'])->middleware('permission:simulation,write');
-            Route::delete('/{id}/force', [SimulationController::class , 'forceDelete'])->middleware('permission:simulation,write');
+            Route::get('/scenarios', [SimulationController::class, 'scenarios'])->middleware('permission:simulation,read');
+            Route::post('/', [SimulationController::class, 'store'])->middleware('permission:simulation,write');
+            Route::get('/{id}', [SimulationController::class, 'show'])->middleware('permission:simulation,read');
+            Route::post('/{id}/start', [SimulationController::class, 'start'])->middleware('permission:simulation,write');
+            Route::post('/{id}/submit', [SimulationController::class, 'submitResponses'])->middleware('permission:simulation,write');
+            Route::delete('/{id}', [SimulationController::class, 'destroy'])->middleware('permission:simulation,write');
+            Route::post('/{id}/restore', [SimulationController::class, 'restore'])->middleware('permission:simulation,write');
+            Route::delete('/{id}/force', [SimulationController::class, 'forceDelete'])->middleware('permission:simulation,write');
         }
-        );
+    );
 
-        // =============================================
-        // Feature Requests
-        // =============================================
-        Route::prefix('feature-requests')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\FeatureRequestController::class , 'index']);
-            Route::post('/', [\App\Http\Controllers\Api\FeatureRequestController::class , 'store']);
-            Route::get('/{id}', [\App\Http\Controllers\Api\FeatureRequestController::class , 'show']);
-            Route::put('/{id}', [\App\Http\Controllers\Api\FeatureRequestController::class , 'update']);
-            Route::post('/{id}/upvote', [\App\Http\Controllers\Api\FeatureRequestController::class , 'upvote']);
-            Route::delete('/{id}', [\App\Http\Controllers\Api\FeatureRequestController::class , 'destroy']);
-            Route::post('/{id}/restore', [\App\Http\Controllers\Api\FeatureRequestController::class , 'restore']);
-            Route::delete('/{id}/force', [\App\Http\Controllers\Api\FeatureRequestController::class , 'forceDelete']);
+    // =============================================
+    // Feature Requests
+    // =============================================
+    Route::prefix('feature-requests')->group(
+        function () {
+            Route::get('/', [\App\Http\Controllers\Api\FeatureRequestController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\FeatureRequestController::class, 'store']);
+            Route::get('/{id}', [\App\Http\Controllers\Api\FeatureRequestController::class, 'show']);
+            Route::put('/{id}', [\App\Http\Controllers\Api\FeatureRequestController::class, 'update']);
+            Route::post('/{id}/upvote', [\App\Http\Controllers\Api\FeatureRequestController::class, 'upvote']);
+            Route::delete('/{id}', [\App\Http\Controllers\Api\FeatureRequestController::class, 'destroy']);
+            Route::post('/{id}/restore', [\App\Http\Controllers\Api\FeatureRequestController::class, 'restore']);
+            Route::delete('/{id}/force', [\App\Http\Controllers\Api\FeatureRequestController::class, 'forceDelete']);
         }
-        );
-
-        // =============================================
-        // Universal Module CRUD (ROPA, DPIA, DSR, Consent, Breach, Data Discovery)
-        // =============================================
-        Route::prefix('m/{module}')->where(['module' => 'ropa|dpia|dsr|consent|breach|data-discovery'])->group(function () {
-            // Module name mapping for permission check (URL slug -> permission module_id)
-            // ropa->ropa, dpia->dpia, dsr->dsr, consent->consent, breach->breach, data-discovery->data_discovery
-            Route::get('/', [ModuleCrudController::class , 'index']);
-            Route::post('/', [ModuleCrudController::class , 'store']);
-            Route::get('/{id}', [ModuleCrudController::class , 'show']);
-            Route::put('/{id}', [ModuleCrudController::class , 'update']);
-            Route::get('/{id}/history', [ModuleCrudController::class , 'history']);
-            Route::delete('/{id}', [ModuleCrudController::class , 'destroy']);
-            Route::post('/{id}/restore', [ModuleCrudController::class , 'restore']);
-            Route::delete('/{id}/force', [ModuleCrudController::class , 'forceDelete']);
-        });
-
-        // =============================================
-        // DPIA — Risk Event Template Library (read-only, seeded)
-        // =============================================
-        Route::get('/dpia/risk-event-templates', [\App\Http\Controllers\Api\DpiaRiskEventTemplateController::class, 'index'])
-            ->middleware('permission:dpia,read');
-
-        // =============================================
-        // DPIA — Assessment Framework (DPO-customizable categories + risks)
-        // =============================================
-        Route::prefix('dpia/framework')->group(function () {
-            Route::get('/categories', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'index'])->middleware('permission:dpia,read');
-            Route::post('/categories', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'storeCategory'])->middleware('permission:dpia,write');
-            Route::put('/categories/{id}', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'updateCategory'])->middleware('permission:dpia,write');
-            Route::delete('/categories/{id}', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'destroyCategory'])->middleware('permission:dpia,write');
-            Route::post('/categories/{categoryId}/risks', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'storeRisk'])->middleware('permission:dpia,write');
-            Route::put('/categories/{categoryId}/risks/{id}', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'updateRisk'])->middleware('permission:dpia,write');
-            Route::delete('/categories/{categoryId}/risks/{id}', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'destroyRisk'])->middleware('permission:dpia,write');
-            Route::post('/reset', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'reset'])->middleware('permission:dpia,write');
-        });
-
-        // =============================================
-        // DPIA — Risk Treatment Plan (per-DPIA endpoints)
-        // Track mitigation execution: status, owner, deadline, evidence, residual risk.
-        // =============================================
-        Route::prefix('dpia/{id}/rtp')->where(['id' => '[0-9a-fA-F-]{36}'])->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\DpiaRtpController::class, 'index'])->middleware('permission:dpia,read');
-            Route::post('/', [\App\Http\Controllers\Api\DpiaRtpController::class, 'store'])->middleware('permission:dpia,write');
-            Route::post('/auto-generate', [\App\Http\Controllers\Api\DpiaRtpController::class, 'autoGenerate'])->middleware('permission:dpia,write');
-            Route::post('/clean-orphans', [\App\Http\Controllers\Api\DpiaRtpController::class, 'cleanOrphans'])->middleware('permission:dpia,write');
-            Route::put('/{itemId}', [\App\Http\Controllers\Api\DpiaRtpController::class, 'update'])->middleware('permission:dpia,write');
-            Route::delete('/{itemId}', [\App\Http\Controllers\Api\DpiaRtpController::class, 'destroy'])->middleware('permission:dpia,write');
-        });
-
-        // =============================================
-        // RTP — Cross-DPIA Aggregate View (menu terpisah)
-        // =============================================
-        Route::prefix('rtp')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\RiskTreatmentPlanController::class, 'index'])->middleware('permission:dpia,read');
-            Route::get('/facets', [\App\Http\Controllers\Api\RiskTreatmentPlanController::class, 'facets'])->middleware('permission:dpia,read');
-            Route::get('/dashboard', [\App\Http\Controllers\Api\RiskTreatmentPlanController::class, 'dashboard'])->middleware('permission:dpia,read');
-        });
-
-        // =============================================
-        // ROPA — DPO Approval Workflow
-        // =============================================
-        Route::prefix('ropa/{id}')->group(function () {
-            Route::post('/submit', [\App\Http\Controllers\Api\RopaApprovalController::class, 'submit'])->middleware('permission:ropa,write');
-            Route::post('/approve', [\App\Http\Controllers\Api\RopaApprovalController::class, 'approve'])->middleware('permission:ropa,write');
-            Route::post('/reject', [\App\Http\Controllers\Api\RopaApprovalController::class, 'reject'])->middleware('permission:ropa,write');
-        });
-
-        // =============================================
-        // ROPA — Industry Templates (seeded library)
-        // =============================================
-        Route::get('/ropa-templates', [\App\Http\Controllers\Api\RopaTemplateController::class, 'index'])->middleware('permission:ropa,read');
-        Route::get('/ropa-templates/{id}', [\App\Http\Controllers\Api\RopaTemplateController::class, 'show'])->middleware('permission:ropa,read');
-
-        // =============================================
-        // Processing Categories — used for ROPA/DPIA naming (ROPA-HR-001).
-        // Org-scoped, user-extendable via LazySearchSelect allowCreate.
-        // =============================================
-        Route::prefix('processing-categories')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\ProcessingCategoryController::class, 'index']);
-            Route::post('/', [\App\Http\Controllers\Api\ProcessingCategoryController::class, 'store']);
-            Route::put('/{id}', [\App\Http\Controllers\Api\ProcessingCategoryController::class, 'update']);
-            Route::delete('/{id}', [\App\Http\Controllers\Api\ProcessingCategoryController::class, 'destroy']);
-        });
-
-        // =============================================
-        // Breach Containment Templates + RACI Matrix
-        // =============================================
-        Route::prefix('containment-templates')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\ContainmentController::class, 'listTemplates']);
-            Route::get('/trash', [\App\Http\Controllers\Api\ContainmentController::class, 'listTrashed']);
-            Route::post('/', [\App\Http\Controllers\Api\ContainmentController::class, 'createTemplate'])->middleware('permission:breach,write');
-            Route::put('/{id}', [\App\Http\Controllers\Api\ContainmentController::class, 'updateTemplate'])->middleware('permission:breach,write');
-            Route::delete('/{id}', [\App\Http\Controllers\Api\ContainmentController::class, 'deleteTemplate'])->middleware('permission:breach,write');
-            Route::post('/{id}/restore', [\App\Http\Controllers\Api\ContainmentController::class, 'restoreTemplate'])->middleware('permission:breach,write');
-            Route::delete('/{id}/force', [\App\Http\Controllers\Api\ContainmentController::class, 'forceDeleteTemplate'])->middleware('permission:breach,write');
-        });
-        Route::post('/breach/{breachId}/apply-template', [\App\Http\Controllers\Api\ContainmentController::class, 'applyTemplate'])->middleware('permission:breach,write');
-        Route::post('/breach/{breachId}/containment', [\App\Http\Controllers\Api\ContainmentController::class, 'addStep'])->middleware('permission:breach,write');
-        Route::put('/breach/{breachId}/containment/{stepKey}', [\App\Http\Controllers\Api\ContainmentController::class, 'updateStep'])->middleware('permission:breach,write');
-        Route::delete('/breach/{breachId}/containment/{stepKey}', [\App\Http\Controllers\Api\ContainmentController::class, 'removeStep'])->middleware('permission:breach,write');
-
-        // Breach PDF report generators (accept ?size=a4|letter|legal|a3|a5|folio & ?orientation=portrait|landscape)
-        Route::get('/breach/{id}/pdf/komdigi', [\App\Http\Controllers\Api\BreachReportController::class, 'komdigi'])->middleware('permission:breach,read');
-        Route::get('/breach/{id}/pdf/subject-letter', [\App\Http\Controllers\Api\BreachReportController::class, 'subjectLetter'])->middleware('permission:breach,read');
-        Route::get('/breach/{id}/pdf/full-report', [\App\Http\Controllers\Api\BreachReportController::class, 'fullReport'])->middleware('permission:breach,read');
-
-        // Document Templates — per-tenant picker + customization
-        // NOTE: static-path routes MUST be declared before any `{id}` route
-        // or Laravel matches "/active-map", "/preview", "/docx-placeholders"
-        // as a DocumentTemplate lookup with id="active-map" → 404 findOrFail.
-        Route::prefix('document-templates')->group(function () {
-            // Static paths first
-            Route::get('/active-map', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'activeMap']);
-            Route::put('/active-map', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'updateActiveMap']);
-            Route::post('/preview', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'preview'])->name('document-templates.preview');
-            Route::post('/upload-asset', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'uploadAsset']);
-            Route::get('/docx-placeholders', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'docxPlaceholders']);
-
-            // Dynamic `{id}` paths after
-            Route::get('/', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'index']);
-            Route::post('/', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'store']);
-            Route::post('/{id}/activate', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'activate'])->where('id', '[0-9a-fA-F-]{36}');
-            Route::post('/{id}/upload-docx', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'uploadDocx'])->where('id', '[0-9a-fA-F-]{36}');
-            Route::delete('/{id}/docx/{kind}', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'deleteDocx'])->where('id', '[0-9a-fA-F-]{36}');
-            Route::get('/{id}', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'show'])->where('id', '[0-9a-fA-F-]{36}');
-            Route::put('/{id}', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'update'])->where('id', '[0-9a-fA-F-]{36}');
-            Route::delete('/{id}', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'destroy'])->where('id', '[0-9a-fA-F-]{36}');
-        });
-        Route::get('/raci-matrix', [\App\Http\Controllers\Api\ContainmentController::class, 'getRaciMatrix']);
-        Route::put('/raci-matrix', [\App\Http\Controllers\Api\ContainmentController::class, 'updateRaciMatrix']);
-
-        // Per-breach RACI matrix edit (Phase G1) — single save endpoint the
-        // matrix modal posts to. Apply-template overlays tenant RACI presets.
-        Route::put('/breach/{id}/containment-raci', [\App\Http\Controllers\Api\ContainmentController::class, 'updateRaciForBreach'])->middleware('permission:breach,write');
-        Route::post('/breach/{id}/apply-raci-template', [\App\Http\Controllers\Api\ContainmentController::class, 'applyRaciTemplate'])->middleware('permission:breach,write');
-
-        // RACI template library (per-tenant, with system presets)
-        Route::prefix('raci-templates')->middleware('permission:breach,read')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\RaciTemplateController::class, 'index']);
-            Route::get('/trash', [\App\Http\Controllers\Api\RaciTemplateController::class, 'trash']);
-            Route::get('/{id}', [\App\Http\Controllers\Api\RaciTemplateController::class, 'show']);
-        });
-        Route::prefix('raci-templates')->middleware('permission:breach,write')->group(function () {
-            Route::post('/', [\App\Http\Controllers\Api\RaciTemplateController::class, 'store']);
-            Route::put('/{id}', [\App\Http\Controllers\Api\RaciTemplateController::class, 'update']);
-            Route::delete('/{id}', [\App\Http\Controllers\Api\RaciTemplateController::class, 'destroy']);
-            Route::post('/{id}/restore', [\App\Http\Controllers\Api\RaciTemplateController::class, 'restore']);
-            Route::delete('/{id}/force', [\App\Http\Controllers\Api\RaciTemplateController::class, 'forceDelete']);
-        });
-
-        // Retention master data (Sprint E3) — reusable library referenced from ROPA wizard step 7
-        Route::prefix('retention-policies')->middleware('permission:ropa,read')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'index']);
-            Route::get('/{id}', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'show']);
-        });
-        Route::prefix('retention-policies')->middleware('permission:ropa,write')->group(function () {
-            Route::post('/', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'store']);
-            Route::put('/{id}', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'update']);
-            Route::delete('/{id}', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'destroy']);
-            Route::post('/{id}/restore', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'restore']);
-            Route::delete('/{id}/force', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'forceDelete']);
-        });
-
-        // =============================================
-        // Contract Review CRUD
-        // =============================================
-        Route::prefix('contract-reviews')->group(function () {
-            Route::get('/trashed', [\App\Http\Controllers\Api\ContractReviewCrudController::class, 'trashed']);
-            Route::get('/', [\App\Http\Controllers\Api\ContractReviewCrudController::class, 'index']);
-            Route::get('/{id}', [\App\Http\Controllers\Api\ContractReviewCrudController::class, 'show']);
-            Route::delete('/{id}', [\App\Http\Controllers\Api\ContractReviewCrudController::class, 'destroy']);
-            Route::post('/{id}/restore', [\App\Http\Controllers\Api\ContractReviewCrudController::class, 'restore']);
-            Route::delete('/{id}/force', [\App\Http\Controllers\Api\ContractReviewCrudController::class, 'forceDelete']);
-        });
-
-        // =============================================
-        // Policy Review CRUD
-        // =============================================
-        Route::prefix('policy-reviews')->group(function () {
-            Route::get('/trashed', [\App\Http\Controllers\Api\PolicyReviewCrudController::class, 'trashed']);
-            Route::get('/', [\App\Http\Controllers\Api\PolicyReviewCrudController::class, 'index']);
-            Route::get('/{id}', [\App\Http\Controllers\Api\PolicyReviewCrudController::class, 'show']);
-            Route::delete('/{id}', [\App\Http\Controllers\Api\PolicyReviewCrudController::class, 'destroy']);
-            Route::post('/{id}/restore', [\App\Http\Controllers\Api\PolicyReviewCrudController::class, 'restore']);
-            Route::delete('/{id}/force', [\App\Http\Controllers\Api\PolicyReviewCrudController::class, 'forceDelete']);
-        });
-
-        // =============================================
-        // Phase 2: Vendor Risk Management (Third Party Management)
-        // =============================================
-        Route::prefix('vendor-risk')->group(function () {
-            Route::get('/trashed', [\App\Http\Controllers\Api\VendorRiskController::class, 'trashed']);
-            Route::get('/', [\App\Http\Controllers\Api\VendorRiskController::class, 'index']);
-            Route::post('/', [\App\Http\Controllers\Api\VendorRiskController::class, 'store']);
-            Route::get('/{id}', [\App\Http\Controllers\Api\VendorRiskController::class, 'show']);
-            Route::put('/{id}', [\App\Http\Controllers\Api\VendorRiskController::class, 'update']);
-            Route::delete('/{id}', [\App\Http\Controllers\Api\VendorRiskController::class, 'destroy']);
-            Route::post('/{id}/restore', [\App\Http\Controllers\Api\VendorRiskController::class, 'restore']);
-            Route::delete('/{id}/force', [\App\Http\Controllers\Api\VendorRiskController::class, 'forceDelete']);
-            // AI Assessment
-            Route::post('/extract', [\App\Http\Controllers\Api\VendorRiskController::class, 'extract']);
-            Route::post('/generate-questions', [\App\Http\Controllers\Api\VendorRiskController::class, 'generateQuestions']);
-            Route::post('/assess', [\App\Http\Controllers\Api\VendorRiskController::class, 'assess']);
-
-            // Sprint D3: TPRM document management
-            Route::post('/{id}/documents', [\App\Http\Controllers\Api\VendorRiskController::class, 'uploadDocument']);
-            Route::delete('/{id}/documents/{docId}', [\App\Http\Controllers\Api\VendorRiskController::class, 'deleteDocument']);
-            Route::post('/{id}/screen-documents', [\App\Http\Controllers\Api\VendorRiskController::class, 'screenDocuments']);
-        });
-
-        // =============================================
-        // Phase 2: Cross Border Data Transfer
-        // =============================================
-        Route::prefix('cross-border')->group(function () {
-            Route::get('/trashed', [\App\Http\Controllers\Api\CrossBorderController::class, 'trashed']);
-            Route::get('/', [\App\Http\Controllers\Api\CrossBorderController::class, 'index']);
-            Route::post('/', [\App\Http\Controllers\Api\CrossBorderController::class, 'store']);
-            Route::get('/{id}', [\App\Http\Controllers\Api\CrossBorderController::class, 'show']);
-            Route::put('/{id}', [\App\Http\Controllers\Api\CrossBorderController::class, 'update']);
-            Route::delete('/{id}', [\App\Http\Controllers\Api\CrossBorderController::class, 'destroy']);
-            Route::post('/{id}/restore', [\App\Http\Controllers\Api\CrossBorderController::class, 'restore']);
-            Route::delete('/{id}/force', [\App\Http\Controllers\Api\CrossBorderController::class, 'forceDelete']);
-            
-            // AI Transfer Impact Assessment (TIA)
-            Route::post('/{id}/tia', [\App\Http\Controllers\Api\CrossBorderController::class, 'assessTIA']);
-        });
-
-        // =============================================
-        // Breach Integrations (Telegram War Room, SIEM/SOAR)
-        // =============================================
-        Route::prefix('integrations')->group(function () {
-            Route::get('/settings', [\App\Http\Controllers\Api\IntegrationController::class, 'getSettings']);
-            Route::put('/settings', [\App\Http\Controllers\Api\IntegrationController::class, 'updateSettings']);
-            Route::post('/breach/{id}/notify-telegram', [\App\Http\Controllers\Api\IntegrationController::class, 'syncBreachTelegram']);
-            Route::post('/breach/{id}/notify-siem', [\App\Http\Controllers\Api\IntegrationController::class, 'syncBreachSiem']);
-        });
-
-        // =============================================
-        // Data Discovery — Advanced Endpoints
-        // =============================================
-        Route::prefix('data-discovery')->group(function () {
-            Route::post('/{id}/test-connection', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'testConnection'])->middleware('permission:data_discovery,read');
-            Route::post('/{id}/scan', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'triggerScan'])->middleware('permission:data_discovery,write');
-            // AI Deep Scan (replaces standard scan view with AI recommendations)
-            Route::post('/{id}/scan-ai', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'scanAi'])->middleware('permission:data_discovery,write');
-            Route::get('/{id}/scan-details', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'scanDetails'])->middleware('permission:data_discovery,read');
-            Route::put('/{id}/classify-column', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'updateColumnClassification'])->middleware('permission:data_discovery,write');
-            Route::get('/{id}/ropa-links', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'ropaLinks'])->middleware('permission:data_discovery,read');
-            Route::get('/search-dsr/subject', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'searchSubject'])->middleware('permission:data_discovery,read');
-            
-            // AI Specific Search (Text-to-SQL Flow, two-step for privacy)
-            //   POST /search-ai        → AI generates SQL from schema metadata only
-            //   POST /search-ai/execute → user explicitly runs the SQL (no AI involved)
-            Route::post('/{id}/search-ai', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'specificSearchAi'])->middleware('permission:data_discovery,read');
-            Route::post('/{id}/search-ai/execute', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'specificSearchExecute'])->middleware('permission:data_discovery,read');
-
-            // Decryptor Profiles (per-system tenant encryption keys, wrapped at rest)
-            //   GET    /decryptor-profiles       → list (metadata only, key hidden)
-            //   POST   /decryptor-profiles       → create with raw key (wrapped & stored)
-            //   PUT    /decryptor-profiles/{pid} → update (optional key rotation)
-            //   DELETE /decryptor-profiles/{pid} → remove
-            //   POST   /decryptor-profiles/{pid}/test → verify key against a sample ciphertext
-            Route::get('/{id}/decryptor-profiles', [\App\Http\Controllers\Api\DecryptorProfileController::class, 'index'])->middleware('permission:data_discovery,read');
-            Route::post('/{id}/decryptor-profiles', [\App\Http\Controllers\Api\DecryptorProfileController::class, 'store'])->middleware('permission:data_discovery,write');
-            Route::put('/{id}/decryptor-profiles/{profileId}', [\App\Http\Controllers\Api\DecryptorProfileController::class, 'update'])->middleware('permission:data_discovery,write');
-            Route::delete('/{id}/decryptor-profiles/{profileId}', [\App\Http\Controllers\Api\DecryptorProfileController::class, 'destroy'])->middleware('permission:data_discovery,write');
-            Route::post('/{id}/decryptor-profiles/{profileId}/test', [\App\Http\Controllers\Api\DecryptorProfileController::class, 'test'])->middleware('permission:data_discovery,write');
-
-            // Leak Detection (dark-web style match → parametrized verify)
-            //   POST /leak/match-schema → AI finds candidate table from leaked column sequence (schema only)
-            //   POST /leak/verify       → parametrized query runs with user-supplied values (no AI)
-            //   GET  /leak/history      → recent verification history (metadata + masked sample only)
-            //   DELETE /leak/history/{hid} → delete one entry
-            //   DELETE /leak/history     → clear all for this system
-            Route::post('/{id}/leak/match-schema', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'leakMatchSchema'])->middleware('permission:data_discovery,read');
-            Route::post('/{id}/leak/verify', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'leakVerify'])->middleware('permission:data_discovery,read');
-            Route::get('/{id}/leak/history', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'leakHistory'])->middleware('permission:data_discovery,read');
-            Route::delete('/{id}/leak/history', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'clearLeakHistory'])->middleware('permission:data_discovery,write');
-            Route::delete('/{id}/leak/history/{historyId}', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'deleteLeakHistory'])->middleware('permission:data_discovery,write');
-            Route::get('/{id}/search-ai-history', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'getSearchAiHistory'])->middleware('permission:data_discovery,read');
-            Route::delete('/{id}/search-ai-history', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'clearSearchAiHistory'])->middleware('permission:data_discovery,write');
-            Route::delete('/{id}/search-ai-history/{historyId}', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'deleteSearchAiHistory'])->middleware('permission:data_discovery,write');
-
-            // Protection Assessment (Manual + AI)
-            Route::get('/{id}/protection-assessment', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'getProtectionAssessment'])->middleware('permission:data_discovery,read');
-            Route::put('/{id}/protection-assessment', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'saveProtectionAssessment'])->middleware('permission:data_discovery,write');
-            Route::post('/{id}/ai-protection-assessment', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'aiProtectionAssessment'])->middleware('permission:data_discovery,write');
-
-            // Sprint E1/E3/E4: Unstructured OCR + metadata compare + AI SQL sample
-            Route::post('/scan-unstructured', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'scanUnstructured'])->middleware('permission:data_discovery,write');
-            Route::post('/{id}/compare-metadata', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'compareMetadata'])->middleware('permission:data_discovery,read');
-            Route::post('/{id}/sample-query', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'sampleQuery'])->middleware('permission:data_discovery,read');
-
-            // AI Patrol & Daily Changelogs
-            Route::get('/{id}/changelogs', [\App\Http\Controllers\Api\DiscoveryChangelogController::class, 'index'])->middleware('permission:data_discovery,read');
-            Route::post('/{id}/changelogs', [\App\Http\Controllers\Api\DiscoveryChangelogController::class, 'store'])->middleware('permission:data_discovery,write');
-            Route::post('/{id}/patrol-config', [\App\Http\Controllers\Api\DiscoveryChangelogController::class, 'saveConfig'])->middleware('permission:data_discovery,write');
-        });
-        
-        // Consent Logs & Items
-        // =============================================
-        // DSR Scope Picker — DPO assign Information Systems per DSR
-        // =============================================
-        Route::prefix('dsr/{id}')->where(['id' => '[0-9a-fA-F-]{36}'])->group(function () {
-            Route::get('/scopes', [\App\Http\Controllers\Api\DsrRequestScopeController::class, 'index'])->middleware('permission:dsr,read');
-            Route::get('/available-systems', [\App\Http\Controllers\Api\DsrRequestScopeController::class, 'availableSystems'])->middleware('permission:dsr,read');
-            Route::post('/scopes', [\App\Http\Controllers\Api\DsrRequestScopeController::class, 'store'])->middleware('permission:dsr,write');
-            Route::put('/scopes/{scopeId}', [\App\Http\Controllers\Api\DsrRequestScopeController::class, 'update'])->middleware('permission:dsr,write');
-            Route::delete('/scopes/{scopeId}', [\App\Http\Controllers\Api\DsrRequestScopeController::class, 'destroy'])->middleware('permission:dsr,write');
-        });
-
-        // =============================================
-        // DSR Apps — registered klien external apps (per-tenant CRUD)
-        // =============================================
-        Route::prefix('dsr-apps')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\DsrAppController::class, 'index'])->middleware('permission:dsr,read');
-            Route::post('/', [\App\Http\Controllers\Api\DsrAppController::class, 'store'])->middleware('permission:dsr,write');
-            Route::get('/{id}', [\App\Http\Controllers\Api\DsrAppController::class, 'show'])
-                ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,read');
-            Route::put('/{id}', [\App\Http\Controllers\Api\DsrAppController::class, 'update'])
-                ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,write');
-            Route::delete('/{id}', [\App\Http\Controllers\Api\DsrAppController::class, 'destroy'])
-                ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,write');
-            Route::post('/{id}/restore', [\App\Http\Controllers\Api\DsrAppController::class, 'restore'])
-                ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,write');
-            Route::post('/{id}/regenerate-token', [\App\Http\Controllers\Api\DsrAppController::class, 'regenerateToken'])
-                ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,write');
-            Route::get('/{id}/embed-snippet', [\App\Http\Controllers\Api\DsrAppController::class, 'embedSnippet'])
-                ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,read');
-        });
-
-        Route::get('/consent-logs', [\App\Http\Controllers\Api\ConsentLogController::class, 'index'])->middleware('permission:consent,read');
-        Route::post('/consent-items', [\App\Http\Controllers\Api\ConsentItemController::class, 'store'])->middleware('permission:consent,write');
-        Route::put('/consent-items/{id}', [\App\Http\Controllers\Api\ConsentItemController::class, 'update'])->middleware('permission:consent,write');
-        Route::delete('/consent-items/{id}', [\App\Http\Controllers\Api\ConsentItemController::class, 'destroy'])->middleware('permission:consent,write');
-        Route::post('/consent/{id}/webhook', [\App\Http\Controllers\Api\ConsentLogController::class, 'saveWebhook'])->middleware('permission:consent,write');
-
-        // Organization Profile (Onboarding)
-        Route::get('/organizations', [\App\Http\Controllers\Api\OrganizationController::class, 'index']); // Super Admin: list all
-        Route::get('/organization', [\App\Http\Controllers\Api\OrganizationController::class, 'show']);
-        Route::put('/organization', [\App\Http\Controllers\Api\OrganizationController::class, 'update']);
-        Route::post('/organizations/create-child', [\App\Http\Controllers\Api\OrganizationController::class, 'createChild']);
-        Route::put('/organizations/{id}/hierarchy', [\App\Http\Controllers\Api\OrganizationController::class, 'updateHierarchy']);
-        Route::post('/organizations/{id}/deactivate', [\App\Http\Controllers\Api\OrganizationController::class, 'deactivate']);
-        Route::post('/organizations/{id}/restore', [\App\Http\Controllers\Api\OrganizationController::class, 'restore']);
-        Route::put('/organizations/{id}/notifications-toggle', [\App\Http\Controllers\Api\OrganizationController::class, 'toggleNotifications']);
-
-        // CRM Integration
-        Route::prefix('crm')->group(function () {
-            Route::get('/config', [\App\Http\Controllers\Api\OrganizationController::class, 'getCrmConfig']);
-            Route::put('/config', [\App\Http\Controllers\Api\OrganizationController::class, 'saveCrmConfig']);
-            Route::post('/test-connection', [\App\Http\Controllers\Api\OrganizationController::class, 'testCrmConnection']);
-            Route::post('/sync', [\App\Http\Controllers\Api\OrganizationController::class, 'syncCrmData']);
-            Route::delete('/disconnect', [\App\Http\Controllers\Api\OrganizationController::class, 'disconnectCrm']);
-        });
-
-        // Templates
-        Route::get('/templates/dpia', [\App\Http\Controllers\Api\DashboardController::class, 'downloadDpiaTemplate']);
-        Route::get('/regulations', [\App\Http\Controllers\Api\GapAssessmentController::class, 'getRegulations']);
-
-        // AI Provider Management (Multi-Provider LLM)
-        Route::prefix('ai-providers')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\AiProviderController::class, 'index']);
-            Route::get('/config', [\App\Http\Controllers\Api\AiProviderController::class, 'getConfig']);
-            Route::post('/api-key', [\App\Http\Controllers\Api\AiProviderController::class, 'saveApiKey']);
-            Route::post('/test', [\App\Http\Controllers\Api\AiProviderController::class, 'testConnection']);
-            Route::post('/set-active', [\App\Http\Controllers\Api\AiProviderController::class, 'setActiveModel']);
-            Route::post('/unset-active', [\App\Http\Controllers\Api\AiProviderController::class, 'unsetActiveModel']);
-            Route::delete('/api-key', [\App\Http\Controllers\Api\AiProviderController::class, 'removeApiKey']);
-            // Admin CRUD
-            Route::get('/admin', [\App\Http\Controllers\Api\AiProviderController::class, 'adminIndex']);
-            Route::post('/', [\App\Http\Controllers\Api\AiProviderController::class, 'storeProvider']);
-            Route::put('/{id}', [\App\Http\Controllers\Api\AiProviderController::class, 'updateProvider']);
-            Route::delete('/{id}', [\App\Http\Controllers\Api\AiProviderController::class, 'destroyProvider']);
-            // Trash & Restore (Providers)
-            Route::get('/trash', [\App\Http\Controllers\Api\AiProviderController::class, 'trashedProviders']);
-            Route::post('/{id}/restore', [\App\Http\Controllers\Api\AiProviderController::class, 'restoreProvider']);
-            Route::delete('/{id}/force', [\App\Http\Controllers\Api\AiProviderController::class, 'forceDeleteProvider']);
-            // Models CRUD
-            Route::get('/{providerId}/models', [\App\Http\Controllers\Api\AiProviderController::class, 'listModels']);
-            Route::post('/{providerId}/models', [\App\Http\Controllers\Api\AiProviderController::class, 'storeModel']);
-            Route::put('/models/{modelId}', [\App\Http\Controllers\Api\AiProviderController::class, 'updateModel']);
-            Route::delete('/models/{modelId}', [\App\Http\Controllers\Api\AiProviderController::class, 'destroyModel']);
-            // Trash & Restore (Models)
-            Route::get('/{providerId}/models/trash', [\App\Http\Controllers\Api\AiProviderController::class, 'trashedModels']);
-            Route::post('/models/{modelId}/restore', [\App\Http\Controllers\Api\AiProviderController::class, 'restoreModel']);
-            Route::delete('/models/{modelId}/force', [\App\Http\Controllers\Api\AiProviderController::class, 'forceDeleteModel']);
-        });
-
-        // Workflow Approvals
-        Route::prefix('approvals')->group(function () {
-            Route::get('/pending', [\App\Http\Controllers\Api\ApprovalController::class, 'pending']);
-            Route::post('/{id}/approve', [\App\Http\Controllers\Api\ApprovalController::class, 'approve']);
-            Route::post('/{id}/reject', [\App\Http\Controllers\Api\ApprovalController::class, 'reject']);
-        });
-
-        // Security Posture & Alerts (DSPM) Phase 4
-        Route::prefix('security')->group(function () {
-            Route::get('/posture', [\App\Http\Controllers\Api\PostureController::class, 'getPosture']);
-            Route::get('/posture/trend', [\App\Http\Controllers\Api\PostureController::class, 'getTrend']);
-
-            // Alert Engine / Notifications
-            Route::get('/alerts', [\App\Http\Controllers\Api\AlertController::class, 'index']);
-            Route::get('/alerts/count', [\App\Http\Controllers\Api\AlertController::class, 'count']);
-            Route::get('/alerts/export', [\App\Http\Controllers\Api\AlertController::class, 'export']);
-            Route::post('/alerts/scan', [\App\Http\Controllers\Api\AlertController::class, 'scan']);
-            Route::post('/alerts/mark-all-read', [\App\Http\Controllers\Api\AlertController::class, 'markAllRead']);
-            Route::post('/alerts/{id}/read', [\App\Http\Controllers\Api\AlertController::class, 'markRead']);
-            Route::post('/alerts/{id}/acknowledge', [\App\Http\Controllers\Api\AlertController::class, 'acknowledge']);
-            Route::post('/alerts/{id}/resolve', [\App\Http\Controllers\Api\AlertController::class, 'resolve']);
-            Route::post('/alerts/{id}/dismiss', [\App\Http\Controllers\Api\AlertController::class, 'dismiss']);
-            // Alias: /notifications → /alerts (semantic preference)
-            Route::get('/notifications', [\App\Http\Controllers\Api\AlertController::class, 'index']);
-            Route::get('/notifications/count', [\App\Http\Controllers\Api\AlertController::class, 'count']);
-            Route::get('/notifications/export', [\App\Http\Controllers\Api\AlertController::class, 'export']);
-            Route::post('/notifications/mark-all-read', [\App\Http\Controllers\Api\AlertController::class, 'markAllRead']);
-            Route::post('/notifications/{id}/read', [\App\Http\Controllers\Api\AlertController::class, 'markRead']);
-        });
-
-        // Notification Preferences (per-user toggles)
-        Route::prefix('notification-preferences')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\NotificationPreferenceController::class, 'index']);
-            Route::put('/', [\App\Http\Controllers\Api\NotificationPreferenceController::class, 'update']);
-            Route::post('/reset', [\App\Http\Controllers\Api\NotificationPreferenceController::class, 'reset']);
-        });
-
-        // Automation Rules (Phase 4)
-        Route::prefix('automation')->group(function () {
-            Route::get('/rules', [\App\Http\Controllers\Api\AutomationController::class, 'index']);
-            Route::put('/rules/{ruleType}', [\App\Http\Controllers\Api\AutomationController::class, 'update']);
-        });
-
-        // =============================================
-        // License Management
-        // =============================================
-        Route::prefix('licenses')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\LicenseController::class, 'index']);
-            Route::post('/', [\App\Http\Controllers\Api\LicenseController::class, 'store']);
-            Route::get('/verify', [\App\Http\Controllers\Api\LicenseController::class, 'verify']);
-            Route::post('/activate', [\App\Http\Controllers\Api\LicenseController::class, 'activate']);
-            Route::get('/pricing', [\App\Http\Controllers\Api\LicenseController::class, 'pricingIndex']);
-            Route::put('/pricing', [\App\Http\Controllers\Api\LicenseController::class, 'pricingUpdate']);
-            Route::get('/{id}', [\App\Http\Controllers\Api\LicenseController::class, 'show']);
-            Route::put('/{id}', [\App\Http\Controllers\Api\LicenseController::class, 'update']);
-            Route::delete('/{id}', [\App\Http\Controllers\Api\LicenseController::class, 'destroy']);
-            Route::post('/{id}/restore', [\App\Http\Controllers\Api\LicenseController::class, 'restore']);
-            Route::post('/{id}/revoke', [\App\Http\Controllers\Api\LicenseController::class, 'revoke']);
-        });
-
-        // =============================================
-        // AI Chat Assistant (Knowledge Base)
-        // =============================================
-        Route::post('/ai/chat', [\App\Http\Controllers\Api\AiChatController::class, 'chat']);
-        Route::match(['get', 'put'], '/ai/knowledge-base', [\App\Http\Controllers\Api\AiChatController::class, 'knowledgeBase']);
-        Route::match(['get', 'put'], '/ai/settings', [\App\Http\Controllers\Api\AiChatController::class, 'apiSettings']);
-        Route::post('/ai/test-connection', [\App\Http\Controllers\Api\AiChatController::class, 'testConnection']);
-
-        // Chat History & Admin CS
-        Route::get('/ai/conversations', [\App\Http\Controllers\Api\AiChatController::class, 'conversations']);
-        Route::get('/ai/conversations/{id}', [\App\Http\Controllers\Api\AiChatController::class, 'conversationMessages']);
-        Route::post('/ai/conversations/{id}/reply', [\App\Http\Controllers\Api\AiChatController::class, 'adminReply']);
-        Route::get('/ai/conversations/{id}/poll', [\App\Http\Controllers\Api\AiChatController::class, 'pollMessages']);
-
-        // =============================================
-        // AI Features (License-Gated)
-        // =============================================
-        Route::prefix('ai-features')->group(function () {
-            Route::post('/gap_comparison/{id}/generate', [\App\Http\Controllers\Api\AiFeatureController::class, 'gapComparisonGenerate']);
-            Route::post('/gap/{id}/remediation', [\App\Http\Controllers\Api\AiFeatureController::class, 'gapRemediation']);
-            Route::post('/ropa/{id}/analysis', [\App\Http\Controllers\Api\AiFeatureController::class, 'ropaAnalysis']);
-            Route::post('/dpia/{id}/risk-scoring', [\App\Http\Controllers\Api\AiFeatureController::class, 'dpiaRiskScoring']);
-            Route::post('/breach/{id}/advisor', [\App\Http\Controllers\Api\AiFeatureController::class, 'breachAdvisor']);
-            Route::post('/dsr/{id}/draft', [\App\Http\Controllers\Api\AiFeatureController::class, 'dsrDraft']);
-            Route::post('/consent/generate', [\App\Http\Controllers\Api\AiFeatureController::class, 'consentGenerator']);
-            Route::get('/dashboard/summary', [\App\Http\Controllers\Api\AiFeatureController::class, 'dashboardSummary']);
-            Route::post('/drill/scenario', [\App\Http\Controllers\Api\AiFeatureController::class, 'drillScenario']);
-            Route::get('/history/{featureType}/{recordId}', [\App\Http\Controllers\Api\AiFeatureController::class, 'history']);
-            Route::post('/contract/review', [\App\Http\Controllers\Api\AiFeatureController::class, 'contractReview']);
-            Route::post('/contract/upload', [\App\Http\Controllers\Api\AiFeatureController::class, 'contractUpload']);
-            Route::post('/contract/analyze', [\App\Http\Controllers\Api\AiFeatureController::class, 'contractAnalyze']);
-            Route::post('/policy/analyze', [\App\Http\Controllers\Api\AiFeatureController::class, 'policyAnalyze']);
-            Route::post('/policy/review', [\App\Http\Controllers\Api\AiFeatureController::class, 'policyReview']);
-            Route::post('/consent/{id}/audit', [\App\Http\Controllers\Api\AiFeatureController::class, 'consentAudit']);
-            Route::post('/simulation/{id}/analysis', [\App\Http\Controllers\Api\AiFeatureController::class, 'simulationAnalysis']);
-            Route::post('/drill/scenario', [\App\Http\Controllers\Api\AiFeatureController::class, 'drillScenarioGenerator']);
-            Route::post('/data-discovery/{id}/classification', [\App\Http\Controllers\Api\AiFeatureController::class, 'dataDiscoveryClassification']);
-
-            // Auto-Fill endpoints
-            Route::post('/autofill/ropa', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillRopa']);
-            Route::post('/autofill/dpia', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillDpia']);
-            Route::post('/generate-raci', [\App\Http\Controllers\Api\AiFeatureController::class, 'generateRaci']);
-            Route::post('/batch-review', [\App\Http\Controllers\Api\AiFeatureController::class, 'batchReview']);
-            Route::get('/batch-review/{batchId}', [\App\Http\Controllers\Api\AiFeatureController::class, 'batchReviewStatus']);
-            Route::post('/breach/containment-steps', [\App\Http\Controllers\Api\AiFeatureController::class, 'breachContainmentSteps']);
-            Route::post('/assessment/{kind}/analysis', [\App\Http\Controllers\Api\AiFeatureController::class, 'assessmentAnalysis'])->where('kind', 'lia|tia|maturity');
-            Route::post('/autofill/breach', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillBreach']);
-            Route::post('/autofill/dsr', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillDsr']);
-            Route::post('/autofill/consent-items/{id}', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillConsentItems']);
-        });
-
-        // AI Credit Management
-        Route::get('/ai-credits/usage', [\App\Http\Controllers\Api\AiFeatureController::class, 'creditUsage']);
-        Route::post('/ai-credits/topup', [\App\Http\Controllers\Api\AiFeatureController::class, 'creditTopup']);
-
-        // =============================================
-        // Sprint C1: Custom Fields & Templates (ROPA / DPIA)
-        // =============================================
-        // =============================================
-        // Sprint F1/F2/F3: LIA / TIA / Maturity Assessment
-        // =============================================
-        Route::prefix('assessments/{kind}')->where(['kind' => 'lia|tia|maturity'])->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\AssessmentsController::class, 'index']);
-            Route::post('/', [\App\Http\Controllers\Api\AssessmentsController::class, 'store']);
-            Route::get('/{id}', [\App\Http\Controllers\Api\AssessmentsController::class, 'show']);
-            Route::put('/{id}', [\App\Http\Controllers\Api\AssessmentsController::class, 'update']);
-            Route::delete('/{id}', [\App\Http\Controllers\Api\AssessmentsController::class, 'destroy']);
-            Route::post('/{id}/restore', [\App\Http\Controllers\Api\AssessmentsController::class, 'restore']);
-            Route::delete('/{id}/force', [\App\Http\Controllers\Api\AssessmentsController::class, 'forceDelete']);
-        });
-
-        // =============================================
-        // Knowledge Base (per-tenant + shared)
-        // =============================================
-        Route::prefix('knowledge-base')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'index']);
-            Route::post('/', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'store']);
-            Route::put('/{id}', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'update']);
-            Route::delete('/{id}', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'destroy']);
-        });
-
-        // =============================================
-        // Menu Registry — 3-layer visibility (root + admin)
-        // =============================================
-        Route::prefix('menu-registry')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\MenuRegistryController::class, 'me']);
-            // Root-only
-            Route::get('/all', [\App\Http\Controllers\Api\MenuRegistryController::class, 'allMenus']);
-            Route::get('/whitelist', [\App\Http\Controllers\Api\MenuRegistryController::class, 'whitelist']);
-            Route::put('/whitelist', [\App\Http\Controllers\Api\MenuRegistryController::class, 'updateWhitelist']);
-            Route::get('/orgs', [\App\Http\Controllers\Api\MenuRegistryController::class, 'orgs']);
-            Route::get('/entitlements', [\App\Http\Controllers\Api\MenuRegistryController::class, 'entitlements']);
-            Route::put('/entitlements', [\App\Http\Controllers\Api\MenuRegistryController::class, 'updateEntitlement']);
-            Route::post('/bulk-entitlement', [\App\Http\Controllers\Api\MenuRegistryController::class, 'bulkEntitlement']);
-            Route::post('/copy-entitlement', [\App\Http\Controllers\Api\MenuRegistryController::class, 'copyEntitlement']);
-            Route::get('/audit-log', [\App\Http\Controllers\Api\MenuRegistryController::class, 'auditLog']);
-            // Admin + Root
-            Route::get('/tenant-overrides', [\App\Http\Controllers\Api\MenuRegistryController::class, 'tenantOverrides']);
-            Route::put('/tenant-overrides', [\App\Http\Controllers\Api\MenuRegistryController::class, 'updateTenantOverride']);
-        });
-
-        // =============================================
-        // Tenant Lifecycle / Offboarding (root + superadmin)
-        // =============================================
-        Route::prefix('tenant-offboard')->group(function () {
-            Route::get('/{id}/status', [\App\Http\Controllers\Api\TenantOffboardController::class, 'status']);
-            Route::post('/{id}/freeze', [\App\Http\Controllers\Api\TenantOffboardController::class, 'freeze']);
-            Route::post('/{id}/unfreeze', [\App\Http\Controllers\Api\TenantOffboardController::class, 'unfreeze']);
-            Route::post('/{id}/transfer', [\App\Http\Controllers\Api\TenantOffboardController::class, 'transfer']);
-            Route::post('/{id}/archive', [\App\Http\Controllers\Api\TenantOffboardController::class, 'archive']);
-            Route::post('/{id}/export', [\App\Http\Controllers\Api\TenantExportController::class, 'export']);
-        });
-
-        // =============================================
-        // Root Dashboard (platform-level aggregates)
-        // =============================================
-        Route::get('/root-dashboard', [\App\Http\Controllers\Api\RootDashboardController::class, 'index']);
-
-        // =============================================
-        // Tenant Branding / Theme (per-org isolation)
-        // =============================================
-        Route::prefix('themes')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\TenantThemeController::class, 'index']);
-            Route::get('/active', [\App\Http\Controllers\Api\TenantThemeController::class, 'active']);
-            Route::post('/use-default', [\App\Http\Controllers\Api\TenantThemeController::class, 'useDefault']);
-            Route::post('/generate', [\App\Http\Controllers\Api\TenantThemeController::class, 'generate']);
-            Route::post('/import', [\App\Http\Controllers\Api\TenantThemeController::class, 'import']);
-            Route::get('/{id}/export', [\App\Http\Controllers\Api\TenantThemeController::class, 'export']);
-            Route::post('/', [\App\Http\Controllers\Api\TenantThemeController::class, 'store']);
-            Route::post('/upload-asset', [\App\Http\Controllers\Api\TenantThemeController::class, 'uploadAsset']);
-            Route::get('/{id}', [\App\Http\Controllers\Api\TenantThemeController::class, 'show']);
-            Route::put('/{id}', [\App\Http\Controllers\Api\TenantThemeController::class, 'update']);
-            Route::delete('/{id}', [\App\Http\Controllers\Api\TenantThemeController::class, 'destroy']);
-            Route::post('/{id}/activate', [\App\Http\Controllers\Api\TenantThemeController::class, 'setActive']);
-            Route::post('/{id}/deactivate', [\App\Http\Controllers\Api\TenantThemeController::class, 'deactivate']);
-        });
-
-        // =============================================
-        // Sprint C4: Module Comments (threaded, cross-module)
-        // =============================================
-        Route::prefix('comments')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\ModuleCommentController::class, 'index']);
-            Route::post('/', [\App\Http\Controllers\Api\ModuleCommentController::class, 'store']);
-            Route::put('/{id}', [\App\Http\Controllers\Api\ModuleCommentController::class, 'update']);
-            Route::delete('/{id}', [\App\Http\Controllers\Api\ModuleCommentController::class, 'destroy']);
-        });
-
-        Route::prefix('custom-fields')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\CustomFieldController::class, 'index']);
-            Route::post('/', [\App\Http\Controllers\Api\CustomFieldController::class, 'store']);
-            Route::put('/{id}', [\App\Http\Controllers\Api\CustomFieldController::class, 'update']);
-            Route::delete('/{id}', [\App\Http\Controllers\Api\CustomFieldController::class, 'destroy']);
-        });
-        Route::prefix('module-templates')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\CustomFieldController::class, 'templates']);
-            Route::post('/', [\App\Http\Controllers\Api\CustomFieldController::class, 'storeTemplate']);
-            Route::put('/{id}', [\App\Http\Controllers\Api\CustomFieldController::class, 'updateTemplate']);
-            Route::delete('/{id}', [\App\Http\Controllers\Api\CustomFieldController::class, 'destroyTemplate']);
-        });
-
-        // =============================================
-        // Template Export (Word/Excel — Formatted Documents)
-        // =============================================
-        Route::prefix('export-doc')->group(function () {
-            Route::get('/ropa/{id}', [\App\Http\Controllers\Api\TemplateExportController::class, 'exportRopa']);
-            Route::get('/dpia/{id}', [\App\Http\Controllers\Api\TemplateExportController::class, 'exportDpia']);
-            Route::get('/gap/{id}', [\App\Http\Controllers\Api\TemplateExportController::class, 'exportGap']);
-            Route::get('/gap/{id}/report', [\App\Http\Controllers\Api\TemplateExportController::class, 'exportGapReport']);
-            Route::get('/compliance-report', [\App\Http\Controllers\Api\TemplateExportController::class, 'exportComplianceReport']);
-        });
-
-        // =============================================
-        // Export (CSV / JSON)
-        // =============================================
-        Route::prefix('export')->group(function () {
-            Route::get('/ropa', [\App\Http\Controllers\Api\ExportController::class, 'ropa']);
-            Route::get('/dpia', [\App\Http\Controllers\Api\ExportController::class, 'dpia']);
-            Route::get('/breach', [\App\Http\Controllers\Api\ExportController::class, 'breach']);
-            Route::get('/dsr', [\App\Http\Controllers\Api\ExportController::class, 'dsr']);
-            Route::get('/consent', [\App\Http\Controllers\Api\ExportController::class, 'consent']);
-            Route::get('/consent-records', [\App\Http\Controllers\Api\ExportController::class, 'consentRecords']);
-            Route::get('/gap-assessment', [\App\Http\Controllers\Api\ExportController::class, 'gapAssessment']);
-            Route::get('/data-discovery', [\App\Http\Controllers\Api\ExportController::class, 'dataDiscovery']);
-            Route::get('/data-discovery-columns', [\App\Http\Controllers\Api\ExportController::class, 'dataDiscoveryColumns']);
-            Route::get('/simulation', [\App\Http\Controllers\Api\ExportController::class, 'simulation']);
-            Route::get('/ai-results', [\App\Http\Controllers\Api\ExportController::class, 'aiResults']);
-            Route::get('/ai-results/{id}', [\App\Http\Controllers\Api\ExportController::class, 'aiResultSingle']);
-            Route::get('/compliance-report', [\App\Http\Controllers\Api\ExportController::class, 'complianceReport']);
-        });
-
-        // =============================================
-        // AI Agent (Enterprise only — function calling)
-        // =============================================
-        Route::prefix('ai-agent')->group(function () {
-            Route::post('/chat', [\App\Http\Controllers\Api\AiAgentController::class, 'chat']);
-            Route::post('/approve-action', [\App\Http\Controllers\Api\AiAgentController::class, 'approveAction']);
-            Route::post('/reject-action', [\App\Http\Controllers\Api\AiAgentController::class, 'rejectAction']);
-            Route::get('/mentions/{type}', [\App\Http\Controllers\Api\AiAgentController::class, 'mentions']);
-            Route::get('/history', [\App\Http\Controllers\Api\AiAgentController::class, 'history']);
-            Route::get('/history/{id}/messages', [\App\Http\Controllers\Api\AiAgentController::class, 'conversationMessages']);
-        });
-
-        // =============================================
-        // Avatar 3D Chat (Platform Q&A with Knowledge Base)
-        // =============================================
-        Route::post('/avatar/chat', [\App\Http\Controllers\Api\AvatarChatController::class, 'chat']);
-
-        // =============================================
-        // Voice TTS Synthesis (AI-powered text-to-speech)
-        // =============================================
-        Route::post('/voice/synthesize', [\App\Http\Controllers\Api\VoiceTtsController::class, 'synthesize']);
-
-        // =============================================
-        // System / Superadmin Tools
-        // =============================================
-        // Platform Config (root only) — editable soft knobs + AWS budget estimator
-        Route::get('/platform-config', [\App\Http\Controllers\Api\PlatformConfigController::class, 'index']);
-        Route::put('/platform-config', [\App\Http\Controllers\Api\PlatformConfigController::class, 'update']);
-        Route::get('/platform-config/budget', [\App\Http\Controllers\Api\PlatformConfigController::class, 'budget']);
-
-        Route::get('/system/check-update', [\App\Http\Controllers\Api\SystemUpdateController::class, 'checkUpdate']);
-        Route::post('/system/update-backend', [\App\Http\Controllers\Api\SystemUpdateController::class, 'updateBackend']);
-        Route::post('/system/checkout-version', [\App\Http\Controllers\Api\SystemUpdateController::class, 'checkoutVersion']);
-        Route::get('/system/frontend-status', [\App\Http\Controllers\Api\SystemUpdateController::class, 'frontendStatus']);
-        Route::post('/system/update-frontend', [\App\Http\Controllers\Api\SystemUpdateController::class, 'updateFrontend']);
-
-        // =============================================
-        // API Keys (Developer/Tenant Integration)
-        // =============================================
-        Route::prefix('api-keys')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\ApiKeyController::class, 'index']);
-            Route::post('/', [\App\Http\Controllers\Api\ApiKeyController::class, 'store']);
-            Route::delete('/{id}', [\App\Http\Controllers\Api\ApiKeyController::class, 'destroy']);
-        });
-
-        // =============================================
-        // Per-Tenant Cloud Storage Settings
-        // =============================================
-        Route::prefix('storage-settings')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\StorageSettingsController::class, 'show']);
-            Route::put('/', [\App\Http\Controllers\Api\StorageSettingsController::class, 'update']);
-            Route::post('/test', [\App\Http\Controllers\Api\StorageSettingsController::class, 'testConnection']);
-            Route::delete('/', [\App\Http\Controllers\Api\StorageSettingsController::class, 'destroy']);
-        });
-
-        // =============================================
-        // Document Intelligence (Import & AI Mapping)
-        // =============================================
-        Route::prefix('documents')->group(function () {
-            Route::post('/upload', [\App\Http\Controllers\Api\DocumentImportController::class, 'upload']);
-            Route::post('/batch-upload', [\App\Http\Controllers\Api\DocumentImportController::class, 'batchUpload']);
-            Route::get('/imports', [\App\Http\Controllers\Api\DocumentImportController::class, 'index']);
-            Route::get('/imports/{id}', [\App\Http\Controllers\Api\DocumentImportController::class, 'show']);
-            Route::put('/imports/{id}/approve', [\App\Http\Controllers\Api\DocumentImportController::class, 'approve']);
-            Route::put('/imports/{id}/edit-mapping', [\App\Http\Controllers\Api\DocumentImportController::class, 'editMapping']);
-            Route::delete('/imports/{id}', [\App\Http\Controllers\Api\DocumentImportController::class, 'destroy']);
-            Route::get('/batches', [\App\Http\Controllers\Api\DocumentImportController::class, 'batches']);
-            Route::get('/batches/{id}', [\App\Http\Controllers\Api\DocumentImportController::class, 'batchDetail']);
-        });
-
-        // =============================================
-        // API Hub (Key Management, Webhooks, Usage)
-        // =============================================
-        Route::prefix('api-hub')->group(function () {
-            Route::get('/docs', [\App\Http\Controllers\Api\ApiHubController::class, 'docs']);
-            // API Keys
-            Route::get('/keys', [\App\Http\Controllers\Api\ApiHubController::class, 'listKeys']);
-            Route::post('/keys', [\App\Http\Controllers\Api\ApiHubController::class, 'createKey']);
-            Route::put('/keys/{id}/toggle', [\App\Http\Controllers\Api\ApiHubController::class, 'toggleKey']);
-            Route::delete('/keys/{id}', [\App\Http\Controllers\Api\ApiHubController::class, 'deleteKey']);
-            // Usage
-            Route::get('/usage', [\App\Http\Controllers\Api\ApiHubController::class, 'usage']);
-            // Webhooks
-            Route::get('/webhooks', [\App\Http\Controllers\Api\ApiHubController::class, 'listWebhooks']);
-            Route::post('/webhooks', [\App\Http\Controllers\Api\ApiHubController::class, 'createWebhook']);
-            Route::put('/webhooks/{id}/toggle', [\App\Http\Controllers\Api\ApiHubController::class, 'toggleWebhook']);
-            Route::delete('/webhooks/{id}', [\App\Http\Controllers\Api\ApiHubController::class, 'deleteWebhook']);
-        });
-
-        // =============================================
-        // Integrations (Telegram, SIEM, SOAR, SOCRadar)
-        // =============================================
-        Route::prefix('integrations')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\IntegrationController::class, 'index']);
-            Route::put('/{provider}', [\App\Http\Controllers\Api\IntegrationController::class, 'update']);
-            Route::post('/{provider}/test', [\App\Http\Controllers\Api\IntegrationController::class, 'test']);
-            Route::delete('/{provider}', [\App\Http\Controllers\Api\IntegrationController::class, 'destroy']);
-            // Breach sync shortcuts
-            Route::post('/breach/{id}/telegram', [\App\Http\Controllers\Api\IntegrationController::class, 'syncBreachTelegram']);
-            Route::post('/breach/{id}/siem', [\App\Http\Controllers\Api\IntegrationController::class, 'syncBreachSiem']);
-        });
-
+    );
+
+    // =============================================
+    // Universal Module CRUD (ROPA, DPIA, DSR, Consent, Breach, Data Discovery)
+    // =============================================
+    Route::prefix('m/{module}')->where(['module' => 'ropa|dpia|dsr|consent|breach|data-discovery'])->group(function () {
+        // Module name mapping for permission check (URL slug -> permission module_id)
+        // ropa->ropa, dpia->dpia, dsr->dsr, consent->consent, breach->breach, data-discovery->data_discovery
+        Route::get('/', [ModuleCrudController::class, 'index']);
+        Route::post('/', [ModuleCrudController::class, 'store']);
+        Route::get('/{id}', [ModuleCrudController::class, 'show']);
+        Route::put('/{id}', [ModuleCrudController::class, 'update']);
+        Route::get('/{id}/history', [ModuleCrudController::class, 'history']);
+        Route::delete('/{id}', [ModuleCrudController::class, 'destroy']);
+        Route::post('/{id}/restore', [ModuleCrudController::class, 'restore']);
+        Route::delete('/{id}/force', [ModuleCrudController::class, 'forceDelete']);
     });
+
+    // =============================================
+    // DPIA — Risk Event Template Library (read-only, seeded)
+    // =============================================
+    Route::get('/dpia/risk-event-templates', [\App\Http\Controllers\Api\DpiaRiskEventTemplateController::class, 'index'])
+        ->middleware('permission:dpia,read');
+
+    // =============================================
+    // DPIA — Assessment Framework (DPO-customizable categories + risks)
+    // =============================================
+    Route::prefix('dpia/framework')->group(function () {
+        Route::get('/categories', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'index'])->middleware('permission:dpia,read');
+        Route::post('/categories', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'storeCategory'])->middleware('permission:dpia,write');
+        Route::put('/categories/{id}', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'updateCategory'])->middleware('permission:dpia,write');
+        Route::delete('/categories/{id}', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'destroyCategory'])->middleware('permission:dpia,write');
+        Route::post('/categories/{categoryId}/risks', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'storeRisk'])->middleware('permission:dpia,write');
+        Route::put('/categories/{categoryId}/risks/{id}', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'updateRisk'])->middleware('permission:dpia,write');
+        Route::delete('/categories/{categoryId}/risks/{id}', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'destroyRisk'])->middleware('permission:dpia,write');
+        Route::post('/reset', [\App\Http\Controllers\Api\DpiaAssessmentFrameworkController::class, 'reset'])->middleware('permission:dpia,write');
+    });
+
+    // =============================================
+    // DPIA — Risk Treatment Plan (per-DPIA endpoints)
+    // Track mitigation execution: status, owner, deadline, evidence, residual risk.
+    // =============================================
+    Route::prefix('dpia/{id}/rtp')->where(['id' => '[0-9a-fA-F-]{36}'])->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\DpiaRtpController::class, 'index'])->middleware('permission:dpia,read');
+        Route::post('/', [\App\Http\Controllers\Api\DpiaRtpController::class, 'store'])->middleware('permission:dpia,write');
+        Route::post('/auto-generate', [\App\Http\Controllers\Api\DpiaRtpController::class, 'autoGenerate'])->middleware('permission:dpia,write');
+        Route::post('/clean-orphans', [\App\Http\Controllers\Api\DpiaRtpController::class, 'cleanOrphans'])->middleware('permission:dpia,write');
+        Route::put('/{itemId}', [\App\Http\Controllers\Api\DpiaRtpController::class, 'update'])->middleware('permission:dpia,write');
+        Route::delete('/{itemId}', [\App\Http\Controllers\Api\DpiaRtpController::class, 'destroy'])->middleware('permission:dpia,write');
+    });
+
+    // =============================================
+    // RTP — Cross-DPIA Aggregate View (menu terpisah)
+    // =============================================
+    Route::prefix('rtp')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\RiskTreatmentPlanController::class, 'index'])->middleware('permission:dpia,read');
+        Route::get('/facets', [\App\Http\Controllers\Api\RiskTreatmentPlanController::class, 'facets'])->middleware('permission:dpia,read');
+        Route::get('/dashboard', [\App\Http\Controllers\Api\RiskTreatmentPlanController::class, 'dashboard'])->middleware('permission:dpia,read');
+    });
+
+    // =============================================
+    // ROPA — DPO Approval Workflow
+    // =============================================
+    Route::prefix('ropa/{id}')->group(function () {
+        Route::post('/submit', [\App\Http\Controllers\Api\RopaApprovalController::class, 'submit'])->middleware('permission:ropa,write');
+        Route::post('/approve', [\App\Http\Controllers\Api\RopaApprovalController::class, 'approve'])->middleware('permission:ropa,write');
+        Route::post('/reject', [\App\Http\Controllers\Api\RopaApprovalController::class, 'reject'])->middleware('permission:ropa,write');
+    });
+
+    // =============================================
+    // ROPA — Industry Templates (seeded library)
+    // =============================================
+    Route::get('/ropa-templates', [\App\Http\Controllers\Api\RopaTemplateController::class, 'index'])->middleware('permission:ropa,read');
+    Route::get('/ropa-templates/{id}', [\App\Http\Controllers\Api\RopaTemplateController::class, 'show'])->middleware('permission:ropa,read');
+
+    // =============================================
+    // Processing Categories — used for ROPA/DPIA naming (ROPA-HR-001).
+    // Org-scoped, user-extendable via LazySearchSelect allowCreate.
+    // =============================================
+    Route::prefix('processing-categories')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\ProcessingCategoryController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\Api\ProcessingCategoryController::class, 'store']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\ProcessingCategoryController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\ProcessingCategoryController::class, 'destroy']);
+    });
+
+    // =============================================
+    // Breach Containment Templates + RACI Matrix
+    // =============================================
+    Route::prefix('containment-templates')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\ContainmentController::class, 'listTemplates']);
+        Route::get('/trash', [\App\Http\Controllers\Api\ContainmentController::class, 'listTrashed']);
+        Route::post('/', [\App\Http\Controllers\Api\ContainmentController::class, 'createTemplate'])->middleware('permission:breach,write');
+        Route::put('/{id}', [\App\Http\Controllers\Api\ContainmentController::class, 'updateTemplate'])->middleware('permission:breach,write');
+        Route::delete('/{id}', [\App\Http\Controllers\Api\ContainmentController::class, 'deleteTemplate'])->middleware('permission:breach,write');
+        Route::post('/{id}/restore', [\App\Http\Controllers\Api\ContainmentController::class, 'restoreTemplate'])->middleware('permission:breach,write');
+        Route::delete('/{id}/force', [\App\Http\Controllers\Api\ContainmentController::class, 'forceDeleteTemplate'])->middleware('permission:breach,write');
+    });
+    Route::post('/breach/{breachId}/apply-template', [\App\Http\Controllers\Api\ContainmentController::class, 'applyTemplate'])->middleware('permission:breach,write');
+    Route::post('/breach/{breachId}/containment', [\App\Http\Controllers\Api\ContainmentController::class, 'addStep'])->middleware('permission:breach,write');
+    Route::put('/breach/{breachId}/containment/{stepKey}', [\App\Http\Controllers\Api\ContainmentController::class, 'updateStep'])->middleware('permission:breach,write');
+    Route::delete('/breach/{breachId}/containment/{stepKey}', [\App\Http\Controllers\Api\ContainmentController::class, 'removeStep'])->middleware('permission:breach,write');
+
+    // Breach PDF report generators (accept ?size=a4|letter|legal|a3|a5|folio & ?orientation=portrait|landscape)
+    Route::get('/breach/{id}/pdf/komdigi', [\App\Http\Controllers\Api\BreachReportController::class, 'komdigi'])->middleware('permission:breach,read');
+    Route::get('/breach/{id}/pdf/subject-letter', [\App\Http\Controllers\Api\BreachReportController::class, 'subjectLetter'])->middleware('permission:breach,read');
+    Route::get('/breach/{id}/pdf/full-report', [\App\Http\Controllers\Api\BreachReportController::class, 'fullReport'])->middleware('permission:breach,read');
+
+    // Document Templates — per-tenant picker + customization
+    // NOTE: static-path routes MUST be declared before any `{id}` route
+    // or Laravel matches "/active-map", "/preview", "/docx-placeholders"
+    // as a DocumentTemplate lookup with id="active-map" → 404 findOrFail.
+    Route::prefix('document-templates')->group(function () {
+        // Static paths first
+        Route::get('/active-map', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'activeMap']);
+        Route::put('/active-map', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'updateActiveMap']);
+        Route::post('/preview', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'preview'])->name('document-templates.preview');
+        Route::post('/upload-asset', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'uploadAsset']);
+        Route::get('/docx-placeholders', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'docxPlaceholders']);
+
+        // Dynamic `{id}` paths after
+        Route::get('/', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'store']);
+        Route::post('/{id}/activate', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'activate'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::post('/{id}/upload-docx', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'uploadDocx'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::delete('/{id}/docx/{kind}', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'deleteDocx'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::get('/{id}', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'show'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::put('/{id}', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'update'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::delete('/{id}', [\App\Http\Controllers\Api\DocumentTemplateController::class, 'destroy'])->where('id', '[0-9a-fA-F-]{36}');
+    });
+    Route::get('/raci-matrix', [\App\Http\Controllers\Api\ContainmentController::class, 'getRaciMatrix']);
+    Route::put('/raci-matrix', [\App\Http\Controllers\Api\ContainmentController::class, 'updateRaciMatrix']);
+
+    // Per-breach RACI matrix edit (Phase G1) — single save endpoint the
+    // matrix modal posts to. Apply-template overlays tenant RACI presets.
+    Route::put('/breach/{id}/containment-raci', [\App\Http\Controllers\Api\ContainmentController::class, 'updateRaciForBreach'])->middleware('permission:breach,write');
+    Route::post('/breach/{id}/apply-raci-template', [\App\Http\Controllers\Api\ContainmentController::class, 'applyRaciTemplate'])->middleware('permission:breach,write');
+
+    // RACI template library (per-tenant, with system presets)
+    Route::prefix('raci-templates')->middleware('permission:breach,read')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\RaciTemplateController::class, 'index']);
+        Route::get('/trash', [\App\Http\Controllers\Api\RaciTemplateController::class, 'trash']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\RaciTemplateController::class, 'show']);
+    });
+    Route::prefix('raci-templates')->middleware('permission:breach,write')->group(function () {
+        Route::post('/', [\App\Http\Controllers\Api\RaciTemplateController::class, 'store']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\RaciTemplateController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\RaciTemplateController::class, 'destroy']);
+        Route::post('/{id}/restore', [\App\Http\Controllers\Api\RaciTemplateController::class, 'restore']);
+        Route::delete('/{id}/force', [\App\Http\Controllers\Api\RaciTemplateController::class, 'forceDelete']);
+    });
+
+    // Retention master data (Sprint E3) — reusable library referenced from ROPA wizard step 7
+    Route::prefix('retention-policies')->middleware('permission:ropa,read')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'index']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'show']);
+    });
+    Route::prefix('retention-policies')->middleware('permission:ropa,write')->group(function () {
+        Route::post('/', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'store']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'destroy']);
+        Route::post('/{id}/restore', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'restore']);
+        Route::delete('/{id}/force', [\App\Http\Controllers\Api\RetentionPolicyController::class, 'forceDelete']);
+    });
+
+    // =============================================
+    // Contract Review CRUD
+    // =============================================
+    Route::prefix('contract-reviews')->group(function () {
+        Route::get('/trashed', [\App\Http\Controllers\Api\ContractReviewCrudController::class, 'trashed']);
+        Route::get('/', [\App\Http\Controllers\Api\ContractReviewCrudController::class, 'index']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\ContractReviewCrudController::class, 'show']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\ContractReviewCrudController::class, 'destroy']);
+        Route::post('/{id}/restore', [\App\Http\Controllers\Api\ContractReviewCrudController::class, 'restore']);
+        Route::delete('/{id}/force', [\App\Http\Controllers\Api\ContractReviewCrudController::class, 'forceDelete']);
+    });
+
+    // =============================================
+    // Policy Review CRUD
+    // =============================================
+    Route::prefix('policy-reviews')->group(function () {
+        Route::get('/trashed', [\App\Http\Controllers\Api\PolicyReviewCrudController::class, 'trashed']);
+        Route::get('/', [\App\Http\Controllers\Api\PolicyReviewCrudController::class, 'index']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\PolicyReviewCrudController::class, 'show']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\PolicyReviewCrudController::class, 'destroy']);
+        Route::post('/{id}/restore', [\App\Http\Controllers\Api\PolicyReviewCrudController::class, 'restore']);
+        Route::delete('/{id}/force', [\App\Http\Controllers\Api\PolicyReviewCrudController::class, 'forceDelete']);
+    });
+
+    // =============================================
+    // Phase 2: Vendor Risk Management (Third Party Management)
+    // =============================================
+    Route::prefix('vendor-risk')->group(function () {
+        Route::get('/trashed', [\App\Http\Controllers\Api\VendorRiskController::class, 'trashed']);
+        Route::get('/', [\App\Http\Controllers\Api\VendorRiskController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\Api\VendorRiskController::class, 'store']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\VendorRiskController::class, 'show']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\VendorRiskController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\VendorRiskController::class, 'destroy']);
+        Route::post('/{id}/restore', [\App\Http\Controllers\Api\VendorRiskController::class, 'restore']);
+        Route::delete('/{id}/force', [\App\Http\Controllers\Api\VendorRiskController::class, 'forceDelete']);
+        // AI Assessment
+        Route::post('/extract', [\App\Http\Controllers\Api\VendorRiskController::class, 'extract']);
+        Route::post('/generate-questions', [\App\Http\Controllers\Api\VendorRiskController::class, 'generateQuestions']);
+        Route::post('/assess', [\App\Http\Controllers\Api\VendorRiskController::class, 'assess']);
+
+        // Sprint D3: TPRM document management
+        Route::post('/{id}/documents', [\App\Http\Controllers\Api\VendorRiskController::class, 'uploadDocument']);
+        Route::delete('/{id}/documents/{docId}', [\App\Http\Controllers\Api\VendorRiskController::class, 'deleteDocument']);
+        Route::post('/{id}/screen-documents', [\App\Http\Controllers\Api\VendorRiskController::class, 'screenDocuments']);
+    });
+
+    // =============================================
+    // Phase 2: Cross Border Data Transfer
+    // =============================================
+    Route::prefix('cross-border')->group(function () {
+        Route::get('/trashed', [\App\Http\Controllers\Api\CrossBorderController::class, 'trashed']);
+        Route::get('/', [\App\Http\Controllers\Api\CrossBorderController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\Api\CrossBorderController::class, 'store']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\CrossBorderController::class, 'show']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\CrossBorderController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\CrossBorderController::class, 'destroy']);
+        Route::post('/{id}/restore', [\App\Http\Controllers\Api\CrossBorderController::class, 'restore']);
+        Route::delete('/{id}/force', [\App\Http\Controllers\Api\CrossBorderController::class, 'forceDelete']);
+
+        // AI Transfer Impact Assessment (TIA)
+        Route::post('/{id}/tia', [\App\Http\Controllers\Api\CrossBorderController::class, 'assessTIA']);
+    });
+
+    // =============================================
+    // Breach Integrations (Telegram War Room, SIEM/SOAR)
+    // =============================================
+    Route::prefix('integrations')->group(function () {
+        Route::get('/settings', [\App\Http\Controllers\Api\IntegrationController::class, 'getSettings']);
+        Route::put('/settings', [\App\Http\Controllers\Api\IntegrationController::class, 'updateSettings']);
+        Route::post('/breach/{id}/notify-telegram', [\App\Http\Controllers\Api\IntegrationController::class, 'syncBreachTelegram']);
+        Route::post('/breach/{id}/notify-siem', [\App\Http\Controllers\Api\IntegrationController::class, 'syncBreachSiem']);
+    });
+
+    // =============================================
+    // Data Discovery — Advanced Endpoints
+    // =============================================
+    Route::prefix('data-discovery')->group(function () {
+        Route::post('/{id}/test-connection', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'testConnection'])->middleware('permission:data_discovery,read');
+        Route::post('/{id}/scan', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'triggerScan'])->middleware('permission:data_discovery,write');
+        // AI Deep Scan (replaces standard scan view with AI recommendations)
+        Route::post('/{id}/scan-ai', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'scanAi'])->middleware('permission:data_discovery,write');
+        Route::get('/{id}/scan-details', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'scanDetails'])->middleware('permission:data_discovery,read');
+        Route::put('/{id}/classify-column', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'updateColumnClassification'])->middleware('permission:data_discovery,write');
+        Route::get('/{id}/ropa-links', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'ropaLinks'])->middleware('permission:data_discovery,read');
+        Route::get('/search-dsr/subject', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'searchSubject'])->middleware('permission:data_discovery,read');
+
+        // AI Specific Search (Text-to-SQL Flow, two-step for privacy)
+        //   POST /search-ai        → AI generates SQL from schema metadata only
+        //   POST /search-ai/execute → user explicitly runs the SQL (no AI involved)
+        Route::post('/{id}/search-ai', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'specificSearchAi'])->middleware('permission:data_discovery,read');
+        Route::post('/{id}/search-ai/execute', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'specificSearchExecute'])->middleware('permission:data_discovery,read');
+
+        // Decryptor Profiles (per-system tenant encryption keys, wrapped at rest)
+        //   GET    /decryptor-profiles       → list (metadata only, key hidden)
+        //   POST   /decryptor-profiles       → create with raw key (wrapped & stored)
+        //   PUT    /decryptor-profiles/{pid} → update (optional key rotation)
+        //   DELETE /decryptor-profiles/{pid} → remove
+        //   POST   /decryptor-profiles/{pid}/test → verify key against a sample ciphertext
+        Route::get('/{id}/decryptor-profiles', [\App\Http\Controllers\Api\DecryptorProfileController::class, 'index'])->middleware('permission:data_discovery,read');
+        Route::post('/{id}/decryptor-profiles', [\App\Http\Controllers\Api\DecryptorProfileController::class, 'store'])->middleware('permission:data_discovery,write');
+        Route::put('/{id}/decryptor-profiles/{profileId}', [\App\Http\Controllers\Api\DecryptorProfileController::class, 'update'])->middleware('permission:data_discovery,write');
+        Route::delete('/{id}/decryptor-profiles/{profileId}', [\App\Http\Controllers\Api\DecryptorProfileController::class, 'destroy'])->middleware('permission:data_discovery,write');
+        Route::post('/{id}/decryptor-profiles/{profileId}/test', [\App\Http\Controllers\Api\DecryptorProfileController::class, 'test'])->middleware('permission:data_discovery,write');
+
+        // Leak Detection (dark-web style match → parametrized verify)
+        //   POST /leak/match-schema → AI finds candidate table from leaked column sequence (schema only)
+        //   POST /leak/verify       → parametrized query runs with user-supplied values (no AI)
+        //   GET  /leak/history      → recent verification history (metadata + masked sample only)
+        //   DELETE /leak/history/{hid} → delete one entry
+        //   DELETE /leak/history     → clear all for this system
+        Route::post('/{id}/leak/match-schema', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'leakMatchSchema'])->middleware('permission:data_discovery,read');
+        Route::post('/{id}/leak/verify', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'leakVerify'])->middleware('permission:data_discovery,read');
+        Route::get('/{id}/leak/history', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'leakHistory'])->middleware('permission:data_discovery,read');
+        Route::delete('/{id}/leak/history', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'clearLeakHistory'])->middleware('permission:data_discovery,write');
+        Route::delete('/{id}/leak/history/{historyId}', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'deleteLeakHistory'])->middleware('permission:data_discovery,write');
+        Route::get('/{id}/search-ai-history', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'getSearchAiHistory'])->middleware('permission:data_discovery,read');
+        Route::delete('/{id}/search-ai-history', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'clearSearchAiHistory'])->middleware('permission:data_discovery,write');
+        Route::delete('/{id}/search-ai-history/{historyId}', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'deleteSearchAiHistory'])->middleware('permission:data_discovery,write');
+
+        // Protection Assessment (Manual + AI)
+        Route::get('/{id}/protection-assessment', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'getProtectionAssessment'])->middleware('permission:data_discovery,read');
+        Route::put('/{id}/protection-assessment', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'saveProtectionAssessment'])->middleware('permission:data_discovery,write');
+        Route::post('/{id}/ai-protection-assessment', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'aiProtectionAssessment'])->middleware('permission:data_discovery,write');
+
+        // Sprint E1/E3/E4: Unstructured OCR + metadata compare + AI SQL sample
+        Route::post('/scan-unstructured', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'scanUnstructured'])->middleware('permission:data_discovery,write');
+        Route::post('/{id}/compare-metadata', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'compareMetadata'])->middleware('permission:data_discovery,read');
+        Route::post('/{id}/sample-query', [\App\Http\Controllers\Api\DataDiscoveryController::class, 'sampleQuery'])->middleware('permission:data_discovery,read');
+
+        // AI Patrol & Daily Changelogs
+        Route::get('/{id}/changelogs', [\App\Http\Controllers\Api\DiscoveryChangelogController::class, 'index'])->middleware('permission:data_discovery,read');
+        Route::post('/{id}/changelogs', [\App\Http\Controllers\Api\DiscoveryChangelogController::class, 'store'])->middleware('permission:data_discovery,write');
+        Route::post('/{id}/patrol-config', [\App\Http\Controllers\Api\DiscoveryChangelogController::class, 'saveConfig'])->middleware('permission:data_discovery,write');
+    });
+
+    // Consent Logs & Items
+    // =============================================
+    // DSR Scope Picker — DPO assign Information Systems per DSR
+    // =============================================
+    Route::prefix('dsr/{id}')->where(['id' => '[0-9a-fA-F-]{36}'])->group(function () {
+        // Scope picker
+        Route::get('/scopes', [\App\Http\Controllers\Api\DsrRequestScopeController::class, 'index'])->middleware('permission:dsr,read');
+        Route::get('/available-systems', [\App\Http\Controllers\Api\DsrRequestScopeController::class, 'availableSystems'])->middleware('permission:dsr,read');
+        Route::post('/scopes', [\App\Http\Controllers\Api\DsrRequestScopeController::class, 'store'])->middleware('permission:dsr,write');
+        Route::put('/scopes/{scopeId}', [\App\Http\Controllers\Api\DsrRequestScopeController::class, 'update'])->middleware('permission:dsr,write');
+        Route::delete('/scopes/{scopeId}', [\App\Http\Controllers\Api\DsrRequestScopeController::class, 'destroy'])->middleware('permission:dsr,write');
+
+        // SQL Pack — Privasimu generates, admin klien executes manually
+        Route::post('/sql-pack/generate', [\App\Http\Controllers\Api\DsrSqlPackController::class, 'generate'])->middleware('permission:dsr,write');
+        Route::get('/sql-pack/download', [\App\Http\Controllers\Api\DsrSqlPackController::class, 'download'])->middleware('permission:dsr,read')->name('dsr.sql_pack.download');
+        Route::get('/sql-pack/info', [\App\Http\Controllers\Api\DsrSqlPackController::class, 'info'])->middleware('permission:dsr,read');
+    });
+
+    // =============================================
+    // DSR Apps — registered klien external apps (per-tenant CRUD)
+    // =============================================
+    Route::prefix('dsr-apps')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\DsrAppController::class, 'index'])->middleware('permission:dsr,read');
+        Route::post('/', [\App\Http\Controllers\Api\DsrAppController::class, 'store'])->middleware('permission:dsr,write');
+        Route::get('/{id}', [\App\Http\Controllers\Api\DsrAppController::class, 'show'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,read');
+        Route::put('/{id}', [\App\Http\Controllers\Api\DsrAppController::class, 'update'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,write');
+        Route::delete('/{id}', [\App\Http\Controllers\Api\DsrAppController::class, 'destroy'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,write');
+        Route::post('/{id}/restore', [\App\Http\Controllers\Api\DsrAppController::class, 'restore'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,write');
+        Route::post('/{id}/regenerate-token', [\App\Http\Controllers\Api\DsrAppController::class, 'regenerateToken'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,write');
+        Route::get('/{id}/embed-snippet', [\App\Http\Controllers\Api\DsrAppController::class, 'embedSnippet'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,read');
+    });
+
+    Route::get('/consent-logs', [\App\Http\Controllers\Api\ConsentLogController::class, 'index'])->middleware('permission:consent,read');
+    Route::post('/consent-items', [\App\Http\Controllers\Api\ConsentItemController::class, 'store'])->middleware('permission:consent,write');
+    Route::put('/consent-items/{id}', [\App\Http\Controllers\Api\ConsentItemController::class, 'update'])->middleware('permission:consent,write');
+    Route::delete('/consent-items/{id}', [\App\Http\Controllers\Api\ConsentItemController::class, 'destroy'])->middleware('permission:consent,write');
+    Route::post('/consent/{id}/webhook', [\App\Http\Controllers\Api\ConsentLogController::class, 'saveWebhook'])->middleware('permission:consent,write');
+
+    // Organization Profile (Onboarding)
+    Route::get('/organizations', [\App\Http\Controllers\Api\OrganizationController::class, 'index']); // Super Admin: list all
+    Route::get('/organization', [\App\Http\Controllers\Api\OrganizationController::class, 'show']);
+    Route::put('/organization', [\App\Http\Controllers\Api\OrganizationController::class, 'update']);
+    Route::post('/organizations/create-child', [\App\Http\Controllers\Api\OrganizationController::class, 'createChild']);
+    Route::put('/organizations/{id}/hierarchy', [\App\Http\Controllers\Api\OrganizationController::class, 'updateHierarchy']);
+    Route::post('/organizations/{id}/deactivate', [\App\Http\Controllers\Api\OrganizationController::class, 'deactivate']);
+    Route::post('/organizations/{id}/restore', [\App\Http\Controllers\Api\OrganizationController::class, 'restore']);
+    Route::put('/organizations/{id}/notifications-toggle', [\App\Http\Controllers\Api\OrganizationController::class, 'toggleNotifications']);
+
+    // CRM Integration
+    Route::prefix('crm')->group(function () {
+        Route::get('/config', [\App\Http\Controllers\Api\OrganizationController::class, 'getCrmConfig']);
+        Route::put('/config', [\App\Http\Controllers\Api\OrganizationController::class, 'saveCrmConfig']);
+        Route::post('/test-connection', [\App\Http\Controllers\Api\OrganizationController::class, 'testCrmConnection']);
+        Route::post('/sync', [\App\Http\Controllers\Api\OrganizationController::class, 'syncCrmData']);
+        Route::delete('/disconnect', [\App\Http\Controllers\Api\OrganizationController::class, 'disconnectCrm']);
+    });
+
+    // Templates
+    Route::get('/templates/dpia', [\App\Http\Controllers\Api\DashboardController::class, 'downloadDpiaTemplate']);
+    Route::get('/regulations', [\App\Http\Controllers\Api\GapAssessmentController::class, 'getRegulations']);
+
+    // AI Provider Management (Multi-Provider LLM)
+    Route::prefix('ai-providers')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\AiProviderController::class, 'index']);
+        Route::get('/config', [\App\Http\Controllers\Api\AiProviderController::class, 'getConfig']);
+        Route::post('/api-key', [\App\Http\Controllers\Api\AiProviderController::class, 'saveApiKey']);
+        Route::post('/test', [\App\Http\Controllers\Api\AiProviderController::class, 'testConnection']);
+        Route::post('/set-active', [\App\Http\Controllers\Api\AiProviderController::class, 'setActiveModel']);
+        Route::post('/unset-active', [\App\Http\Controllers\Api\AiProviderController::class, 'unsetActiveModel']);
+        Route::delete('/api-key', [\App\Http\Controllers\Api\AiProviderController::class, 'removeApiKey']);
+        // Admin CRUD
+        Route::get('/admin', [\App\Http\Controllers\Api\AiProviderController::class, 'adminIndex']);
+        Route::post('/', [\App\Http\Controllers\Api\AiProviderController::class, 'storeProvider']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\AiProviderController::class, 'updateProvider']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\AiProviderController::class, 'destroyProvider']);
+        // Trash & Restore (Providers)
+        Route::get('/trash', [\App\Http\Controllers\Api\AiProviderController::class, 'trashedProviders']);
+        Route::post('/{id}/restore', [\App\Http\Controllers\Api\AiProviderController::class, 'restoreProvider']);
+        Route::delete('/{id}/force', [\App\Http\Controllers\Api\AiProviderController::class, 'forceDeleteProvider']);
+        // Models CRUD
+        Route::get('/{providerId}/models', [\App\Http\Controllers\Api\AiProviderController::class, 'listModels']);
+        Route::post('/{providerId}/models', [\App\Http\Controllers\Api\AiProviderController::class, 'storeModel']);
+        Route::put('/models/{modelId}', [\App\Http\Controllers\Api\AiProviderController::class, 'updateModel']);
+        Route::delete('/models/{modelId}', [\App\Http\Controllers\Api\AiProviderController::class, 'destroyModel']);
+        // Trash & Restore (Models)
+        Route::get('/{providerId}/models/trash', [\App\Http\Controllers\Api\AiProviderController::class, 'trashedModels']);
+        Route::post('/models/{modelId}/restore', [\App\Http\Controllers\Api\AiProviderController::class, 'restoreModel']);
+        Route::delete('/models/{modelId}/force', [\App\Http\Controllers\Api\AiProviderController::class, 'forceDeleteModel']);
+    });
+
+    // Workflow Approvals
+    Route::prefix('approvals')->group(function () {
+        Route::get('/pending', [\App\Http\Controllers\Api\ApprovalController::class, 'pending']);
+        Route::post('/{id}/approve', [\App\Http\Controllers\Api\ApprovalController::class, 'approve']);
+        Route::post('/{id}/reject', [\App\Http\Controllers\Api\ApprovalController::class, 'reject']);
+    });
+
+    // Security Posture & Alerts (DSPM) Phase 4
+    Route::prefix('security')->group(function () {
+        Route::get('/posture', [\App\Http\Controllers\Api\PostureController::class, 'getPosture']);
+        Route::get('/posture/trend', [\App\Http\Controllers\Api\PostureController::class, 'getTrend']);
+
+        // Alert Engine / Notifications
+        Route::get('/alerts', [\App\Http\Controllers\Api\AlertController::class, 'index']);
+        Route::get('/alerts/count', [\App\Http\Controllers\Api\AlertController::class, 'count']);
+        Route::get('/alerts/export', [\App\Http\Controllers\Api\AlertController::class, 'export']);
+        Route::post('/alerts/scan', [\App\Http\Controllers\Api\AlertController::class, 'scan']);
+        Route::post('/alerts/mark-all-read', [\App\Http\Controllers\Api\AlertController::class, 'markAllRead']);
+        Route::post('/alerts/{id}/read', [\App\Http\Controllers\Api\AlertController::class, 'markRead']);
+        Route::post('/alerts/{id}/acknowledge', [\App\Http\Controllers\Api\AlertController::class, 'acknowledge']);
+        Route::post('/alerts/{id}/resolve', [\App\Http\Controllers\Api\AlertController::class, 'resolve']);
+        Route::post('/alerts/{id}/dismiss', [\App\Http\Controllers\Api\AlertController::class, 'dismiss']);
+        // Alias: /notifications → /alerts (semantic preference)
+        Route::get('/notifications', [\App\Http\Controllers\Api\AlertController::class, 'index']);
+        Route::get('/notifications/count', [\App\Http\Controllers\Api\AlertController::class, 'count']);
+        Route::get('/notifications/export', [\App\Http\Controllers\Api\AlertController::class, 'export']);
+        Route::post('/notifications/mark-all-read', [\App\Http\Controllers\Api\AlertController::class, 'markAllRead']);
+        Route::post('/notifications/{id}/read', [\App\Http\Controllers\Api\AlertController::class, 'markRead']);
+    });
+
+    // Notification Preferences (per-user toggles)
+    Route::prefix('notification-preferences')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\NotificationPreferenceController::class, 'index']);
+        Route::put('/', [\App\Http\Controllers\Api\NotificationPreferenceController::class, 'update']);
+        Route::post('/reset', [\App\Http\Controllers\Api\NotificationPreferenceController::class, 'reset']);
+    });
+
+    // Automation Rules (Phase 4)
+    Route::prefix('automation')->group(function () {
+        Route::get('/rules', [\App\Http\Controllers\Api\AutomationController::class, 'index']);
+        Route::put('/rules/{ruleType}', [\App\Http\Controllers\Api\AutomationController::class, 'update']);
+    });
+
+    // =============================================
+    // License Management
+    // =============================================
+    Route::prefix('licenses')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\LicenseController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\Api\LicenseController::class, 'store']);
+        Route::get('/verify', [\App\Http\Controllers\Api\LicenseController::class, 'verify']);
+        Route::post('/activate', [\App\Http\Controllers\Api\LicenseController::class, 'activate']);
+        Route::get('/pricing', [\App\Http\Controllers\Api\LicenseController::class, 'pricingIndex']);
+        Route::put('/pricing', [\App\Http\Controllers\Api\LicenseController::class, 'pricingUpdate']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\LicenseController::class, 'show']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\LicenseController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\LicenseController::class, 'destroy']);
+        Route::post('/{id}/restore', [\App\Http\Controllers\Api\LicenseController::class, 'restore']);
+        Route::post('/{id}/revoke', [\App\Http\Controllers\Api\LicenseController::class, 'revoke']);
+    });
+
+    // =============================================
+    // AI Chat Assistant (Knowledge Base)
+    // =============================================
+    Route::post('/ai/chat', [\App\Http\Controllers\Api\AiChatController::class, 'chat']);
+    Route::match(['get', 'put'], '/ai/knowledge-base', [\App\Http\Controllers\Api\AiChatController::class, 'knowledgeBase']);
+    Route::match(['get', 'put'], '/ai/settings', [\App\Http\Controllers\Api\AiChatController::class, 'apiSettings']);
+    Route::post('/ai/test-connection', [\App\Http\Controllers\Api\AiChatController::class, 'testConnection']);
+
+    // Chat History & Admin CS
+    Route::get('/ai/conversations', [\App\Http\Controllers\Api\AiChatController::class, 'conversations']);
+    Route::get('/ai/conversations/{id}', [\App\Http\Controllers\Api\AiChatController::class, 'conversationMessages']);
+    Route::post('/ai/conversations/{id}/reply', [\App\Http\Controllers\Api\AiChatController::class, 'adminReply']);
+    Route::get('/ai/conversations/{id}/poll', [\App\Http\Controllers\Api\AiChatController::class, 'pollMessages']);
+
+    // =============================================
+    // AI Features (License-Gated)
+    // =============================================
+    Route::prefix('ai-features')->group(function () {
+        Route::post('/gap_comparison/{id}/generate', [\App\Http\Controllers\Api\AiFeatureController::class, 'gapComparisonGenerate']);
+        Route::post('/gap/{id}/remediation', [\App\Http\Controllers\Api\AiFeatureController::class, 'gapRemediation']);
+        Route::post('/ropa/{id}/analysis', [\App\Http\Controllers\Api\AiFeatureController::class, 'ropaAnalysis']);
+        Route::post('/dpia/{id}/risk-scoring', [\App\Http\Controllers\Api\AiFeatureController::class, 'dpiaRiskScoring']);
+        Route::post('/breach/{id}/advisor', [\App\Http\Controllers\Api\AiFeatureController::class, 'breachAdvisor']);
+        Route::post('/dsr/{id}/draft', [\App\Http\Controllers\Api\AiFeatureController::class, 'dsrDraft']);
+        Route::post('/consent/generate', [\App\Http\Controllers\Api\AiFeatureController::class, 'consentGenerator']);
+        Route::get('/dashboard/summary', [\App\Http\Controllers\Api\AiFeatureController::class, 'dashboardSummary']);
+        Route::post('/drill/scenario', [\App\Http\Controllers\Api\AiFeatureController::class, 'drillScenario']);
+        Route::get('/history/{featureType}/{recordId}', [\App\Http\Controllers\Api\AiFeatureController::class, 'history']);
+        Route::post('/contract/review', [\App\Http\Controllers\Api\AiFeatureController::class, 'contractReview']);
+        Route::post('/contract/upload', [\App\Http\Controllers\Api\AiFeatureController::class, 'contractUpload']);
+        Route::post('/contract/analyze', [\App\Http\Controllers\Api\AiFeatureController::class, 'contractAnalyze']);
+        Route::post('/policy/analyze', [\App\Http\Controllers\Api\AiFeatureController::class, 'policyAnalyze']);
+        Route::post('/policy/review', [\App\Http\Controllers\Api\AiFeatureController::class, 'policyReview']);
+        Route::post('/consent/{id}/audit', [\App\Http\Controllers\Api\AiFeatureController::class, 'consentAudit']);
+        Route::post('/simulation/{id}/analysis', [\App\Http\Controllers\Api\AiFeatureController::class, 'simulationAnalysis']);
+        Route::post('/drill/scenario', [\App\Http\Controllers\Api\AiFeatureController::class, 'drillScenarioGenerator']);
+        Route::post('/data-discovery/{id}/classification', [\App\Http\Controllers\Api\AiFeatureController::class, 'dataDiscoveryClassification']);
+
+        // Auto-Fill endpoints
+        Route::post('/autofill/ropa', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillRopa']);
+        Route::post('/autofill/dpia', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillDpia']);
+        Route::post('/generate-raci', [\App\Http\Controllers\Api\AiFeatureController::class, 'generateRaci']);
+        Route::post('/batch-review', [\App\Http\Controllers\Api\AiFeatureController::class, 'batchReview']);
+        Route::get('/batch-review/{batchId}', [\App\Http\Controllers\Api\AiFeatureController::class, 'batchReviewStatus']);
+        Route::post('/breach/containment-steps', [\App\Http\Controllers\Api\AiFeatureController::class, 'breachContainmentSteps']);
+        Route::post('/assessment/{kind}/analysis', [\App\Http\Controllers\Api\AiFeatureController::class, 'assessmentAnalysis'])->where('kind', 'lia|tia|maturity');
+        Route::post('/autofill/breach', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillBreach']);
+        Route::post('/autofill/dsr', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillDsr']);
+        Route::post('/autofill/consent-items/{id}', [\App\Http\Controllers\Api\AiFeatureController::class, 'autofillConsentItems']);
+    });
+
+    // AI Credit Management
+    Route::get('/ai-credits/usage', [\App\Http\Controllers\Api\AiFeatureController::class, 'creditUsage']);
+    Route::post('/ai-credits/topup', [\App\Http\Controllers\Api\AiFeatureController::class, 'creditTopup']);
+
+    // =============================================
+    // Sprint C1: Custom Fields & Templates (ROPA / DPIA)
+    // =============================================
+    // =============================================
+    // Sprint F1/F2/F3: LIA / TIA / Maturity Assessment
+    // =============================================
+    Route::prefix('assessments/{kind}')->where(['kind' => 'lia|tia|maturity'])->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\AssessmentsController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\Api\AssessmentsController::class, 'store']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\AssessmentsController::class, 'show']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\AssessmentsController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\AssessmentsController::class, 'destroy']);
+        Route::post('/{id}/restore', [\App\Http\Controllers\Api\AssessmentsController::class, 'restore']);
+        Route::delete('/{id}/force', [\App\Http\Controllers\Api\AssessmentsController::class, 'forceDelete']);
+    });
+
+    // =============================================
+    // Knowledge Base (per-tenant + shared)
+    // =============================================
+    Route::prefix('knowledge-base')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'store']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'destroy']);
+    });
+
+    // =============================================
+    // Menu Registry — 3-layer visibility (root + admin)
+    // =============================================
+    Route::prefix('menu-registry')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\MenuRegistryController::class, 'me']);
+        // Root-only
+        Route::get('/all', [\App\Http\Controllers\Api\MenuRegistryController::class, 'allMenus']);
+        Route::get('/whitelist', [\App\Http\Controllers\Api\MenuRegistryController::class, 'whitelist']);
+        Route::put('/whitelist', [\App\Http\Controllers\Api\MenuRegistryController::class, 'updateWhitelist']);
+        Route::get('/orgs', [\App\Http\Controllers\Api\MenuRegistryController::class, 'orgs']);
+        Route::get('/entitlements', [\App\Http\Controllers\Api\MenuRegistryController::class, 'entitlements']);
+        Route::put('/entitlements', [\App\Http\Controllers\Api\MenuRegistryController::class, 'updateEntitlement']);
+        Route::post('/bulk-entitlement', [\App\Http\Controllers\Api\MenuRegistryController::class, 'bulkEntitlement']);
+        Route::post('/copy-entitlement', [\App\Http\Controllers\Api\MenuRegistryController::class, 'copyEntitlement']);
+        Route::get('/audit-log', [\App\Http\Controllers\Api\MenuRegistryController::class, 'auditLog']);
+        // Admin + Root
+        Route::get('/tenant-overrides', [\App\Http\Controllers\Api\MenuRegistryController::class, 'tenantOverrides']);
+        Route::put('/tenant-overrides', [\App\Http\Controllers\Api\MenuRegistryController::class, 'updateTenantOverride']);
+    });
+
+    // =============================================
+    // Tenant Lifecycle / Offboarding (root + superadmin)
+    // =============================================
+    Route::prefix('tenant-offboard')->group(function () {
+        Route::get('/{id}/status', [\App\Http\Controllers\Api\TenantOffboardController::class, 'status']);
+        Route::post('/{id}/freeze', [\App\Http\Controllers\Api\TenantOffboardController::class, 'freeze']);
+        Route::post('/{id}/unfreeze', [\App\Http\Controllers\Api\TenantOffboardController::class, 'unfreeze']);
+        Route::post('/{id}/transfer', [\App\Http\Controllers\Api\TenantOffboardController::class, 'transfer']);
+        Route::post('/{id}/archive', [\App\Http\Controllers\Api\TenantOffboardController::class, 'archive']);
+        Route::post('/{id}/export', [\App\Http\Controllers\Api\TenantExportController::class, 'export']);
+    });
+
+    // =============================================
+    // Root Dashboard (platform-level aggregates)
+    // =============================================
+    Route::get('/root-dashboard', [\App\Http\Controllers\Api\RootDashboardController::class, 'index']);
+
+    // =============================================
+    // Tenant Branding / Theme (per-org isolation)
+    // =============================================
+    Route::prefix('themes')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\TenantThemeController::class, 'index']);
+        Route::get('/active', [\App\Http\Controllers\Api\TenantThemeController::class, 'active']);
+        Route::post('/use-default', [\App\Http\Controllers\Api\TenantThemeController::class, 'useDefault']);
+        Route::post('/generate', [\App\Http\Controllers\Api\TenantThemeController::class, 'generate']);
+        Route::post('/import', [\App\Http\Controllers\Api\TenantThemeController::class, 'import']);
+        Route::get('/{id}/export', [\App\Http\Controllers\Api\TenantThemeController::class, 'export']);
+        Route::post('/', [\App\Http\Controllers\Api\TenantThemeController::class, 'store']);
+        Route::post('/upload-asset', [\App\Http\Controllers\Api\TenantThemeController::class, 'uploadAsset']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\TenantThemeController::class, 'show']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\TenantThemeController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\TenantThemeController::class, 'destroy']);
+        Route::post('/{id}/activate', [\App\Http\Controllers\Api\TenantThemeController::class, 'setActive']);
+        Route::post('/{id}/deactivate', [\App\Http\Controllers\Api\TenantThemeController::class, 'deactivate']);
+    });
+
+    // =============================================
+    // Sprint C4: Module Comments (threaded, cross-module)
+    // =============================================
+    Route::prefix('comments')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\ModuleCommentController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\Api\ModuleCommentController::class, 'store']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\ModuleCommentController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\ModuleCommentController::class, 'destroy']);
+    });
+
+    Route::prefix('custom-fields')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\CustomFieldController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\Api\CustomFieldController::class, 'store']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\CustomFieldController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\CustomFieldController::class, 'destroy']);
+    });
+    Route::prefix('module-templates')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\CustomFieldController::class, 'templates']);
+        Route::post('/', [\App\Http\Controllers\Api\CustomFieldController::class, 'storeTemplate']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\CustomFieldController::class, 'updateTemplate']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\CustomFieldController::class, 'destroyTemplate']);
+    });
+
+    // =============================================
+    // Template Export (Word/Excel — Formatted Documents)
+    // =============================================
+    Route::prefix('export-doc')->group(function () {
+        Route::get('/ropa/{id}', [\App\Http\Controllers\Api\TemplateExportController::class, 'exportRopa']);
+        Route::get('/dpia/{id}', [\App\Http\Controllers\Api\TemplateExportController::class, 'exportDpia']);
+        Route::get('/gap/{id}', [\App\Http\Controllers\Api\TemplateExportController::class, 'exportGap']);
+        Route::get('/gap/{id}/report', [\App\Http\Controllers\Api\TemplateExportController::class, 'exportGapReport']);
+        Route::get('/compliance-report', [\App\Http\Controllers\Api\TemplateExportController::class, 'exportComplianceReport']);
+    });
+
+    // =============================================
+    // Export (CSV / JSON)
+    // =============================================
+    Route::prefix('export')->group(function () {
+        Route::get('/ropa', [\App\Http\Controllers\Api\ExportController::class, 'ropa']);
+        Route::get('/dpia', [\App\Http\Controllers\Api\ExportController::class, 'dpia']);
+        Route::get('/breach', [\App\Http\Controllers\Api\ExportController::class, 'breach']);
+        Route::get('/dsr', [\App\Http\Controllers\Api\ExportController::class, 'dsr']);
+        Route::get('/consent', [\App\Http\Controllers\Api\ExportController::class, 'consent']);
+        Route::get('/consent-records', [\App\Http\Controllers\Api\ExportController::class, 'consentRecords']);
+        Route::get('/gap-assessment', [\App\Http\Controllers\Api\ExportController::class, 'gapAssessment']);
+        Route::get('/data-discovery', [\App\Http\Controllers\Api\ExportController::class, 'dataDiscovery']);
+        Route::get('/data-discovery-columns', [\App\Http\Controllers\Api\ExportController::class, 'dataDiscoveryColumns']);
+        Route::get('/simulation', [\App\Http\Controllers\Api\ExportController::class, 'simulation']);
+        Route::get('/ai-results', [\App\Http\Controllers\Api\ExportController::class, 'aiResults']);
+        Route::get('/ai-results/{id}', [\App\Http\Controllers\Api\ExportController::class, 'aiResultSingle']);
+        Route::get('/compliance-report', [\App\Http\Controllers\Api\ExportController::class, 'complianceReport']);
+    });
+
+    // =============================================
+    // AI Agent (Enterprise only — function calling)
+    // =============================================
+    Route::prefix('ai-agent')->group(function () {
+        Route::post('/chat', [\App\Http\Controllers\Api\AiAgentController::class, 'chat']);
+        Route::post('/approve-action', [\App\Http\Controllers\Api\AiAgentController::class, 'approveAction']);
+        Route::post('/reject-action', [\App\Http\Controllers\Api\AiAgentController::class, 'rejectAction']);
+        Route::get('/mentions/{type}', [\App\Http\Controllers\Api\AiAgentController::class, 'mentions']);
+        Route::get('/history', [\App\Http\Controllers\Api\AiAgentController::class, 'history']);
+        Route::get('/history/{id}/messages', [\App\Http\Controllers\Api\AiAgentController::class, 'conversationMessages']);
+    });
+
+    // =============================================
+    // Avatar 3D Chat (Platform Q&A with Knowledge Base)
+    // =============================================
+    Route::post('/avatar/chat', [\App\Http\Controllers\Api\AvatarChatController::class, 'chat']);
+
+    // =============================================
+    // Voice TTS Synthesis (AI-powered text-to-speech)
+    // =============================================
+    Route::post('/voice/synthesize', [\App\Http\Controllers\Api\VoiceTtsController::class, 'synthesize']);
+
+    // =============================================
+    // System / Superadmin Tools
+    // =============================================
+    // Platform Config (root only) — editable soft knobs + AWS budget estimator
+    Route::get('/platform-config', [\App\Http\Controllers\Api\PlatformConfigController::class, 'index']);
+    Route::put('/platform-config', [\App\Http\Controllers\Api\PlatformConfigController::class, 'update']);
+    Route::get('/platform-config/budget', [\App\Http\Controllers\Api\PlatformConfigController::class, 'budget']);
+
+    Route::get('/system/check-update', [\App\Http\Controllers\Api\SystemUpdateController::class, 'checkUpdate']);
+    Route::post('/system/update-backend', [\App\Http\Controllers\Api\SystemUpdateController::class, 'updateBackend']);
+    Route::post('/system/checkout-version', [\App\Http\Controllers\Api\SystemUpdateController::class, 'checkoutVersion']);
+    Route::get('/system/frontend-status', [\App\Http\Controllers\Api\SystemUpdateController::class, 'frontendStatus']);
+    Route::post('/system/update-frontend', [\App\Http\Controllers\Api\SystemUpdateController::class, 'updateFrontend']);
+
+    // =============================================
+    // API Keys (Developer/Tenant Integration)
+    // =============================================
+    Route::prefix('api-keys')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\ApiKeyController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\Api\ApiKeyController::class, 'store']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\ApiKeyController::class, 'destroy']);
+    });
+
+    // =============================================
+    // Per-Tenant Cloud Storage Settings
+    // =============================================
+    Route::prefix('storage-settings')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\StorageSettingsController::class, 'show']);
+        Route::put('/', [\App\Http\Controllers\Api\StorageSettingsController::class, 'update']);
+        Route::post('/test', [\App\Http\Controllers\Api\StorageSettingsController::class, 'testConnection']);
+        Route::delete('/', [\App\Http\Controllers\Api\StorageSettingsController::class, 'destroy']);
+    });
+
+    // =============================================
+    // Document Intelligence (Import & AI Mapping)
+    // =============================================
+    Route::prefix('documents')->group(function () {
+        Route::post('/upload', [\App\Http\Controllers\Api\DocumentImportController::class, 'upload']);
+        Route::post('/batch-upload', [\App\Http\Controllers\Api\DocumentImportController::class, 'batchUpload']);
+        Route::get('/imports', [\App\Http\Controllers\Api\DocumentImportController::class, 'index']);
+        Route::get('/imports/{id}', [\App\Http\Controllers\Api\DocumentImportController::class, 'show']);
+        Route::put('/imports/{id}/approve', [\App\Http\Controllers\Api\DocumentImportController::class, 'approve']);
+        Route::put('/imports/{id}/edit-mapping', [\App\Http\Controllers\Api\DocumentImportController::class, 'editMapping']);
+        Route::delete('/imports/{id}', [\App\Http\Controllers\Api\DocumentImportController::class, 'destroy']);
+        Route::get('/batches', [\App\Http\Controllers\Api\DocumentImportController::class, 'batches']);
+        Route::get('/batches/{id}', [\App\Http\Controllers\Api\DocumentImportController::class, 'batchDetail']);
+    });
+
+    // =============================================
+    // API Hub (Key Management, Webhooks, Usage)
+    // =============================================
+    Route::prefix('api-hub')->group(function () {
+        Route::get('/docs', [\App\Http\Controllers\Api\ApiHubController::class, 'docs']);
+        // API Keys
+        Route::get('/keys', [\App\Http\Controllers\Api\ApiHubController::class, 'listKeys']);
+        Route::post('/keys', [\App\Http\Controllers\Api\ApiHubController::class, 'createKey']);
+        Route::put('/keys/{id}/toggle', [\App\Http\Controllers\Api\ApiHubController::class, 'toggleKey']);
+        Route::delete('/keys/{id}', [\App\Http\Controllers\Api\ApiHubController::class, 'deleteKey']);
+        // Usage
+        Route::get('/usage', [\App\Http\Controllers\Api\ApiHubController::class, 'usage']);
+        // Webhooks
+        Route::get('/webhooks', [\App\Http\Controllers\Api\ApiHubController::class, 'listWebhooks']);
+        Route::post('/webhooks', [\App\Http\Controllers\Api\ApiHubController::class, 'createWebhook']);
+        Route::put('/webhooks/{id}/toggle', [\App\Http\Controllers\Api\ApiHubController::class, 'toggleWebhook']);
+        Route::delete('/webhooks/{id}', [\App\Http\Controllers\Api\ApiHubController::class, 'deleteWebhook']);
+    });
+
+    // =============================================
+    // Integrations (Telegram, SIEM, SOAR, SOCRadar)
+    // =============================================
+    Route::prefix('integrations')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\IntegrationController::class, 'index']);
+        Route::put('/{provider}', [\App\Http\Controllers\Api\IntegrationController::class, 'update']);
+        Route::post('/{provider}/test', [\App\Http\Controllers\Api\IntegrationController::class, 'test']);
+        Route::delete('/{provider}', [\App\Http\Controllers\Api\IntegrationController::class, 'destroy']);
+        // Breach sync shortcuts
+        Route::post('/breach/{id}/telegram', [\App\Http\Controllers\Api\IntegrationController::class, 'syncBreachTelegram']);
+        Route::post('/breach/{id}/siem', [\App\Http\Controllers\Api\IntegrationController::class, 'syncBreachSiem']);
+    });
+
+});
 
 // =============================================
 // Public Partner API v1 (authenticated via X-Api-Key)
