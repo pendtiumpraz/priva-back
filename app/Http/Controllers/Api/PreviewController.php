@@ -23,37 +23,49 @@ class PreviewController extends Controller
     public function consentBanner(Request $request)
     {
         $cid = $request->input('collection_id');
-        if (!$cid) abort(400, 'collection_id required');
+        if (! $cid) {
+            abort(400, 'collection_id required');
+        }
 
         $cp = ConsentCollectionPoint::where('embed_token', $cid)
             ->orWhere('collection_id', $cid)
             ->orWhere('id', $cid)
             ->first();
-        if (!$cp) abort(404, 'Collection not found');
+        if (! $cp) {
+            abort(404, 'Collection not found');
+        }
 
         $base = rtrim(config('app.url') ?: url('/'), '/');
         $bust = $this->bust(public_path('consent-banner.js'), $cp->updated_at);
+
         return response()->view('preview.consent_banner', [
             'collection_id' => $cp->embed_token ?: $cp->collection_id,
-            'widget_url' => $base . '/consent-banner.js?v=' . $bust,
-            'api_base' => $base . '/api',
+            'widget_url' => $base.'/consent-banner.js?v='.$bust,
+            'api_base' => $base.'/api',
+            'locale' => $cp->locale ?: 'id',
         ])->header('Cache-Control', 'no-store, must-revalidate');
     }
 
     public function dsrWidget(Request $request)
     {
         $token = $request->input('embed_token');
-        if (!$token) abort(400, 'embed_token required');
+        if (! $token) {
+            abort(400, 'embed_token required');
+        }
 
         $app = DsrApp::where('embed_token', $token)->first();
-        if (!$app) abort(404, 'App not found');
+        if (! $app) {
+            abort(404, 'App not found');
+        }
 
         $base = rtrim(config('app.url') ?: url('/'), '/');
         $bust = $this->bust(public_path('dsr-widget.js'), $app->updated_at);
+
         return response()->view('preview.dsr_widget', [
             'embed_token' => $app->embed_token,
-            'widget_url' => $base . '/dsr-widget.js?v=' . $bust,
-            'api_base' => $base . '/api',
+            'widget_url' => $base.'/dsr-widget.js?v='.$bust,
+            'api_base' => $base.'/api',
+            'locale' => $app->locale ?: 'id',
         ])->header('Cache-Control', 'no-store, must-revalidate');
     }
 
@@ -61,6 +73,7 @@ class PreviewController extends Controller
     private function bust(string $filePath, $updatedAt): string
     {
         $mtime = file_exists($filePath) ? filemtime($filePath) : time();
-        return substr(md5($mtime . '|' . (string) $updatedAt), 0, 10);
+
+        return substr(md5($mtime.'|'.(string) $updatedAt), 0, 10);
     }
 }
