@@ -152,6 +152,14 @@
         + '#pp-c-modal .pp-c-cat-arrow.expanded{transform:rotate(180deg)}'
         + '#pp-c-modal .pp-c-cat-body{margin-top:10px;padding:0 8px 0 28px;font-size:12px;color:#475569;line-height:1.6;display:none}'
         + '#pp-c-modal .pp-c-cat-body.expanded{display:block}'
+        + '#pp-c-modal .pp-c-item-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px dashed #e2e8f0}'
+        + '#pp-c-modal .pp-c-item-row:last-child{border-bottom:0}'
+        + '#pp-c-modal .pp-c-item-info{flex:1;min-width:0}'
+        + '#pp-c-modal .pp-c-item-name{font-size:13px;font-weight:700;color:#0f172a;margin-bottom:3px}'
+        + '#pp-c-modal .pp-c-item-desc{font-size:11.5px;color:#64748b;margin-top:2px;line-height:1.5}'
+        + '#pp-c-modal .pp-c-item-cookies{font-size:10.5px;color:#94a3b8;margin-top:4px}'
+        + '#pp-c-modal .pp-c-item-cookies code{background:#f1f5f9;padding:0 4px;border-radius:3px;font-size:10px}'
+        + '#pp-c-modal .pp-c-item-control{flex-shrink:0;display:flex;align-items:center}'
         + '#pp-c-modal .pp-c-cat-body ul{margin:6px 0 0 16px;padding:0}'
         + '#pp-c-modal .pp-c-cat-body code{background:#f1f5f9;padding:1px 5px;border-radius:3px;font-size:11px}'
         + '#pp-c-modal .pp-c-mfoot{padding:16px 24px;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;gap:8px}'
@@ -289,33 +297,39 @@
         cats.forEach(function (cat) {
             var label = (cfg.category_labels && cfg.category_labels[cat]) || CAT_LABELS[cat] || cat;
             var items = byCat[cat];
-            var allRequired = items.every(function (i) { return i.is_required; });
-            var anyChecked = items.some(function (i) { return state.choices[i.id]; });
             var totalCookies = items.reduce(function (s, i) { return s + (Array.isArray(i.cookie_keys) ? i.cookie_keys.length : 0); }, 0);
             var expanded = !!EXPANDED_CAT[cat];
+            var itemCount = items.length;
 
+            // Per-CATEGORY accordion shows item count + total cookies. Expand to see PER-ITEM toggles.
             body += '<div class="pp-c-cat" data-cat="' + escapeAttr(cat) + '">'
-                +     '<div class="pp-c-cat-head" data-act="toggle-cat" data-cat="' + escapeAttr(cat) + '">'
+                +     '<div class="pp-c-cat-head" data-act="toggle-cat" data-cat="' + escapeAttr(cat) + '" style="cursor:pointer">'
                 +       '<span class="pp-c-cat-arrow' + (expanded ? ' expanded' : '') + '">▼</span>'
                 +       '<div class="pp-c-cat-title">' + escapeHtml(label)
-                +         (totalCookies > 0 ? '<span class="pp-c-cat-meta"> · ' + totalCookies + ' ' + escapeHtml(t.cookies_count) + '</span>' : '')
-                +       '</div>'
-                +       '<div class="pp-c-cat-toggle-wrap">'
-                +         (allRequired
-                            ? '<span class="pp-c-req-label">' + escapeHtml(t.required_label) + '</span>'
-                            : '<label class="pp-c-switch" onclick="event.stopPropagation()">'
-                              + '<input type="checkbox" data-cat-toggle="' + escapeAttr(cat) + '"' + (anyChecked ? ' checked' : '') + '>'
-                              + '<span class="pp-c-slider"></span>'
-                              + '</label>')
+                +         '<span class="pp-c-cat-meta"> · ' + itemCount + ' ' + (itemCount === 1 ? 'item' : 'items')
+                +         (totalCookies > 0 ? ' / ' + totalCookies + ' ' + escapeHtml(t.cookies_count) : '')
+                +         '</span>'
                 +       '</div>'
                 +     '</div>'
                 +     '<div class="pp-c-cat-body' + (expanded ? ' expanded' : '') + '">'
                 +       (items.map(function (it) {
                             var keys = Array.isArray(it.cookie_keys) ? it.cookie_keys : [];
-                            return '<div style="margin:6px 0">'
-                                +    '<strong>' + escapeHtml(it.title) + '</strong>'
-                                +    (it.description ? '<div style="margin-top:2px">' + escapeHtml(it.description) + '</div>' : '')
-                                +    (keys.length > 0 ? '<div style="margin-top:4px;font-size:11px"><em>Cookies:</em> ' + keys.map(escapeHtml).join(', ') + '</div>' : '')
+                            var checked = state.choices[it.id] ? 'checked' : '';
+                            // Per-ITEM row: nama + deskripsi + cookies + toggle individual (atau "Selalu Aktif" lock)
+                            return '<div class="pp-c-item-row">'
+                                +    '<div class="pp-c-item-info">'
+                                +      '<div class="pp-c-item-name">' + escapeHtml(it.title) + '</div>'
+                                +      (it.description ? '<div class="pp-c-item-desc">' + escapeHtml(it.description) + '</div>' : '')
+                                +      (keys.length > 0 ? '<div class="pp-c-item-cookies"><em>Cookies:</em> ' + keys.map(escapeHtml).join(', ') + '</div>' : '')
+                                +    '</div>'
+                                +    '<div class="pp-c-item-control">'
+                                +      (it.is_required
+                                          ? '<span class="pp-c-req-label">' + escapeHtml(t.required_label) + '</span>'
+                                          : '<label class="pp-c-switch">'
+                                            + '<input type="checkbox" data-item-toggle="' + escapeAttr(it.id) + '" ' + checked + '>'
+                                            + '<span class="pp-c-slider"></span>'
+                                            + '</label>')
+                                +    '</div>'
                                 +  '</div>';
                           }).join(''))
                 +     '</div>'
@@ -353,13 +367,10 @@
                 if (bodyEl) bodyEl.classList.toggle('expanded', EXPANDED_CAT[cat]);
             });
         });
-        modal.querySelectorAll('input[data-cat-toggle]').forEach(function (cb) {
+        modal.querySelectorAll('input[data-item-toggle]').forEach(function (cb) {
             cb.addEventListener('change', function () {
-                var cat = cb.getAttribute('data-cat-toggle');
-                var checked = cb.checked;
-                (byCat[cat] || []).forEach(function (item) {
-                    if (!item.is_required) state.choices[item.id] = checked;
-                });
+                var itemId = cb.getAttribute('data-item-toggle');
+                state.choices[itemId] = cb.checked;
             });
         });
         modal.querySelectorAll('button[data-act]').forEach(function (btn) {
