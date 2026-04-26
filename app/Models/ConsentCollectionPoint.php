@@ -1,9 +1,10 @@
 <?php
+
 namespace App\Models;
 
 use App\Casts\EncryptedString;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
@@ -16,13 +17,15 @@ class ConsentCollectionPoint extends Model
         'org_id', 'collection_id', 'name', 'kind', 'domain', 'redirect_url',
         'settings', 'webhook_url', 'created_by',
         'embed_token', 'client_key', 'server_key', 'auth_methods', 'allowed_domains',
-        'display_mode', 'display_frequency', 'audience',
+        'display_mode', 'display_frequency', 'audience', 'locale',
         'captcha_provider', 'captcha_site_key', 'captcha_secret',
         'api_keys_last_rotated_at',
     ];
 
     public const KIND_COOKIE = 'cookie_banner';
-    public const KIND_APP    = 'app_consent';
+
+    public const KIND_APP = 'app_consent';
+
     public const KINDS = [self::KIND_COOKIE, self::KIND_APP];
 
     protected $casts = [
@@ -45,16 +48,16 @@ class ConsentCollectionPoint extends Model
 
         // Cache invalidation on save/delete (existing behavior preserved)
         $bust = function (self $c) {
-            Cache::forget('consent:config:' . sha1($c->collection_id));
-            Cache::forget('consent:config:' . sha1($c->id));
-            Cache::forget('consent:collection:' . sha1($c->collection_id));
-            Cache::forget('consent:collection:' . sha1($c->id));
+            Cache::forget('consent:config:'.sha1($c->collection_id));
+            Cache::forget('consent:config:'.sha1($c->id));
+            Cache::forget('consent:collection:'.sha1($c->collection_id));
+            Cache::forget('consent:collection:'.sha1($c->id));
             if ($c->embed_token) {
-                Cache::forget('consent:config:' . sha1($c->embed_token));
-                Cache::forget('consent:cp_by_embed_token:' . sha1($c->embed_token));
+                Cache::forget('consent:config:'.sha1($c->embed_token));
+                Cache::forget('consent:cp_by_embed_token:'.sha1($c->embed_token));
             }
             if ($c->client_key) {
-                Cache::forget('consent:cp_by_client_key:' . sha1($c->client_key));
+                Cache::forget('consent:cp_by_client_key:'.sha1($c->client_key));
             }
         };
         static::saved($bust);
@@ -66,15 +69,17 @@ class ConsentCollectionPoint extends Model
         do {
             $token = Str::random(64);
         } while (self::where('embed_token', $token)->exists());
+
         return $token;
     }
 
     public static function generateApiKeyPair(): array
     {
         do {
-            $clientKey = 'pk_consent_' . Str::random(32);
+            $clientKey = 'pk_consent_'.Str::random(32);
         } while (self::where('client_key', $clientKey)->exists());
-        $serverKey = 'sk_consent_' . Str::random(48);
+        $serverKey = 'sk_consent_'.Str::random(48);
+
         return [$clientKey, $serverKey];
     }
 
@@ -85,11 +90,18 @@ class ConsentCollectionPoint extends Model
 
     public function isApiKeyEnabled(): bool
     {
-        return ($this->auth_methods['api_key'] ?? false) === true && !empty($this->client_key);
+        return ($this->auth_methods['api_key'] ?? false) === true && ! empty($this->client_key);
     }
 
-    public function isCookieBanner(): bool { return $this->kind === self::KIND_COOKIE; }
-    public function isAppConsent(): bool { return $this->kind === self::KIND_APP; }
+    public function isCookieBanner(): bool
+    {
+        return $this->kind === self::KIND_COOKIE;
+    }
+
+    public function isAppConsent(): bool
+    {
+        return $this->kind === self::KIND_APP;
+    }
 
     /**
      * Defaults applied per kind. Klien bisa override individual fields, tapi
@@ -104,6 +116,7 @@ class ConsentCollectionPoint extends Model
                 'display_frequency' => 'once',
             ];
         }
+
         // Cookie banner default (UU PDP + GDPR-friendly)
         return [
             'audience' => 'anonymous_only',
@@ -114,23 +127,25 @@ class ConsentCollectionPoint extends Model
 
     public function bustConsentCache(): void
     {
-        Cache::forget('consent:config:' . sha1($this->collection_id));
-        Cache::forget('consent:config:' . sha1($this->id));
-        Cache::forget('consent:collection:' . sha1($this->collection_id));
-        Cache::forget('consent:collection:' . sha1($this->id));
+        Cache::forget('consent:config:'.sha1($this->collection_id));
+        Cache::forget('consent:config:'.sha1($this->id));
+        Cache::forget('consent:collection:'.sha1($this->collection_id));
+        Cache::forget('consent:collection:'.sha1($this->id));
     }
 
     public function organization()
     {
-        return $this->belongsTo(Organization::class , 'org_id');
+        return $this->belongsTo(Organization::class, 'org_id');
     }
+
     public function items()
     {
-        return $this->hasMany(ConsentItem::class , 'collection_point_id');
+        return $this->hasMany(ConsentItem::class, 'collection_point_id');
     }
+
     public function records()
     {
-        return $this->hasMany(ConsentRecord::class , 'collection_point_id');
+        return $this->hasMany(ConsentRecord::class, 'collection_point_id');
     }
 
     /**
@@ -139,7 +154,7 @@ class ConsentCollectionPoint extends Model
      */
     public function ropas()
     {
-        return $this->belongsToMany(\App\Models\Ropa::class, 'consent_collection_ropa', 'collection_point_id', 'ropa_id')
+        return $this->belongsToMany(Ropa::class, 'consent_collection_ropa', 'collection_point_id', 'ropa_id')
             ->withPivot('notes', 'org_id')
             ->withTimestamps();
     }

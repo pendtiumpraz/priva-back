@@ -3,8 +3,8 @@
 namespace App\Models;
 
 use App\Casts\EncryptedString;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
@@ -23,6 +23,7 @@ class DsrApp extends Model
         'default_assignee_user_id', 'webhook_url', 'branding',
         'requires_nda_for_access', 'nda_template_doc_id', 'nda_signing_method',
         'captcha_provider', 'captcha_site_key', 'captcha_secret',
+        'locale',
         'is_active', 'created_by',
     ];
 
@@ -45,9 +46,10 @@ class DsrApp extends Model
     public static function generateApiKeyPair(): array
     {
         do {
-            $clientKey = 'pk_live_' . Str::random(32);
+            $clientKey = 'pk_live_'.Str::random(32);
         } while (self::where('client_key', $clientKey)->exists());
-        $serverKey = 'sk_live_' . Str::random(48);
+        $serverKey = 'sk_live_'.Str::random(48);
+
         return [$clientKey, $serverKey];
     }
 
@@ -58,7 +60,7 @@ class DsrApp extends Model
 
     public function isApiKeyEnabled(): bool
     {
-        return ($this->auth_methods['api_key'] ?? false) === true && !empty($this->client_key);
+        return ($this->auth_methods['api_key'] ?? false) === true && ! empty($this->client_key);
     }
 
     protected static function booted(): void
@@ -90,7 +92,7 @@ class DsrApp extends Model
 
     public function ndaTemplate()
     {
-        return $this->belongsTo(\App\Models\Document::class, 'nda_template_doc_id');
+        return $this->belongsTo(Document::class, 'nda_template_doc_id');
     }
 
     /**
@@ -99,7 +101,10 @@ class DsrApp extends Model
     public function defaultInformationSystems()
     {
         $ids = $this->default_information_system_ids ?? [];
-        if (empty($ids)) return collect();
+        if (empty($ids)) {
+            return collect();
+        }
+
         return InformationSystem::whereIn('id', $ids)->where('org_id', $this->org_id)->get();
     }
 
@@ -111,6 +116,7 @@ class DsrApp extends Model
         do {
             $token = Str::random(64);
         } while (self::where('embed_token', $token)->exists());
+
         return $token;
     }
 
@@ -123,12 +129,17 @@ class DsrApp extends Model
         $code = '';
         foreach ($words as $w) {
             $w = preg_replace('/[^A-Za-z0-9]/', '', $w);
-            if ($w !== '') $code .= mb_strtoupper(mb_substr($w, 0, 1));
-            if (mb_strlen($code) >= 3) break;
+            if ($w !== '') {
+                $code .= mb_strtoupper(mb_substr($w, 0, 1));
+            }
+            if (mb_strlen($code) >= 3) {
+                break;
+            }
         }
         if (mb_strlen($code) < 3) {
             $code = mb_strtoupper(mb_substr(preg_replace('/[^A-Za-z0-9]/', '', $name), 0, 3));
         }
+
         return $code ?: 'APP';
     }
 }

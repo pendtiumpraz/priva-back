@@ -38,7 +38,8 @@
     }
     var apiBase = (script.getAttribute('data-api-base') || (new URL(script.src).origin + '/api')).replace(/\/+$/, '');
     var modeOverride = script.getAttribute('data-mode') || 'auto';
-    var locale = script.getAttribute('data-locale') || 'id';
+    var localeOverride = script.getAttribute('data-locale') || null; // null = pakai server config
+    var locale = localeOverride || 'id'; // initial; akan di-replace dari config setelah fetch
 
     var STORAGE_KEY = 'pp_consent_' + collectionId;
     var EXPANDED_CAT = {}; // { category: bool } — accordion state in modal
@@ -71,8 +72,7 @@
     };
     var t = T[locale] || T.id;
 
-    // Category labels (override server-side via item.title kalau perlu)
-    var CAT_LABELS = {
+    var CAT_LABELS_BY_LOCALE = {
         id: {
             essential: 'Cookie yang Sangat Diperlukan',
             functional: 'Cookie Fungsional',
@@ -91,7 +91,16 @@
             third_party: 'Third Party Cookies',
             other: 'Other Cookies',
         },
-    }[locale] || {};
+    };
+    var CAT_LABELS = CAT_LABELS_BY_LOCALE[locale] || CAT_LABELS_BY_LOCALE.id;
+
+    /** Refresh translations dictionary kalau config.collection.locale berubah */
+    function applyLocale(newLocale) {
+        if (!newLocale || !T[newLocale]) return;
+        locale = newLocale;
+        t = T[locale];
+        CAT_LABELS = CAT_LABELS_BY_LOCALE[locale] || CAT_LABELS_BY_LOCALE.id;
+    }
 
     var state = { config: null, choices: {} };
 
@@ -515,6 +524,8 @@
                 if (!res || !res.data) return;
                 state.config = res.data;
                 var col = state.config.collection || {};
+                // Apply server locale unless klien explicitly override via data-locale
+                if (!localeOverride && col.locale) applyLocale(col.locale);
                 if (!shouldShow(col.audience || 'anonymous_only')) return;
                 injectStyles();
                 renderBanner();

@@ -8,6 +8,7 @@ use App\Jobs\PushConsentToCrmJob;
 use App\Models\ConsentCollectionPoint;
 use App\Models\ConsentItem;
 use App\Models\ConsentLog;
+use App\Models\Organization;
 use App\Services\CaptchaVerifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -26,7 +27,7 @@ class ConsentLogController extends Controller
     public function index(Request $request)
     {
         $query = ConsentLog::query();
-        
+
         // Superadmin bypass / org scope
         if ($request->user()->role !== 'superadmin') {
             $query->where('org_id', $request->user()->org_id);
@@ -44,7 +45,7 @@ class ConsentLogController extends Controller
         }
 
         return response()->json([
-            'data' => $query->orderBy('created_at', 'desc')->with('collectionPoint')->take(1000)->get()
+            'data' => $query->orderBy('created_at', 'desc')->with('collectionPoint')->take(1000)->get(),
         ]);
     }
 
@@ -69,7 +70,7 @@ class ConsentLogController extends Controller
         ]);
 
         $filter = $request->input('category_filter', 'all');
-        $key = 'consent:config:' . sha1($request->collection_id . '|' . $filter);
+        $key = 'consent:config:'.sha1($request->collection_id.'|'.$filter);
 
         $payload = Cache::remember($key, now()->addMinutes(5), function () use ($request, $filter) {
             // Resolve by embed_token (preferred) ATAU legacy collection_id ATAU UUID
@@ -79,12 +80,12 @@ class ConsentLogController extends Controller
                     $query->whereIn('category', ConsentItem::COOKIE_CATEGORIES);
                 }
                 $query->orderByRaw("CASE WHEN category='essential' THEN 0 ELSE 1 END")
-                      ->orderBy('title');
+                    ->orderBy('title');
             }])
                 ->where(function ($q) use ($request) {
                     $q->where('embed_token', $request->collection_id)
-                      ->orWhere('collection_id', $request->collection_id)
-                      ->orWhere('id', $request->collection_id);
+                        ->orWhere('collection_id', $request->collection_id)
+                        ->orWhere('id', $request->collection_id);
                 })
                 ->firstOrFail();
 
@@ -96,6 +97,7 @@ class ConsentLogController extends Controller
                     'display_mode' => $collection->display_mode ?: 'banner_bottom',
                     'display_frequency' => $collection->display_frequency ?: 'once',
                     'audience' => $collection->audience ?: 'anonymous_only',
+                    'locale' => $collection->locale ?: 'id',
                 ],
                 'captcha' => $collection->captcha_provider ? [
                     'provider' => $collection->captcha_provider,
@@ -144,7 +146,7 @@ class ConsentLogController extends Controller
                 'has_record' => $latestLog ? true : false,
                 'consented_items' => $latestLog ? $latestLog->consented_items : [],
                 'last_updated' => $latestLog ? $latestLog->created_at : null,
-            ]
+            ],
         ]);
     }
 
@@ -162,14 +164,14 @@ class ConsentLogController extends Controller
         ]);
 
         // Rate limit per IP — generous since legitimate widgets fire 1x per session.
-        $rateKey = 'consent-capture:' . $request->ip();
+        $rateKey = 'consent-capture:'.$request->ip();
         if (RateLimiter::tooManyAttempts($rateKey, 30)) {
             return response()->json(['error' => 'Too many requests. Try again later.'], 429);
         }
         RateLimiter::hit($rateKey, 60);
 
         // Resolve via embed_token / collection_id / UUID (cached)
-        $cacheKey = 'consent:collection:' . sha1($request->collection_id);
+        $cacheKey = 'consent:collection:'.sha1($request->collection_id);
         $collection = Cache::remember($cacheKey, now()->addMinutes(10), function () use ($request) {
             return ConsentCollectionPoint::where('embed_token', $request->collection_id)
                 ->orWhere('collection_id', $request->collection_id)
@@ -179,7 +181,7 @@ class ConsentLogController extends Controller
 
         // Captcha verify (no-op if provider not configured)
         if ($collection->captcha_provider) {
-            if (!$this->captcha->verifyForCollection($collection, $request->input('captcha_token'), $request->ip())) {
+            if (! $this->captcha->verifyForCollection($collection, $request->input('captcha_token'), $request->ip())) {
                 return response()->json(['error' => 'Verifikasi captcha gagal.'], 422);
             }
         }
@@ -220,7 +222,7 @@ class ConsentLogController extends Controller
 
         // CRM push also async — a Salesforce/HubSpot round-trip can be
         // several seconds, we don't block the user for it.
-        $org = \App\Models\Organization::find($collection->org_id);
+        $org = Organization::find($collection->org_id);
         $crms = $org->settings['crm_connections'] ?? [];
         foreach ($crms as $providerId => $config) {
             PushConsentToCrmJob::dispatch($providerId, (array) $config, $log->id);

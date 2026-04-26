@@ -24,22 +24,80 @@
         console.warn('[Privasimu DSR] Missing data-embed-token attribute.');
         return;
     }
-    var buttonText = script.getAttribute('data-button-text') || '🔒 Privacy Request';
-    var position   = script.getAttribute('data-button-position') || 'bottom-right';
+    var localeOverride = script.getAttribute('data-locale') || null;
     var apiBase    = (script.getAttribute('data-api-base') || (new URL(script.src).origin + '/api')).replace(/\/+$/, '');
+    var position   = script.getAttribute('data-button-position') || 'bottom-right';
 
-    var REQUEST_TYPE_LABELS = {
-        access:           'Akses Data Saya',
-        correction:       'Koreksi Data',
-        rectification:    'Koreksi Data',
-        deletion:         'Hapus Data Saya',
-        erasure:          'Hapus Data Saya',
-        portability:      'Portabilitas Data',
-        restriction:      'Pembatasan Pemrosesan',
-        objection:        'Keberatan atas Pemrosesan',
-        withdraw_consent: 'Tarik Persetujuan',
-        info:             'Info Pemrosesan',
+    // Bilingual strings — server's per-app locale wins unless data-locale override.
+    var T = {
+        id: {
+            buttonText: '🔒 Permintaan Privasi',
+            modalTitle: 'Permintaan Hak Subjek Data',
+            close: 'Tutup',
+            requestType: 'Jenis Permintaan',
+            fullName: 'Nama Lengkap',
+            email: 'Email',
+            phoneOpt: 'Telepon (opsional)',
+            nikOpt: 'NIK (opsional)',
+            description: 'Deskripsi / Detail',
+            descriptionPh: 'Jelaskan permintaan Anda…',
+            cancel: 'Batal',
+            submit: 'Kirim Permintaan',
+            submitting: 'Mengirim...',
+            okMsg: function (id) { return '✓ Permintaan diterima (' + (id || 'DSR') + '). Cek email Anda untuk verifikasi.'; },
+            duplicate: 'Anda sudah punya permintaan aktif: ',
+            tooMany: 'Terlalu banyak percobaan. Coba lagi nanti.',
+            failGeneric: 'Gagal mengirim permintaan.',
+            captchaAuto: 'Verifikasi otomatis (reCAPTCHA v3)',
+            poweredBy: 'Powered by',
+            networkErr: 'Network error: ',
+            REQUEST_TYPE_LABELS: {
+                access: 'Akses Data Saya', correction: 'Koreksi Data', rectification: 'Koreksi Data',
+                deletion: 'Hapus Data Saya', erasure: 'Hapus Data Saya', portability: 'Portabilitas Data',
+                restriction: 'Pembatasan Pemrosesan', objection: 'Keberatan atas Pemrosesan',
+                withdraw_consent: 'Tarik Persetujuan', info: 'Info Pemrosesan',
+            },
+        },
+        en: {
+            buttonText: '🔒 Privacy Request',
+            modalTitle: 'Data Subject Rights Request',
+            close: 'Close',
+            requestType: 'Request Type',
+            fullName: 'Full Name',
+            email: 'Email',
+            phoneOpt: 'Phone (optional)',
+            nikOpt: 'National ID (optional)',
+            description: 'Description / Details',
+            descriptionPh: 'Describe your request…',
+            cancel: 'Cancel',
+            submit: 'Submit Request',
+            submitting: 'Submitting...',
+            okMsg: function (id) { return '✓ Request received (' + (id || 'DSR') + '). Check your email for verification.'; },
+            duplicate: 'You already have an active request: ',
+            tooMany: 'Too many attempts. Please try again later.',
+            failGeneric: 'Failed to submit request.',
+            captchaAuto: 'Automatic verification (reCAPTCHA v3)',
+            poweredBy: 'Powered by',
+            networkErr: 'Network error: ',
+            REQUEST_TYPE_LABELS: {
+                access: 'Access My Data', correction: 'Correct Data', rectification: 'Correct Data',
+                deletion: 'Delete My Data', erasure: 'Delete My Data', portability: 'Data Portability',
+                restriction: 'Restrict Processing', objection: 'Object to Processing',
+                withdraw_consent: 'Withdraw Consent', info: 'Processing Info',
+            },
+        },
     };
+
+    var locale = (localeOverride && T[localeOverride]) ? localeOverride : 'id';
+    var t = T[locale];
+
+    function applyLocale(newLocale) {
+        if (!newLocale || !T[newLocale]) return;
+        locale = newLocale;
+        t = T[locale];
+    }
+
+    var buttonText = script.getAttribute('data-button-text') || t.buttonText;
 
     var state = { config: null, captchaToken: null, captchaWidgetId: null };
 
@@ -116,37 +174,37 @@
         // for backwards-compat, but UI hanya tampilkan 1 entry per label biar tidak ada
         // "Koreksi Data" muncul 2x.
         var seenLabels = {};
-        var typeOptions = (config.request_types || []).reduce(function (acc, t) {
-            var label = REQUEST_TYPE_LABELS[t] || t;
+        var typeOptions = (config.request_types || []).reduce(function (acc, code) {
+            var label = (t.REQUEST_TYPE_LABELS && t.REQUEST_TYPE_LABELS[code]) || code;
             if (seenLabels[label]) return acc; // skip duplicate label
             seenLabels[label] = true;
-            return acc + '<option value="' + t + '">' + label + '</option>';
+            return acc + '<option value="' + code + '">' + label + '</option>';
         }, '');
 
         modal.innerHTML = ''
             + '<div class="pp-head">'
-            +   '<h2>Permintaan Hak Subjek Data</h2>'
-            +   '<button type="button" class="pp-x" aria-label="Tutup">&times;</button>'
+            +   '<h2>' + t.modalTitle + '</h2>'
+            +   '<button type="button" class="pp-x" aria-label="' + t.close + '">&times;</button>'
             + '</div>'
             + '<div class="pp-body">'
             +   '<form id="pp-dsr-form" novalidate>'
-            +     '<label>Jenis Permintaan</label>'
+            +     '<label>' + t.requestType + '</label>'
             +     '<select name="request_type" required>' + typeOptions + '</select>'
             +     '<div class="pp-row">'
-            +       '<div><label>Nama Lengkap</label><input name="requester_name" required maxlength="200"></div>'
-            +       '<div><label>Email</label><input name="requester_email" type="email" required maxlength="200"></div>'
+            +       '<div><label>' + t.fullName + '</label><input name="requester_name" required maxlength="200"></div>'
+            +       '<div><label>' + t.email + '</label><input name="requester_email" type="email" required maxlength="200"></div>'
             +     '</div>'
             +     '<div class="pp-row">'
-            +       '<div><label>Telepon (opsional)</label><input name="requester_phone" maxlength="20"></div>'
-            +       '<div><label>NIK (opsional)</label><input name="subject_data[nik]" maxlength="20"></div>'
+            +       '<div><label>' + t.phoneOpt + '</label><input name="requester_phone" maxlength="20"></div>'
+            +       '<div><label>' + t.nikOpt + '</label><input name="subject_data[nik]" maxlength="20"></div>'
             +     '</div>'
-            +     '<label>Deskripsi / Detail</label>'
-            +     '<textarea name="description" maxlength="5000" placeholder="Jelaskan permintaan Anda…"></textarea>'
+            +     '<label>' + t.description + '</label>'
+            +     '<textarea name="description" maxlength="5000" placeholder="' + t.descriptionPh + '"></textarea>'
             +     '<div class="pp-captcha" id="pp-dsr-captcha"></div>'
             +     '<div class="pp-msg" id="pp-dsr-msg"></div>'
             +     '<div class="pp-actions">'
-            +       '<button type="button" class="pp-btn pp-cancel">Batal</button>'
-            +       '<button type="submit" class="pp-btn pp-submit">Kirim Permintaan</button>'
+            +       '<button type="button" class="pp-btn pp-cancel">' + t.cancel + '</button>'
+            +       '<button type="submit" class="pp-btn pp-submit">' + t.submit + '</button>'
             +     '</div>'
             +   '</form>'
             + '</div>'
@@ -174,7 +232,7 @@
         if (b.show_powered_by === false) return '';
         // Default = Privasimu Nexus logo. Klien override via branding.powered_by_logo.
         var logoUrl = b.powered_by_logo || (apiBase.replace(/\/api\/?$/, '') + '/nexus.png');
-        var text = b.powered_by_text || 'Powered by';
+        var text = b.powered_by_text || t.poweredBy;
         var url = b.powered_by_url || 'https://privasimu.com';
         var inner = '<span style="display:inline-flex;align-items:center;gap:6px;justify-content:center">'
                   +   '<span>' + escapeHtml(text) + '</span>'
@@ -234,7 +292,7 @@
         } else if (captchaCfg.provider === 'recaptcha_v3') {
             loadScript('https://www.google.com/recaptcha/api.js?render=' + encodeURIComponent(captchaCfg.site_key), function () {
                 // v3 is invisible — token fetched right before submit
-                slot.innerHTML = '<div style="font-size:11px;color:#94a3b8">Verifikasi otomatis (reCAPTCHA v3)</div>';
+                slot.innerHTML = '<div style="font-size:11px;color:#94a3b8">' + t.captchaAuto + '</div>';
             });
         }
     }
@@ -270,7 +328,7 @@
         resetMsg();
         var form = e.target;
         var btn = form.querySelector('.pp-submit');
-        btn.disabled = true; btn.textContent = 'Mengirim...';
+        btn.disabled = true; btn.textContent = t.submitting;
 
         fetchCaptchaTokenIfNeeded(state.config && state.config.captcha).then(function (captchaToken) {
             var fd = new FormData(form);
@@ -290,21 +348,21 @@
                 body: JSON.stringify(payload),
             }).then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }); });
         }).then(function (resp) {
-            btn.disabled = false; btn.textContent = 'Kirim Permintaan';
+            btn.disabled = false; btn.textContent = t.submit;
             if (resp.status === 202) {
-                showMsg('✓ Permintaan diterima (' + (resp.body.request_id || 'DSR') + '). Cek email Anda untuk verifikasi.', 'ok');
+                showMsg(t.okMsg(resp.body.request_id), 'ok');
                 setTimeout(closeModal, 4500);
             } else if (resp.status === 409) {
-                showMsg('Anda sudah punya permintaan aktif: ' + (resp.body.existing_request_id || ''), 'err');
+                showMsg(t.duplicate + (resp.body.existing_request_id || ''), 'err');
             } else if (resp.status === 429) {
-                showMsg(resp.body.error || 'Terlalu banyak percobaan. Coba lagi nanti.', 'err');
+                showMsg(resp.body.error || t.tooMany, 'err');
             } else {
-                showMsg(resp.body.error || resp.body.message || 'Gagal mengirim permintaan.', 'err');
+                showMsg(resp.body.error || resp.body.message || t.failGeneric, 'err');
                 resetCaptcha();
             }
         }).catch(function (err) {
-            btn.disabled = false; btn.textContent = 'Kirim Permintaan';
-            showMsg('Network error: ' + (err && err.message ? err.message : 'unknown'), 'err');
+            btn.disabled = false; btn.textContent = t.submit;
+            showMsg(t.networkErr + (err && err.message ? err.message : 'unknown'), 'err');
         });
     }
 
@@ -342,6 +400,10 @@
                 cfg.request_types = ['access', 'correction', 'deletion', 'portability', 'restriction', 'objection', 'withdraw_consent', 'info'];
             }
             state.config = cfg;
+            // Apply server-configured locale unless klien set data-locale on script tag
+            if (!localeOverride && cfg.locale) applyLocale(cfg.locale);
+            // Re-resolve buttonText if klien didn't override via data-button-text
+            if (!script.getAttribute('data-button-text')) buttonText = t.buttonText;
             buildButton(cfg.branding || {});
             buildModal(cfg);
         }).catch(function (err) {

@@ -31,12 +31,13 @@ class DsrAppController extends Controller
             ->whereNull('deleted_at')
             ->orderBy('name')
             ->get(['id', 'name', 'email', 'role'])
-            ->map(fn($u) => [
+            ->map(fn ($u) => [
                 'id' => $u->id,
                 'name' => $u->name,
                 'email' => $u->email,
                 'role' => $u->role,
             ]);
+
         return response()->json(['data' => $users]);
     }
 
@@ -56,7 +57,7 @@ class DsrAppController extends Controller
             $s = $request->input('search');
             $query->where(function ($q) use ($s) {
                 $q->where('name', 'like', "%{$s}%")
-                  ->orWhere('app_code', 'like', "%{$s}%");
+                    ->orWhere('app_code', 'like', "%{$s}%");
             });
         }
 
@@ -67,6 +68,7 @@ class DsrAppController extends Controller
     {
         $user = $request->user();
         $app = DsrApp::where('org_id', $user->org_id)->findOrFail($id);
+
         return response()->json(['data' => $app]);
     }
 
@@ -93,15 +95,17 @@ class DsrAppController extends Controller
             'auth_methods' => 'nullable|array',
             'auth_methods.widget' => 'nullable|boolean',
             'auth_methods.api_key' => 'nullable|boolean',
+            'locale' => 'nullable|in:id,en',
             'is_active' => 'nullable|boolean',
         ]);
 
         $appCode = $data['app_code'] ?? DsrApp::deriveAppCode($data['name']);
 
         // Ensure unique app_code per org
-        $base = $appCode; $i = 1;
+        $base = $appCode;
+        $i = 1;
         while (DsrApp::where('org_id', $user->org_id)->where('app_code', $appCode)->exists()) {
-            $appCode = $base . $i;
+            $appCode = $base.$i;
             $i++;
         }
 
@@ -149,6 +153,7 @@ class DsrAppController extends Controller
             'auth_methods' => 'sometimes|nullable|array',
             'auth_methods.widget' => 'sometimes|nullable|boolean',
             'auth_methods.api_key' => 'sometimes|nullable|boolean',
+            'locale' => 'sometimes|nullable|in:id,en',
         ]);
 
         $app->update($data);
@@ -173,6 +178,7 @@ class DsrAppController extends Controller
             'module' => 'dsr', 'record_id' => $app->id,
             'action' => 'dsr_app.delete',
         ]);
+
         return response()->json(['message' => 'DSR App moved to trash']);
     }
 
@@ -181,6 +187,7 @@ class DsrAppController extends Controller
         $user = $request->user();
         $app = DsrApp::withTrashed()->where('org_id', $user->org_id)->findOrFail($id);
         $app->restore();
+
         return response()->json(['message' => 'DSR App restored', 'data' => $app->fresh()]);
     }
 
@@ -199,6 +206,7 @@ class DsrAppController extends Controller
             'action' => 'dsr_app.regenerate_token',
             'details' => ['warning' => 'old embed_token invalidated, update widget script'],
         ]);
+
         return response()->json([
             'message' => 'Embed token regenerated. Update widget script in production.',
             'embed_token' => $app->embed_token,
@@ -222,7 +230,7 @@ class DsrAppController extends Controller
 
         // Bust cached old client_key resolver
         if ($app->client_key) {
-            \Cache::forget('dsr_app_by_client_key:' . sha1($app->client_key));
+            \Cache::forget('dsr_app_by_client_key:'.sha1($app->client_key));
         }
 
         // Ensure auth_methods enables api_key
@@ -240,7 +248,7 @@ class DsrAppController extends Controller
             'org_id' => $user->org_id, 'user_id' => $user->id,
             'module' => 'dsr', 'record_id' => $app->id,
             'action' => 'dsr_app.regenerate_api_keys',
-            'details' => ['client_key_prefix' => substr($clientKey, 0, 16) . '…'],
+            'details' => ['client_key_prefix' => substr($clientKey, 0, 16).'…'],
         ]);
 
         return response()->json([
@@ -260,6 +268,7 @@ class DsrAppController extends Controller
     {
         $user = $request->user();
         $app = DsrApp::where('org_id', $user->org_id)->findOrFail($id);
+
         return response()->json(['snippet' => $this->buildEmbedSnippet($app)]);
     }
 
@@ -318,6 +327,7 @@ class DsrAppController extends Controller
         $token = $app->embed_token;
         $position = $app->branding['position'] ?? 'bottom-right';
         $btnText = $app->branding['button_text'] ?? '🔒 Privacy Request';
+
         return <<<HTML
 <!-- Privasimu DSR Widget — {$app->name} -->
 <script src="{$base}/dsr-widget.js"
