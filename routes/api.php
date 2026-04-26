@@ -476,6 +476,10 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     // DSR Scope Picker — DPO assign Information Systems per DSR
     // =============================================
     Route::prefix('dsr/{id}')->where(['id' => '[0-9a-fA-F-]{36}'])->group(function () {
+        // Verification helpers — DPO actions saat subject tidak bisa verify via email
+        Route::post('/resend-verification', [\App\Http\Controllers\Api\DsrVerificationController::class, 'resend'])->middleware('permission:dsr,write');
+        Route::post('/manual-verify', [\App\Http\Controllers\Api\DsrVerificationController::class, 'manualVerify'])->middleware('permission:dsr,write');
+
         // Scope picker
         Route::get('/scopes', [\App\Http\Controllers\Api\DsrRequestScopeController::class, 'index'])->middleware('permission:dsr,read');
         Route::get('/available-systems', [\App\Http\Controllers\Api\DsrRequestScopeController::class, 'availableSystems'])->middleware('permission:dsr,read');

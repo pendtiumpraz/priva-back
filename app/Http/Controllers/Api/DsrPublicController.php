@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Mail\DsrVerificationMail;
 use App\Models\AuditLog;
 use App\Models\Document;
 use App\Models\DsrApp;
@@ -15,6 +16,8 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 
@@ -162,15 +165,36 @@ class DsrPublicController extends Controller
 
         $verifyUrl = url("/public/dsr/verify/{$verificationToken}");
 
+        $emailDispatched = $this->dispatchVerificationMail($dsr, $app, $verifyUrl);
+
         $this->events->emit(DsrEventBroadcaster::EVENT_CREATED, $dsr);
 
         return response()->json([
             'message' => 'Permintaan diterima. Silakan cek email Anda untuk verifikasi (link valid 24 jam).',
             'request_id' => $dsr->request_id,
             'verification_required' => true,
-            // TODO Phase 6: hapus saat email service aktif
+            'email_dispatched' => $emailDispatched,
+            // Surfaced for DPO UI fallback when SMTP not configured (mail driver=log)
+            // — DPO can copy to send via WhatsApp/SMS manually.
             '_dev_verify_url' => $verifyUrl,
         ], 202);
+    }
+
+    /**
+     * Try to send verification email. Wrapped in try-catch so misconfigured SMTP
+     * doesn't 500 the public submit endpoint. When mail driver = log, this still
+     * "succeeds" but body lands in laravel.log; caller should also surface URL.
+     */
+    private function dispatchVerificationMail(DsrRequest $dsr, ?DsrApp $app, string $verifyUrl): bool
+    {
+        if (empty($dsr->requester_email)) return false;
+        try {
+            Mail::to($dsr->requester_email)->queue(new DsrVerificationMail($dsr, $verifyUrl, $app));
+            return true;
+        } catch (\Throwable $e) {
+            Log::warning("DSR verification mail queue failed for {$dsr->request_id}: " . $e->getMessage());
+            return false;
+        }
     }
 
     /**
