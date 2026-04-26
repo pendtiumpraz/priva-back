@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\DsrApp;
+use App\Models\Organization;
+use App\Models\User;
+use App\Services\TenantStorageService;
 use Illuminate\Http\Request;
 
 /**
@@ -15,6 +18,28 @@ use Illuminate\Http\Request;
  */
 class DsrAppController extends Controller
 {
+    /**
+     * GET /api/dsr-apps/assignable-users
+     * Lightweight user list for assignee picker — anyone with dsr:read can see
+     * all org members (NOT just admin), so DPO can pick the right person on the
+     * team. Returns minimal fields only.
+     */
+    public function assignableUsers(Request $request)
+    {
+        $user = $request->user();
+        $users = User::where('org_id', $user->org_id)
+            ->whereNull('deleted_at')
+            ->orderBy('name')
+            ->get(['id', 'name', 'email', 'role'])
+            ->map(fn($u) => [
+                'id' => $u->id,
+                'name' => $u->name,
+                'email' => $u->email,
+                'role' => $u->role,
+            ]);
+        return response()->json(['data' => $users]);
+    }
+
     public function index(Request $request)
     {
         $user = $request->user();
@@ -184,6 +209,53 @@ class DsrAppController extends Controller
         $user = $request->user();
         $app = DsrApp::where('org_id', $user->org_id)->findOrFail($id);
         return response()->json(['snippet' => $this->buildEmbedSnippet($app)]);
+    }
+
+    /**
+     * POST /api/dsr-apps/upload-logo (multipart, file)
+     * POST /api/dsr-apps/{id}/upload-logo (also persists to existing app)
+     *
+     * Upload widget branding logo. Auto-routing via TenantStorageService:
+     *   - Tenant has cloud storage configured → uploads to their disk (S3/MinIO/GCS)
+     *   - Otherwise → falls back to Privasimu `public` disk (served via storage:link)
+     *
+     * Returns {url, path, driver}. Frontend stores `url` into branding.logo_url.
+     */
+    public function uploadLogo(Request $request, TenantStorageService $storage, ?string $id = null)
+    {
+        $user = $request->user();
+        $request->validate([
+            'file' => 'required|file|image|mimes:png,jpg,jpeg,svg,webp|max:2048',
+        ]);
+
+        $org = Organization::findOrFail($user->org_id);
+        $stored = $storage->storePublicAsset(
+            $org,
+            $request->file('file'),
+            'dsr-apps/logos'
+        );
+
+        // If app id provided, persist to its branding atomically.
+        if ($id) {
+            $app = DsrApp::where('org_id', $user->org_id)->findOrFail($id);
+            $branding = $app->branding ?? [];
+            $branding['logo_url'] = $stored['url'];
+            $app->update(['branding' => $branding]);
+
+            AuditLog::create([
+                'org_id' => $user->org_id, 'user_id' => $user->id,
+                'module' => 'dsr', 'record_id' => $app->id,
+                'action' => 'dsr_app.logo_upload',
+                'details' => ['driver' => $stored['driver'], 'path' => $stored['path']],
+            ]);
+        }
+
+        return response()->json([
+            'url' => $stored['url'],
+            'path' => $stored['path'],
+            'driver' => $stored['driver'],
+            'is_tenant_storage' => $stored['driver'] !== 'public',
+        ]);
     }
 
     private function buildEmbedSnippet(DsrApp $app): string

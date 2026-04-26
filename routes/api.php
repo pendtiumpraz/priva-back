@@ -507,6 +507,10 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     // DSR Apps — registered klien external apps (per-tenant CRUD)
     // =============================================
     Route::prefix('dsr-apps')->group(function () {
+        // Helper endpoints (must come before /{id} to avoid pattern collision)
+        Route::get('/assignable-users', [\App\Http\Controllers\Api\DsrAppController::class, 'assignableUsers'])->middleware('permission:dsr,read');
+        Route::post('/upload-logo', [\App\Http\Controllers\Api\DsrAppController::class, 'uploadLogo'])->middleware('permission:dsr,write');
+
         Route::get('/', [\App\Http\Controllers\Api\DsrAppController::class, 'index'])->middleware('permission:dsr,read');
         Route::post('/', [\App\Http\Controllers\Api\DsrAppController::class, 'store'])->middleware('permission:dsr,write');
         Route::get('/{id}', [\App\Http\Controllers\Api\DsrAppController::class, 'show'])
@@ -521,6 +525,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,write');
         Route::get('/{id}/embed-snippet', [\App\Http\Controllers\Api\DsrAppController::class, 'embedSnippet'])
             ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,read');
+        Route::post('/{id}/upload-logo', [\App\Http\Controllers\Api\DsrAppController::class, 'uploadLogo'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dsr,write');
     });
 
     Route::get('/consent-logs', [\App\Http\Controllers\Api\ConsentLogController::class, 'index'])->middleware('permission:consent,read');
