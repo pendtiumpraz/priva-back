@@ -271,6 +271,18 @@ class Ropa extends Model
     }
 
     /**
+     * Many-to-many DPIAs (beyond the legacy single ropa_id parent FK).
+     * 1 ROPA bisa di-cover banyak DPIA dari sudut pandang berbeda
+     * (e.g. ROPA "Customer Onboarding" → DPIA Privacy + DPIA Security).
+     */
+    public function dpiaCoverages()
+    {
+        return $this->belongsToMany(Dpia::class, 'dpia_ropa', 'ropa_id', 'dpia_id')
+            ->withPivot('notes', 'org_id')
+            ->withTimestamps();
+    }
+
+    /**
      * Many-to-many: ROPA processing activity bisa pakai banyak Information Systems
      * (1 activity might query customer DB + log DB + analytics warehouse).
      */

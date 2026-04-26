@@ -205,6 +205,63 @@ class ModuleCrudController extends Controller
      *
      * Empty arrays / empty strings clear both fields.
      */
+    /**
+     * Sync DPIA's dpia_ropa pivot from wizard_data.koneksi_ropa.connected_ropas.
+     * Idempotent — replaces (any ROPA removed from wizard is detached too).
+     */
+    private function syncDpiaRopas($dpia): void
+    {
+        $wizard = $dpia->wizard_data ?? [];
+        $section = $wizard['koneksi_ropa'] ?? [];
+        $ids = array_filter(array_unique($section['connected_ropas'] ?? []));
+        if (!is_array($ids)) return;
+
+        $valid = \App\Models\Ropa::whereIn('id', $ids)
+            ->where('org_id', $dpia->org_id)
+            ->pluck('id')->all();
+
+        // Include legacy single ropa_id if set, so it appears in pivot too
+        if ($dpia->ropa_id && !in_array($dpia->ropa_id, $valid, true)) {
+            $exists = \App\Models\Ropa::where('id', $dpia->ropa_id)->where('org_id', $dpia->org_id)->exists();
+            if ($exists) $valid[] = $dpia->ropa_id;
+        }
+
+        $syncData = [];
+        foreach ($valid as $id) $syncData[$id] = ['org_id' => $dpia->org_id];
+        $dpia->ropas()->sync($syncData);
+    }
+
+    /**
+     * Sync ROPA's information_system_ropa pivot from wizard_data.detail_pemrosesan.sistem_terkait.
+     * Idempotent — sync REPLACES (any system removed from wizard is detached too).
+     * No-op if no sistem_terkait array provided.
+     */
+    private function syncRopaInformationSystems($ropa): void
+    {
+        $wizard = $ropa->wizard_data ?? [];
+        $section = $wizard['detail_pemrosesan'] ?? [];
+        $raw = $section['sistem_terkait'] ?? null;
+        if ($raw === null) return;
+
+        // Normalize: array of UUIDs OR array of objects {id: ...}
+        $ids = collect(is_array($raw) ? $raw : [])
+            ->map(fn($v) => is_array($v) ? ($v['id'] ?? null) : (is_string($v) ? $v : null))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        // Verify all belong to same org
+        $valid = \App\Models\InformationSystem::whereIn('id', $ids)
+            ->where('org_id', $ropa->org_id)
+            ->pluck('id')
+            ->all();
+
+        $syncData = [];
+        foreach ($valid as $id) $syncData[$id] = ['org_id' => $ropa->org_id];
+        $ropa->informationSystems()->sync($syncData);
+    }
+
     private function normalizeBreachRopaLinks(array $data): array
     {
         if (array_key_exists('linked_ropa_ids', $data)) {
@@ -370,6 +427,19 @@ class ModuleCrudController extends Controller
             }
 
             $record = $model->create($data);
+
+            // Sync ROPA ↔ Information System pivot on create
+            if ($module === 'ropa') {
+                try { $this->syncRopaInformationSystems($record); } catch (\Throwable $e) {
+                    \Log::warning("syncRopaInformationSystems on create failed: " . $e->getMessage());
+                }
+            }
+            // Sync DPIA ↔ ROPA pivot on create (from wizard.koneksi_ropa.connected_ropas)
+            if ($module === 'dpia') {
+                try { $this->syncDpiaRopas($record); } catch (\Throwable $e) {
+                    \Log::warning("syncDpiaRopas on create failed: " . $e->getMessage());
+                }
+            }
 
             // Audit log: record created
             try {
@@ -656,6 +726,23 @@ class ModuleCrudController extends Controller
             $payload['wizard_data'] = $merged['wizard_data'];
         }
         $record->update($payload);
+
+        // Sync ROPA ↔ Information System pivot (many-to-many).
+        if ($module === 'ropa') {
+            try {
+                $this->syncRopaInformationSystems($record);
+            } catch (\Throwable $e) {
+                \Log::warning("syncRopaInformationSystems failed for ROPA {$record->id}: " . $e->getMessage());
+            }
+        }
+        // Sync DPIA ↔ ROPA pivot
+        if ($module === 'dpia') {
+            try {
+                $this->syncDpiaRopas($record);
+            } catch (\Throwable $e) {
+                \Log::warning("syncDpiaRopas failed for DPIA {$record->id}: " . $e->getMessage());
+            }
+        }
 
         // Notify new assignees added on this update (ROPA/DPIA).
         try {

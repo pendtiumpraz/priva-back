@@ -81,6 +81,19 @@ class Dpia extends Model
         return $this->belongsTo(Ropa::class);
     }
 
+    /**
+     * Many-to-many: 1 DPIA bisa cover banyak ROPA processing activities
+     * (e.g. DPIA "Marketing Stack" cover ROPA outreach + retargeting + lookalike).
+     * Source: dpia.wizard_data.koneksi_ropa.connected_ropas → synced ke pivot via
+     * ModuleCrudController::syncDpiaRopas().
+     */
+    public function ropas()
+    {
+        return $this->belongsToMany(Ropa::class, 'dpia_ropa', 'dpia_id', 'ropa_id')
+            ->withPivot('notes', 'org_id')
+            ->withTimestamps();
+    }
+
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
