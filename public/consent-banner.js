@@ -1,36 +1,29 @@
 /*!
- * Consent Banner Widget v1.0
- * Multi-mode (banner/modal/fullscreen/inline) cookie consent dengan UU PDP audit trail.
+ * Consent Banner Widget v2.0 — 2-layer OneTrust-style UX.
+ *
+ * Layer 1: Banner singkat di pojok (default bottom-right) dengan 3 button:
+ *          [Pengaturan Cookie] [Tolak Semua] [Terima Semua Cookie]
+ *
+ * Layer 2: Modal tengah "Pusat Preferensi Privasi" dengan:
+ *          - Accordion per category (Cookie Penargetan, Performa, dll)
+ *          - Toggle switch ON/OFF (required = locked ON)
+ *          - Footer: [Tolak Semua] [Konfirmasi Pilihan Saya]
+ *
  * White-label safe — semua URL detect runtime dari script.src.
  *
- * Embed (replace YOUR-HOST + COLLECTION-ID):
- *
+ * Embed:
  *   <script src="https://YOUR-HOST/consent-banner.js"
  *           data-collection-id="..." async></script>
  *
  * Optional data attributes:
- *   data-api-base="https://YOUR-HOST/api"   (override API)
- *   data-mode="auto"          (auto = follow server config; or override: banner_bottom|banner_top|modal_center|fullscreen|inline)
- *   data-mount="#my-anchor"   (only used kalau mode=inline)
- *   data-locale="id"          (id|en, default id)
- *
- * Behavior:
- *   - Frequency `once`: simpan decision di localStorage selamanya
- *   - Frequency `session`: simpan di sessionStorage, re-prompt next browser session
- *   - Frequency `every_load`: tidak simpan, prompt setiap page load (compliance-strict)
- *
- *   Kalau user REJECT non-essential:
- *     1. Banner closed
- *     2. localStorage/sessionStorage `pp_consent_state` = {decision, items, ts}
- *     3. Dispatches CustomEvent 'privasimu:consent-decision' dengan detail = decision
- *     4. window.PrivasimuConsent.state() returns current state untuk klien JS
- *     5. Klien dengar event → enable/disable analytics scripts accordingly
+ *   data-api-base="https://..."  (override API)
+ *   data-mode="auto"             (banner_bottom|banner_top|modal_center|fullscreen|inline)
+ *   data-locale="id"             (id|en)
  *
  * Public API (window.PrivasimuConsent):
- *   .show()        — paksa tampilkan banner (untuk "Manage Cookies" footer link)
- *   .reset()       — clear stored decision (next load akan re-prompt)
- *   .state()       — returns last saved decision
- *   .open()        — alias .show()
+ *   .show()    — paksa tampilkan (untuk "Manage Cookies" footer link)
+ *   .reset()   — hapus stored decision
+ *   .state()   — baca decision terakhir
  */
 (function () {
     'use strict';
@@ -45,52 +38,64 @@
     }
     var apiBase = (script.getAttribute('data-api-base') || (new URL(script.src).origin + '/api')).replace(/\/+$/, '');
     var modeOverride = script.getAttribute('data-mode') || 'auto';
-    var mountSelector = script.getAttribute('data-mount') || null;
     var locale = script.getAttribute('data-locale') || 'id';
 
     var STORAGE_KEY = 'pp_consent_' + collectionId;
+    var EXPANDED_CAT = {}; // { category: bool } — accordion state in modal
 
     var T = {
         id: {
-            title: 'Pengaturan Privasi & Cookies',
-            intro: 'Kami menggunakan cookies untuk fungsi situs, analytics, dan personalisasi. Pilih preferensi Anda.',
-            accept_all: 'Terima Semua',
-            reject_optional: 'Tolak yang Opsional',
-            customize: 'Atur Detail',
-            save: 'Simpan Preferensi',
-            required: '(Wajib)',
+            banner_text: 'Kami menggunakan cookie agar situs kami berfungsi dengan baik, mempersonalisasikan konten dan iklan, menyediakan fitur media sosial, dan menganalisis traffik kami. Kami juga berbagi informasi penggunaan situs kami oleh Anda dengan mitra media sosial, periklanan, dan analisis kami.',
+            settings: 'Pengaturan Cookie',
+            reject_all: 'Tolak Semua',
+            accept_all: 'Terima Semua Cookie',
+            modal_title: 'Pusat Preferensi Privasi',
+            modal_intro: 'Saat Anda mengunjungi situs web mana pun, situs tersebut dapat menyimpan atau mengambil informasi di browser Anda, sebagian besar dalam bentuk cookie. Informasi ini dapat berupa Anda, preferensi Anda, atau perangkat Anda. Anda dapat mengatur preferensi cookie di bawah ini.',
+            confirm: 'Konfirmasi Pilihan Saya',
+            required_label: 'Selalu Aktif',
             powered: 'Powered by Privasimu',
-            cat_essential: 'Esensial',
-            cat_analytics: 'Analytics',
-            cat_marketing: 'Marketing',
-            cat_functional: 'Fungsional',
-            cat_personalization: 'Personalisasi',
-            cat_third_party: 'Pihak Ketiga',
-            cat_other: 'Lainnya',
+            cookies_count: 'cookies',
         },
         en: {
-            title: 'Privacy & Cookie Preferences',
-            intro: 'We use cookies for site function, analytics, and personalization. Pick your preferences.',
-            accept_all: 'Accept All',
-            reject_optional: 'Reject Optional',
-            customize: 'Customize',
-            save: 'Save Preferences',
-            required: '(Required)',
+            banner_text: 'We use cookies to make our site work properly, personalize content and ads, provide social media features, and analyze our traffic. We also share information about your use of our site with our social media, advertising, and analytics partners.',
+            settings: 'Cookie Settings',
+            reject_all: 'Reject All',
+            accept_all: 'Accept All Cookies',
+            modal_title: 'Privacy Preference Center',
+            modal_intro: 'When you visit any website, it may store or retrieve information on your browser, mostly in the form of cookies. This information might be about you, your preferences, or your device. You can manage your cookie preferences below.',
+            confirm: 'Confirm My Choices',
+            required_label: 'Always Active',
             powered: 'Powered by Privasimu',
-            cat_essential: 'Essential',
-            cat_analytics: 'Analytics',
-            cat_marketing: 'Marketing',
-            cat_functional: 'Functional',
-            cat_personalization: 'Personalization',
-            cat_third_party: 'Third Party',
-            cat_other: 'Other',
+            cookies_count: 'cookies',
         },
     };
     var t = T[locale] || T.id;
 
-    var state = { config: null, captchaToken: null, captchaWidgetId: null, expanded: false, choices: {} };
+    // Category labels (override server-side via item.title kalau perlu)
+    var CAT_LABELS = {
+        id: {
+            essential: 'Cookie yang Sangat Diperlukan',
+            functional: 'Cookie Fungsional',
+            analytics: 'Cookie Performa',
+            marketing: 'Cookie Penargetan',
+            personalization: 'Cookie Personalisasi',
+            third_party: 'Cookie Pihak Ketiga',
+            other: 'Cookie Lainnya',
+        },
+        en: {
+            essential: 'Strictly Necessary Cookies',
+            functional: 'Functional Cookies',
+            analytics: 'Performance Cookies',
+            marketing: 'Targeting Cookies',
+            personalization: 'Personalization Cookies',
+            third_party: 'Third Party Cookies',
+            other: 'Other Cookies',
+        },
+    }[locale] || {};
 
-    // ----------- Storage helpers (frequency-aware) -----------
+    var state = { config: null, choices: {} };
+
+    // ----------- Storage (frequency-aware) -----------
     function getStored() {
         try {
             var raw = localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY);
@@ -98,14 +103,10 @@
         } catch (e) { return null; }
     }
     function saveStored(decision, freq) {
-        var payload = JSON.stringify(decision);
+        var p = JSON.stringify(decision);
         try {
-            if (freq === 'session') {
-                sessionStorage.setItem(STORAGE_KEY, payload);
-            } else if (freq === 'once') {
-                localStorage.setItem(STORAGE_KEY, payload);
-            }
-            // every_load → tidak simpan, akan re-prompt setiap reload
+            if (freq === 'session') sessionStorage.setItem(STORAGE_KEY, p);
+            else if (freq === 'once') localStorage.setItem(STORAGE_KEY, p);
         } catch (e) {}
     }
     function clearStored() {
@@ -113,10 +114,7 @@
         try { sessionStorage.removeItem(STORAGE_KEY); } catch (e) {}
     }
 
-    // ----------- Audience filter -----------
     function shouldShow(audience) {
-        // Heuristic: kalau ada auth_token / session di localStorage → user dianggap "logged in".
-        // Klien bisa override dengan window.PrivasimuConsent.show() manual.
         var loggedIn = !!localStorage.getItem('auth_token') || !!localStorage.getItem('session_token') || !!localStorage.getItem('jwt');
         if (audience === 'anonymous_only' && loggedIn) return false;
         if (audience === 'logged_in_only' && !loggedIn) return false;
@@ -125,41 +123,56 @@
 
     // ----------- Styles -----------
     var STYLES = ''
-        + '#pp-c-overlay,#pp-c-banner,#pp-c-inline{position:fixed;z-index:2147483646;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#0f172a}'
-        + '#pp-c-banner{left:0;right:0;background:#fff;border:1px solid #e2e8f0;box-shadow:0 -4px 24px rgba(15,23,42,.12);padding:18px 22px;display:flex;flex-direction:column;gap:12px;max-height:80vh;overflow-y:auto}'
-        + '#pp-c-banner.bottom{bottom:0;border-radius:12px 12px 0 0}'
-        + '#pp-c-banner.top{top:0;border-radius:0 0 12px 12px;box-shadow:0 4px 24px rgba(15,23,42,.12)}'
-        + '#pp-c-overlay{inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto}'
-        + '#pp-c-overlay.fullscreen{background:#fff;align-items:flex-start;justify-content:center;padding:40px 20px}'
-        + '#pp-c-modal{background:#fff;border-radius:14px;max-width:540px;width:100%;padding:24px 26px;display:flex;flex-direction:column;gap:14px;box-shadow:0 30px 80px rgba(15,23,42,.35)}'
-        + '#pp-c-overlay.fullscreen #pp-c-modal{box-shadow:none;border:1px solid #e2e8f0;max-width:680px}'
-        + '#pp-c-inline{position:relative;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:12px;margin:12px 0}'
-        + '.pp-c-h{font-size:16px;font-weight:800;margin:0;color:var(--pp-c-primary,#0f172a)}'
-        + '.pp-c-sub{font-size:13px;color:#475569;line-height:1.55;margin:0}'
-        + '.pp-c-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}'
-        + '.pp-c-btn{padding:9px 16px;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer;border:0;transition:transform .12s}'
-        + '.pp-c-btn:hover{transform:translateY(-1px)}'
+        // Layer 1 banner
+        + '#pp-c-banner{position:fixed;z-index:2147483646;background:#fff;max-width:520px;border-radius:8px;box-shadow:0 12px 48px rgba(15,23,42,.18);font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#0f172a;padding:18px 20px;display:flex;flex-direction:column;gap:14px;line-height:1.5;}'
+        + '#pp-c-banner.bottom-right{bottom:20px;right:20px}'
+        + '#pp-c-banner.bottom-left{bottom:20px;left:20px}'
+        + '#pp-c-banner.bottom-center{bottom:20px;left:50%;transform:translateX(-50%)}'
+        + '#pp-c-banner.top-right{top:20px;right:20px}'
+        + '#pp-c-banner.top-left{top:20px;left:20px}'
+        + '#pp-c-banner.full-bottom{bottom:0;left:0;right:0;max-width:none;border-radius:0;border-top:1px solid #e2e8f0;flex-direction:row;align-items:center;padding:14px 24px;}'
+        + '#pp-c-banner .pp-c-text{font-size:13px;color:#334155;flex:1}'
+        + '#pp-c-banner .pp-c-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}'
+        + '#pp-c-banner.full-bottom .pp-c-actions{flex-shrink:0}'
+        // Layer 2 modal
+        + '#pp-c-overlay{position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:20px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#0f172a}'
+        + '#pp-c-modal{background:#fff;border-radius:10px;max-width:720px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(15,23,42,.4)}'
+        + '#pp-c-modal .pp-c-mhead{padding:20px 24px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:flex-start;gap:12px}'
+        + '#pp-c-modal .pp-c-mtitle{font-size:18px;font-weight:800;margin:0;color:var(--pp-c-primary,#0f172a)}'
+        + '#pp-c-modal .pp-c-mintro{font-size:13px;color:#475569;margin:6px 0 0;line-height:1.55}'
+        + '#pp-c-modal .pp-c-mclose{background:transparent;border:0;cursor:pointer;font-size:24px;color:#94a3b8;line-height:1;padding:0;flex-shrink:0}'
+        + '#pp-c-modal .pp-c-mbody{padding:0 24px;overflow-y:auto;flex:1}'
+        + '#pp-c-modal .pp-c-cat{border-bottom:1px solid #e2e8f0;padding:14px 0}'
+        + '#pp-c-modal .pp-c-cat:last-child{border-bottom:0}'
+        + '#pp-c-modal .pp-c-cat-head{display:flex;align-items:center;gap:10px;cursor:pointer}'
+        + '#pp-c-modal .pp-c-cat-toggle-wrap{margin-left:auto;display:flex;align-items:center;gap:8px}'
+        + '#pp-c-modal .pp-c-cat-title{font-size:14px;font-weight:700;flex:1}'
+        + '#pp-c-modal .pp-c-cat-meta{font-size:11px;color:#94a3b8;font-weight:500;margin-left:6px}'
+        + '#pp-c-modal .pp-c-cat-arrow{transition:transform .15s;color:#94a3b8;font-weight:700}'
+        + '#pp-c-modal .pp-c-cat-arrow.expanded{transform:rotate(180deg)}'
+        + '#pp-c-modal .pp-c-cat-body{margin-top:10px;padding:0 8px 0 28px;font-size:12px;color:#475569;line-height:1.6;display:none}'
+        + '#pp-c-modal .pp-c-cat-body.expanded{display:block}'
+        + '#pp-c-modal .pp-c-cat-body ul{margin:6px 0 0 16px;padding:0}'
+        + '#pp-c-modal .pp-c-cat-body code{background:#f1f5f9;padding:1px 5px;border-radius:3px;font-size:11px}'
+        + '#pp-c-modal .pp-c-mfoot{padding:16px 24px;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;gap:8px}'
+        // Required label (replaces toggle for essential)
+        + '.pp-c-req-label{font-size:11px;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:.4px}'
+        // Toggle switch
+        + '.pp-c-switch{position:relative;display:inline-block;width:38px;height:22px}'
+        + '.pp-c-switch input{opacity:0;width:0;height:0}'
+        + '.pp-c-slider{position:absolute;cursor:pointer;inset:0;background:#cbd5e1;border-radius:22px;transition:.18s}'
+        + '.pp-c-slider:before{position:absolute;content:"";height:16px;width:16px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.18s;box-shadow:0 1px 3px rgba(0,0,0,.2)}'
+        + '.pp-c-switch input:checked + .pp-c-slider{background:var(--pp-c-accent,#0ea5e9)}'
+        + '.pp-c-switch input:checked + .pp-c-slider:before{transform:translateX(16px)}'
+        // Buttons
+        + '.pp-c-btn{padding:9px 14px;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer;border:0;transition:transform .12s,filter .12s;font-family:inherit}'
+        + '.pp-c-btn:hover{transform:translateY(-1px);filter:brightness(1.05)}'
         + '.pp-c-primary{background:var(--pp-c-accent,#0ea5e9);color:#fff}'
-        + '.pp-c-secondary{background:#e2e8f0;color:#334155}'
+        + '.pp-c-secondary{background:#fff;color:#334155;border:1px solid #cbd5e1}'
         + '.pp-c-link{background:transparent;color:var(--pp-c-accent,#0ea5e9);text-decoration:underline;padding:9px 6px}'
-        + '.pp-c-items{display:flex;flex-direction:column;gap:8px;margin:6px 0;max-height:340px;overflow-y:auto;padding-right:4px}'
-        + '.pp-c-item{display:flex;gap:10px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;align-items:flex-start}'
-        + '.pp-c-item input{margin-top:2px;flex-shrink:0;transform:scale(1.15)}'
-        + '.pp-c-item-meta{flex:1}'
-        + '.pp-c-item-title{font-size:13px;font-weight:700}'
-        + '.pp-c-item-desc{font-size:11px;color:#64748b;margin-top:3px;line-height:1.5}'
-        + '.pp-c-item-cat{display:inline-block;font-size:9px;font-weight:700;text-transform:uppercase;padding:2px 6px;border-radius:8px;margin-left:6px;letter-spacing:.5px}'
-        + '.pp-c-cat-essential{background:#dcfce7;color:#166534}'
-        + '.pp-c-cat-analytics{background:#dbeafe;color:#1e40af}'
-        + '.pp-c-cat-marketing{background:#fce7f3;color:#9f1239}'
-        + '.pp-c-cat-functional{background:#fef3c7;color:#92400e}'
-        + '.pp-c-cat-personalization{background:#f3e8ff;color:#6b21a8}'
-        + '.pp-c-cat-third_party{background:#ffedd5;color:#9a3412}'
-        + '.pp-c-cat-other{background:#f1f5f9;color:#475569}'
-        + '.pp-c-foot{font-size:10px;color:#94a3b8;text-align:center;margin-top:8px}'
-        + '.pp-c-msg{padding:8px 12px;border-radius:6px;font-size:12px;display:none}'
-        + '.pp-c-msg.err{background:#fee2e2;color:#991b1b;display:block}'
-        + '@media (max-width:480px){#pp-c-banner{padding:14px 16px}#pp-c-modal{padding:18px 20px}.pp-c-actions{justify-content:stretch;flex-direction:column}.pp-c-actions .pp-c-btn{width:100%}}';
+        // Footer powered-by
+        + '.pp-c-foot{font-size:11px;color:#94a3b8;text-align:center;padding:8px 0 4px}'
+        + '@media (max-width:540px){#pp-c-banner{max-width:none;left:8px!important;right:8px!important;transform:none!important}.pp-c-actions{justify-content:stretch}.pp-c-actions .pp-c-btn{flex:1;text-align:center}}';
 
     function injectStyles() {
         if (document.getElementById('pp-c-styles')) return;
@@ -169,116 +182,200 @@
         document.head.appendChild(s);
     }
 
-    // ----------- Render (mode-aware) -----------
-    function render() {
+    // ----------- Render Layer 1 (banner) -----------
+    function renderBanner() {
+        cleanup();
         var cfg = state.config;
         var col = cfg.collection || {};
-        var mode = (modeOverride !== 'auto' ? modeOverride : col.display_mode) || 'banner_bottom';
-
-        // Apply branding CSS vars
         var settings = col.settings || {};
         var primary = settings.primary_color || '#0f172a';
         var accent = settings.accent_color || '#0ea5e9';
 
-        var bodyHtml = ''
-            + '<h3 class="pp-c-h" style="color:' + primary + '">' + escapeHtml(t.title) + '</h3>'
-            + '<p class="pp-c-sub">' + escapeHtml(t.intro) + '</p>'
-            + (state.expanded ? renderItems(cfg.items) : '')
-            + '<div class="pp-c-msg" id="pp-c-msg"></div>'
-            + '<div class="pp-c-actions">'
-            +   (state.expanded
-                ? '<button type="button" class="pp-c-btn pp-c-secondary" data-act="reject">' + escapeHtml(t.reject_optional) + '</button>'
-                  + '<button type="button" class="pp-c-btn pp-c-primary" data-act="save" style="background:' + accent + '">' + escapeHtml(t.save) + '</button>'
-                : '<button type="button" class="pp-c-btn pp-c-link" data-act="customize">' + escapeHtml(t.customize) + '</button>'
-                  + '<button type="button" class="pp-c-btn pp-c-secondary" data-act="reject">' + escapeHtml(t.reject_optional) + '</button>'
-                  + '<button type="button" class="pp-c-btn pp-c-primary" data-act="accept_all" style="background:' + accent + '">' + escapeHtml(t.accept_all) + '</button>')
-            + '</div>'
-            + '<div class="pp-c-foot">' + escapeHtml(t.powered) + '</div>';
+        // Use server-configured banner text if provided
+        var bannerText = settings.banner_text || t.banner_text;
 
-        var container;
-        // Remove existing first
-        ['pp-c-overlay', 'pp-c-banner', 'pp-c-inline'].forEach(function (id) {
-            var e = document.getElementById(id);
-            if (e) e.parentNode.removeChild(e);
-        });
-
-        if (mode === 'banner_bottom' || mode === 'banner_top') {
-            container = document.createElement('div');
-            container.id = 'pp-c-banner';
-            container.className = mode === 'banner_top' ? 'top' : 'bottom';
-            container.style.setProperty('--pp-c-primary', primary);
-            container.style.setProperty('--pp-c-accent', accent);
-            container.innerHTML = bodyHtml;
-            document.body.appendChild(container);
-        } else if (mode === 'modal_center' || mode === 'fullscreen') {
-            container = document.createElement('div');
-            container.id = 'pp-c-overlay';
-            if (mode === 'fullscreen') container.className = 'fullscreen';
-            var modal = document.createElement('div');
-            modal.id = 'pp-c-modal';
-            modal.style.setProperty('--pp-c-primary', primary);
-            modal.style.setProperty('--pp-c-accent', accent);
-            modal.innerHTML = bodyHtml;
-            container.appendChild(modal);
-            document.body.appendChild(container);
-            // Block scroll behind modal
-            document.documentElement.style.overflow = 'hidden';
-        } else if (mode === 'inline') {
-            var anchor = mountSelector ? document.querySelector(mountSelector) : document.body;
-            if (!anchor) {
-                console.warn('[Privasimu Consent] Inline mode but data-mount selector not found');
-                return;
-            }
-            container = document.createElement('div');
-            container.id = 'pp-c-inline';
-            container.style.setProperty('--pp-c-primary', primary);
-            container.style.setProperty('--pp-c-accent', accent);
-            container.innerHTML = bodyHtml;
-            anchor.appendChild(container);
+        var mode = (modeOverride !== 'auto' ? modeOverride : col.display_mode) || 'banner_bottom';
+        var pos = mode === 'banner_top' ? 'top-right' : (mode === 'fullscreen' || mode === 'modal_center') ? null : 'bottom-right';
+        // For fullscreen/modal_center mode → directly open Layer 2 modal as the entry point
+        if (mode === 'modal_center' || mode === 'fullscreen') {
+            renderModal(true);
+            return;
         }
 
-        wireEvents();
-    }
+        var banner = document.createElement('div');
+        banner.id = 'pp-c-banner';
+        banner.className = pos;
+        banner.style.setProperty('--pp-c-primary', primary);
+        banner.style.setProperty('--pp-c-accent', accent);
 
-    function renderItems(items) {
-        if (!items || items.length === 0) return '';
-        return '<div class="pp-c-items">' + items.map(function (item) {
-            var checked = state.choices[item.id] || item.is_required;
-            var disabled = item.is_required ? 'disabled checked' : (checked ? 'checked' : '');
-            var cat = item.category || 'essential';
-            return '<label class="pp-c-item">'
-                + '<input type="checkbox" data-id="' + item.id + '" ' + disabled + '>'
-                + '<div class="pp-c-item-meta">'
-                +   '<span class="pp-c-item-title">' + escapeHtml(item.title)
-                +     (item.is_required ? ' <span style="color:#16a34a;font-size:10px">' + escapeHtml(t.required) + '</span>' : '')
-                +     '<span class="pp-c-item-cat pp-c-cat-' + cat + '">' + escapeHtml(t['cat_' + cat] || cat) + '</span>'
-                +   '</span>'
-                + (item.description ? '<div class="pp-c-item-desc">' + escapeHtml(item.description) + '</div>' : '')
-                + '</div>'
-                + '</label>';
-        }).join('') + '</div>';
-    }
+        banner.innerHTML = ''
+            + '<div class="pp-c-text">' + escapeHtml(bannerText) + '</div>'
+            + '<div class="pp-c-actions">'
+            +   '<button type="button" class="pp-c-btn pp-c-secondary" data-act="settings">' + escapeHtml(t.settings) + '</button>'
+            +   '<button type="button" class="pp-c-btn pp-c-secondary" data-act="reject">' + escapeHtml(t.reject_all) + '</button>'
+            +   '<button type="button" class="pp-c-btn pp-c-primary" data-act="accept">' + escapeHtml(t.accept_all) + '</button>'
+            + '</div>'
+            + footerHtml(cfg);
 
-    function wireEvents() {
-        var root = document.getElementById('pp-c-overlay') || document.getElementById('pp-c-banner') || document.getElementById('pp-c-inline');
-        if (!root) return;
-        root.querySelectorAll('button[data-act]').forEach(function (btn) {
+        document.body.appendChild(banner);
+
+        banner.querySelectorAll('button[data-act]').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var act = btn.getAttribute('data-act');
-                if (act === 'customize') { state.expanded = true; render(); return; }
-                if (act === 'accept_all') { commitDecision(allTrue()); return; }
-                if (act === 'reject') { commitDecision(allRequiredOnly()); return; }
-                if (act === 'save') { commitDecision(collectChoices()); return; }
+                if (act === 'accept') return commitDecision(allTrue());
+                if (act === 'reject') return commitDecision(allRequiredOnly());
+                if (act === 'settings') return renderModal(false);
             });
         });
-        // Track item checkbox changes
-        if (state.expanded) {
-            root.querySelectorAll('input[type="checkbox"][data-id]').forEach(function (cb) {
-                cb.addEventListener('change', function () {
-                    state.choices[cb.getAttribute('data-id')] = cb.checked;
+    }
+
+    // ----------- Render Layer 2 (modal — Pusat Preferensi Privasi) -----------
+    function renderModal(removeBanner) {
+        // Banner stays visible behind overlay unless explicitly removed
+        if (removeBanner) cleanup();
+        else {
+            var b = document.getElementById('pp-c-banner');
+            if (b) b.style.display = 'none';
+        }
+        // Prevent duplicate
+        var existing = document.getElementById('pp-c-overlay');
+        if (existing) existing.remove();
+
+        var cfg = state.config;
+        var col = cfg.collection || {};
+        var settings = col.settings || {};
+        var primary = settings.primary_color || '#0f172a';
+        var accent = settings.accent_color || '#0ea5e9';
+
+        // Group items by category
+        var byCat = {};
+        (cfg.items || []).forEach(function (item) {
+            var cat = item.category || 'essential';
+            if (!byCat[cat]) byCat[cat] = [];
+            byCat[cat].push(item);
+        });
+        // Stable order
+        var order = ['essential', 'functional', 'analytics', 'marketing', 'personalization', 'third_party', 'other'];
+        var cats = order.filter(function (c) { return byCat[c]; });
+        Object.keys(byCat).forEach(function (c) { if (cats.indexOf(c) < 0) cats.push(c); });
+
+        // Initialize choices for required items
+        cats.forEach(function (c) {
+            byCat[c].forEach(function (item) {
+                if (item.is_required) state.choices[item.id] = true;
+                else if (state.choices[item.id] === undefined) state.choices[item.id] = false;
+            });
+        });
+
+        var overlay = document.createElement('div');
+        overlay.id = 'pp-c-overlay';
+
+        var modal = document.createElement('div');
+        modal.id = 'pp-c-modal';
+        modal.style.setProperty('--pp-c-primary', primary);
+        modal.style.setProperty('--pp-c-accent', accent);
+        modal.onclick = function (e) { e.stopPropagation(); };
+
+        var head = ''
+            + '<div class="pp-c-mhead">'
+            +   '<div>'
+            +     '<h2 class="pp-c-mtitle">' + escapeHtml(t.modal_title) + '</h2>'
+            +     '<p class="pp-c-mintro">' + escapeHtml(settings.modal_intro_text || t.modal_intro) + '</p>'
+            +   '</div>'
+            +   '<button type="button" class="pp-c-mclose" aria-label="Close" data-act="close">&times;</button>'
+            + '</div>';
+
+        var body = '<div class="pp-c-mbody">';
+        cats.forEach(function (cat) {
+            var label = (cfg.category_labels && cfg.category_labels[cat]) || CAT_LABELS[cat] || cat;
+            var items = byCat[cat];
+            var allRequired = items.every(function (i) { return i.is_required; });
+            var anyChecked = items.some(function (i) { return state.choices[i.id]; });
+            var totalCookies = items.reduce(function (s, i) { return s + (Array.isArray(i.cookie_keys) ? i.cookie_keys.length : 0); }, 0);
+            var expanded = !!EXPANDED_CAT[cat];
+
+            body += '<div class="pp-c-cat" data-cat="' + escapeAttr(cat) + '">'
+                +     '<div class="pp-c-cat-head" data-act="toggle-cat" data-cat="' + escapeAttr(cat) + '">'
+                +       '<span class="pp-c-cat-arrow' + (expanded ? ' expanded' : '') + '">▼</span>'
+                +       '<div class="pp-c-cat-title">' + escapeHtml(label)
+                +         (totalCookies > 0 ? '<span class="pp-c-cat-meta"> · ' + totalCookies + ' ' + escapeHtml(t.cookies_count) + '</span>' : '')
+                +       '</div>'
+                +       '<div class="pp-c-cat-toggle-wrap">'
+                +         (allRequired
+                            ? '<span class="pp-c-req-label">' + escapeHtml(t.required_label) + '</span>'
+                            : '<label class="pp-c-switch" onclick="event.stopPropagation()">'
+                              + '<input type="checkbox" data-cat-toggle="' + escapeAttr(cat) + '"' + (anyChecked ? ' checked' : '') + '>'
+                              + '<span class="pp-c-slider"></span>'
+                              + '</label>')
+                +       '</div>'
+                +     '</div>'
+                +     '<div class="pp-c-cat-body' + (expanded ? ' expanded' : '') + '">'
+                +       (items.map(function (it) {
+                            var keys = Array.isArray(it.cookie_keys) ? it.cookie_keys : [];
+                            return '<div style="margin:6px 0">'
+                                +    '<strong>' + escapeHtml(it.title) + '</strong>'
+                                +    (it.description ? '<div style="margin-top:2px">' + escapeHtml(it.description) + '</div>' : '')
+                                +    (keys.length > 0 ? '<div style="margin-top:4px;font-size:11px"><em>Cookies:</em> ' + keys.map(escapeHtml).join(', ') + '</div>' : '')
+                                +  '</div>';
+                          }).join(''))
+                +     '</div>'
+                + '</div>';
+        });
+        body += '</div>';
+
+        var foot = ''
+            + '<div class="pp-c-mfoot">'
+            +   '<button type="button" class="pp-c-btn pp-c-secondary" data-act="reject">' + escapeHtml(t.reject_all) + '</button>'
+            +   '<button type="button" class="pp-c-btn pp-c-primary" data-act="confirm">' + escapeHtml(t.confirm) + '</button>'
+            + '</div>'
+            + footerHtml(state.config);
+
+        modal.innerHTML = head + body + foot;
+        overlay.appendChild(modal);
+        overlay.onclick = function (e) {
+            // Click outside modal closes (back to banner). Esc not handled to avoid accidents.
+            if (e.target === overlay) {
+                overlay.remove();
+                var b = document.getElementById('pp-c-banner');
+                if (b) b.style.display = '';
+            }
+        };
+        document.body.appendChild(overlay);
+
+        // Wire events
+        modal.querySelectorAll('[data-act="toggle-cat"]').forEach(function (head) {
+            head.addEventListener('click', function () {
+                var cat = head.getAttribute('data-cat');
+                EXPANDED_CAT[cat] = !EXPANDED_CAT[cat];
+                var arrow = head.querySelector('.pp-c-cat-arrow');
+                var bodyEl = modal.querySelector('.pp-c-cat[data-cat="' + cat + '"] .pp-c-cat-body');
+                if (arrow) arrow.classList.toggle('expanded', EXPANDED_CAT[cat]);
+                if (bodyEl) bodyEl.classList.toggle('expanded', EXPANDED_CAT[cat]);
+            });
+        });
+        modal.querySelectorAll('input[data-cat-toggle]').forEach(function (cb) {
+            cb.addEventListener('change', function () {
+                var cat = cb.getAttribute('data-cat-toggle');
+                var checked = cb.checked;
+                (byCat[cat] || []).forEach(function (item) {
+                    if (!item.is_required) state.choices[item.id] = checked;
                 });
             });
-        }
+        });
+        modal.querySelectorAll('button[data-act]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var act = btn.getAttribute('data-act');
+                if (act === 'close') {
+                    overlay.remove();
+                    var b = document.getElementById('pp-c-banner');
+                    if (b) b.style.display = '';
+                } else if (act === 'reject') {
+                    commitDecision(allRequiredOnly());
+                } else if (act === 'confirm') {
+                    commitDecision(currentChoices());
+                }
+            });
+        });
     }
 
     function allTrue() {
@@ -291,7 +388,7 @@
         (state.config.items || []).forEach(function (it) { c[it.id] = !!it.is_required; });
         return c;
     }
-    function collectChoices() {
+    function currentChoices() {
         var c = {};
         (state.config.items || []).forEach(function (it) {
             c[it.id] = it.is_required ? true : !!state.choices[it.id];
@@ -299,11 +396,28 @@
         return c;
     }
 
-    // ----------- Commit decision (POST + storage + dispatch event) -----------
+    function footerHtml(cfg) {
+        var b = (cfg && cfg.collection && cfg.collection.settings) || {};
+        if (b.show_powered_by === false) return '';
+        // Default = Privasimu Nexus logo (non-inverted, color-on-light).
+        // Klien bisa override pakai branding.powered_by_logo / powered_by_text / powered_by_url.
+        var logoUrl = b.powered_by_logo || (apiBase.replace(/\/api\/?$/, '') + '/nexus.png');
+        var text = b.powered_by_text || 'Powered by';
+        var url = b.powered_by_url || 'https://privasimu.com';
+        var inner = '<span style="display:inline-flex;align-items:center;gap:6px">'
+                  +   '<span>' + escapeHtml(text) + '</span>'
+                  +   '<img src="' + escapeAttr(logoUrl) + '" alt="Privasimu Nexus" style="height:18px;vertical-align:middle">'
+                  + '</span>';
+        var wrapped = url
+            ? '<a href="' + escapeAttr(url) + '" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">' + inner + '</a>'
+            : inner;
+        return '<div class="pp-c-foot">' + wrapped + '</div>';
+    }
+
+    // ----------- Commit decision -----------
     function commitDecision(consentedItems) {
         var col = state.config.collection;
         var freq = col.display_frequency || 'once';
-
         var decision = {
             items: consentedItems,
             policy_version: state.config.policy_version || '1.0',
@@ -317,7 +431,6 @@
             user_identifier: userId,
             consented_items: consentedItems,
             policy_version: decision.policy_version,
-            captcha_token: state.captchaToken,
         };
 
         fetch(apiBase + '/public/consent/capture', {
@@ -331,10 +444,10 @@
                 cleanup();
                 dispatchEvent('privasimu:consent-decision', decision);
             } else {
-                showMsg((resp.body && (resp.body.error || resp.body.message)) || 'Gagal menyimpan preferensi', 'err');
+                console.warn('[Privasimu Consent] capture failed:', resp.body);
             }
         }).catch(function (err) {
-            showMsg('Network error: ' + (err && err.message ? err.message : 'unknown'), 'err');
+            console.warn('[Privasimu Consent] network error:', err);
         });
     }
 
@@ -351,13 +464,8 @@
         }
     }
 
-    function showMsg(text, kind) {
-        var m = document.getElementById('pp-c-msg');
-        if (m) { m.textContent = text; m.className = 'pp-c-msg ' + (kind || 'err'); }
-    }
-
     function cleanup() {
-        ['pp-c-overlay', 'pp-c-banner', 'pp-c-inline'].forEach(function (id) {
+        ['pp-c-overlay', 'pp-c-banner'].forEach(function (id) {
             var e = document.getElementById(id);
             if (e) e.parentNode.removeChild(e);
         });
@@ -365,23 +473,18 @@
     }
 
     function dispatchEvent(name, detail) {
-        try {
-            var evt = new CustomEvent(name, { detail: detail });
-            window.dispatchEvent(evt);
-        } catch (e) {
-            // Legacy IE fallback omitted — IE11 EOL'd
-        }
+        try { window.dispatchEvent(new CustomEvent(name, { detail: detail })); } catch (e) {}
     }
-
     function escapeHtml(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
     }
+    function escapeAttr(s) { return escapeHtml(s); }
 
     // ----------- Public API -----------
     window.PrivasimuConsent = {
-        show: function () { state.expanded = false; init(true); },
+        show: function () { state.choices = {}; init(true); },
         open: function () { this.show(); },
         reset: function () { clearStored(); },
         state: function () { return getStored(); },
@@ -391,12 +494,10 @@
     function init(force) {
         var stored = getStored();
         if (stored && !force) {
-            // Decision already stored — just dispatch so klien JS can read state
             dispatchEvent('privasimu:consent-decision', stored);
             return;
         }
 
-        // Fetch config (cookie filter — anonymous visitors)
         fetch(apiBase + '/public/consent/config?collection_id=' + encodeURIComponent(collectionId) + '&category_filter=cookie')
             .then(function (r) { return r.json(); })
             .then(function (res) {
@@ -405,10 +506,10 @@
                 var col = state.config.collection || {};
                 if (!shouldShow(col.audience || 'anonymous_only')) return;
                 injectStyles();
-                render();
+                renderBanner();
             })
             .catch(function (err) {
-                console.warn('[Privasimu Consent] Config load failed:', err);
+                console.warn('[Privasimu Consent] config load failed:', err);
             });
     }
 
