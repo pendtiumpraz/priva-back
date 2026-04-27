@@ -1,8 +1,14 @@
 <?php
 
+use App\Http\Middleware\AuthenticateConsentApiKey;
+use App\Http\Middleware\AuthenticateDsrApiKey;
+use App\Http\Middleware\CheckPermission;
+use App\Http\Middleware\RootOrSuperadmin;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -13,15 +19,16 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
-            'permission' => \App\Http\Middleware\CheckPermission::class,
-            'dsr.api_key' => \App\Http\Middleware\AuthenticateDsrApiKey::class,
-            'consent.api_key' => \App\Http\Middleware\AuthenticateConsentApiKey::class,
+            'permission' => CheckPermission::class,
+            'dsr.api_key' => AuthenticateDsrApiKey::class,
+            'consent.api_key' => AuthenticateConsentApiKey::class,
+            'role.root' => RootOrSuperadmin::class,
         ]);
         // Prevent "Route [login] not defined" on API auth failures
         $middleware->redirectGuestsTo(fn ($request) => $request->is('api/*') ? null : '/login');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e, \Illuminate\Http\Request $request) {
+        $exceptions->render(function (AuthenticationException $e, Request $request) {
             if ($request->is('api/*')) {
                 return response()->json(['message' => 'Unauthenticated.'], 401);
             }

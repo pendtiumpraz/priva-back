@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Admin\LandingAdminController;
 use App\Http\Controllers\Api\AiAgentController;
 use App\Http\Controllers\Api\AiChatController;
 use App\Http\Controllers\Api\AiFeatureController;
@@ -56,6 +57,7 @@ use App\Http\Controllers\Api\PolicyReviewCrudController;
 use App\Http\Controllers\Api\PositionController;
 use App\Http\Controllers\Api\PostureController;
 use App\Http\Controllers\Api\ProcessingCategoryController;
+use App\Http\Controllers\Api\PublicLandingController;
 use App\Http\Controllers\Api\RaciTemplateController;
 use App\Http\Controllers\Api\RetentionPolicyController;
 use App\Http\Controllers\Api\RiskTreatmentPlanController;
@@ -123,6 +125,23 @@ Route::middleware('throttle:api')->group(function () {
     // Public: unsubscribe via signed URL (from email footer)
     Route::get('/notifications/unsubscribe', [NotificationPreferenceController::class, 'unsubscribe'])
         ->name('notifications.unsubscribe');
+
+    // =============================================
+    // Public Landing Page — read endpoints (cached) + lead capture
+    // =============================================
+    Route::prefix('public/landing')->group(function () {
+        Route::get('/bundle', [PublicLandingController::class, 'bundle']);
+        Route::get('/settings', [PublicLandingController::class, 'settings']);
+        Route::get('/features', [PublicLandingController::class, 'features']);
+        Route::get('/team', [PublicLandingController::class, 'team']);
+        Route::get('/testimonials', [PublicLandingController::class, 'testimonials']);
+        Route::get('/logos', [PublicLandingController::class, 'logos']);
+        Route::get('/products', [PublicLandingController::class, 'products']);
+        Route::get('/products/{slug}', [PublicLandingController::class, 'productDetail']);
+        Route::get('/stats', [PublicLandingController::class, 'stats']);
+        // Contact / Demo lead capture (rate-limited dalam controller)
+        Route::post('/lead', [PublicLandingController::class, 'submitLead']);
+    });
 
 });
 
@@ -1083,4 +1102,65 @@ Route::prefix('v1/consent')->middleware('consent.api_key')->group(function () {
     Route::post('/capture', [ConsentApiV1Controller::class, 'capture']);
     Route::get('/state', [ConsentApiV1Controller::class, 'state']);
     Route::get('/items', [ConsentApiV1Controller::class, 'items']);
+});
+
+// =============================================
+// Landing Page Admin — gated `role.root` (root + superadmin only)
+// Privasimu's own marketing site management. NOT per-tenant.
+// =============================================
+Route::middleware(['auth:sanctum', 'role.root'])->prefix('admin/landing')->group(function () {
+    $c = LandingAdminController::class;
+
+    // Settings (singleton)
+    Route::get('/settings', [$c, 'getSettings']);
+    Route::put('/settings', [$c, 'updateSettings']);
+
+    // Generic upload — returns relative path
+    Route::post('/upload', [$c, 'upload']);
+
+    // Reorder batch
+    Route::post('/{resource}/reorder', [$c, 'reorder'])
+        ->where('resource', 'features|team|testimonials|logos|products|stats');
+
+    // Features
+    Route::get('/features', [$c, 'indexFeatures']);
+    Route::post('/features', [$c, 'storeFeature']);
+    Route::put('/features/{id}', [$c, 'updateFeature']);
+    Route::delete('/features/{id}', [$c, 'destroyFeature']);
+
+    // Team
+    Route::get('/team', [$c, 'indexTeam']);
+    Route::post('/team', [$c, 'storeTeam']);
+    Route::put('/team/{id}', [$c, 'updateTeam']);
+    Route::delete('/team/{id}', [$c, 'destroyTeam']);
+
+    // Testimonials
+    Route::get('/testimonials', [$c, 'indexTestimonials']);
+    Route::post('/testimonials', [$c, 'storeTestimonial']);
+    Route::put('/testimonials/{id}', [$c, 'updateTestimonial']);
+    Route::delete('/testimonials/{id}', [$c, 'destroyTestimonial']);
+
+    // Logos (partner / customer / integration)
+    Route::get('/logos', [$c, 'indexLogos']);
+    Route::post('/logos', [$c, 'storeLogo']);
+    Route::put('/logos/{id}', [$c, 'updateLogo']);
+    Route::delete('/logos/{id}', [$c, 'destroyLogo']);
+
+    // Products
+    Route::get('/products', [$c, 'indexProducts']);
+    Route::post('/products', [$c, 'storeProduct']);
+    Route::put('/products/{id}', [$c, 'updateProduct']);
+    Route::delete('/products/{id}', [$c, 'destroyProduct']);
+
+    // Stats
+    Route::get('/stats', [$c, 'indexStats']);
+    Route::post('/stats', [$c, 'storeStat']);
+    Route::put('/stats/{id}', [$c, 'updateStat']);
+    Route::delete('/stats/{id}', [$c, 'destroyStat']);
+
+    // Leads inbox (Contact + Demo submissions)
+    Route::get('/leads', [$c, 'indexLeads']);
+    Route::get('/leads/{id}', [$c, 'showLead']);
+    Route::put('/leads/{id}', [$c, 'updateLead']);
+    Route::delete('/leads/{id}', [$c, 'destroyLead']);
 });
