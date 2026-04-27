@@ -7,10 +7,12 @@ use App\Models\Organization;
 use App\Models\Vendor;
 use App\Models\VendorAssessment;
 use App\Services\AiService;
+use App\Services\DocumentParserService;
 use App\Services\TenantStorageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class VendorRiskController extends Controller
 {
@@ -22,13 +24,14 @@ class VendorRiskController extends Controller
         $orgId = $request->user()->org_id;
 
         $vendors = Vendor::where('org_id', $orgId)
-            ->with(['assessments' => function($q) {
+            ->with(['assessments' => function ($q) {
                 $q->orderBy('created_at', 'desc')->limit(1);
             }])
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($vendor) {
                 $assessment = $vendor->assessments->first();
+
                 return [
                     'id' => $vendor->id,
                     'name' => $vendor->name,
@@ -44,23 +47,17 @@ class VendorRiskController extends Controller
         return response()->json(['data' => $vendors]);
     }
 
+    private const RISK_LEVELS = ['low', 'medium', 'high', 'critical'];
+
+    private const DPA_STATUSES = ['none', 'draft', 'signed', 'expired'];
+
     public function store(Request $request)
     {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'services_provided' => 'nullable|array',
-            'data_shared' => 'nullable|array',
-            'risk_level' => 'nullable|string',
-            'risk_score' => 'nullable|integer',
-            'dpa_status' => 'nullable|string|in:none,draft,signed,expired',
-            'dpa_signed_at' => 'nullable|date',
-            'dpa_expires_at' => 'nullable|date'
-        ]);
+        $data = $request->validate($this->writeRules(false));
 
-        $vendor = Vendor::create(array_merge(
-            $request->all(),
-            ['org_id' => $request->user()->org_id]
-        ));
+        $vendor = Vendor::create(array_merge($data, [
+            'org_id' => $request->user()->org_id,
+        ]));
 
         return response()->json(['message' => 'Vendor berhasil ditambahkan', 'data' => $vendor], 201);
     }
@@ -68,25 +65,47 @@ class VendorRiskController extends Controller
     public function show(Request $request, $id)
     {
         $vendor = Vendor::where('org_id', $request->user()->org_id)->with('assessments')->findOrFail($id);
+
         return response()->json(['data' => $vendor]);
     }
 
     public function update(Request $request, $id)
     {
         $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($id);
-        
-        $request->validate([
-            'name' => 'string|max:255',
-            'services_provided' => 'nullable|array',
-            'data_shared' => 'nullable|array',
-            'dpa_status' => 'nullable|string|in:none,draft,signed,expired',
-            'dpa_signed_at' => 'nullable|date',
-            'dpa_expires_at' => 'nullable|date'
-        ]);
+        $data = $request->validate($this->writeRules(true));
+        $vendor->update($data);
 
-        $vendor->update($request->all());
+        return response()->json(['message' => 'Vendor berhasil diupdate', 'data' => $vendor->fresh()]);
+    }
 
-        return response()->json(['message' => 'Vendor berhasil diupdate', 'data' => $vendor]);
+    /**
+     * Validation rules shared by store + update.
+     * Critical: risk_level + risk_score validated against enum/range — sebelumnya
+     * frontend bisa kirim risk_level apa saja dan backend menerima begitu saja.
+     */
+    private function writeRules(bool $forUpdate): array
+    {
+        $req = $forUpdate ? 'sometimes' : 'required';
+        $opt = $forUpdate ? 'sometimes|nullable' : 'nullable';
+
+        return [
+            'name' => "{$req}|string|max:255",
+            'description' => "{$opt}|string|max:2000",
+            'website' => "{$opt}|url|max:500",
+            'country' => "{$opt}|string|max:100",
+            'services_provided' => "{$opt}|array",
+            'services_provided.*' => 'string|max:200',
+            'data_shared' => "{$opt}|array",
+            'data_shared.*' => 'string|max:200',
+            'risk_level' => "{$opt}|in:".implode(',', self::RISK_LEVELS),
+            'risk_score' => "{$opt}|integer|min:0|max:100",
+            'dpa_status' => "{$opt}|in:".implode(',', self::DPA_STATUSES),
+            'dpa_signed_at' => "{$opt}|date",
+            'dpa_expires_at' => "{$opt}|date|after_or_equal:dpa_signed_at",
+            'last_assessed_at' => "{$opt}|date",
+            'contact_name' => "{$opt}|string|max:200",
+            'contact_email' => "{$opt}|email|max:200",
+        ];
     }
 
     public function destroy(Request $request, $id)
@@ -101,6 +120,7 @@ class VendorRiskController extends Controller
     {
         $vendors = Vendor::onlyTrashed()->where('org_id', $request->user()->org_id)
             ->orderBy('deleted_at', 'desc')->get();
+
         return response()->json(['data' => $vendors]);
     }
 
@@ -139,7 +159,7 @@ class VendorRiskController extends Controller
 
         $documents = $vendor->documents ?? [];
         $documents[] = [
-            'id' => (string) \Illuminate\Support\Str::uuid(),
+            'id' => (string) Str::uuid(),
             'name' => $file->getClientOriginalName(),
             'path' => $path,
             'type' => strtolower($file->getClientOriginalExtension()),
@@ -159,16 +179,32 @@ class VendorRiskController extends Controller
         $org = Organization::findOrFail($request->user()->org_id);
         $docs = $vendor->documents ?? [];
         $doc = collect($docs)->firstWhere('id', $docId);
-        if ($doc && !empty($doc['path'])) {
-            try { $storage->getDisk($org)->delete($doc['path']); } catch (\Throwable $e) { /* best-effort */ }
+        if ($doc && ! empty($doc['path'])) {
+            try {
+                $storage->getDisk($org)->delete($doc['path']);
+            } catch (\Throwable $e) { /* best-effort */
+            }
         }
-        $vendor->update(['documents' => array_values(array_filter($docs, fn($d) => ($d['id'] ?? null) !== $docId))]);
+        $vendor->update(['documents' => array_values(array_filter($docs, fn ($d) => ($d['id'] ?? null) !== $docId))]);
 
         return response()->json(['message' => 'Dokumen dihapus', 'data' => $vendor->documents]);
     }
 
+    /**
+     * Screen vendor documents — dua mode:
+     *  - mode=manual (default kalau AI gak available / user pilih): parse semua
+     *    dokumen, return raw text supaya user bisa baca manual & kasih skor
+     *    sendiri lewat update endpoint. TIDAK ada AI dependency.
+     *  - mode=ai: parse + kirim ke AI vendorRiskAssessor untuk auto-score.
+     *
+     * Per-doc parse errors di-surface (bukan di-swallow) — sebelumnya user lihat
+     * "Tidak ada dokumen yang bisa di-parse" walau ada 10 dokumen yang gagal.
+     */
     public function screenDocuments(Request $request, string $id, TenantStorageService $storage)
     {
+        $request->validate(['mode' => 'nullable|in:manual,ai,auto']);
+        $mode = $request->input('mode', 'auto');
+
         $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($id);
         $org = Organization::findOrFail($request->user()->org_id);
         $docs = $vendor->documents ?? [];
@@ -177,16 +213,30 @@ class VendorRiskController extends Controller
         }
 
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        $aiAvailable = $ai->isAvailable() && ($org->ai_credits_remaining ?? 0) > 0;
+        $useAi = $mode === 'ai' || ($mode === 'auto' && $aiAvailable);
 
-        $parser = new \App\Services\DocumentParserService();
+        if ($mode === 'ai' && ! $aiAvailable) {
+            return response()->json([
+                'message' => 'AI tidak tersedia (API key kosong atau credits habis). Gunakan mode=manual untuk parse-only.',
+            ], 503);
+        }
+
+        $parser = new DocumentParserService;
         $summaries = [];
+        $parseErrors = [];
         foreach ($docs as $d) {
-            if (empty($d['path'])) continue;
+            if (empty($d['path'])) {
+                $parseErrors[] = ['doc' => $d['name'] ?? '?', 'error' => 'path kosong'];
+
+                continue;
+            }
             try {
                 [$fullPath, $cleanup] = $storage->getLocalPathForProcessing($org, $d['path']);
             } catch (\Throwable $e) {
-                \Log::warning("screenDocuments local path resolve failed for {$d['name']}: " . $e->getMessage());
+                $parseErrors[] = ['doc' => $d['name'] ?? '?', 'error' => 'storage tidak terjangkau: '.$e->getMessage()];
+                Log::warning("screenDocuments storage resolve failed for {$d['name']}: ".$e->getMessage());
+
                 continue;
             }
             try {
@@ -195,36 +245,168 @@ class VendorRiskController extends Controller
                     'doc' => $d['name'] ?? '',
                     'text' => mb_substr($parsed['raw_text'] ?? '', 0, 5000),
                 ];
-            } catch (\Exception $e) {
-                \Log::warning("screenDocuments parse failed for {$d['name']}: " . $e->getMessage());
+            } catch (\Throwable $e) {
+                $parseErrors[] = ['doc' => $d['name'] ?? '?', 'error' => $e->getMessage()];
+                Log::warning("screenDocuments parse failed for {$d['name']}: ".$e->getMessage());
             } finally {
                 $cleanup();
             }
         }
 
         if (count($summaries) === 0) {
-            return response()->json(['message' => 'Tidak ada dokumen yang bisa di-parse'], 422);
+            return response()->json([
+                'message' => 'Tidak ada dokumen yang berhasil di-parse',
+                'parse_errors' => $parseErrors,
+            ], 422);
         }
 
+        // Manual mode: return parsed text, user kasih skor sendiri via update endpoint
+        if (! $useAi) {
+            return response()->json([
+                'message' => 'Parse selesai (manual mode) — review teks lalu update risk_score/level secara manual.',
+                'mode' => 'manual',
+                'documents' => $summaries,
+                'parse_errors' => $parseErrors,
+                'vendor' => $vendor,
+            ]);
+        }
+
+        // AI mode
         $combinedText = '';
         foreach ($summaries as $s) {
             $combinedText .= "=== {$s['doc']} ===\n{$s['text']}\n\n";
         }
 
-        $response = $ai->vendorRiskAssessor([
-            'vendor' => ['name' => $vendor->name, 'services' => $vendor->services_provided ?? []],
-            'documents_text' => mb_substr($combinedText, 0, 12000),
-        ]);
+        try {
+            $response = $ai->vendorRiskAssessor([
+                'vendor' => ['name' => $vendor->name, 'services' => $vendor->services_provided ?? []],
+                'documents_text' => mb_substr($combinedText, 0, 12000),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('screenDocuments AI call failed: '.$e->getMessage());
+
+            return response()->json([
+                'message' => 'AI gagal — gunakan mode=manual untuk lihat hasil parse.',
+                'mode' => 'ai',
+                'ai_error' => $e->getMessage(),
+                'documents' => $summaries,
+                'parse_errors' => $parseErrors,
+            ], 502);
+        }
 
         if ($response && isset($response['score'])) {
             $vendor->update([
-                'risk_score' => (int) ($response['score'] ?? $vendor->risk_score),
+                'risk_score' => (int) $response['score'],
                 'risk_level' => $response['risk_level'] ?? $vendor->risk_level,
                 'last_assessed_at' => now(),
             ]);
+            $org->decrement('ai_credits_remaining', 1);
         }
 
-        return response()->json(['message' => 'Screening selesai', 'data' => $response, 'vendor' => $vendor->fresh()]);
+        return response()->json([
+            'message' => 'Screening selesai (AI-assisted)',
+            'mode' => 'ai',
+            'data' => $response,
+            'documents' => $summaries,
+            'parse_errors' => $parseErrors,
+            'vendor' => $vendor->fresh(),
+        ]);
+    }
+
+    /**
+     * Re-assess existing vendor — entry point untuk "Jalankan Ulang Audit"
+     * di detail modal. Manual mode: caller kirim score+level langsung.
+     * AI mode: kirim updated answers untuk re-scoring.
+     *
+     * Ini menggantikan placeholder "belum diimplementasi" toast di frontend.
+     */
+    public function reassess(Request $request, $id)
+    {
+        $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($id);
+
+        $validated = $request->validate([
+            'mode' => 'required|in:manual,ai',
+            'answers' => 'nullable|array',
+            'manual_score' => 'nullable|integer|min:0|max:100',
+            'manual_risk_level' => 'nullable|in:'.implode(',', self::RISK_LEVELS),
+            'notes' => 'nullable|string|max:5000',
+            'recommendations' => 'nullable|array',
+            'recommendations.*' => 'string|max:500',
+        ]);
+
+        if ($validated['mode'] === 'manual') {
+            if (! isset($validated['manual_score'], $validated['manual_risk_level'])) {
+                return response()->json(['message' => 'manual_score + manual_risk_level wajib untuk mode manual'], 422);
+            }
+
+            $assessment = VendorAssessment::create([
+                'vendor_id' => $vendor->id,
+                'org_id' => $vendor->org_id,
+                'assessed_by' => $request->user()->id,
+                'answers' => $validated['answers'] ?? [],
+                'score' => $validated['manual_score'],
+                'risk_level' => $validated['manual_risk_level'],
+                'recommendations' => $validated['recommendations'] ?? [],
+                'notes' => $validated['notes'] ?? null,
+            ]);
+            $vendor->update([
+                'risk_score' => $validated['manual_score'],
+                'risk_level' => $validated['manual_risk_level'],
+                'last_assessed_at' => now(),
+            ]);
+
+            return response()->json([
+                'message' => 'Re-assessment manual tersimpan.',
+                'mode' => 'manual',
+                'assessment' => $assessment,
+                'vendor' => $vendor->fresh(),
+            ]);
+        }
+
+        // AI mode
+        $org = $request->user()->organization;
+        if (($org->ai_credits_remaining ?? 0) < 1) {
+            return response()->json(['message' => 'AI credits habis. Gunakan mode=manual.'], 402);
+        }
+        if (empty($validated['answers'])) {
+            return response()->json(['message' => 'answers wajib untuk mode AI'], 422);
+        }
+
+        try {
+            $aiService = (new AiService($vendor->org_id))->setLocale($request->user()->locale ?? 'id');
+            $response = $aiService->vendorRiskAssessor($validated['answers']);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'AI gagal: '.$e->getMessage(), 'fallback' => 'gunakan mode=manual'], 502);
+        }
+
+        if (! $response || ! isset($response['score'])) {
+            return response()->json(['message' => 'AI tidak return skor — gunakan mode=manual'], 502);
+        }
+
+        $assessment = VendorAssessment::create([
+            'vendor_id' => $vendor->id,
+            'org_id' => $vendor->org_id,
+            'assessed_by' => $request->user()->id,
+            'answers' => $validated['answers'],
+            'score' => (int) $response['score'],
+            'risk_level' => $response['risk_level'] ?? 'medium',
+            'recommendations' => $response['recommendations'] ?? [],
+            'notes' => json_encode($response['red_flags'] ?? []),
+        ]);
+        $vendor->update([
+            'risk_score' => (int) $response['score'],
+            'risk_level' => $response['risk_level'] ?? $vendor->risk_level,
+            'last_assessed_at' => now(),
+        ]);
+        $org->decrement('ai_credits_remaining', 1);
+
+        return response()->json([
+            'message' => 'Re-assessment AI selesai.',
+            'mode' => 'ai',
+            'assessment' => $assessment,
+            'vendor' => $vendor->fresh(),
+            'data' => $response,
+        ]);
     }
 
     /**
@@ -233,7 +415,7 @@ class VendorRiskController extends Controller
     public function extract(Request $request)
     {
         $request->validate(['url' => 'required|string']);
-        
+
         $org = $request->user()->organization;
         if ($org->ai_credits_remaining < 1) {
             return response()->json(['message' => 'AI Credits tidak mencukupi'], 402);
@@ -243,8 +425,8 @@ class VendorRiskController extends Controller
             $aiService = (new AiService($org->id))->setLocale($request->user()->locale ?? 'id');
             $response = $aiService->vendorExtractor($request->url);
 
-            if (!$response) {
-                throw new \Exception("AI gagal merespons dengan JSON valid");
+            if (! $response) {
+                throw new \Exception('AI gagal merespons dengan JSON valid');
             }
 
             // Deduct exactly after success
@@ -252,11 +434,12 @@ class VendorRiskController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $response
+                'data' => $response,
             ]);
 
         } catch (\Exception $e) {
             Log::error('VendorRisk Extract Error: '.$e->getMessage());
+
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
         }
     }
@@ -267,7 +450,7 @@ class VendorRiskController extends Controller
     public function generateQuestions(Request $request)
     {
         $request->validate(['extracted_data' => 'required|array']);
-        
+
         $org = $request->user()->organization;
         if ($org->ai_credits_remaining < 1) {
             return response()->json(['message' => 'AI Credits tidak mencukupi'], 402);
@@ -277,19 +460,20 @@ class VendorRiskController extends Controller
             $aiService = (new AiService($org->id))->setLocale($request->user()->locale ?? 'id');
             $response = $aiService->vendorQuestionnaire($request->extracted_data);
 
-            if (!$response || !isset($response['questions'])) {
-                throw new \Exception("AI gagal generate pertanyaan");
+            if (! $response || ! isset($response['questions'])) {
+                throw new \Exception('AI gagal generate pertanyaan');
             }
 
             $org->decrement('ai_credits_remaining', 1);
 
             return response()->json([
                 'status' => 'success',
-                'data' => $response['questions']
+                'data' => $response['questions'],
             ]);
 
         } catch (\Exception $e) {
             Log::error('VendorRisk QGen Error: '.$e->getMessage());
+
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
         }
     }
@@ -301,9 +485,9 @@ class VendorRiskController extends Controller
     {
         $request->validate([
             'extracted_data' => 'required|array',
-            'answers' => 'required|array'
+            'answers' => 'required|array',
         ]);
-        
+
         $orgId = $request->user()->org_id;
         $org = $request->user()->organization;
         if ($org->ai_credits_remaining < 1) {
@@ -316,8 +500,8 @@ class VendorRiskController extends Controller
             $aiService = (new AiService($orgId))->setLocale($request->user()->locale ?? 'id');
             $response = $aiService->vendorRiskAssessor($request->answers);
 
-            if (!$response || !isset($response['score'])) {
-                throw new \Exception("AI gagal men-scoring risiko");
+            if (! $response || ! isset($response['score'])) {
+                throw new \Exception('AI gagal men-scoring risiko');
             }
 
             $extracted = $request->extracted_data;
@@ -351,12 +535,13 @@ class VendorRiskController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $response
+                'data' => $response,
             ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('VendorRisk Assess Error: '.$e->getMessage());
+
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
         }
     }

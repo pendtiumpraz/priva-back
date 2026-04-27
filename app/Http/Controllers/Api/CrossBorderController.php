@@ -4,32 +4,42 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\CrossBorderTransfer;
-use Illuminate\Http\Request;
 use App\Services\AiService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class CrossBorderController extends Controller
 {
+    /**
+     * Allowed legal bases for cross-border transfer (UU PDP Pasal 56 + GDPR Ch. V).
+     * Used by both store/update validation AND TIA recommender.
+     */
+    private const LEGAL_BASES = [
+        'none', 'adequacy', 'sccs', 'bcr', 'consent',
+        'contract_necessity', 'public_interest', 'vital_interest',
+    ];
+
+    private const RISK_LEVELS = ['low', 'medium', 'high', 'critical'];
+
+    private const STATUSES = ['draft', 'pending', 'approved', 'rejected', 'expired'];
+
     public function index(Request $request)
     {
         $orgId = $request->user()->org_id;
         $transfers = CrossBorderTransfer::where('org_id', $orgId)
             ->orderBy('created_at', 'desc')
             ->paginate(15);
-            
+
         return response()->json($transfers);
     }
 
     public function store(Request $request)
     {
-        $request->validate([
-            'destination_country' => 'required|string|max:100',
-            'destination_entity' => 'required|string|max:255',
-            'transfer_purpose' => 'required|string',
-            'legal_basis' => 'required|string',
-        ]);
+        $data = $request->validate($this->writeRules(false));
 
-        $transfer = CrossBorderTransfer::create(array_merge($request->all(), [
+        $transfer = CrossBorderTransfer::create(array_merge($data, [
             'org_id' => $request->user()->org_id,
+            'status' => $data['status'] ?? 'draft',
         ]));
 
         return response()->json(['message' => 'Data transfer berhasil didaftarkan', 'data' => $transfer], 201);
@@ -38,20 +48,24 @@ class CrossBorderController extends Controller
     public function show(Request $request, $id)
     {
         $transfer = CrossBorderTransfer::where('org_id', $request->user()->org_id)->findOrFail($id);
+
         return response()->json(['data' => $transfer]);
     }
 
     public function update(Request $request, $id)
     {
         $transfer = CrossBorderTransfer::where('org_id', $request->user()->org_id)->findOrFail($id);
-        $transfer->update($request->all());
-        return response()->json(['message' => 'Data transfer berhasil diperbarui', 'data' => $transfer]);
+        $data = $request->validate($this->writeRules(true));
+        $transfer->update($data);
+
+        return response()->json(['message' => 'Data transfer berhasil diperbarui', 'data' => $transfer->fresh()]);
     }
 
     public function destroy(Request $request, $id)
     {
         $transfer = CrossBorderTransfer::where('org_id', $request->user()->org_id)->findOrFail($id);
         $transfer->delete();
+
         return response()->json(['message' => 'Data transfer berhasil dihapus']);
     }
 
@@ -59,6 +73,7 @@ class CrossBorderController extends Controller
     {
         $transfers = CrossBorderTransfer::onlyTrashed()->where('org_id', $request->user()->org_id)
             ->orderBy('deleted_at', 'desc')->get();
+
         return response()->json($transfers);
     }
 
@@ -66,6 +81,7 @@ class CrossBorderController extends Controller
     {
         $transfer = CrossBorderTransfer::onlyTrashed()->where('org_id', $request->user()->org_id)->findOrFail($id);
         $transfer->restore();
+
         return response()->json(['message' => 'Data transfer berhasil dipulihkan']);
     }
 
@@ -73,76 +89,227 @@ class CrossBorderController extends Controller
     {
         $transfer = CrossBorderTransfer::onlyTrashed()->where('org_id', $request->user()->org_id)->findOrFail($id);
         $transfer->forceDelete();
+
         return response()->json(['message' => 'Data transfer dihapus permanen']);
     }
 
     /**
-     * Conduct Transfer Impact Assessment (TIA) via AI
+     * Conduct Transfer Impact Assessment (TIA).
+     *
+     * Two modes — both fully functional:
+     *  - mode=manual: skor + safeguards + legal_basis dihitung dari jawaban form
+     *    (rubric Pasal 56 UU PDP). Selalu jalan, no AI dependency.
+     *  - mode=ai (default if credits available): jawaban dianalisa AI untuk skor
+     *    + rekomendasi safeguards + recommended legal basis. Fallback ke manual
+     *    rubric kalau AI gagal/error/credits habis — user TIDAK kehilangan TIA.
+     *
+     * Dipanggil berulang untuk re-assess.
      */
     public function assessTIA(Request $request, $id)
     {
         $user = $request->user();
         $transfer = CrossBorderTransfer::where('org_id', $user->org_id)->findOrFail($id);
 
-        $request->validate([
+        $validated = $request->validate([
             'tia_answers' => 'required|array',
+            'mode' => 'nullable|in:manual,ai,auto',
+            // Manual fields — used in manual mode OR as fallback when AI fails
+            'manual_score' => 'nullable|integer|min:0|max:100',
+            'manual_risk_level' => 'nullable|in:'.implode(',', self::RISK_LEVELS),
+            'manual_safeguards' => 'nullable|array',
+            'manual_safeguards.*' => 'string|max:300',
+            'manual_legal_basis' => 'nullable|in:'.implode(',', self::LEGAL_BASES),
         ]);
 
-        $answers = $request->tia_answers;
-        $hasAi = $user->organization->ai_credits_remaining > 0;
-        
-        $score = 50;
-        $riskLevel = 'medium';
-        $summary = 'TIA dilakukan secara manual atau tanpa asisten AI.';
-        $safeguards = [];
-        $legalBasisRecommended = null;
+        $answers = $validated['tia_answers'];
+        $mode = $validated['mode'] ?? 'auto';
+        $hasCredits = ($user->organization->ai_credits_remaining ?? 0) > 0;
+        $useAi = $mode === 'ai' || ($mode === 'auto' && $hasCredits);
 
-        if ($hasAi) {
+        $result = null;
+        $aiUsed = false;
+        $aiError = null;
+
+        if ($useAi && $hasCredits) {
             try {
-                $vendorData = ['tia_answers' => $answers, 'transfer_purpose' => $transfer->transfer_purpose];
                 $aiService = (new AiService($user->org_id))->setLocale($user->locale ?? 'id');
-                $result = $aiService->vendorTia($vendorData, $transfer->destination_country);
+                $aiOut = $aiService->vendorTia(
+                    ['tia_answers' => $answers, 'transfer_purpose' => $transfer->transfer_purpose],
+                    $transfer->destination_country
+                );
 
-                if ($result) {
-                    $score = isset($result['tia_score']) ? (int)$result['tia_score'] : 50;
-                    
-                    if ($score >= 85) $riskLevel = 'low';
-                    elseif ($score >= 65) $riskLevel = 'medium';
-                    elseif ($score >= 40) $riskLevel = 'high';
-                    else $riskLevel = 'critical';
-
-                    $legalBasisRecommended = $result['legal_basis_recommended'] ?? null;
-                    $safeguards = $result['safeguard_recommendations'] ?? [];
-                    $summary = json_encode(['legal_basis' => $legalBasisRecommended, 'safeguards' => $safeguards]);
-
+                if ($aiOut && isset($aiOut['tia_score'])) {
+                    $score = (int) $aiOut['tia_score'];
+                    $result = [
+                        'score' => $score,
+                        'risk_level' => $this->scoreToRiskLevel($score),
+                        'safeguards' => $aiOut['safeguard_recommendations'] ?? [],
+                        'legal_basis' => $aiOut['legal_basis_recommended'] ?? null,
+                        'source' => 'ai',
+                    ];
                     $user->organization->decrement('ai_credits_remaining', 1);
+                    $aiUsed = true;
                 }
-            } catch (\Exception $e) {
-                \Illuminate\Support\Facades\Log::error('AI TIA Assessment failed: ' . $e->getMessage());
+            } catch (\Throwable $e) {
+                $aiError = $e->getMessage();
+                Log::warning('AI TIA failed, falling back to manual rubric: '.$aiError);
             }
-        } else {
-            // Manual flow fallback if no AI or disabled
-            $score = $request->input('manual_score', 50);
-            $riskLevel = $request->input('manual_risk_level', 'medium');
-            $safeguards = $request->input('manual_safeguards', []);
-            $summary = json_encode(['legal_basis' => 'Standard Contractual Clauses (SCCs) (Manual)', 'safeguards' => $safeguards]);
+        }
+
+        // Manual fallback OR explicit manual mode
+        if ($result === null) {
+            $result = $this->manualTia($validated, $transfer, $answers);
+        }
+
+        // Preserve user-supplied safeguards if provided (don't let AI overwrite explicit input)
+        if (! empty($validated['manual_safeguards'])) {
+            $result['safeguards'] = $validated['manual_safeguards'];
+        }
+        if (! empty($validated['manual_legal_basis'])) {
+            $result['legal_basis'] = $validated['manual_legal_basis'];
         }
 
         $transfer->update([
             'tia_answers' => $answers,
-            'risk_score' => $score,
-            'risk_level' => $riskLevel,
-            'tia_summary' => $summary,
-            'safeguards' => !empty($safeguards) ? $safeguards : $transfer->safeguards,
-            'legal_basis' => $legalBasisRecommended ?: $transfer->legal_basis,
-            'status' => ($riskLevel === 'high' || $riskLevel === 'critical') ? 'pending' : 'approved',
-            'approved_at' => ($riskLevel === 'low' || $riskLevel === 'medium') ? now() : null,
+            'risk_score' => $result['score'],
+            'risk_level' => $result['risk_level'],
+            'tia_summary' => json_encode([
+                'source' => $result['source'],
+                'legal_basis' => $result['legal_basis'],
+                'safeguards' => $result['safeguards'],
+                'assessed_at' => now()->toIso8601String(),
+                'ai_error' => $aiError,
+            ]),
+            'safeguards' => ! empty($result['safeguards']) ? $result['safeguards'] : ($transfer->safeguards ?? []),
+            'legal_basis' => $result['legal_basis'] ?: $transfer->legal_basis,
+            'status' => in_array($result['risk_level'], ['high', 'critical'], true) ? 'pending' : 'approved',
+            'approved_at' => in_array($result['risk_level'], ['low', 'medium'], true) ? now() : null,
             'review_due_at' => now()->addYear(),
         ]);
 
         return response()->json([
-            'message' => 'Transfer Impact Assessment berhasil diselesaikan.',
-            'data' => $transfer
+            'message' => $aiUsed
+                ? 'Transfer Impact Assessment selesai (AI-assisted).'
+                : 'Transfer Impact Assessment selesai (manual rubric).',
+            'data' => $transfer->fresh(),
+            'ai_used' => $aiUsed,
+            'ai_error' => $aiError,
         ]);
+    }
+
+    /**
+     * Deterministic manual TIA — jawaban TIA di-skor pakai rubric tetap supaya
+     * hasilnya konsisten antar pengguna & antar org.
+     *
+     * Skor turun jika:
+     *  - destination country bukan adequacy-listed (UU PDP Pasal 56 ayat 1)
+     *  - data sensitif / spesifik tanpa SCCs/BCR
+     *  - tidak ada DPA / encryption-at-rest
+     *
+     * Skor naik jika:
+     *  - SCCs/BCR/Adequacy decision in place
+     *  - Encryption + access logging + DPIA done
+     */
+    private function manualTia(array $validated, CrossBorderTransfer $transfer, array $answers): array
+    {
+        // Honor explicit manual override score
+        if (isset($validated['manual_score'])) {
+            $score = $validated['manual_score'];
+            $level = $validated['manual_risk_level'] ?? $this->scoreToRiskLevel($score);
+
+            return [
+                'score' => $score,
+                'risk_level' => $level,
+                'safeguards' => $validated['manual_safeguards'] ?? ($transfer->safeguards ?? []),
+                'legal_basis' => $validated['manual_legal_basis'] ?? $transfer->legal_basis,
+                'source' => 'manual',
+            ];
+        }
+
+        // Rubric-based: start at 70 (medium-good), adjust ±
+        $score = 70;
+        $safeguards = $validated['manual_safeguards'] ?? [];
+        $legalBasis = $validated['manual_legal_basis'] ?? $transfer->legal_basis ?? 'none';
+
+        // Legal basis weight
+        $score += match ($legalBasis) {
+            'adequacy', 'bcr' => 15,
+            'sccs', 'contract_necessity' => 10,
+            'consent' => 0,
+            'public_interest', 'vital_interest' => -5,
+            default => -25, // 'none' or invalid
+        };
+
+        // Yes/no rubric from common TIA questions
+        foreach ($answers as $key => $val) {
+            $bool = is_bool($val) ? $val : in_array(strtolower((string) $val), ['yes', 'ya', 'true', '1'], true);
+            if (str_contains($key, 'sensitive') && $bool) {
+                $score -= 15;
+            }
+            if (str_contains($key, 'encryption') && $bool) {
+                $score += 8;
+            }
+            if (str_contains($key, 'dpa') && $bool) {
+                $score += 7;
+            }
+            if (str_contains($key, 'audit') && $bool) {
+                $score += 5;
+            }
+            if (str_contains($key, 'breach_history') && $bool) {
+                $score -= 12;
+            }
+        }
+
+        $score = max(0, min(100, $score));
+
+        return [
+            'score' => $score,
+            'risk_level' => $this->scoreToRiskLevel($score),
+            'safeguards' => $safeguards,
+            'legal_basis' => $legalBasis !== 'none' ? $legalBasis : null,
+            'source' => 'manual',
+        ];
+    }
+
+    private function scoreToRiskLevel(int $score): string
+    {
+        if ($score >= 85) {
+            return 'low';
+        }
+        if ($score >= 65) {
+            return 'medium';
+        }
+        if ($score >= 40) {
+            return 'high';
+        }
+
+        return 'critical';
+    }
+
+    /**
+     * Validation rules shared by store + update.
+     * `$forUpdate=true` → all fields become `sometimes`.
+     */
+    private function writeRules(bool $forUpdate): array
+    {
+        $req = $forUpdate ? 'sometimes' : 'required';
+        $opt = $forUpdate ? 'sometimes|nullable' : 'nullable';
+
+        return [
+            'destination_country' => "{$req}|string|max:100",
+            'destination_entity' => "{$req}|string|max:255",
+            'transfer_purpose' => "{$req}|string|max:2000",
+            'legal_basis' => "{$req}|in:".implode(',', self::LEGAL_BASES),
+            'data_categories' => "{$opt}|array",
+            'data_categories.*' => 'string|max:200',
+            'safeguards' => "{$opt}|array",
+            'safeguards.*' => 'string|max:300',
+            'status' => "{$opt}|in:".implode(',', self::STATUSES),
+            'risk_score' => "{$opt}|integer|min:0|max:100",
+            'risk_level' => "{$opt}|in:".implode(',', self::RISK_LEVELS),
+            'review_due_at' => "{$opt}|date",
+            'approved_at' => "{$opt}|date",
+            'ropa_id' => "{$opt}|uuid",
+        ];
     }
 }
