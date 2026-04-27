@@ -91,6 +91,7 @@ class MenuRegistrySeeder extends Seeder
             ['menu_key' => 'platform-config', 'label' => 'Platform Config', 'href' => '/platform-config', 'icon' => 'Settings', 'section' => 'Platform (Root)', 'sort' => 760, 'roles' => self::PLATFORM_ROOT],
 
             // Superadmin (not root)
+            ['menu_key' => 'landing-admin', 'label' => 'Landing Admin', 'href' => '/landing-admin', 'icon' => 'Globe', 'section' => 'Superadmin', 'sort' => 795, 'roles' => ['root', 'superadmin']],
             ['menu_key' => 'tenant-offboard', 'label' => 'Tenant Offboarding', 'href' => '/tenant-offboard', 'icon' => 'Archive', 'section' => 'Superadmin', 'sort' => 800, 'roles' => self::PLATFORM_SUPERADMIN],
             ['menu_key' => 'license', 'label' => 'License & Billing', 'href' => '/license', 'icon' => 'Key', 'section' => 'Superadmin', 'sort' => 810, 'roles' => self::ADMIN_SUPERADMIN],
             ['menu_key' => 'chat-history', 'label' => 'Master AI Audit', 'href' => '/chat-history', 'icon' => 'MessageSquare', 'section' => 'Superadmin', 'sort' => 820, 'roles' => self::PLATFORM_SUPERADMIN],
