@@ -131,7 +131,10 @@ class PublicLandingController extends Controller
      */
     public function submitLead(Request $request)
     {
-        $rateKey = 'landing-lead:'.$request->ip();
+        $ip = (string) $request->ip();
+
+        // Hard rate-limit (defense-in-depth against bots)
+        $rateKey = 'landing-lead:'.$ip;
         if (RateLimiter::tooManyAttempts($rateKey, 5)) {
             $secs = RateLimiter::availableIn($rateKey);
 
@@ -155,11 +158,34 @@ class PublicLandingController extends Controller
             'utm_campaign' => 'nullable|string|max:120',
         ]);
 
+        $email = strtolower(trim((string) $data['email']));
+
+        // 1 email + 1 IP rule: refuse if either has previously submitted (any intent).
+        // Soft-deleted rows don't count as duplicates.
+        $existingByEmail = LandingLead::query()->whereRaw('LOWER(email) = ?', [$email])->first();
+        if ($existingByEmail) {
+            return response()->json([
+                'error' => 'Email ini sudah mengirim pesan sebelumnya. Tim kami akan menghubungi Anda. Untuk pertanyaan lain, silakan email langsung ke hello@privasimu.com.',
+                'already_submitted' => true,
+                'lead_id' => $existingByEmail->id,
+            ], 409);
+        }
+
+        $existingByIp = LandingLead::query()->where('ip_address', $ip)->first();
+        if ($existingByIp) {
+            return response()->json([
+                'error' => 'Permintaan dari koneksi internet ini sudah pernah diterima. Jika Anda baru, silakan email kami di hello@privasimu.com.',
+                'already_submitted' => true,
+                'lead_id' => $existingByIp->id,
+            ], 409);
+        }
+
         RateLimiter::hit($rateKey, 3600);
 
         $lead = LandingLead::create(array_merge($data, [
+            'email' => $email,
             'source' => 'landing',
-            'ip_address' => $request->ip(),
+            'ip_address' => $ip,
             'user_agent' => substr((string) $request->userAgent(), 0, 500),
             'status' => 'new',
         ]));
