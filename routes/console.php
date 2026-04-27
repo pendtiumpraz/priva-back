@@ -16,3 +16,4 @@ Artisan::command('inspire', function () {
 \Illuminate\Support\Facades\Schedule::command('notifications:digest daily')->dailyAt('08:00');
 \Illuminate\Support\Facades\Schedule::command('notifications:digest weekly')->weeklyOn(1, '08:00'); // Monday 08:00
 \Illuminate\Support\Facades\Schedule::command('dsr:scan-sla')->hourly()->withoutOverlapping();
+\Illuminate\Support\Facades\Schedule::command('consent:prune-cookie-logs')->dailyAt('02:30');
