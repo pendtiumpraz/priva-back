@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\PushExtractToCrmJob;
 use App\Models\ConsentLog;
 use App\Models\ExtractRun;
 use App\Services\TenantContextService;
@@ -85,15 +86,17 @@ class ConsentExtractController extends Controller
             return $this->streamCsv($q, $run);
         }
 
-        // Async target — job dispatch placeholder. Actual CRM connectors arrive
-        // in Phase F. For now we record the intent and return run_id so the
-        // admin UI can poll status.
+        // Async target — dispatch CRM push job. The job re-loads filters from
+        // the run row, resolves credentials per org+provider, calls the
+        // connector, and writes back success/failure counts + status.
+        PushExtractToCrmJob::dispatch($run->id)->afterCommit();
+
         return response()->json([
             'data' => [
                 'run_id' => $run->id,
                 'status' => $run->status,
                 'count' => $count,
-                'note' => 'CRM push connector not yet implemented — Phase F.',
+                'note' => 'Push job dispatched. Poll /api/consent-extract/runs for status.',
             ],
         ], 202);
     }

@@ -659,6 +659,13 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/consent-extract/preview', [\App\Http\Controllers\Api\Admin\ConsentExtractController::class, 'preview'])->middleware('permission:consent,read');
     Route::post('/consent-extract/run', [\App\Http\Controllers\Api\Admin\ConsentExtractController::class, 'run'])->middleware('permission:consent,write');
     Route::get('/consent-extract/runs', [\App\Http\Controllers\Api\Admin\ConsentExtractController::class, 'index'])->middleware('permission:consent,read');
+
+    // Phase F — CRM credentials (per-org, encrypted secrets)
+    Route::get('/crm-credentials', [\App\Http\Controllers\Api\Admin\CrmCredentialController::class, 'index'])->middleware('permission:consent,read');
+    Route::post('/crm-credentials', [\App\Http\Controllers\Api\Admin\CrmCredentialController::class, 'store'])->middleware('permission:consent,write');
+    Route::put('/crm-credentials/{id}', [\App\Http\Controllers\Api\Admin\CrmCredentialController::class, 'update'])->middleware('permission:consent,write')->where('id', '[0-9a-fA-F-]{36}');
+    Route::delete('/crm-credentials/{id}', [\App\Http\Controllers\Api\Admin\CrmCredentialController::class, 'destroy'])->middleware('permission:consent,write')->where('id', '[0-9a-fA-F-]{36}');
+    Route::post('/crm-credentials/{id}/probe', [\App\Http\Controllers\Api\Admin\CrmCredentialController::class, 'probe'])->middleware('permission:consent,write')->where('id', '[0-9a-fA-F-]{36}');
     Route::post('/consent-items', [ConsentItemController::class, 'store'])->middleware('permission:consent,write');
     Route::put('/consent-items/{id}', [ConsentItemController::class, 'update'])->middleware('permission:consent,write');
     Route::delete('/consent-items/{id}', [ConsentItemController::class, 'destroy'])->middleware('permission:consent,write');
