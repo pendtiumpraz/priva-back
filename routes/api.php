@@ -67,6 +67,7 @@ use App\Http\Controllers\Api\RopaLinkController;
 use App\Http\Controllers\Api\RopaTemplateController;
 use App\Http\Controllers\Api\SimulationController;
 use App\Http\Controllers\Api\SsoLoginController;
+use App\Http\Controllers\Api\PlatformStorageSettingsController;
 use App\Http\Controllers\Api\StorageSettingsController;
 use App\Http\Controllers\Api\SystemUpdateController;
 use App\Http\Controllers\Api\TemplateExportController;
@@ -1043,6 +1044,18 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::put('/', [StorageSettingsController::class, 'update']);
         Route::post('/test', [StorageSettingsController::class, 'testConnection']);
         Route::delete('/', [StorageSettingsController::class, 'destroy']);
+    });
+
+    // =============================================
+    // Platform-wide Default Storage (root + superadmin only)
+    // Acts as the fallback for tenants that have not set their own storage.
+    // Resolution order: tenant override → platform default → Laravel default.
+    // =============================================
+    Route::middleware('role.root')->prefix('platform-storage')->group(function () {
+        Route::get('/', [PlatformStorageSettingsController::class, 'show']);
+        Route::put('/', [PlatformStorageSettingsController::class, 'update']);
+        Route::post('/test', [PlatformStorageSettingsController::class, 'testConnection']);
+        Route::delete('/', [PlatformStorageSettingsController::class, 'destroy']);
     });
 
     // =============================================

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AppSetting;
 use App\Models\Organization;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\UploadedFile;
@@ -12,29 +13,40 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class TenantStorageService
 {
     /**
-     * Resolve the filesystem disk for a given tenant.
-     * If tenant has custom storage config, creates an on-the-fly disk.
-     * Otherwise, falls back to the server default disk.
+     * Resolve the filesystem disk for a given tenant via 3-layer fallback:
+     *   1. Tenant override (organizations.storage_driver + storage_config)
+     *   2. Platform default (app_settings: platform.storage.driver + .config)
+     *   3. Laravel default disk (config('filesystems.default'))
+     *
+     * Files are always written under `tenants/{$org->id}/` prefix regardless
+     * of which layer resolved — that keeps cross-tenant isolation when layers
+     * 2 & 3 share a single bucket/disk between tenants.
      */
     public function getDisk(Organization $org): FilesystemAdapter
     {
-        if (!$org->storage_driver || !$org->storage_config) {
-            return Storage::disk(config('filesystems.default'));
+        // Layer 1: tenant override
+        if ($org->storage_driver && $org->storage_config) {
+            $config = $this->decryptConfig($org->storage_config, "org {$org->id}");
+            if ($config !== null) {
+                $disk = $this->buildDisk($org->storage_driver, $config);
+                if ($disk !== null) return $disk;
+            }
         }
 
-        try {
-            $config = json_decode(Crypt::decryptString($org->storage_config), true);
-        } catch (\Exception $e) {
-            \Log::warning("TenantStorage: Failed to decrypt config for org {$org->id}, falling back to default.");
-            return Storage::disk(config('filesystems.default'));
-        }
+        // Layer 2: platform default
+        $platformDisk = $this->resolvePlatformDisk();
+        if ($platformDisk !== null) return $platformDisk;
 
-        if (!$config || !is_array($config)) {
-            return Storage::disk(config('filesystems.default'));
-        }
+        // Layer 3: Laravel default disk
+        return Storage::disk(config('filesystems.default'));
+    }
 
-        $driver = $org->storage_driver;
-
+    /**
+     * Build a Flysystem disk on-the-fly from a driver + raw config array.
+     * Returns null if driver is unknown so caller can fall through.
+     */
+    private function buildDisk(string $driver, array $config): ?FilesystemAdapter
+    {
         $diskConfig = match ($driver) {
             's3', 'minio', 'do_spaces' => [
                 'driver' => 's3',
@@ -56,11 +68,73 @@ class TenantStorageService
             default => null,
         };
 
-        if (!$diskConfig) {
-            return Storage::disk(config('filesystems.default'));
-        }
+        if (!$diskConfig) return null;
 
         return Storage::build($diskConfig);
+    }
+
+    /**
+     * Decrypt + decode a stored config blob. Returns null on failure.
+     */
+    private function decryptConfig(string $encrypted, string $contextLabel = ''): ?array
+    {
+        try {
+            $config = json_decode(Crypt::decryptString($encrypted), true);
+        } catch (\Exception $e) {
+            \Log::warning("TenantStorage: Failed to decrypt config ({$contextLabel}); falling through.");
+            return null;
+        }
+        return is_array($config) ? $config : null;
+    }
+
+    /**
+     * Resolve platform-level storage settings to a disk, or null if unset/unusable.
+     * Cached per-request via static map so concurrent calls within the same
+     * request don't repeatedly hit AppSetting + Crypt.
+     */
+    private function resolvePlatformDisk(): ?FilesystemAdapter
+    {
+        static $cache = null;
+        if ($cache !== null) return $cache === false ? null : $cache;
+
+        $driver = AppSetting::get('platform.storage.driver');
+        $configRaw = AppSetting::get('platform.storage.config');
+        if (!$driver || !$configRaw || $driver === 'default') {
+            $cache = false;
+            return null;
+        }
+
+        $config = $this->decryptConfig($configRaw, 'platform');
+        if ($config === null) {
+            $cache = false;
+            return null;
+        }
+
+        $disk = $this->buildDisk($driver, $config);
+        $cache = $disk ?: false;
+        return $disk;
+    }
+
+    /**
+     * Whether the resolved disk for this org points at cloud storage (S3/GCS/etc),
+     * considering the 3-layer fallback. Used to decide if a cloud-style download
+     * to temp file is required for local-fs operations (PhpWord/OCR/etc).
+     */
+    private function resolvedDriver(Organization $org): string
+    {
+        if ($org->storage_driver && $org->storage_config) {
+            return $org->storage_driver;
+        }
+        $platformDriver = AppSetting::get('platform.storage.driver');
+        if ($platformDriver && $platformDriver !== 'default') {
+            return $platformDriver;
+        }
+        return 'local';
+    }
+
+    private function isCloudDriver(string $driver): bool
+    {
+        return in_array($driver, ['s3', 'minio', 'do_spaces', 'gcs'], true);
     }
 
     /**
@@ -82,15 +156,19 @@ class TenantStorageService
      * Resolve a URL-generating disk for a tenant. Used for assets that must
      * be web-accessible (logos, watermarks, cover images).
      *
-     * - If tenant has cloud config (S3/MinIO/GCS): use that (always URL-capable).
-     * - Otherwise: fall back to Laravel's `public` disk (served via storage:link).
-     *   NOT `filesystems.default` (usually `local` which has no public URL).
+     * 3-layer fallback (mirrors getDisk):
+     *   1. Tenant cloud config → always URL-capable
+     *   2. Platform cloud config → always URL-capable
+     *   3. Laravel `public` disk (served via storage:link). NOT `local` —
+     *      local has no public URL.
      */
     public function getPublicDisk(Organization $org): FilesystemAdapter
     {
         if ($org->storage_driver && $org->storage_config) {
             return $this->getDisk($org);
         }
+        $platformDisk = $this->resolvePlatformDisk();
+        if ($platformDisk !== null) return $platformDisk;
         return Storage::disk('public');
     }
 
@@ -132,9 +210,9 @@ class TenantStorageService
      */
     public function storeTenantPrivateFile(Organization $org, UploadedFile $file, string $directory, ?string $filename = null): array
     {
-        $disk = $org->storage_driver && $org->storage_config
-            ? $this->getDisk($org)
-            : Storage::disk('local');
+        // Use 3-layer resolution. If neither tenant nor platform configured cloud
+        // storage, the resolved disk is the Laravel default (typically `local`).
+        $disk = $this->getDisk($org);
 
         $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'bin');
         $name = $filename ?: (pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME) . '_' . bin2hex(random_bytes(4)) . '.' . $ext);
@@ -146,7 +224,7 @@ class TenantStorageService
 
         return [
             'path'   => $path,
-            'driver' => $org->storage_driver ?: 'local',
+            'driver' => $this->resolvedDriver($org),
         ];
     }
 
@@ -175,7 +253,9 @@ class TenantStorageService
         }
 
         $disk = $this->getDisk($org);
-        $usesCloud = $org->storage_driver && in_array($org->storage_driver, ['s3', 'minio', 'do_spaces', 'gcs'], true);
+        // Resolved driver respects 3-layer fallback — platform-level cloud
+        // counts as "uses cloud" even when tenant has no override.
+        $usesCloud = $this->isCloudDriver($this->resolvedDriver($org));
 
         if (!$usesCloud) {
             $absolute = $disk->path($path);
@@ -239,41 +319,77 @@ class TenantStorageService
 
     /**
      * Check if tenant storage is properly configured and accessible.
+     * Reports which layer is in effect (tenant override / platform default / server default).
      */
     public function testConnection(Organization $org): array
     {
-        if (!$org->storage_driver || !$org->storage_config) {
-            return ['success' => true, 'message' => 'Menggunakan storage default server', 'driver' => 'default'];
+        $resolved = $this->resolvedDriver($org);
+        $hasTenantOverride = $org->storage_driver && $org->storage_config;
+        $hasPlatformDefault = !$hasTenantOverride && AppSetting::get('platform.storage.driver') && AppSetting::get('platform.storage.driver') !== 'default';
+
+        // No cloud anywhere — using Laravel default disk (local/public).
+        if ($resolved === 'local') {
+            return ['success' => true, 'message' => 'Menggunakan storage default server (Laravel local)', 'driver' => 'default', 'layer' => 'server-default'];
         }
 
         try {
             $disk = $this->getDisk($org);
             $testPath = "tenants/{$org->id}/.connection_test";
 
-            // Write test file
             $disk->put($testPath, 'privasimu_connection_test_' . now()->toIso8601String());
-
-            // Read it back
             $contents = $disk->get($testPath);
-
-            // Clean up
             $disk->delete($testPath);
+
+            $layer = $hasTenantOverride ? 'tenant-override' : ($hasPlatformDefault ? 'platform-default' : 'server-default');
 
             if ($contents && str_starts_with($contents, 'privasimu_connection_test_')) {
                 return [
                     'success' => true,
-                    'message' => "Berhasil terhubung ke {$org->storage_driver}",
-                    'driver' => $org->storage_driver,
+                    'message' => "Berhasil terhubung ke {$resolved}" . ($layer === 'platform-default' ? ' (default platform)' : ''),
+                    'driver' => $resolved,
+                    'layer' => $layer,
                 ];
             }
 
-            return ['success' => false, 'message' => 'File test berhasil ditulis tapi gagal dibaca kembali.'];
+            return ['success' => false, 'message' => 'File test berhasil ditulis tapi gagal dibaca kembali.', 'layer' => $layer];
         } catch (\Exception $e) {
             return [
                 'success' => false,
                 'message' => 'Gagal terhubung: ' . $e->getMessage(),
-                'driver' => $org->storage_driver,
+                'driver' => $resolved,
             ];
+        }
+    }
+
+    /**
+     * Test an arbitrary driver+config combo without persisting it. Used by
+     * the per-tenant and platform-level "Test Connection" buttons before save.
+     * The probe writes to a transient `_probe/...` path so it can't collide
+     * with real tenant files.
+     */
+    public function testConnectionWithConfig(string $driver, array $config): array
+    {
+        if ($driver === 'default') {
+            return ['success' => true, 'message' => 'Driver default — tidak perlu test koneksi', 'driver' => 'default'];
+        }
+
+        try {
+            $disk = $this->buildDisk($driver, $config);
+            if ($disk === null) {
+                return ['success' => false, 'message' => "Driver '{$driver}' tidak dikenali", 'driver' => $driver];
+            }
+
+            $testPath = '_probe/connection_test_' . bin2hex(random_bytes(4));
+            $disk->put($testPath, 'privasimu_connection_test_' . now()->toIso8601String());
+            $contents = $disk->get($testPath);
+            $disk->delete($testPath);
+
+            if ($contents && str_starts_with($contents, 'privasimu_connection_test_')) {
+                return ['success' => true, 'message' => "Berhasil terhubung ke {$driver}", 'driver' => $driver];
+            }
+            return ['success' => false, 'message' => 'File test berhasil ditulis tapi gagal dibaca kembali.', 'driver' => $driver];
+        } catch (\Throwable $e) {
+            return ['success' => false, 'message' => 'Gagal terhubung: ' . $e->getMessage(), 'driver' => $driver];
         }
     }
 
@@ -282,6 +398,7 @@ class TenantStorageService
      */
     public function getUsageSummary(Organization $org): array
     {
+        $resolved = $this->resolvedDriver($org);
         try {
             $disk = $this->getDisk($org);
             $prefix = "tenants/{$org->id}/";
@@ -296,14 +413,14 @@ class TenantStorageService
                 'file_count' => count($files),
                 'total_size_bytes' => $totalSize,
                 'total_size_human' => $this->formatBytes($totalSize),
-                'driver' => $org->storage_driver ?? 'default',
+                'driver' => $resolved,
             ];
         } catch (\Exception $e) {
             return [
                 'file_count' => 0,
                 'total_size_bytes' => 0,
                 'total_size_human' => '0 B',
-                'driver' => $org->storage_driver ?? 'default',
+                'driver' => $resolved,
                 'error' => $e->getMessage(),
             ];
         }
