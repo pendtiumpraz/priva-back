@@ -44,6 +44,31 @@ class ConsentLogController extends Controller
             $query->where('user_identifier', $request->user_identifier);
         }
 
+        // Phase B filters for the new identifiable schema:
+        if ($request->filled('email')) {
+            $query->where('email', strtolower(trim($request->email)));
+        }
+        if ($request->filled('source_form')) {
+            $query->where('source_form', $request->source_form);
+        }
+        if ($request->filled('country')) {
+            $query->where('ip_country', strtoupper($request->country));
+        }
+        if ($request->filled('date_from')) {
+            $query->where('created_at', '>=', $request->date_from);
+        }
+        if ($request->filled('date_to')) {
+            $query->where('created_at', '<=', $request->date_to);
+        }
+        // purpose_keys may arrive as comma-separated string OR array (from FE)
+        $purposes = $request->input('purpose_keys');
+        if ($purposes) {
+            $list = is_array($purposes) ? $purposes : explode(',', (string) $purposes);
+            foreach (array_filter($list) as $p) {
+                $query->where('purpose_keys', 'like', '%"'.addslashes(trim($p)).'"%');
+            }
+        }
+
         return response()->json([
             'data' => $query->orderBy('created_at', 'desc')->with('collectionPoint')->take(1000)->get(),
         ]);
@@ -186,14 +211,46 @@ class ConsentLogController extends Controller
             }
         }
 
+        // Phase B: capture extended identifiable fields when present.
+        // Backwards-compat: legacy clients still send only user_identifier.
+        // For app_consent kind, email is recommended (FE will require).
+        $email = $request->input('email');
+        $isEmailIdentifier = filter_var($request->user_identifier, FILTER_VALIDATE_EMAIL);
+        if (! $email && $isEmailIdentifier) {
+            $email = strtolower(trim($request->user_identifier));
+        }
+
+        // Denormalize purpose_keys from consented_items (keys where value=true)
+        $consented = $request->consented_items ?? [];
+        $purposeKeys = [];
+        foreach ($consented as $k => $v) {
+            if ($v === true || $v === 'true' || $v === 1) {
+                $purposeKeys[] = is_string($k) ? $k : (string) $k;
+            }
+        }
+
+        $ua = \App\Services\Consent\UserAgentParser::parse($request->userAgent());
+        $geo = \App\Services\Consent\IpGeoResolver::resolve($request->ip());
+
         $log = ConsentLog::create([
             'org_id' => $collection->org_id,
             'collection_id' => $collection->id,
             'user_identifier' => $request->user_identifier,
-            'consented_items' => $request->consented_items,
+            'email' => $email ? strtolower($email) : null,
+            'name' => $request->input('name'),
+            'phone' => $request->input('phone'),
+            'external_user_ref' => $request->input('external_user_ref'),
+            'consented_items' => $consented,
+            'purpose_keys' => $purposeKeys,
             'policy_version' => $request->policy_version ?? '1.0',
+            'source_form' => $request->input('source_form'),
             'ip_address' => $request->ip(),
-            'user_agent' => $request->userAgent(),
+            'ip_country' => $geo['country'],
+            'user_agent' => substr((string) $request->userAgent(), 0, 500),
+            'browser_name' => $ua['browser_name'],
+            'browser_version' => $ua['browser_version'],
+            'os_name' => $ua['os_name'],
+            'device_type' => $ua['device_type'],
         ]);
 
         // records_count moved out of the hot path — scheduled command

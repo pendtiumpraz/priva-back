@@ -107,6 +107,11 @@ Route::middleware('throttle:api')->group(function () {
     Route::get('/public/consent/config', [ConsentLogController::class, 'config']);
     Route::get('/public/consent/state', [ConsentLogController::class, 'state']);
 
+    // Public Cookie Banner API v2 (Phase B — anonymous visitor capture)
+    Route::post('/v2/cookies/capture', [\App\Http\Controllers\Api\V2\CookieCaptureController::class, 'capture']);
+    Route::get('/v2/cookies/state', [\App\Http\Controllers\Api\V2\CookieCaptureController::class, 'state']);
+    Route::post('/v2/cookies/withdraw', [\App\Http\Controllers\Api\V2\CookieCaptureController::class, 'withdraw']);
+
     // =============================================
     // Public DSR endpoints (untuk embed widget di klien websites)
     // =============================================
@@ -643,6 +648,17 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     });
 
     Route::get('/consent-logs', [ConsentLogController::class, 'index'])->middleware('permission:consent,read');
+
+    // Phase B — Cookie Logs admin (tenant-scoped, separate from consent_logs)
+    Route::get('/cookie-logs', [\App\Http\Controllers\Api\Admin\CookieLogAdminController::class, 'index'])->middleware('permission:consent,read');
+    Route::get('/cookie-logs/stats', [\App\Http\Controllers\Api\Admin\CookieLogAdminController::class, 'stats'])->middleware('permission:consent,read');
+    Route::get('/cookie-logs/{id}', [\App\Http\Controllers\Api\Admin\CookieLogAdminController::class, 'show'])->middleware('permission:consent,read')->where('id', '[0-9a-fA-F-]{36}');
+    Route::delete('/cookie-logs/{id}', [\App\Http\Controllers\Api\Admin\CookieLogAdminController::class, 'destroy'])->middleware('permission:consent,write')->where('id', '[0-9a-fA-F-]{36}');
+
+    // Phase B — Consent Extract (CRM extractor wizard backbone)
+    Route::post('/consent-extract/preview', [\App\Http\Controllers\Api\Admin\ConsentExtractController::class, 'preview'])->middleware('permission:consent,read');
+    Route::post('/consent-extract/run', [\App\Http\Controllers\Api\Admin\ConsentExtractController::class, 'run'])->middleware('permission:consent,write');
+    Route::get('/consent-extract/runs', [\App\Http\Controllers\Api\Admin\ConsentExtractController::class, 'index'])->middleware('permission:consent,read');
     Route::post('/consent-items', [ConsentItemController::class, 'store'])->middleware('permission:consent,write');
     Route::put('/consent-items/{id}', [ConsentItemController::class, 'update'])->middleware('permission:consent,write');
     Route::delete('/consent-items/{id}', [ConsentItemController::class, 'destroy'])->middleware('permission:consent,write');
