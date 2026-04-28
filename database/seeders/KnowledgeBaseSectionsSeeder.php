@@ -489,6 +489,220 @@ KB
             ],
         ];
 
+        // Flow-specific knowledge base entries — appended via merge so the
+        // existing module overview entries (consent / dsr) keep their
+        // sort_order, and the *_flow entries become deep-dive companions.
+        $sections = array_merge($sections, [
+            [
+                'module_key' => 'consent_flow',
+                'title' => 'Consent Flow — End-to-End',
+                'sort_order' => 71,
+                'keywords' => 'flow,consent,cookie,banner,form,register,embed,api,webhook,visitor,visitor_id,email,session,withdraw,revoke,uu pdp,pasal 22',
+                'content' => <<<'KB'
+# Consent Flow — End-to-End
+
+Privasimu Nexus bifurkasi consent jadi DUA surface yang berbeda:
+
+| Surface | Embed | Audience | Tabel Log |
+|---|---|---|---|
+| Cookie Banner | `cookie-banner.js` (homepage) | Anonymous visitor | `cookie_logs` |
+| Consent Form | `consent-form.js` (register/checkout) | Identifiable user (email) | `consent_logs` |
+
+## A. Cookie Banner Flow (anonymous, homepage)
+
+### Setup admin
+1. Buka **Consent Management → Tambah Collection** → pilih `kind: cookie_banner`
+2. Tab **Cookie Items** → Tambah item / pakai template cepat (Essential, Analytics, Marketing, Functional, Performance)
+3. Pasang embed di `<head>` homepage:
+   ```html
+   <script src="https://your-domain.com/cookie-banner.js"
+           data-collection-id="CNT-XXXX"
+           data-position="bottom-right"
+           data-locale="id"
+           defer></script>
+   ```
+
+### Runtime flow
+1. Visitor buka homepage → `cookie-banner.js` di-execute
+2. Script generate `visitor_id` UUID (localStorage `privasimu_visitor_id`)
+3. Cek `localStorage.privasimu_cookie_choice_<id>` → kalau ada, banner skip (already chose)
+4. Fetch `/api/public/consent/config?collection_id=...&category_filter=cookie` → dapat list cookie items
+5. Render banner bottom-right dengan **master toggle "Setujui Semua"** + link "Lihat Detail"
+6. User pilih:
+   - **Accept All** → semua optional ON, post ke API
+   - **Reject All** → optional OFF (necessary tetap ON)
+   - **Customize** → expand list, toggle individual
+7. POST `/api/v2/cookies/capture` dengan: `visitor_id`, `choices`, `collection_id`, `policy_version`, `page_url`, `referrer`
+8. Backend parse UA → `browser_name/version/os/device_type`, IP geo → `ip_country/city`
+9. Insert ke `cookie_logs` dengan `expires_at = now + 90 days` (retention default)
+10. localStorage save → banner hilang sampai kadaluarsa
+
+### Withdraw / Re-open
+- User klik "Manage Cookies" di footer (preference center) atau panggil `window.PrivasimuCookies.reopen()`
+- Banner muncul lagi dengan state terakhir, user bisa ubah → POST `/api/v2/cookies/withdraw` (atau capture ulang)
+
+### Auto-cleanup
+- `php artisan consent:prune-cookie-logs` (scheduled daily 02:30) → hard-delete rows > 90 hari
+
+## B. Consent Form Flow (identifiable, register page)
+
+### Setup admin
+1. Sama collection (atau buat baru `kind: app_consent`)
+2. Tab **Consent Items** → Tambah item / pakai template (Newsletter, WhatsApp, Profiling, dll)
+3. Pasang embed di register page:
+   ```html
+   <form id="register-form">
+     <input name="email" type="email" required>
+     <input name="name" required>
+     <input name="phone">
+     <div data-privasimu-consent></div>
+     <button type="submit">Daftar</button>
+   </form>
+   <script src="https://your-domain.com/consent-form.js"
+           data-collection-id="CNT-XXXX"
+           data-form-selector="#register-form"
+           data-source-form="register"
+           defer></script>
+   ```
+
+### Runtime flow
+1. User isi form register
+2. `consent-form.js` inject **master toggle "Setujui Semua"** + link "Lihat Detail" di `<div data-privasimu-consent>`
+3. Default: master OFF, list collapsed. Required items pre-checked + disabled.
+4. User klik "Daftar" → script intercept submit
+5. Read fields: email, name, phone (dari form input by name)
+6. Read consent choices dari toggles
+7. POST `/api/public/consent/capture` dengan: `email, name, phone, source_form, consented_items, purpose_keys[]`
+8. Backend parse UA + IP geo, denormalize purpose_keys, insert ke `consent_logs`
+9. Sukses → script call `form.submit()` native → register lanjut
+10. Gagal (409 conflict / 422) → tampil error inline, btn submit re-enable
+
+### 1-email + 1-IP rule
+Backend menolak duplicate submission per email **atau** per IP (lifetime, soft-delete tidak menghitung). Returns 409 dengan `lead_id` yang ada.
+
+### Withdraw
+- User akses Preference Center (URL diberikan klien) atau email link
+- Update consent: POST `/api/public/consent/capture` dengan `consented_items` baru
+- Audit trail tersimpan: timestamp, IP, UA, dari mana request
+
+## C. CRM Extractor Flow
+
+Setelah consent_logs terkumpul, admin bisa:
+1. **Consent Management → Extractor** → filter by purpose_keys (e.g. marketing), date range, source_form
+2. **Preview Count** → live count + 5 sample
+3. **Run** → CSV download (instant) **atau** push async ke HubSpot/Mailchimp/Salesforce/Webhook
+4. Push job → ExtractRun row → CrmCredential resolved → CrmConnector.push() → status update
+5. Audit trail di **Run History** tab
+
+## Referensi
+- UU PDP Pasal 20: Consent harus bebas, spesifik, informatif, eksplisit
+- UU PDP Pasal 22: Subjek dapat tarik consent kapan saja
+- UU PDP Pasal 21–28: Hak subjek data (lihat juga DSR Flow)
+KB
+            ],
+            [
+                'module_key' => 'dsr_flow',
+                'title' => 'DSR Flow — End-to-End (UU PDP Pasal 21–28)',
+                'sort_order' => 61,
+                'keywords' => 'flow,dsr,data subject request,akses,koreksi,hapus,portabilitas,72 jam,deadline,sla,verifikasi,handler,reviewer,approver,pasal 21,pasal 28',
+                'content' => <<<'KB'
+# DSR Flow — End-to-End (UU PDP Pasal 21–28)
+
+DSR (Data Subject Request) adalah permintaan subjek data untuk meng-eksekusi haknya per UU PDP Pasal 5–10. Privasimu wajibkan respons dalam **72 jam (3 hari kerja)** per Pasal 21–28.
+
+## A. Submission Channels
+
+Subjek dapat submit DSR via:
+1. **Embed widget** di website klien — `dsr-widget.js` di footer/account page
+2. **Form publik** Privasimu — link generated per collection
+3. **Email** ke DPO klien — admin manual create di dashboard
+4. **Backend API** — `POST /api/v1/dsr/submit` dengan API key
+
+## B. Lifecycle (state machine)
+
+```
+[Submitted] → [Verified] → [In Progress] → [Approved/Rejected] → [Fulfilled]
+                ↑                                                       ↓
+            [Awaiting ID]                                        [Audit Logged]
+```
+
+### Step 1: Submission
+- Subjek isi: nama, email, jenis hak, deskripsi, bukti identitas (upload KTP/passport)
+- Sistem auto-generate `DSR-YYYY-NNN`
+- Set `deadline_at = now + 72 hours`
+- Auto-assign ke handler default (configurable per collection)
+- Notif email + WhatsApp ke handler
+
+### Step 2: Verification (optional)
+- Handler review bukti identitas
+- Kalau bukti tidak cukup → kirim challenge (OTP, dokumen tambahan, video selfie)
+- Maks 3× retry → masuk queue manual review (timer pause)
+
+### Step 3: Processing
+- Handler tentukan response sesuai jenis hak:
+  - **Hak Akses** → export ZIP semua data subjek (export-job runner)
+  - **Hak Koreksi** → update field via UI atau API
+  - **Hak Hapus** → cascade delete (soft + hard sesuai retention rule)
+  - **Hak Portabilitas** → JSON struktur portable
+  - **Tarik Consent** → batch update consent_logs status = withdrawn
+- Optional: Reviewer approve sebelum fulfill (Maker–Checker)
+
+### Step 4: Fulfillment
+- Sistem eksekusi action (delete/update/export)
+- Subjek dapat email + URL secure download (untuk akses/portabilitas)
+- Audit trail wrote: kapan, siapa, action apa, bukti
+- Notif close ke subjek
+
+### Step 5: Audit
+- Setiap step tertulis di `audit_logs` dengan actor + timestamp
+- Bukti pemenuhan: PDF report dengan signature + timestamp
+
+## C. Auto-trigger ke modul lain
+
+| DSR Action | Auto-trigger |
+|---|---|
+| Hak Hapus | Cascade ke ROPA (mark archived), Consent (revoke all), Vendor sub-processor (notify) |
+| Tarik Consent | Update `consent_logs.status='withdrawn'`, fire webhook ke CRM klien untuk unsubscribe |
+| Hak Akses | Generate ZIP dari ROPA + Consent + Audit Logs subjek |
+| Hak Portabilitas | Sama dengan akses, format JSON ekspor |
+
+## D. Embed Widget Klien
+
+```html
+<!-- DSR widget di account page klien -->
+<script src="https://your-domain.com/dsr-widget.js"
+        data-collection-id="CNT-XXXX"
+        defer></script>
+<button onclick="window.PrivasimuDSR.openForm()">Kelola Hak Privasi Saya</button>
+```
+
+Widget buka modal dengan: jenis hak (radio), deskripsi (textarea), upload identitas, captcha, submit. POST ke `/api/v1/dsr/submit`.
+
+## E. SLA & Notifikasi
+
+- **H-72 jam**: setiap DSR baru reset clock
+- **H-24 jam**: warning ke handler (email + in-app)
+- **H-0**: alert ke supervisor + DPO; status flagged "OVERDUE"
+- **Pasca-deadline**: jangan ditolak otomatis — handler harus dokumentasi alasan keterlambatan
+
+`php artisan dsr:scan-sla` (scheduled hourly) → check + send notif
+
+## F. Sanksi Non-Compliance
+
+UU PDP Pasal 57:
+- Sanksi administratif: teguran, denda 2% omzet, penghentian pemrosesan, hapus data
+- Pidana Pasal 67–68: penjara maks 6 tahun / denda Rp 6 miliar
+- Perdata: ganti rugi unlimited ke subjek
+
+## Tips
+- Verifikasi identitas adalah CRITICAL — jangan release data tanpa bukti
+- Untuk request "ambigu", tanya klarifikasi via email (jangan tebak intent)
+- Kalau klien tolak request, dokumentasikan alasan (bisnis sah, kewajiban hukum, dll)
+- Backup data sebelum hapus permanen — beberapa kewajiban audit (perpajakan, AML) override hak hapus
+KB
+            ],
+        ]);
+
         foreach ($sections as $section) {
             KnowledgeBaseSection::updateOrCreate(
                 ['module_key' => $section['module_key']],
