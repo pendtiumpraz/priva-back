@@ -90,8 +90,9 @@ class ConsentLogController extends Controller
         $request->validate([
             'collection_id' => 'required|string',
             // category_filter=cookie → only essential/analytics/marketing/functional (anonymous)
+            // category_filter=app    → only NON-cookie items (consent for register/checkout)
             // category_filter=all (default) → semua items active
-            'category_filter' => 'nullable|in:cookie,all',
+            'category_filter' => 'nullable|in:cookie,app,all',
         ]);
 
         $filter = $request->input('category_filter', 'all');
@@ -103,6 +104,10 @@ class ConsentLogController extends Controller
                 $query->where('is_active', true);
                 if ($filter === 'cookie') {
                     $query->whereIn('category', ConsentItem::COOKIE_CATEGORIES);
+                } elseif ($filter === 'app') {
+                    // Consent items = anything that is NOT a cookie category.
+                    // E.g., 'newsletter', 'whatsapp', 'profiling', 'sharing_3p', custom.
+                    $query->whereNotIn('category', ConsentItem::COOKIE_CATEGORIES);
                 }
                 $query->orderByRaw("CASE WHEN category='essential' THEN 0 ELSE 1 END")
                     ->orderBy('title');
