@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrg;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 
 class AiResult extends Model
 {
-    use HasUuids;
+    use HasUuids, BelongsToOrg;
 
     protected $fillable = [
         'org_id', 'user_id', 'feature_type', 'record_id', 'record_type',

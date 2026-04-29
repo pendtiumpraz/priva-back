@@ -9,6 +9,9 @@ class RoleMenuWhitelist extends Model
 {
     use HasUuids;
 
+    /** Pinned to landlord — same as MenuItem. */
+    protected $connection = 'landlord';
+
     protected $table = 'role_menu_whitelist';
 
     protected $fillable = ['menu_id', 'role', 'is_allowed'];

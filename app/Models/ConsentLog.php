@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrg;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -17,7 +18,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class ConsentLog extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory, HasUuids, BelongsToOrg;
 
     protected $fillable = [
         'org_id',

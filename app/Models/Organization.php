@@ -12,6 +12,11 @@ class Organization extends Model
 {
     use HasUuids, SoftDeletes;
 
+    /**
+     * Pinned to landlord — orgs are platform-level metadata.
+     */
+    protected $connection = 'landlord';
+
     protected $fillable = [
         'parent_id', 'org_level',
         'idle_timeout_enabled', 'idle_timeout_minutes', 'name', 'slug', 'industry', 'logo_url', 'privacy_policy_url',
@@ -98,6 +103,27 @@ class Organization extends Model
     public function creditLogs()
     {
         return $this->hasMany(AiCreditLog::class, 'org_id');
+    }
+
+    public function dbPool()
+    {
+        return $this->belongsTo(DatabasePool::class, 'db_pool_id');
+    }
+
+    public function storagePool()
+    {
+        return $this->belongsTo(StoragePool::class, 'storage_pool_id');
+    }
+
+    public function changeRequests()
+    {
+        return $this->hasMany(TenantChangeRequest::class, 'org_id');
+    }
+
+    public function pendingChangeRequests()
+    {
+        return $this->hasMany(TenantChangeRequest::class, 'org_id')
+            ->where('status', TenantChangeRequest::STATUS_PENDING);
     }
 
     protected static function booted()

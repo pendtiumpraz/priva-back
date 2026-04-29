@@ -9,6 +9,9 @@ class MenuItem extends Model
 {
     use HasUuids;
 
+    /** Pinned to landlord — sidebar registry is platform-wide config. */
+    protected $connection = 'landlord';
+
     protected $fillable = [
         'parent_menu_id', 'menu_key', 'label', 'href', 'icon', 'section',
         'sort_order', 'hideable', 'required_packages',

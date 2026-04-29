@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AppSetting;
 use App\Models\Organization;
+use App\Models\StoragePool;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Crypt;
@@ -13,18 +14,21 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class TenantStorageService
 {
     /**
-     * Resolve the filesystem disk for a given tenant via 3-layer fallback:
+     * Resolve the filesystem disk for a given tenant via 4-layer fallback:
      *   1. Tenant override (organizations.storage_driver + storage_config)
-     *   2. Platform default (app_settings: platform.storage.driver + .config)
-     *   3. Laravel default disk (config('filesystems.default'))
+     *   2. Tenant's assigned storage pool (organizations.storage_pool_id)
+     *   3. Default storage pool (storage_pools WHERE is_default = TRUE)
+     *      Falls back to legacy app_settings.platform.storage.* if no
+     *      default pool exists yet (pre-pool-registry installs).
+     *   4. Laravel default disk (config('filesystems.default'))
      *
      * Files are always written under `tenants/{$org->id}/` prefix regardless
      * of which layer resolved — that keeps cross-tenant isolation when layers
-     * 2 & 3 share a single bucket/disk between tenants.
+     * 2-4 share a single bucket/disk between tenants.
      */
     public function getDisk(Organization $org): FilesystemAdapter
     {
-        // Layer 1: tenant override
+        // Layer 1: tenant override (BYOS)
         if ($org->storage_driver && $org->storage_config) {
             $config = $this->decryptConfig($org->storage_config, "org {$org->id}");
             if ($config !== null) {
@@ -33,12 +37,83 @@ class TenantStorageService
             }
         }
 
-        // Layer 2: platform default
-        $platformDisk = $this->resolvePlatformDisk();
+        // Layer 2: tenant's assigned pool
+        if ($org->storage_pool_id) {
+            $disk = $this->resolvePoolDisk($org->storage_pool_id);
+            if ($disk !== null) return $disk;
+        }
+
+        // Layer 3: default storage pool, or legacy platform.storage.*
+        $platformDisk = $this->resolveDefaultPoolDisk() ?? $this->resolvePlatformDisk();
         if ($platformDisk !== null) return $platformDisk;
 
-        // Layer 3: Laravel default disk
+        // Layer 4: Laravel default disk
         return Storage::disk(config('filesystems.default'));
+    }
+
+    /**
+     * Build a disk from a specific StoragePool by id. Used by Layer 2
+     * (tenant's assigned pool). Returns null if pool is missing/disabled.
+     */
+    private function resolvePoolDisk(string $poolId): ?FilesystemAdapter
+    {
+        static $cache = [];
+        if (array_key_exists($poolId, $cache)) {
+            return $cache[$poolId] ?: null;
+        }
+
+        $pool = StoragePool::query()
+            ->where('id', $poolId)
+            ->where('status', StoragePool::STATUS_ACTIVE)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$pool) {
+            $cache[$poolId] = false;
+            return null;
+        }
+
+        $diskConfig = $pool->toDiskConfig();
+        if (empty($diskConfig)) {
+            $cache[$poolId] = false;
+            return null;
+        }
+
+        $disk = Storage::build($diskConfig);
+        $cache[$poolId] = $disk;
+        return $disk;
+    }
+
+    /**
+     * Resolve the platform-default storage pool (the row with is_default = true).
+     * Layer 3 of the fallback. Returns null if no default pool is configured —
+     * caller will then try the legacy app_settings path.
+     */
+    private function resolveDefaultPoolDisk(): ?FilesystemAdapter
+    {
+        static $cache = null;
+        if ($cache !== null) return $cache === false ? null : $cache;
+
+        $pool = StoragePool::query()
+            ->where('is_default', true)
+            ->where('status', StoragePool::STATUS_ACTIVE)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$pool) {
+            $cache = false;
+            return null;
+        }
+
+        $diskConfig = $pool->toDiskConfig();
+        if (empty($diskConfig)) {
+            $cache = false;
+            return null;
+        }
+
+        $disk = Storage::build($diskConfig);
+        $cache = $disk;
+        return $disk;
     }
 
     /**
@@ -117,7 +192,7 @@ class TenantStorageService
 
     /**
      * Whether the resolved disk for this org points at cloud storage (S3/GCS/etc),
-     * considering the 3-layer fallback. Used to decide if a cloud-style download
+     * considering the 4-layer fallback. Used to decide if a cloud-style download
      * to temp file is required for local-fs operations (PhpWord/OCR/etc).
      */
     private function resolvedDriver(Organization $org): string
@@ -125,6 +200,22 @@ class TenantStorageService
         if ($org->storage_driver && $org->storage_config) {
             return $org->storage_driver;
         }
+        // Tenant's assigned pool
+        if ($org->storage_pool_id) {
+            $pool = StoragePool::query()->where('id', $org->storage_pool_id)->first();
+            if ($pool && $pool->status === StoragePool::STATUS_ACTIVE) {
+                return $pool->driver;
+            }
+        }
+        // Default pool
+        $defaultPool = StoragePool::query()
+            ->where('is_default', true)
+            ->where('status', StoragePool::STATUS_ACTIVE)
+            ->first();
+        if ($defaultPool) {
+            return $defaultPool->driver;
+        }
+        // Legacy platform.storage.driver
         $platformDriver = AppSetting::get('platform.storage.driver');
         if ($platformDriver && $platformDriver !== 'default') {
             return $platformDriver;

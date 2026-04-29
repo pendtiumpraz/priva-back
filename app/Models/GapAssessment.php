@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrg;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class GapAssessment extends Model
 {
-    use HasUuids, SoftDeletes;
+    use HasUuids, SoftDeletes, BelongsToOrg;
 
     protected $fillable = [
         'org_id', 'regulation_code', 'version', 'overall_score', 'compliance_level',

@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrg;
 use Illuminate\Database\Eloquent\Model;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 
 class AutomationRule extends Model
 {
-    use HasUuids;
+    use HasUuids, BelongsToOrg;
 
     protected $fillable = [
         'org_id', 'rule_type', 'is_active', 'settings'

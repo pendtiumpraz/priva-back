@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrg;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class LiaAssessment extends Model
 {
-    use HasUuids, SoftDeletes;
+    use HasUuids, SoftDeletes, BelongsToOrg;
 
     protected $fillable = [
         'org_id', 'title', 'description', 'processing_activity', 'linked_ropa_id',

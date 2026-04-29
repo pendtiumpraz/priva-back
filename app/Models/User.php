@@ -18,6 +18,13 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, HasUuids, Notifiable, SoftDeletes;
 
     /**
+     * Pinned to landlord — auth + user records live with the platform,
+     * not on tenant-isolated DBs. Without this, queries hit whichever
+     * DB the tenant.db middleware switched to and break auth.
+     */
+    protected $connection = 'landlord';
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var list<string>

@@ -154,7 +154,7 @@ Route::middleware('throttle:api')->group(function () {
 // =============================================
 // Protected Routes (Sanctum)
 // =============================================
-Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
+Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'])->group(function () {
 
     // Auth
     Route::get('/auth/me', [AuthController::class, 'me']);
@@ -1144,7 +1144,7 @@ Route::prefix('v1/consent')->middleware('consent.api_key')->group(function () {
 // Landing Page Admin — gated `role.root` (root + superadmin only)
 // Privasimu's own marketing site management. NOT per-tenant.
 // =============================================
-Route::middleware(['auth:sanctum', 'role.root'])->prefix('admin/landing')->group(function () {
+Route::middleware(['auth:sanctum', 'role.root', 'tenant.context'])->prefix('admin/landing')->group(function () {
     $c = LandingAdminController::class;
 
     // Settings (singleton)

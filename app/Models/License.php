@@ -10,6 +10,9 @@ class License extends Model
 {
     use HasUuids, SoftDeletes;
 
+    /** Pinned to landlord — license records belong to platform, not tenant. */
+    protected $connection = 'landlord';
+
     protected $fillable = [
         'license_key', 'package_type', 'license_type', 'status',
         'org_id', 'org_name', 'domain_whitelist', 'ip_log',

@@ -2,13 +2,14 @@
 namespace App\Models;
 
 use App\Casts\EncryptedString;
+use App\Models\Concerns\BelongsToOrg;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class DsrRequest extends Model
 {
-    use HasUuids, SoftDeletes;
+    use HasUuids, SoftDeletes, BelongsToOrg;
 
     protected $fillable = [
         'org_id', 'app_id', 'request_id', 'request_type', 'requester_name', 'requester_email',

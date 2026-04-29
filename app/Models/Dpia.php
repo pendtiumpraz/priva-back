@@ -1,6 +1,7 @@
 <?php
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrg;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -10,7 +11,7 @@ use App\Models\User;
 
 class Dpia extends Model
 {
-    use HasUuids, SoftDeletes;
+    use HasUuids, SoftDeletes, BelongsToOrg;
 
     protected $fillable = [
         'org_id', 'regulation_code', 'category_id', 'custom_number', 'registration_number',

@@ -5,6 +5,12 @@ use Illuminate\Database\Eloquent\Model;
 
 class AppSetting extends Model
 {
+    /**
+     * Pinned to landlord — global platform config, must be reachable
+     * from any request regardless of which tenant DB is active.
+     */
+    protected $connection = 'landlord';
+
     protected $primaryKey = 'key';
     public $incrementing = false;
     protected $keyType = 'string';

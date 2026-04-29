@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrg;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 
 class AiCreditLog extends Model
 {
-    use HasUuids;
+    use HasUuids, BelongsToOrg;
 
     protected $fillable = [
         'org_id', 'user_id', 'action_type', 'credits_used',

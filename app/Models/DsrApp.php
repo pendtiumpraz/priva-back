@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Casts\EncryptedString;
+use App\Models\Concerns\BelongsToOrg;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -14,7 +15,7 @@ use Illuminate\Support\Str;
  */
 class DsrApp extends Model
 {
-    use HasUuids, SoftDeletes;
+    use HasUuids, SoftDeletes, BelongsToOrg;
 
     protected $fillable = [
         'org_id', 'name', 'app_code', 'description', 'embed_token',

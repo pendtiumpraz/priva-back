@@ -2,13 +2,14 @@
 namespace App\Models;
 
 use App\Casts\EncryptedString;
+use App\Models\Concerns\BelongsToOrg;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class BreachIncident extends Model
 {
-    use HasUuids, SoftDeletes;
+    use HasUuids, SoftDeletes, BelongsToOrg;
 
     protected $fillable = [
         'org_id', 'incident_code', 'linked_ropa_id', 'linked_ropa_ids', 'title', 'description', 'severity', 'source',
