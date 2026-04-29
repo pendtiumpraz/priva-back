@@ -70,6 +70,8 @@ use App\Http\Controllers\Api\SsoLoginController;
 use App\Http\Controllers\Api\DatabasePoolController;
 use App\Http\Controllers\Api\PlatformStorageSettingsController;
 use App\Http\Controllers\Api\StoragePoolController;
+use App\Http\Controllers\Api\TenantChangeRequestController;
+use App\Http\Controllers\Api\TenantIsolationController;
 use App\Http\Controllers\Api\StorageSettingsController;
 use App\Http\Controllers\Api\SystemUpdateController;
 use App\Http\Controllers\Api\TemplateExportController;
@@ -1082,6 +1084,29 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::put('/storage-pools/{id}', [StoragePoolController::class, 'update']);
         Route::delete('/storage-pools/{id}', [StoragePoolController::class, 'destroy']);
         Route::post('/storage-pools/{id}/set-default', [StoragePoolController::class, 'setDefault']);
+
+        // Tenant Isolation Management — list + provision + status
+        Route::get('/tenants', [TenantIsolationController::class, 'index']);
+        Route::get('/tenants/{id}', [TenantIsolationController::class, 'show']);
+        Route::post('/tenants/{id}/provision', [TenantIsolationController::class, 'provision']);
+        Route::get('/tenants/{id}/isolation/status', [TenantIsolationController::class, 'status']);
+        Route::post('/tenants/{id}/isolation/reset-failed', [TenantIsolationController::class, 'resetFailed']);
+
+        // Change Request Approval Queue (superadmin)
+        Route::get('/change-requests', [TenantChangeRequestController::class, 'adminIndex']);
+        Route::get('/change-requests/{id}', [TenantChangeRequestController::class, 'adminShow']);
+        Route::post('/change-requests/{id}/approve', [TenantChangeRequestController::class, 'approve']);
+        Route::post('/change-requests/{id}/deny', [TenantChangeRequestController::class, 'deny']);
+    });
+
+    // =============================================
+    // Tenant-side Change Request Submission
+    // Tenant admins submit infrastructure-change requests; superadmin
+    // reviews above. See BYODB.md §2.6.
+    // =============================================
+    Route::prefix('tenant')->group(function () {
+        Route::get('/change-requests', [TenantChangeRequestController::class, 'tenantIndex']);
+        Route::post('/change-requests', [TenantChangeRequestController::class, 'tenantStore']);
     });
 
     // =============================================

@@ -4,7 +4,8 @@ Laravel 12 / PHP 8.3 API backing the PRIVASIMU NEXUS multi-tenant PDP compliance
 
 ## Architecture at a Glance
 
-- **Multi-tenant via `org_id`** — every tenant-scoped table carries a UUID `org_id`. No query leaves `app/` without that filter. Soft-deletes (`deleted_at`) are the universal norm.
+- **3-tier tenancy (BYODB)** — tenants run in one of three modes: shared landlord DB (default), Privasimu-hosted dedicated DB on a registered pool, or BYODB (client-provided endpoint). See [Tenancy & Database Isolation](#tenancy--database-isolation-byodb).
+- **Multi-tenant via `org_id`** — every tenant-scoped table carries a UUID `org_id`. The `BelongsToOrg` trait + global scope auto-filters every query; the `tenant.context` middleware sets the active org from the authenticated user. Soft-deletes (`deleted_at`) are the universal norm.
 - **UUID primary keys everywhere.** Auto-increment IDs are not used for domain tables.
 - **Role hierarchy**: `root` > `superadmin` > `admin` > `dpo` > `maker` > `viewer`.
   - `root` + `superadmin` have no `org_id` (platform-level).
@@ -12,6 +13,7 @@ Laravel 12 / PHP 8.3 API backing the PRIVASIMU NEXUS multi-tenant PDP compliance
 - **3-layer menu visibility**: `entitlement × role_whitelist × tenant_override × license_package_gate × parent_visible`. Resolved in `App\Services\MenuRegistryService`.
 - **Universal CRUD**: six modules (`ropa`, `dpia`, `dsr`, `consent`, `breach`, `data-discovery`) share one controller `Api\ModuleCrudController` mounted under `/api/m/{module}`.
 - **AI Agent** routes all DB-mutating tool calls through `App\Services\AiAgentToolExecutor` which is org-scoped in its constructor.
+- **Pool Registry** — root/superadmin manages registered Postgres/MySQL clusters and S3-compatible storage backends via UI (no env churn). Tenants are assigned to pools; provisioning is automated.
 
 ## Stack
 
@@ -100,11 +102,125 @@ Tests use SQLite in-memory. Every migration therefore must be portable across sq
 
 Every repository / controller / service that touches tenant data **must** filter by `org_id`. Patterns to rely on:
 
-- `App\Services\TenantContextService` resolves the caller's `org_id`.
+- `App\Services\CurrentOrgContext` (singleton) holds the active `org_id` for the request. Set by `SetCurrentOrgContext` middleware after `auth:sanctum`.
+- `App\Models\Concerns\BelongsToOrg` trait — auto-applies a global scope `WHERE org_id = ?` from the context, plus an auto-fill on `creating`. Applied to all tenant-scoped models (Ropa, Dpia, DsrRequest, BreachIncident, ConsentLog, GapAssessment, AiCreditLog, and ~17 others).
+- `App\Services\TenantContextService` resolves the caller's `org_id` for AI prompt context (separate from `CurrentOrgContext`).
 - `AiAgentToolExecutor::__construct(string $orgId)` locks every tool call to one tenant.
 - `ModuleCrudController::scopedQuery()` auto-applies `where('org_id', $user->org_id)`.
 
-Violating this leaks data across customers. There is no retroactive fix — do not merge code that queries a tenant table without an `org_id` clause.
+Violating this leaks data across customers. There is no retroactive fix — do not merge code that queries a tenant table without an `org_id` clause. The `BelongsToOrg` global scope is a sabuk pengaman, not a license to skip explicit filtering in critical paths.
+
+To opt out of the global scope (super-admin tools that legitimately span tenants):
+```php
+Ropa::withoutGlobalScope('org')->where('status', 'critical')->get();
+```
+
+To run as a different org from queue jobs / artisan / system context:
+```php
+app(CurrentOrgContext::class)->runAs($targetOrgId, fn () => /* ... */);
+```
+
+## Tenancy & Database Isolation (BYODB)
+
+PRIVASIMU NEXUS supports three tenant isolation tiers, motivated by financial-institution clients (banks, multifinance, fintech) under POJK 11/03/2022 and POJK 38/2016 that mandate physical data isolation per customer. See `BYODB.md` at the repo root for the full design rationale.
+
+### 3-Tier Model
+
+```
+TIER 1 — Shared (default for SMB / trial)
+  Tenant data lives in the landlord DB. Distinguished by org_id column.
+  organizations.tenant_db_provider = 'shared'
+
+TIER 2 — Privasimu-hosted dedicated (default for Enterprise / FI)
+  Privasimu provisions a dedicated database for the tenant inside a
+  registered DatabasePool (Postgres/MySQL cluster Privasimu controls).
+  App connects via 127.0.0.1 / internal VPC — zero network friction.
+  organizations.tenant_db_provider = 'pool'
+  organizations.db_pool_id        = <pool-uuid>
+  organizations.tenant_db_state   = 'isolated'
+  organizations.tenant_db_config  = <encrypted JSON: host/port/db/user/pass>
+
+TIER 3 — BYODB (client provides their own DB endpoint)
+  Client operates the database in their own datacenter or cloud account.
+  Privasimu only runs migrations and connects via the supplied credentials.
+  organizations.tenant_db_provider = 'byodb'
+  organizations.db_pool_id         = NULL
+  organizations.tenant_db_config   = <encrypted JSON of client endpoint>
+```
+
+State machine: `shared → provisioning → migrating → isolated` (or `failed`). Mid-migration states keep the request on landlord DB so writes don't land in a half-built database.
+
+### Pool Registry
+
+Root/superadmin manages Privasimu's registered clusters via UI under `/platform-admin/database-pools` and `/platform-admin/storage-pools`. Pool credentials are encrypted at column level via `Crypt::encryptString` and never serialized in API responses.
+
+| Table | Purpose |
+|---|---|
+| `database_pools` | Postgres/MySQL clusters Privasimu can provision tenant DBs into. Stores provisioner_user + encrypted password + ca_cert + region + capacity. |
+| `storage_pools` | S3/MinIO/GCS/DO Spaces backends. Tenants without explicit assignment fall back to the row marked `is_default = true`. |
+| `tenant_change_requests` | Workflow queue for tenant-initiated infra changes (request DB pool / switch to BYODB / change storage pool). Approved + executed by superadmin. |
+
+The pool registry is for **provisioning only**. Once a tenant is provisioned, runtime routing reads the encrypted `organizations.tenant_db_config` directly — pool config isn't accessed per-request.
+
+### Connection Routing at Request Time
+
+```
+Request → auth:sanctum → tenant.context → tenant.db → controller
+                          (sets org_id)    (switches DB::default)
+```
+
+`InitializeTenantDatabase` middleware (alias `tenant.db`) calls `TenantDatabaseService::getConnection($org)` after auth. When `tenant_db_state = 'isolated'`, it switches `DB::setDefaultConnection()` to a per-tenant connection built on the fly from the encrypted config, registered under name `tenant_<org-id>`. Tier 1 tenants are a no-op — default stays at landlord.
+
+Models on the landlord DB (User, Organization, License, AppSetting, MenuItem, RoleMenuWhitelist, DatabasePool, StoragePool, TenantChangeRequest) use the `LandlordPinned` trait so their queries always hit landlord regardless of the current default. The `landlord` connection name is auto-registered in `AppServiceProvider::boot` from the original default at boot time. In tests (SQLite `:memory:` is per-connection), the trait falls back to default to keep fixtures intact.
+
+### Provisioning Workflow
+
+```
+1. Superadmin creates a pool (DatabasePool row) via /platform-admin/database-pools UI.
+2. Superadmin assigns a tenant to the pool (via change request approval or
+   direct API call) — dispatches ProvisionTenantDatabaseJob.
+3. Job state machine:
+     shared → provisioning  (CREATE DATABASE + CREATE USER + GRANT)
+            → migrating     (php artisan migrate against new DB)
+            → isolated      (encrypt creds + atomic state flip + counter increment)
+   On failure: state='failed', error logged to organizations.tenant_db_error.
+4. Migration step also drops cross-DB FK constraints from tenant tables to
+   landlord-only tables (users, organizations, licenses, ...) so app inserts
+   don't fail referencing empty leftover tables in the tenant DB.
+```
+
+Services involved:
+- `App\Services\TenantDb\PrivasimuHostedProvisioner` — DDL execution (CREATE/DROP DATABASE/USER/GRANT). Engine-aware: separate Postgres + MySQL helpers.
+- `App\Services\TenantDb\DatabasePoolRegistry` — finds active pool, increments/decrements counter, opens admin connection AS the provisioner user.
+- `App\Services\TenantDb\TenantDatabaseService` — runtime resolver; `getConnection`, `buildConnection`, `testConnectionWithConfig` (probe via CREATE/INSERT/SELECT/DROP test table).
+- `App\Jobs\ProvisionTenantDatabaseJob` — orchestration with state machine + audit + change-request lifecycle integration.
+
+### Tenant Storage (Mirror Pattern)
+
+`TenantStorageService` resolves a disk via 4-layer fallback:
+1. Tenant override (`organizations.storage_driver` + `storage_config` — BYOS)
+2. Tenant's assigned pool (`organizations.storage_pool_id`)
+3. Default storage pool (`storage_pools WHERE is_default = TRUE`)
+4. Laravel default disk
+
+Falls back to legacy `app_settings.platform.storage.*` during the migration window if no default pool exists. Files are always written under `tenants/{org_id}/...` prefix regardless of layer, so cross-tenant isolation holds even when layers 2-4 share a single bucket between tenants.
+
+### Artisan Commands
+
+```bash
+# Manual provisioning trigger (ops smoke test / emergency)
+php artisan tenants:provision <org-id> --pool=<pool-id-or-name> [--sync]
+
+# Run pending migrations across all isolated tenant DBs (use after deploy)
+php artisan tenants:migrate [--tenant=<org-id>] [--pretend]
+```
+
+`--sync` runs the provisioning job inline so errors print to the terminal directly instead of going to the queue worker log.
+
+### Decision References
+
+- `BYODB.md` — design doc with compliance mapping, network reach analysis, cost estimates.
+- `BYODB_plan_and_progress_tracker.md` — milestone breakdown + decision log + risk register.
 
 ### Role & Permission Resolution
 
@@ -198,8 +314,11 @@ Single file: `routes/api.php`.
 
 - Don't create per-module CRUD controllers for the six universal modules — use `ModuleCrudController`.
 - Don't bypass `AiAgentToolExecutor` for AI tool calls.
-- Don't query a tenant table without `org_id`.
-- Don't use MySQL-only migration helpers (`->after()`, `ALTER COLUMN` without `DOCTRINE_REGISTER_TYPES`).
+- Don't query a tenant table without `org_id` — even with `BelongsToOrg` global scope as a sabuk, explicit filtering in critical paths is required.
+- Don't add provisioner credentials to `.env` — register a `DatabasePool` row via `/platform-admin/database-pools` instead. Env-based creds were the old pattern; pool registry replaces it (see `BYODB.md` §2.5).
+- Don't drop the `landlord` connection alias or rename `LandlordPinned` trait without auditing every model that uses it — these are the rails that keep platform queries on landlord after `tenant.db` middleware switches the default.
+- Don't run `php artisan migrate` against a tenant DB by hand without using `tenants:migrate` — the provisioning flow drops cross-DB FK constraints that re-running raw `migrate` would re-create, breaking app inserts.
+- Don't use MySQL-only migration helpers (`->after()`, raw `ALTER COLUMN` without engine guards). When the migration *must* be raw SQL, gate by `DB::getDriverName()` and supply at least the pgsql + mysql + sqlite branches (see `2026_04_15_000001_expand_pii_columns_for_encryption.php` for a working pattern).
 - Don't hardcode palette colors on components targeting white-labeled tenants — use CSS vars driven by `/themes/active`.
 - Don't trust Next.js/React memory for the frontend — the Next 16 + React 19 pair has breaking changes vs. typical training data.
 
