@@ -119,32 +119,26 @@ class AssessmentAutoTriggerService
                 ->where('org_id', $cbt->org_id)->count();
             $code = sprintf('TIA-%s-%03d', date('Y'), $existingCount + 1);
 
-            $tia = TiaAssessment::create([
-                'org_id' => $cbt->org_id,
+            // Delegate prefill to TiaAssessment so explicit "Buat TIA"
+            // and auto-trigger paths produce identical drafts.
+            $prefill = TiaAssessment::buildPrefillFromCrossBorder($cbt);
+
+            $tia = TiaAssessment::create(array_merge($prefill, [
                 'tia_code' => $code,
                 'title' => 'TIA — Transfer ke ' . ($cbt->destination_country ?? 'Unknown'),
-                'linked_cross_border_id' => $cbt->id,
-                'destination_country' => $cbt->destination_country,
-                'transfer_basis' => $cbt->legal_basis,
-                'transfer_details' => [
-                    'destination_entity' => $cbt->destination_entity,
-                    'transfer_purpose' => $cbt->transfer_purpose,
-                    'data_categories' => $cbt->data_categories,
-                ],
                 'status' => TiaAssessment::STATUS_DRAFT,
                 'created_by' => $createdBy ?: ($cbt->created_by ?? null),
-                'wizard_data' => [
+                'wizard_data' => array_merge($prefill['wizard_data'], [
                     'auto_triggered' => true,
                     'trigger_source' => 'cross_border',
-                    'cross_border_id' => $cbt->id,
-                    'snapshot_taken_at' => now()->toIso8601String(),
-                ],
-            ]);
+                ]),
+            ]));
 
             AuditLog::log('tia', $tia->id, 'auto_created_from_cross_border', [
                 'tia_code' => $tia->tia_code,
                 'cross_border_id' => $cbt->id,
                 'destination_country' => $cbt->destination_country,
+                'adequacy_tier' => $prefill['wizard_data']['adequacy_tier'] ?? null,
             ], 'system');
 
             return $tia;

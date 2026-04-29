@@ -27,6 +27,8 @@ class DatabaseSeeder extends Seeder
             RaciTemplateSeeder::class,
             // Maturity Assessment master questions (UU PDP, 18 questions).
             MaturityQuestionsSeeder::class,
+            // Country adequacy lookup — UU PDP Pasal 56 working classification.
+            CountryAdequacySeeder::class,
         ]);
 
         if (User::where('email', 'superadmin@privasimu.com')->exists()) {

@@ -325,6 +325,64 @@ class CrossBorderController extends Controller
             'review_due_at' => "{$opt}|date",
             'approved_at' => "{$opt}|date",
             'ropa_id' => "{$opt}|uuid",
+
+            // Phase 1 — transfer profile (drives TIA risk pre-fill)
+            'transfer_volume_band' => "{$opt}|in:" . implode(',', \App\Models\CrossBorderTransfer::VOLUME_BANDS),
+            'transfer_frequency' => "{$opt}|in:" . implode(',', \App\Models\CrossBorderTransfer::FREQUENCIES),
+            'data_sensitivity' => "{$opt}|in:" . implode(',', \App\Models\CrossBorderTransfer::SENSITIVITIES),
+            'transfer_mechanism' => "{$opt}|in:" . implode(',', \App\Models\CrossBorderTransfer::MECHANISMS),
+            'encryption_in_transit' => "{$opt}|boolean",
+            'encryption_at_rest' => "{$opt}|boolean",
+            'data_minimization_applied' => "{$opt}|boolean",
+            'retention_period_days' => "{$opt}|integer|min:1|max:36500",
+            'recipient_dpo_name' => "{$opt}|string|max:255",
+            'recipient_dpo_email' => "{$opt}|email|max:255",
+            'linked_ropa_id' => "{$opt}|uuid|exists:ropas,id",
         ];
+    }
+
+    /**
+     * Country adequacy lookup. Used by the FE when user types/selects
+     * a destination country — returns the tier classification + default
+     * risk score pre-fills + Pasal 56 safeguard recommendation hint.
+     *
+     * GET /cross-border/countries           → list all (for autocomplete)
+     * GET /cross-border/countries/{code}    → resolve one
+     */
+    public function listCountries(Request $request)
+    {
+        $q = $request->get('q');
+        $tier = $request->get('tier');
+
+        $query = \App\Models\CountryAdequacy::query()->where('is_active', true);
+        if ($q) {
+            $like = '%' . strtolower($q) . '%';
+            $query->where(function ($w) use ($like) {
+                $w->whereRaw('LOWER(country_name) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(country_code) LIKE ?', [$like]);
+            });
+        }
+        if ($tier) $query->where('tier', $tier);
+
+        return response()->json([
+            'data' => $query->orderBy('tier')->orderBy('country_name')->get(),
+            'tier_labels' => \App\Models\CountryAdequacy::TIER_LABELS,
+        ]);
+    }
+
+    public function resolveCountry(Request $request, string $codeOrName)
+    {
+        $rec = \App\Models\CountryAdequacy::resolve($codeOrName);
+        if (!$rec) {
+            return response()->json([
+                'message' => 'Country not in adequacy lookup. Treat as Tier "none" and require safeguards.',
+                'data' => null,
+                'tier_label' => \App\Models\CountryAdequacy::TIER_LABELS[\App\Models\CountryAdequacy::TIER_NONE],
+            ]);
+        }
+        return response()->json([
+            'data' => $rec,
+            'tier_label' => \App\Models\CountryAdequacy::TIER_LABELS[$rec->tier] ?? $rec->tier,
+        ]);
     }
 }

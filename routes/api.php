@@ -496,6 +496,11 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
     // Phase 2: Cross Border Data Transfer
     // =============================================
     Route::prefix('cross-border')->group(function () {
+        // Country adequacy lookup (Phase 1) — must precede /{id} so 'countries'
+        // doesn't get treated as a UUID.
+        Route::get('/countries', [CrossBorderController::class, 'listCountries']);
+        Route::get('/countries/{codeOrName}', [CrossBorderController::class, 'resolveCountry']);
+
         Route::get('/trashed', [CrossBorderController::class, 'trashed']);
         Route::get('/', [CrossBorderController::class, 'index']);
         Route::post('/', [CrossBorderController::class, 'store']);
@@ -505,7 +510,10 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::post('/{id}/restore', [CrossBorderController::class, 'restore']);
         Route::delete('/{id}/force', [CrossBorderController::class, 'forceDelete']);
 
-        // AI Transfer Impact Assessment (TIA)
+        // Legacy AI TIA endpoint — kept for backwards compat with existing
+        // CBDT records that have tia_summary/tia_answers data. New flow uses
+        // POST /tia/from-cross-border/{cbtId} which spawns a proper Sprint X2
+        // TiaAssessment with RACI workflow + 6 risk metrics + 2 security.
         Route::post('/{id}/tia', [CrossBorderController::class, 'assessTIA']);
     });
 

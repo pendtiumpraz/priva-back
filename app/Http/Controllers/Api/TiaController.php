@@ -131,44 +131,40 @@ class TiaController extends Controller
     }
 
     /**
-     * Quick-create from a CrossBorderTransfer. Pulls destination country
-     * + parties so the operator only fills the risk metrics + supplementary
-     * docs.
+     * Quick-create from a CrossBorderTransfer. Pulls destination, transfer
+     * profile, and security flags from the inventory so the operator only
+     * needs to verify and complete supplementary fields. Pre-fills the 3
+     * regulatory risk metrics from country adequacy tier so a transfer to
+     * Singapore doesn't start at the same risk score as a transfer to China.
      */
     public function fromCrossBorder(Request $request, string $cbtId)
     {
-        $cbt = CrossBorderTransfer::query()->findOrFail($cbtId);
+        $cbt = CrossBorderTransfer::query()->with('ropa:id,registration_number,division,processing_activity')->findOrFail($cbtId);
         $orgId = $request->user()->org_id;
         if ($cbt->org_id !== $orgId) abort(403, 'Cross-border transfer belongs to another org.');
 
-        $unit = strtoupper(substr(preg_replace('/[^a-zA-Z0-9]/', '', $cbt->sender_organization ?? 'GEN'), 0, 4));
-        $activity = strtoupper(substr(preg_replace('/[^a-zA-Z0-9]/', '', $cbt->activity_name ?? 'CBDT'), 0, 4));
+        $unit = $cbt->ropa?->division ?? 'CBDT';
+        $activity = $cbt->ropa?->processing_activity ?? $cbt->destination_country ?? 'TRANSFER';
         $code = $this->suggestCode($orgId, $unit, $activity);
 
-        $record = TiaAssessment::create([
-            'org_id' => $orgId,
+        // Single source of truth for the CBDT→TIA prefill (risk metrics,
+        // security scores, snapshot). Same helper is reused by the auto-
+        // trigger service so explicit + auto paths produce identical drafts.
+        $prefill = TiaAssessment::buildPrefillFromCrossBorder($cbt);
+
+        $record = TiaAssessment::create(array_merge($prefill, [
             'tia_code' => $code,
-            'title' => "TIA — Cross-border to {$cbt->destination_country}",
-            'linked_cross_border_id' => $cbt->id,
-            'destination_country' => $cbt->destination_country,
+            'title' => "TIA — Transfer ke {$cbt->destination_country}",
             'maker_id' => $request->user()->id,
             'created_by' => $request->user()->id,
             'status' => TiaAssessment::STATUS_DRAFT,
-            'wizard_data' => [
-                'source' => 'cross_border',
-                'cross_border_id' => $cbt->id,
-                'cross_border_snapshot' => [
-                    'destination_country' => $cbt->destination_country,
-                    'activity_name' => $cbt->activity_name,
-                    'sender_organization' => $cbt->sender_organization,
-                    'recipient_organization' => $cbt->recipient_organization,
-                ],
-                'snapshot_taken_at' => now()->toIso8601String(),
-            ],
-        ]);
+            'wizard_data' => array_merge($prefill['wizard_data'], ['source' => 'cross_border']),
+        ]));
 
         AuditLog::log('tia', $record->id, 'created_from_cross_border', [
-            'tia_code' => $record->tia_code, 'cross_border_id' => $cbt->id,
+            'tia_code' => $record->tia_code,
+            'cross_border_id' => $cbt->id,
+            'adequacy_tier' => $prefill['wizard_data']['adequacy_tier'] ?? null,
         ], 'manual');
 
         return response()->json([
