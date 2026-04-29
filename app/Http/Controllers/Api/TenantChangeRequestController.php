@@ -142,8 +142,10 @@ class TenantChangeRequestController extends Controller
 
         $availableDbPools = DatabasePool::query()
             ->where('status', 'active')
-            ->where('is_accepting_tenants', true)
-            ->whereNull('deleted_at')
+            ->where(function ($q) {
+                $q->whereNull('max_tenants')
+                  ->orWhereColumn('current_tenants_count', '<', 'max_tenants');
+            })
             ->orderBy('name')
             ->get(['id', 'name', 'engine', 'region', 'description', 'current_tenants_count', 'max_tenants']);
 
