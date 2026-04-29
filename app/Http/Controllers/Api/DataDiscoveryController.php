@@ -149,6 +149,22 @@ class DataDiscoveryController extends Controller
             }
         }
 
+        // Phase 3c — also scan access paths + encryption signals if the
+        // source supports it. Wrapped so a permission error on these
+        // optional scans doesn't fail the main schema scan.
+        $accessPaths = null;
+        $encryption = null;
+        try {
+            $accessPaths = DatabaseScanner::scanAccessPaths($sourceType, $config);
+        } catch (\Throwable $e) {
+            \Log::info("Access path scan skipped: " . $e->getMessage());
+        }
+        try {
+            $encryption = DatabaseScanner::scanEncryption($sourceType, $config);
+        } catch (\Throwable $e) {
+            \Log::info("Encryption scan skipped: " . $e->getMessage());
+        }
+
         $system->update([
             'scanning_status'   => isset($scanResult['error']) ? 'failed' : 'done',
             'scanning_progress' => 100,
@@ -163,6 +179,8 @@ class DataDiscoveryController extends Controller
                 'engine'             => $engine,
                 'error'              => $scanResult['error'] ?? null,
                 'diff_alerts'        => $diffAlerts,
+                'access_paths'       => $accessPaths,    // Phase 3c
+                'encryption'         => $encryption,     // Phase 3c
             ],
             'last_scanned_at' => now(),
         ]);

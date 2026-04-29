@@ -259,6 +259,342 @@ class DatabaseScanner
         }
     }
 
+    /**
+     * Phase 3c — Scan database access paths (who can do what to which table).
+     *
+     * Output structure:
+     *   [
+     *     'engine' => 'postgresql' | 'mysql' | ...,
+     *     'grants' => [
+     *       ['grantee' => 'app_user', 'table' => 'users', 'privilege' => 'SELECT', 'is_grantable' => false],
+     *       ...
+     *     ],
+     *     'roles' => [   // Postgres only — list of all roles + login flag
+     *       ['name' => 'app_user', 'can_login' => true, 'is_superuser' => false],
+     *       ...
+     *     ],
+     *     'error' => null | string,
+     *   ]
+     *
+     * Read-only — only queries metadata, no data movement.
+     */
+    public static function scanAccessPaths(string $sourceType, array $config): array
+    {
+        return match ($sourceType) {
+            'postgresql' => self::scanAccessPathsPostgres($config),
+            'mysql'      => self::scanAccessPathsMysql($config),
+            default      => ['engine' => $sourceType, 'grants' => [], 'roles' => [], 'error' => 'Access path scan not supported for ' . $sourceType],
+        };
+    }
+
+    private static function scanAccessPathsPostgres(array $config): array
+    {
+        try {
+            $port = !empty($config['port']) ? $config['port'] : 5432;
+            $dsn = "pgsql:host={$config['host']};port={$port};dbname={$config['database']}";
+            $pdo = new \PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [
+                \PDO::ATTR_TIMEOUT => 10,
+                \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+            ]);
+
+            // Roles + login capability
+            $rolesRaw = $pdo->query(
+                "SELECT rolname AS name, rolcanlogin AS can_login, rolsuper AS is_superuser,
+                        rolcreatedb AS can_create_db, rolcreaterole AS can_create_role,
+                        rolvaliduntil AS valid_until
+                 FROM pg_roles
+                 WHERE rolname NOT LIKE 'pg\_%'
+                 ORDER BY rolname"
+            )->fetchAll(\PDO::FETCH_ASSOC);
+
+            $roles = array_map(fn ($r) => [
+                'name' => $r['name'],
+                'can_login' => (bool) $r['can_login'],
+                'is_superuser' => (bool) $r['is_superuser'],
+                'can_create_db' => (bool) $r['can_create_db'],
+                'can_create_role' => (bool) $r['can_create_role'],
+                'valid_until' => $r['valid_until'],
+            ], $rolesRaw);
+
+            // Per-table privilege grants (excluding self-owner internal grants on PUBLIC)
+            $grantsRaw = $pdo->query(
+                "SELECT grantee, table_name, privilege_type, is_grantable
+                 FROM information_schema.role_table_grants
+                 WHERE table_schema = 'public'
+                   AND grantee NOT IN ('PUBLIC')
+                   AND grantee NOT LIKE 'pg\_%'
+                 ORDER BY grantee, table_name"
+            )->fetchAll(\PDO::FETCH_ASSOC);
+
+            $grants = array_map(fn ($g) => [
+                'grantee' => $g['grantee'],
+                'table' => $g['table_name'],
+                'privilege' => $g['privilege_type'],
+                'is_grantable' => $g['is_grantable'] === 'YES',
+            ], $grantsRaw);
+
+            return [
+                'engine' => 'postgresql',
+                'roles' => $roles,
+                'grants' => $grants,
+                'scanned_at' => now()->toIso8601String(),
+                'error' => null,
+            ];
+        } catch (\Throwable $e) {
+            Log::warning("PostgreSQL access path scan failed: " . $e->getMessage());
+            return ['engine' => 'postgresql', 'grants' => [], 'roles' => [], 'error' => $e->getMessage()];
+        }
+    }
+
+    private static function scanAccessPathsMysql(array $config): array
+    {
+        try {
+            $port = !empty($config['port']) ? $config['port'] : 3306;
+            $dsn = "mysql:host={$config['host']};port={$port};dbname={$config['database']}";
+            $pdo = new \PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [
+                \PDO::ATTR_TIMEOUT => 10,
+                \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+            ]);
+
+            // List MySQL users (note: needs privilege on mysql.user — may fail
+            // for non-DBA scanner accounts; we degrade gracefully)
+            $roles = [];
+            try {
+                $rows = $pdo->query("SELECT User AS name, Host AS host FROM mysql.user")->fetchAll(\PDO::FETCH_ASSOC);
+                foreach ($rows as $r) {
+                    $roles[] = ['name' => $r['name'] . '@' . $r['host'], 'can_login' => true, 'is_superuser' => false];
+                }
+            } catch (\Throwable $e) {
+                Log::info('MySQL mysql.user inaccessible to scanner — degrading: ' . $e->getMessage());
+            }
+
+            // Schema-level privileges
+            $grants = [];
+            try {
+                $rows = $pdo->query(
+                    "SELECT GRANTEE, TABLE_SCHEMA, TABLE_NAME, PRIVILEGE_TYPE, IS_GRANTABLE
+                     FROM INFORMATION_SCHEMA.TABLE_PRIVILEGES
+                     WHERE TABLE_SCHEMA = '{$config['database']}'
+                     ORDER BY GRANTEE, TABLE_NAME"
+                )->fetchAll(\PDO::FETCH_ASSOC);
+                foreach ($rows as $g) {
+                    $grants[] = [
+                        'grantee' => trim($g['GRANTEE'], "'"),
+                        'table' => $g['TABLE_NAME'],
+                        'privilege' => $g['PRIVILEGE_TYPE'],
+                        'is_grantable' => $g['IS_GRANTABLE'] === 'YES',
+                    ];
+                }
+            } catch (\Throwable $e) {
+                Log::info('MySQL TABLE_PRIVILEGES inaccessible: ' . $e->getMessage());
+            }
+
+            return [
+                'engine' => 'mysql',
+                'roles' => $roles,
+                'grants' => $grants,
+                'scanned_at' => now()->toIso8601String(),
+                'error' => null,
+            ];
+        } catch (\Throwable $e) {
+            Log::warning("MySQL access path scan failed: " . $e->getMessage());
+            return ['engine' => 'mysql', 'grants' => [], 'roles' => [], 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Phase 3c — Scan encryption signals at the DB level.
+     *
+     * Output:
+     *   [
+     *     'engine' => 'postgresql' | 'mysql' | ...,
+     *     'ssl_in_use' => bool,                   // connection-level TLS
+     *     'tablespace_encryption' => [            // per-table where detectable
+     *       ['table' => 'users', 'encrypted' => true|false|null],
+     *       ...
+     *     ],
+     *     'column_encryption_observed' => [       // tables with pgp_sym_encrypt
+     *                                             // or AES_ENCRYPT in their data
+     *       'tables' => ['users'],
+     *       'note' => 'Detected via column type / data sample'
+     *     ],
+     *     'data_at_rest_encrypted' => bool|null,  // best-effort overall flag
+     *     'error' => null | string,
+     *   ]
+     *
+     * Note: at-rest encryption is usually filesystem/storage-level (LUKS,
+     * EBS encryption) — not visible to DB. We detect what IS visible:
+     *   - Postgres: SSL in use (pg_settings ssl), tablespace flags via
+     *     pg_tablespace and pg_class.reloptions when AWS RDS encryption used
+     *   - MySQL: INFORMATION_SCHEMA.INNODB_TABLESPACES_ENCRYPTION
+     */
+    public static function scanEncryption(string $sourceType, array $config): array
+    {
+        return match ($sourceType) {
+            'postgresql' => self::scanEncryptionPostgres($config),
+            'mysql'      => self::scanEncryptionMysql($config),
+            default      => [
+                'engine' => $sourceType,
+                'ssl_in_use' => null,
+                'tablespace_encryption' => [],
+                'column_encryption_observed' => ['tables' => [], 'note' => null],
+                'data_at_rest_encrypted' => null,
+                'error' => 'Encryption scan not supported for ' . $sourceType,
+            ],
+        };
+    }
+
+    private static function scanEncryptionPostgres(array $config): array
+    {
+        try {
+            $port = !empty($config['port']) ? $config['port'] : 5432;
+            $dsn = "pgsql:host={$config['host']};port={$port};dbname={$config['database']}";
+            $pdo = new \PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [
+                \PDO::ATTR_TIMEOUT => 10,
+                \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+            ]);
+
+            // SSL in use for THIS connection
+            $sslInUse = false;
+            try {
+                $row = $pdo->query("SELECT setting FROM pg_settings WHERE name = 'ssl'")->fetchColumn();
+                $sslInUse = strtolower((string) $row) === 'on';
+            } catch (\Throwable $e) {}
+
+            // Detect column-level encryption via pgcrypto: scan public schema for
+            // bytea columns named like *_encrypted / *_enc — heuristic, not perfect.
+            $colEncTables = [];
+            try {
+                $rows = $pdo->query(
+                    "SELECT DISTINCT table_name FROM information_schema.columns
+                     WHERE table_schema = 'public'
+                       AND data_type = 'bytea'
+                       AND (column_name ~ '_(enc|encrypted|cipher)$'
+                            OR column_name LIKE 'enc\\_%')"
+                )->fetchAll(\PDO::FETCH_COLUMN);
+                $colEncTables = array_values(array_unique($rows));
+            } catch (\Throwable $e) {}
+
+            // Per-table encryption flag — Postgres doesn't expose tablespace
+            // encryption as a per-table flag; we mark unknown for all and let
+            // the operator override via protection_assessment.
+            $tablespace = [];
+            try {
+                $tableNames = $pdo->query(
+                    "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename"
+                )->fetchAll(\PDO::FETCH_COLUMN);
+                foreach ($tableNames as $name) {
+                    $tablespace[] = [
+                        'table' => $name,
+                        'encrypted' => null,   // unknown at DB layer alone
+                        'note' => 'PostgreSQL does not expose tablespace-level encryption flag via SQL — verify via storage layer (RDS storage_encrypted, LUKS, etc.)',
+                    ];
+                }
+            } catch (\Throwable $e) {}
+
+            return [
+                'engine' => 'postgresql',
+                'ssl_in_use' => $sslInUse,
+                'tablespace_encryption' => $tablespace,
+                'column_encryption_observed' => [
+                    'tables' => $colEncTables,
+                    'note' => 'Detected via heuristic: bytea columns named *_enc/*_encrypted/enc_*',
+                ],
+                'data_at_rest_encrypted' => null,
+                'scanned_at' => now()->toIso8601String(),
+                'error' => null,
+            ];
+        } catch (\Throwable $e) {
+            Log::warning("PostgreSQL encryption scan failed: " . $e->getMessage());
+            return [
+                'engine' => 'postgresql', 'ssl_in_use' => null,
+                'tablespace_encryption' => [], 'column_encryption_observed' => ['tables' => [], 'note' => null],
+                'data_at_rest_encrypted' => null, 'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    private static function scanEncryptionMysql(array $config): array
+    {
+        try {
+            $port = !empty($config['port']) ? $config['port'] : 3306;
+            $dsn = "mysql:host={$config['host']};port={$port};dbname={$config['database']}";
+            $pdo = new \PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [
+                \PDO::ATTR_TIMEOUT => 10,
+                \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+            ]);
+
+            // SSL — query session status
+            $sslInUse = false;
+            try {
+                $row = $pdo->query("SHOW STATUS LIKE 'Ssl_cipher'")->fetch(\PDO::FETCH_ASSOC);
+                $sslInUse = !empty($row['Value']);
+            } catch (\Throwable $e) {}
+
+            // Tablespace encryption — InnoDB
+            $tablespace = [];
+            $atRestAllEnc = null;
+            try {
+                $rows = $pdo->query(
+                    "SELECT t.NAME AS table_name, te.ENCRYPTION
+                     FROM INFORMATION_SCHEMA.INNODB_TABLES t
+                     LEFT JOIN INFORMATION_SCHEMA.INNODB_TABLESPACES_ENCRYPTION te
+                       ON te.SPACE = t.SPACE
+                     WHERE t.NAME LIKE '{$config['database']}/%'"
+                )->fetchAll(\PDO::FETCH_ASSOC);
+
+                $allEnc = !empty($rows);
+                foreach ($rows as $r) {
+                    $tableName = explode('/', $r['table_name'])[1] ?? $r['table_name'];
+                    $enc = $r['ENCRYPTION'] === 'Y' || strtoupper((string) $r['ENCRYPTION']) === 'ON';
+                    if (!$enc) $allEnc = false;
+                    $tablespace[] = [
+                        'table' => $tableName,
+                        'encrypted' => $enc,
+                        'note' => null,
+                    ];
+                }
+                $atRestAllEnc = !empty($rows) ? $allEnc : null;
+            } catch (\Throwable $e) {
+                Log::info('MySQL INNODB_TABLESPACES_ENCRYPTION inaccessible: ' . $e->getMessage());
+            }
+
+            // Column encryption hint — detect AES_ENCRYPT / VARBINARY columns
+            // named like *_enc / *_encrypted (heuristic).
+            $colEncTables = [];
+            try {
+                $rows = $pdo->query(
+                    "SELECT DISTINCT TABLE_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                     WHERE TABLE_SCHEMA = '{$config['database']}'
+                       AND DATA_TYPE IN ('varbinary', 'blob')
+                       AND (COLUMN_NAME REGEXP '_(enc|encrypted|cipher)$'
+                            OR COLUMN_NAME LIKE 'enc\\_%')"
+                )->fetchAll(\PDO::FETCH_COLUMN);
+                $colEncTables = array_values(array_unique($rows));
+            } catch (\Throwable $e) {}
+
+            return [
+                'engine' => 'mysql',
+                'ssl_in_use' => $sslInUse,
+                'tablespace_encryption' => $tablespace,
+                'column_encryption_observed' => [
+                    'tables' => $colEncTables,
+                    'note' => 'Detected via heuristic: varbinary/blob columns named *_enc/*_encrypted/enc_*',
+                ],
+                'data_at_rest_encrypted' => $atRestAllEnc,
+                'scanned_at' => now()->toIso8601String(),
+                'error' => null,
+            ];
+        } catch (\Throwable $e) {
+            Log::warning("MySQL encryption scan failed: " . $e->getMessage());
+            return [
+                'engine' => 'mysql', 'ssl_in_use' => null,
+                'tablespace_encryption' => [], 'column_encryption_observed' => ['tables' => [], 'note' => null],
+                'data_at_rest_encrypted' => null, 'error' => $e->getMessage(),
+            ];
+        }
+    }
+
     private static function testMongodb(array $config): array
     {
         $start = microtime(true);

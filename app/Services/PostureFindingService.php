@@ -41,6 +41,8 @@ class PostureFindingService
             $this->detectCrossBorderBasis($orgId),
             $this->detectBreachReadiness($orgId),
             $this->detectDsrCompliance($orgId),
+            $this->detectExcessiveAccess($orgId),       // Phase 3c
+            $this->detectEncryptionGaps($orgId),        // Phase 3c
         );
 
         $now = now();
@@ -463,6 +465,185 @@ class PostureFindingService
                 'regulation_ref' => 'UU PDP Pasal 8-10',
                 'metadata' => ['dsr_id' => $d->id, 'hours_late' => $hoursLate],
             ];
+        }
+        return $candidates;
+    }
+
+    /**
+     * Phase 3c — Excessive access on tables yang punya PII columns.
+     *
+     * Heuristic: any non-admin/dpo/app role that has SELECT or higher on
+     * a table with pii_detected=true columns gets a finding. Severity
+     * scales with privilege type:
+     *   - DELETE / TRUNCATE / DROP on PII table  → critical
+     *   - UPDATE / INSERT on PII table           → high
+     *   - SELECT on Pasal 4 spesifik table       → high
+     *   - SELECT on PII umum table               → medium
+     */
+    private function detectExcessiveAccess(string $orgId): array
+    {
+        $candidates = [];
+        $systems = InformationSystem::query()->withoutGlobalScope('org')
+            ->where('org_id', $orgId)->whereNull('deleted_at')
+            ->whereNotNull('scan_results')
+            ->get(['id', 'name', 'scan_results']);
+
+        // Roles considered "expected" — these don't trigger findings even
+        // with broad privilege. Operator can fine-tune later.
+        $expectedRoles = ['postgres', 'root', 'admin', 'dba', 'app', 'application', 'service_account'];
+        $expectedPattern = '/^(' . implode('|', $expectedRoles) . ')(@|_|$)/i';
+
+        foreach ($systems as $sys) {
+            $accessPaths = $sys->scan_results['access_paths'] ?? null;
+            $tables = $sys->scan_results['tables'] ?? [];
+            if (!$accessPaths || empty($accessPaths['grants'])) continue;
+
+            // Build map: table_name → has spesifik PII / has umum PII
+            $tablePii = [];
+            foreach ($tables as $t) {
+                $tableName = $t['name'] ?? '';
+                $hasSpesifik = false; $hasPii = false;
+                foreach (($t['columns'] ?? []) as $c) {
+                    if ($c['pii_detected'] ?? false) $hasPii = true;
+                    if (($c['pdp_category'] ?? null) === 'spesifik') $hasSpesifik = true;
+                }
+                if ($hasPii) $tablePii[$tableName] = ['spesifik' => $hasSpesifik, 'pii' => true];
+            }
+
+            // Group grants per (grantee, table) to summarize privileges
+            $byUserTable = [];
+            foreach ($accessPaths['grants'] as $g) {
+                $grantee = $g['grantee'];
+                $table = $g['table'];
+                $priv = strtoupper((string) $g['privilege']);
+                if (!isset($tablePii[$table])) continue;                  // not a PII table
+                if (preg_match($expectedPattern, $grantee)) continue;      // expected role
+                $key = $grantee . '|' . $table;
+                $byUserTable[$key] ??= ['grantee' => $grantee, 'table' => $table, 'privileges' => []];
+                $byUserTable[$key]['privileges'][] = $priv;
+            }
+
+            foreach ($byUserTable as $entry) {
+                $privs = array_values(array_unique($entry['privileges']));
+                $hasWrite = (bool) array_intersect(['DELETE', 'TRUNCATE', 'DROP'], $privs);
+                $hasModify = (bool) array_intersect(['UPDATE', 'INSERT'], $privs);
+                $hasSelect = in_array('SELECT', $privs, true);
+                if (!$hasWrite && !$hasModify && !$hasSelect) continue;
+
+                $isSpesifik = $tablePii[$entry['table']]['spesifik'];
+                $severity = match (true) {
+                    $hasWrite => 'critical',
+                    $hasModify => 'high',
+                    $isSpesifik => 'high',
+                    default => 'medium',
+                };
+
+                $privList = implode(', ', $privs);
+                $candidates[] = [
+                    'source_pillar' => 'access_path',
+                    'source_key' => "access_path:{$sys->id}:{$entry['grantee']}:{$entry['table']}",
+                    'source_type' => 'information_system',
+                    'source_id' => $sys->id,
+                    'source_detail' => "{$sys->name} · {$entry['grantee']} → {$entry['table']}",
+                    'severity' => $severity,
+                    'title' => "Akses berlebih: {$entry['grantee']} punya {$privList} pada {$entry['table']}",
+                    'description' => "User '{$entry['grantee']}' punya privilege [{$privList}] pada tabel '{$entry['table']}' yang mengandung " . ($isSpesifik ? 'data spesifik (Pasal 4 ayat 2)' : 'PII') . " di sistem '{$sys->name}'. Verifikasi kebutuhan akses dan terapkan least-privilege.",
+                    'regulation_ref' => 'UU PDP Pasal 39 + ISO 27001 A.9.4',
+                    'metadata' => [
+                        'system_id' => $sys->id,
+                        'grantee' => $entry['grantee'],
+                        'table' => $entry['table'],
+                        'privileges' => $privs,
+                        'is_spesifik' => $isSpesifik,
+                    ],
+                ];
+            }
+        }
+        return $candidates;
+    }
+
+    /**
+     * Phase 3c — Encryption gaps. Sensitive table tanpa signal enkripsi.
+     *
+     * Triggers:
+     *   - Postgres: tabel punya kolom PII spesifik DAN tidak ada kolom
+     *     bytea-encrypted DAN ssl_in_use=false → critical
+     *   - MySQL: tabel punya kolom PII spesifik DAN tablespace.encrypted=false
+     *     DAN tidak ada column-level encryption → critical
+     *   - Either: PII umum tanpa SSL connection → medium
+     */
+    private function detectEncryptionGaps(string $orgId): array
+    {
+        $candidates = [];
+        $systems = InformationSystem::query()->withoutGlobalScope('org')
+            ->where('org_id', $orgId)->whereNull('deleted_at')
+            ->whereNotNull('scan_results')
+            ->get(['id', 'name', 'scan_results']);
+
+        foreach ($systems as $sys) {
+            $enc = $sys->scan_results['encryption'] ?? null;
+            $tables = $sys->scan_results['tables'] ?? [];
+            if (!$enc) continue;   // encryption scan didn't run for this engine
+
+            $colEncTables = array_flip($enc['column_encryption_observed']['tables'] ?? []);
+            $tablespaceMap = [];
+            foreach (($enc['tablespace_encryption'] ?? []) as $ts) {
+                $tablespaceMap[$ts['table']] = $ts['encrypted'];   // true | false | null
+            }
+            $sslInUse = $enc['ssl_in_use'] ?? null;
+
+            foreach ($tables as $t) {
+                $tableName = $t['name'] ?? '';
+                $hasSpesifik = false; $hasPii = false;
+                foreach (($t['columns'] ?? []) as $c) {
+                    if ($c['pii_detected'] ?? false) $hasPii = true;
+                    if (($c['pdp_category'] ?? null) === 'spesifik') $hasSpesifik = true;
+                }
+                if (!$hasPii) continue;
+
+                $tablespaceEncrypted = $tablespaceMap[$tableName] ?? null;
+                $hasColEnc = isset($colEncTables[$tableName]);
+
+                // No signal of any encryption + has spesifik PII = critical
+                if ($hasSpesifik && $tablespaceEncrypted === false && !$hasColEnc) {
+                    $candidates[] = [
+                        'source_pillar' => 'encryption_at_rest',
+                        'source_key' => "encryption_at_rest:{$sys->id}:{$tableName}",
+                        'source_type' => 'information_system',
+                        'source_id' => $sys->id,
+                        'source_detail' => "{$sys->name} · {$tableName}",
+                        'severity' => 'critical',
+                        'title' => "Tabel data spesifik tanpa enkripsi: {$tableName}",
+                        'description' => "Tabel '{$tableName}' di sistem '{$sys->name}' mengandung data spesifik (Pasal 4 ayat 2) tapi tablespace tidak terenkripsi dan tidak ditemukan kolom dengan enkripsi field-level (heuristik *_enc/*_encrypted). Pasal 39 UU PDP mensyaratkan pengamanan teknis.",
+                        'regulation_ref' => 'UU PDP Pasal 4 ayat 2 + Pasal 39',
+                        'metadata' => [
+                            'system_id' => $sys->id,
+                            'table' => $tableName,
+                            'tablespace_encrypted' => $tablespaceEncrypted,
+                            'column_encryption_observed' => $hasColEnc,
+                            'ssl_in_use' => $sslInUse,
+                        ],
+                    ];
+                } elseif ($hasPii && $sslInUse === false) {
+                    // SSL not enforced + PII = medium
+                    $candidates[] = [
+                        'source_pillar' => 'encryption_at_rest',
+                        'source_key' => "encryption_at_rest:{$sys->id}:{$tableName}:ssl",
+                        'source_type' => 'information_system',
+                        'source_id' => $sys->id,
+                        'source_detail' => "{$sys->name} · {$tableName}",
+                        'severity' => 'medium',
+                        'title' => "Koneksi tanpa SSL/TLS: {$sys->name}",
+                        'description' => "Sistem '{$sys->name}' tidak menggunakan SSL/TLS untuk koneksi database. Tabel '{$tableName}' yang punya PII jadi rentan eavesdropping di network.",
+                        'regulation_ref' => 'POJK 11/2022 Pasal 27',
+                        'metadata' => [
+                            'system_id' => $sys->id,
+                            'table' => $tableName,
+                            'ssl_in_use' => false,
+                        ],
+                    ];
+                }
+            }
         }
         return $candidates;
     }
