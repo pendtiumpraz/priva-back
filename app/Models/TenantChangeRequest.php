@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\LandlordPinned;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 
@@ -17,14 +18,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class TenantChangeRequest extends Model
 {
-    use HasUuids;
-
-    /**
-     * Pinned to landlord — change requests reference orgs and need the
-     * approval queue to be visible to superadmins regardless of the
-     * tenant their request targets.
-     */
-    protected $connection = 'landlord';
+    use HasUuids, LandlordPinned;
 
     public const STATUS_PENDING = 'pending';
     public const STATUS_APPROVED = 'approved';

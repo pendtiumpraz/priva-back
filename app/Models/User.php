@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Casts\EncryptedString;
+use App\Models\Concerns\LandlordPinned;
 
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -15,14 +16,7 @@ use Laravel\Sanctum\HasApiTokens;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, HasUuids, Notifiable, SoftDeletes;
-
-    /**
-     * Pinned to landlord — auth + user records live with the platform,
-     * not on tenant-isolated DBs. Without this, queries hit whichever
-     * DB the tenant.db middleware switched to and break auth.
-     */
-    protected $connection = 'landlord';
+    use HasApiTokens, HasFactory, HasUuids, Notifiable, SoftDeletes, LandlordPinned;
 
     /**
      * The attributes that are mass assignable.

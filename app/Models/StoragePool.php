@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\LandlordPinned;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -18,12 +19,7 @@ use Illuminate\Support\Facades\Crypt;
  */
 class StoragePool extends Model
 {
-    use HasUuids, SoftDeletes;
-
-    /**
-     * Pinned to landlord — pool registry is platform-level.
-     */
-    protected $connection = 'landlord';
+    use HasUuids, SoftDeletes, LandlordPinned;
 
     public const STATUS_ACTIVE = 'active';
     public const STATUS_DISABLED = 'disabled';

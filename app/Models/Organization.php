@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Casts\EncryptedString;
+use App\Models\Concerns\LandlordPinned;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -10,12 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Organization extends Model
 {
-    use HasUuids, SoftDeletes;
-
-    /**
-     * Pinned to landlord — orgs are platform-level metadata.
-     */
-    protected $connection = 'landlord';
+    use HasUuids, SoftDeletes, LandlordPinned;
 
     protected $fillable = [
         'parent_id', 'org_level',

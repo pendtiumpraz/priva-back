@@ -67,7 +67,9 @@ use App\Http\Controllers\Api\RopaLinkController;
 use App\Http\Controllers\Api\RopaTemplateController;
 use App\Http\Controllers\Api\SimulationController;
 use App\Http\Controllers\Api\SsoLoginController;
+use App\Http\Controllers\Api\DatabasePoolController;
 use App\Http\Controllers\Api\PlatformStorageSettingsController;
+use App\Http\Controllers\Api\StoragePoolController;
 use App\Http\Controllers\Api\StorageSettingsController;
 use App\Http\Controllers\Api\SystemUpdateController;
 use App\Http\Controllers\Api\TemplateExportController;
@@ -1056,6 +1058,30 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::put('/', [PlatformStorageSettingsController::class, 'update']);
         Route::post('/test', [PlatformStorageSettingsController::class, 'testConnection']);
         Route::delete('/', [PlatformStorageSettingsController::class, 'destroy']);
+    });
+
+    // =============================================
+    // BYODB Pool Registry (root + superadmin only)
+    // Manage Postgres/MySQL clusters + S3/MinIO/GCS backends that
+    // tenants can be assigned to. See BYODB.md §2.5.
+    // =============================================
+    Route::middleware('role.root')->prefix('platform-admin')->group(function () {
+        // Database pools
+        Route::get('/database-pools', [DatabasePoolController::class, 'index']);
+        Route::post('/database-pools', [DatabasePoolController::class, 'store']);
+        Route::post('/database-pools/test', [DatabasePoolController::class, 'testConnection']);
+        Route::get('/database-pools/{id}', [DatabasePoolController::class, 'show']);
+        Route::put('/database-pools/{id}', [DatabasePoolController::class, 'update']);
+        Route::delete('/database-pools/{id}', [DatabasePoolController::class, 'destroy']);
+
+        // Storage pools
+        Route::get('/storage-pools', [StoragePoolController::class, 'index']);
+        Route::post('/storage-pools', [StoragePoolController::class, 'store']);
+        Route::post('/storage-pools/test', [StoragePoolController::class, 'testConnection']);
+        Route::get('/storage-pools/{id}', [StoragePoolController::class, 'show']);
+        Route::put('/storage-pools/{id}', [StoragePoolController::class, 'update']);
+        Route::delete('/storage-pools/{id}', [StoragePoolController::class, 'destroy']);
+        Route::post('/storage-pools/{id}/set-default', [StoragePoolController::class, 'setDefault']);
     });
 
     // =============================================

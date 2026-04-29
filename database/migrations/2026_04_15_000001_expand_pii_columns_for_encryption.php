@@ -44,10 +44,12 @@ return new class extends Migration
             $null = $nullable ? 'NULL' : 'NOT NULL';
             if ($driver === 'mysql') {
                 DB::statement("ALTER TABLE `{$table}` MODIFY `{$column}` TEXT {$null}");
-            } else {
-                // PostgreSQL
+            } elseif ($driver === 'pgsql') {
                 DB::statement("ALTER TABLE \"{$table}\" ALTER COLUMN \"{$column}\" TYPE TEXT");
             }
+            // SQLite: TEXT columns are already flexible-length and accept any
+            // string content, so no migration is needed for the test DB.
+            // Other engines (sqlsrv, etc) would need their own branch if added.
         };
 
         // ──── Users ────

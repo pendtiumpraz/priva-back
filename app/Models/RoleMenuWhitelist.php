@@ -2,15 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\LandlordPinned;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 
 class RoleMenuWhitelist extends Model
 {
-    use HasUuids;
-
-    /** Pinned to landlord — same as MenuItem. */
-    protected $connection = 'landlord';
+    use HasUuids, LandlordPinned;
 
     protected $table = 'role_menu_whitelist';
 

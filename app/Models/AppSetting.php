@@ -1,15 +1,12 @@
 <?php
 namespace App\Models;
 
+use App\Models\Concerns\LandlordPinned;
 use Illuminate\Database\Eloquent\Model;
 
 class AppSetting extends Model
 {
-    /**
-     * Pinned to landlord — global platform config, must be reachable
-     * from any request regardless of which tenant DB is active.
-     */
-    protected $connection = 'landlord';
+    use LandlordPinned;
 
     protected $primaryKey = 'key';
     public $incrementing = false;

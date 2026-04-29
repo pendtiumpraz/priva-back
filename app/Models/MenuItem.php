@@ -2,15 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\LandlordPinned;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 
 class MenuItem extends Model
 {
-    use HasUuids;
-
-    /** Pinned to landlord — sidebar registry is platform-wide config. */
-    protected $connection = 'landlord';
+    use HasUuids, LandlordPinned;
 
     protected $fillable = [
         'parent_menu_id', 'menu_key', 'label', 'href', 'icon', 'section',

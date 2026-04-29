@@ -1,6 +1,7 @@
 <?php
 namespace App\Models;
 
+use App\Models\Concerns\LandlordPinned;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -8,10 +9,7 @@ use Illuminate\Support\Str;
 
 class License extends Model
 {
-    use HasUuids, SoftDeletes;
-
-    /** Pinned to landlord — license records belong to platform, not tenant. */
-    protected $connection = 'landlord';
+    use HasUuids, SoftDeletes, LandlordPinned;
 
     protected $fillable = [
         'license_key', 'package_type', 'license_type', 'status',
