@@ -44,6 +44,7 @@ use App\Http\Controllers\Api\HoldingDashboardController;
 use App\Http\Controllers\Api\IntegrationController;
 use App\Http\Controllers\Api\KnowledgeBaseController;
 use App\Http\Controllers\Api\LiaController;
+use App\Http\Controllers\Api\MaturityController;
 use App\Http\Controllers\Api\LicenseController;
 use App\Http\Controllers\Api\LogAnalyzerController;
 use App\Http\Controllers\Api\MaintenanceController;
@@ -922,6 +923,30 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::post('/{id}/approve', [TiaController::class, 'approve']);
         Route::post('/{id}/reject', [TiaController::class, 'reject']);
         Route::post('/{id}/unlock', [TiaController::class, 'unlock']);
+    });
+
+    // =============================================
+    // Sprint X3: Maturity Assessment — UU PDP self-evaluation
+    // 3 input methods (questionnaire / document / auto_derive). No
+    // formal approval — status flow draft → submitted → published.
+    // =============================================
+    Route::prefix('maturity')->group(function () {
+        Route::get('/questions', [MaturityController::class, 'questions']);
+        Route::get('/trend', [MaturityController::class, 'trend']);
+
+        Route::get('/', [MaturityController::class, 'index']);
+        Route::post('/', [MaturityController::class, 'store']);
+        Route::get('/{id}', [MaturityController::class, 'show']);
+        Route::delete('/{id}', [MaturityController::class, 'destroy']);
+        Route::post('/{id}/restore', [MaturityController::class, 'restore']);
+        Route::delete('/{id}/force', [MaturityController::class, 'forceDelete']);
+
+        Route::post('/{id}/responses', [MaturityController::class, 'upsertResponse']);
+        Route::post('/{id}/responses/bulk', [MaturityController::class, 'bulkUpsertResponses']);
+        Route::post('/{id}/auto-derive', [MaturityController::class, 'autoDerive']);
+        Route::post('/{id}/submit', [MaturityController::class, 'submit']);
+        Route::post('/{id}/publish', [MaturityController::class, 'publish']);
+        Route::get('/{id}/recommendations', [MaturityController::class, 'recommendations']);
     });
 
     // =============================================

@@ -126,7 +126,7 @@ Status: 🔵 not started · 🟡 in progress · 🟢 done · 🔴 blocked
 
 ---
 
-### Sprint X3 — Maturity Full Implementation 🔵
+### Sprint X3 — Maturity Full Implementation 🟢 (BE + FE done 2026-04-30; document AI scoring deferred ke X4)
 
 **Goal**: 18 UU PDP questions, 1-10 ruler, 2 input methods (questionnaire + auto-derive), recommendations, trend chart.
 

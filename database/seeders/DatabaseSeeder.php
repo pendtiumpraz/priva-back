@@ -25,6 +25,8 @@ class DatabaseSeeder extends Seeder
             NexusCanonicalDocxSeeder::class,
             // RACI template presets for breach containment matrix editor.
             RaciTemplateSeeder::class,
+            // Maturity Assessment master questions (UU PDP, 18 questions).
+            MaturityQuestionsSeeder::class,
         ]);
 
         if (User::where('email', 'superadmin@privasimu.com')->exists()) {
