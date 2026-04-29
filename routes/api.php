@@ -43,6 +43,7 @@ use App\Http\Controllers\Api\GapAssessmentController;
 use App\Http\Controllers\Api\HoldingDashboardController;
 use App\Http\Controllers\Api\IntegrationController;
 use App\Http\Controllers\Api\KnowledgeBaseController;
+use App\Http\Controllers\Api\LiaController;
 use App\Http\Controllers\Api\LicenseController;
 use App\Http\Controllers\Api\LogAnalyzerController;
 use App\Http\Controllers\Api\MaintenanceController;
@@ -874,6 +875,28 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::delete('/{id}', [AssessmentsController::class, 'destroy']);
         Route::post('/{id}/restore', [AssessmentsController::class, 'restore']);
         Route::delete('/{id}/force', [AssessmentsController::class, 'forceDelete']);
+    });
+
+    // =============================================
+    // Sprint X1: LIA — full workflow (RACI + lock + RoPA auto-fill)
+    // See backend/docs/LIA_TIA_MATURITY_TRACKER.md and Fitur LIA.pdf.
+    // =============================================
+    Route::prefix('lia')->group(function () {
+        Route::get('/', [LiaController::class, 'index']);
+        Route::post('/', [LiaController::class, 'store']);
+        Route::post('/from-ropa/{ropaId}', [LiaController::class, 'fromRopa']);
+        Route::get('/{id}', [LiaController::class, 'show']);
+        Route::put('/{id}', [LiaController::class, 'update']);
+        Route::delete('/{id}', [LiaController::class, 'destroy']);
+        Route::post('/{id}/restore', [LiaController::class, 'restore']);
+        Route::delete('/{id}/force', [LiaController::class, 'forceDelete']);
+
+        // Workflow — see PDF Fitur LIA.pdf §RACI Matrix
+        Route::post('/{id}/submit', [LiaController::class, 'submit']);    // Maker: lock + send to checker
+        Route::post('/{id}/check', [LiaController::class, 'check']);      // Checker: pass | reject
+        Route::post('/{id}/approve', [LiaController::class, 'approve']);  // Approver: 3 verdicts + final
+        Route::post('/{id}/reject', [LiaController::class, 'reject']);    // Approver: reject + reason
+        Route::post('/{id}/unlock', [LiaController::class, 'unlock']);    // root only — emergency unlock
     });
 
     // =============================================
