@@ -155,7 +155,8 @@ class MenuRegistrySeeder extends Seeder
             ['key' => 'settings.positions', 'label' => 'Positions', 'icon' => 'Briefcase', 'section' => 'Settings: Organization', 'sort' => 1012, 'roles' => self::ADMIN_SUPERADMIN],
             ['key' => 'settings.master_data', 'label' => 'Master Application', 'icon' => 'Database', 'section' => 'Settings: Organization', 'sort' => 1013, 'roles' => self::ADMIN_SUPERADMIN],
 
-            ['key' => 'settings.infrastructure', 'label' => 'Infrastruktur (DB & Storage)', 'icon' => 'Server', 'section' => 'Settings: Organization', 'sort' => 1015, 'roles' => self::ADMIN_SUPERADMIN],
+            // Tenant-only — superadmin uses /platform-admin/change-requests to approve, not to submit.
+            ['key' => 'settings.infrastructure', 'label' => 'Infrastruktur (DB & Storage)', 'icon' => 'Server', 'section' => 'Settings: Organization', 'sort' => 1015, 'roles' => ['admin']],
 
             ['key' => 'settings.compliance', 'label' => 'Compliance', 'icon' => 'Shield', 'section' => 'Settings: Compliance', 'sort' => 1020, 'roles' => ['root', 'superadmin', 'admin', 'dpo']],
             ['key' => 'settings.automation', 'label' => 'System Automation', 'icon' => 'Sparkles', 'section' => 'Settings: Compliance', 'sort' => 1021, 'roles' => self::ADMIN_SUPERADMIN],
