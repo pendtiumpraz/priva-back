@@ -190,7 +190,8 @@ services:
     depends_on:
       backend:
         condition: service_started
-    command: php artisan queue:work --tries=1 --timeout=3600
+    entrypoint: []
+    command: ["php", "artisan", "queue:work", "--queue=document-imports,default", "--tries=3", "--timeout=300", "--sleep=3", "--max-jobs=1000", "--max-time=3600"]
     environment:
       APP_ENV: production
       APP_DEBUG: "false"

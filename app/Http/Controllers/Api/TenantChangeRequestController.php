@@ -117,6 +117,75 @@ class TenantChangeRequestController extends Controller
         return response()->json(['data' => $reqs]);
     }
 
+    /**
+     * Sanitised view of the tenant's current infra state for the settings UI.
+     * Encrypted credentials are intentionally excluded — the page never
+     * needs to read them, only knowing the *tier* matters.
+     */
+    public function tenantStatus(Request $request)
+    {
+        $orgId = $request->user()->org_id;
+        if (!$orgId) {
+            return response()->json(['message' => 'No tenant context.'], 403);
+        }
+
+        $org = Organization::query()->findOrFail($orgId);
+
+        $dbPool = $org->db_pool_id ? DatabasePool::query()->find($org->db_pool_id) : null;
+        $storagePool = $org->storage_pool_id ? StoragePool::query()->find($org->storage_pool_id) : null;
+
+        $hasStorageOverride = !empty($org->storage_driver) && !empty($org->storage_config);
+
+        $storageProvider = $hasStorageOverride
+            ? 'byos'
+            : ($org->storage_pool_id ? 'pool' : 'platform-default');
+
+        $availableDbPools = DatabasePool::query()
+            ->where('status', 'active')
+            ->where('is_accepting_tenants', true)
+            ->whereNull('deleted_at')
+            ->orderBy('name')
+            ->get(['id', 'name', 'engine', 'region', 'description', 'current_tenants_count', 'max_tenants']);
+
+        $availableStoragePools = StoragePool::query()
+            ->where('status', 'active')
+            ->whereNull('deleted_at')
+            ->orderBy('name')
+            ->get(['id', 'name', 'driver', 'region', 'description', 'is_default']);
+
+        return response()->json([
+            'data' => [
+                'database' => [
+                    'provider' => $org->tenant_db_provider ?? 'shared',
+                    'state' => $org->tenant_db_state ?? 'shared',
+                    'pool' => $dbPool ? [
+                        'id' => $dbPool->id,
+                        'name' => $dbPool->name,
+                        'engine' => $dbPool->engine,
+                        'region' => $dbPool->region,
+                    ] : null,
+                    'provisioned_at' => $org->tenant_db_provisioned_at,
+                    'isolated_at' => $org->tenant_db_isolated_at,
+                    'has_error' => !empty($org->tenant_db_error),
+                ],
+                'storage' => [
+                    'provider' => $storageProvider,
+                    'driver' => $org->storage_driver,
+                    'pool' => $storagePool ? [
+                        'id' => $storagePool->id,
+                        'name' => $storagePool->name,
+                        'driver' => $storagePool->driver,
+                        'region' => $storagePool->region,
+                    ] : null,
+                ],
+                'available' => [
+                    'db_pools' => $availableDbPools,
+                    'storage_pools' => $availableStoragePools,
+                ],
+            ],
+        ]);
+    }
+
     // ─── Superadmin approval queue ─────────────────────────────────────────
 
     public function adminIndex(Request $request)

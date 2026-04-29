@@ -1206,6 +1206,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
     // reviews above. See BYODB.md §2.6.
     // =============================================
     Route::prefix('tenant')->group(function () {
+        Route::get('/infrastructure-status', [TenantChangeRequestController::class, 'tenantStatus']);
         Route::get('/change-requests', [TenantChangeRequestController::class, 'tenantIndex']);
         Route::post('/change-requests', [TenantChangeRequestController::class, 'tenantStore']);
     });
