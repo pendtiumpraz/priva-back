@@ -81,6 +81,7 @@ use App\Http\Controllers\Api\TenantOffboardController;
 use App\Http\Controllers\Api\TenantRoleController;
 use App\Http\Controllers\Api\TenantSsoController;
 use App\Http\Controllers\Api\TenantThemeController;
+use App\Http\Controllers\Api\TiaController;
 use App\Http\Controllers\Api\ThreatIntelController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\V1\BreachApiController;
@@ -897,6 +898,30 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::post('/{id}/approve', [LiaController::class, 'approve']);  // Approver: 3 verdicts + final
         Route::post('/{id}/reject', [LiaController::class, 'reject']);    // Approver: reject + reason
         Route::post('/{id}/unlock', [LiaController::class, 'unlock']);    // root only — emergency unlock
+    });
+
+    // =============================================
+    // Sprint X2: TIA — full workflow (cross-border + vendor + RACI)
+    // See backend/docs/LIA_TIA_MATURITY_TRACKER.md and Fitur TIA.pdf.
+    // =============================================
+    Route::prefix('tia')->group(function () {
+        Route::get('/', [TiaController::class, 'index']);
+        Route::post('/', [TiaController::class, 'store']);
+        Route::post('/from-ropa/{ropaId}', [TiaController::class, 'fromRopa']);
+        Route::post('/from-cross-border/{cbtId}', [TiaController::class, 'fromCrossBorder']);
+        Route::post('/from-vendor/{vendorId}', [TiaController::class, 'fromVendor']);
+        Route::get('/{id}', [TiaController::class, 'show']);
+        Route::put('/{id}', [TiaController::class, 'update']);
+        Route::delete('/{id}', [TiaController::class, 'destroy']);
+        Route::post('/{id}/restore', [TiaController::class, 'restore']);
+        Route::delete('/{id}/force', [TiaController::class, 'forceDelete']);
+
+        // Workflow
+        Route::post('/{id}/submit', [TiaController::class, 'submit']);
+        Route::post('/{id}/check', [TiaController::class, 'check']);
+        Route::post('/{id}/approve', [TiaController::class, 'approve']);
+        Route::post('/{id}/reject', [TiaController::class, 'reject']);
+        Route::post('/{id}/unlock', [TiaController::class, 'unlock']);
     });
 
     // =============================================

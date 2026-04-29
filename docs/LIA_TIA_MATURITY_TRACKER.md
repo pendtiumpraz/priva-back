@@ -99,7 +99,7 @@ Status: 🔵 not started · 🟡 in progress · 🟢 done · 🔴 blocked
 
 ---
 
-### Sprint X2 — TIA Full Implementation 🔵
+### Sprint X2 — TIA Full Implementation 🟢 (BE + FE done 2026-04-30; PDF export deferred ke X4)
 
 **Goal**: TIA module dengan 8 risk metrics ruler, country assessment, supplementary docs, Vendor relation, RACI workflow.
 
