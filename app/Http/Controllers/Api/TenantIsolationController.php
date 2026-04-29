@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\MigrateTenantDataJob;
 use App\Jobs\ProvisionTenantDatabaseJob;
 use App\Models\AuditLog;
 use App\Models\DatabasePool;
@@ -10,6 +11,7 @@ use App\Models\Organization;
 use App\Services\TenantDb\DatabasePoolRegistry;
 use App\Services\TenantDb\PrivasimuHostedProvisioner;
 use App\Services\TenantDb\TenantDatabaseService;
+use App\Services\TenantDb\TenantDataMigrator;
 use Illuminate\Http\Request;
 
 /**
@@ -30,6 +32,7 @@ class TenantIsolationController extends Controller
         protected DatabasePoolRegistry $registry,
         protected PrivasimuHostedProvisioner $provisioner,
         protected TenantDatabaseService $dbService,
+        protected TenantDataMigrator $migrator,
     ) {}
 
     /**
@@ -153,6 +156,52 @@ class TenantIsolationController extends Controller
                 'tenant_db_error' => $org->tenant_db_error,
             ],
         ]);
+    }
+
+    /**
+     * Upgrade an existing tenant (with data) from shared → dedicated pool.
+     * Differs from `provision` which is for brand-new tenants — this one
+     * runs the full migration pipeline (freeze → copy → verify → cutover).
+     */
+    public function migrate(Request $request, string $id)
+    {
+        $data = $request->validate([
+            'pool_id' => 'nullable|uuid|exists:database_pools,id',
+            'sync' => 'nullable|boolean',
+        ]);
+
+        $org = Organization::query()->whereNull('deleted_at')->findOrFail($id);
+
+        if ($org->tenant_db_state !== 'shared') {
+            return response()->json([
+                'message' => "Tenant must be in 'shared' state to migrate. Current: '{$org->tenant_db_state}'.",
+            ], 409);
+        }
+
+        $pool = !empty($data['pool_id'])
+            ? DatabasePool::query()->whereNull('deleted_at')->findOrFail($data['pool_id'])
+            : $this->registry->findActivePool();
+
+        if (!$pool || !$pool->isAcceptingTenants()) {
+            return response()->json(['message' => 'No active pool with capacity available.'], 422);
+        }
+
+        AuditLog::log('tenant_isolation', $org->id, 'migrate_dispatched', [
+            'pool_id' => $pool->id, 'pool_name' => $pool->name, 'requested_by' => $request->user()?->id,
+        ], 'manual');
+
+        if (!empty($data['sync'])) {
+            (new MigrateTenantDataJob($org->id, $pool->id))->handle(
+                $this->provisioner, $this->registry, $this->dbService, $this->migrator,
+            );
+        } else {
+            MigrateTenantDataJob::dispatch($org->id, $pool->id);
+        }
+
+        return response()->json([
+            'message' => "Migration started for '{$org->name}'. The tenant will be temporarily read-only during the freeze + copy phases. Poll status for progress.",
+            'data' => $this->presentTenant($org->fresh(), includeDetail: true),
+        ], 202);
     }
 
     /**

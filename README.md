@@ -208,19 +208,41 @@ Falls back to legacy `app_settings.platform.storage.*` during the migration wind
 ### Artisan Commands
 
 ```bash
-# Manual provisioning trigger (ops smoke test / emergency)
+# Brand-new tenant — provision dedicated DB, no data to copy
 php artisan tenants:provision <org-id> --pool=<pool-id-or-name> [--sync]
 
-# Run pending migrations across all isolated tenant DBs (use after deploy)
+# Existing tenant — full migration pipeline with data copy + freeze + cutover
+php artisan tenants:migrate-data <org-id> --pool=<pool-id-or-name> [--sync]
+
+# Run pending schema migrations across all isolated tenant DBs (use after deploy)
 php artisan tenants:migrate [--tenant=<org-id>] [--pretend]
 ```
 
-`--sync` runs the provisioning job inline so errors print to the terminal directly instead of going to the queue worker log.
+`--sync` runs the job inline so errors print to the terminal directly instead of going to the queue worker log. Use `tenants:migrate-data` only for tenants with existing data on the shared landlord DB — for net-new tenants, `tenants:provision` is the fast path (~5 sec vs minutes-hours).
+
+### Tenant Read-Only Mode
+
+During the migration window (states `freezing` and `migrating`), the `tenant.readonly` middleware (alias) returns HTTP 503 on any POST/PUT/PATCH/DELETE for users belonging to that tenant. GETs pass through. The frontend can detect 503 + `tenant_db_state` in the body to render a "tenant under maintenance" banner instead of error toasts.
+
+Order in middleware stack:
+```
+auth:sanctum → tenant.context → tenant.db → tenant.readonly → controller
+```
 
 ### Decision References
 
 - `BYODB.md` — design doc with compliance mapping, network reach analysis, cost estimates.
 - `BYODB_plan_and_progress_tracker.md` — milestone breakdown + decision log + risk register.
+- `backend/docs/PRODUCTION_DEPLOY.md` — step-by-step AWS production runbook (RDS landlord + tenant cluster + ElastiCache + S3 + ECS).
+- `backend/docs/ONPREM_DEPLOY.md` — self-hosted deployment guide for clients running Privasimu in their own datacenter.
+
+### Deployment Targets
+
+| Target | Use this |
+|---|---|
+| SaaS at AWS (Privasimu hosts) | `backend/docs/PRODUCTION_DEPLOY.md` |
+| On-prem at client (bank datacenter) | `backend/docs/ONPREM_DEPLOY.md` + `backend/docker/docker-compose.onprem.yml` + `backend/scripts/install-onprem.sh` |
+| Local dev | The Quick Start at the top of this file |
 
 ### Role & Permission Resolution
 

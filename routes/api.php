@@ -158,7 +158,7 @@ Route::middleware('throttle:api')->group(function () {
 // =============================================
 // Protected Routes (Sanctum)
 // =============================================
-Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'])->group(function () {
+Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db', 'tenant.readonly'])->group(function () {
 
     // Auth
     Route::get('/auth/me', [AuthController::class, 'me']);
@@ -1085,10 +1085,11 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::delete('/storage-pools/{id}', [StoragePoolController::class, 'destroy']);
         Route::post('/storage-pools/{id}/set-default', [StoragePoolController::class, 'setDefault']);
 
-        // Tenant Isolation Management — list + provision + status
+        // Tenant Isolation Management — list + provision + migrate + status
         Route::get('/tenants', [TenantIsolationController::class, 'index']);
         Route::get('/tenants/{id}', [TenantIsolationController::class, 'show']);
         Route::post('/tenants/{id}/provision', [TenantIsolationController::class, 'provision']);
+        Route::post('/tenants/{id}/migrate', [TenantIsolationController::class, 'migrate']);
         Route::get('/tenants/{id}/isolation/status', [TenantIsolationController::class, 'status']);
         Route::post('/tenants/{id}/isolation/reset-failed', [TenantIsolationController::class, 'resetFailed']);
 
