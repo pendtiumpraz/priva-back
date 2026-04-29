@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\Dpia;
 use App\Models\LiaAssessment;
 use App\Models\Ropa;
+use App\Services\AssessmentPdfService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -391,6 +392,23 @@ class LiaController extends Controller
         $record->forceDelete();
         AuditLog::log('lia', $id, 'hard_deleted', [], 'manual');
         return response()->json(['message' => 'Permanently deleted.']);
+    }
+
+    /**
+     * Stream the LIA as a branded PDF for board/regulator review.
+     * Uses the tenant's active DocumentTemplate for fonts/colors/watermark.
+     */
+    public function exportPdf(Request $request, AssessmentPdfService $pdf, string $id)
+    {
+        $record = LiaAssessment::query()->findOrFail($id);
+        $filename = "LIA_{$record->lia_code}.pdf";
+
+        AuditLog::log('lia', $record->id, 'pdf_exported', [
+            'filename' => $filename,
+            'status' => $record->status,
+        ], 'manual');
+
+        return $pdf->lia($record, $request->user())->download($filename);
     }
 
     // ─── Helpers ────────────────────────────────────────────────────────────

@@ -8,6 +8,7 @@ use App\Models\CrossBorderTransfer;
 use App\Models\Ropa;
 use App\Models\TiaAssessment;
 use App\Models\Vendor;
+use App\Services\AssessmentPdfService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -433,6 +434,22 @@ class TiaController extends Controller
         $record->forceDelete();
         AuditLog::log('tia', $id, 'hard_deleted', [], 'manual');
         return response()->json(['message' => 'Permanently deleted.']);
+    }
+
+    /**
+     * Stream the TIA as a branded PDF for board/regulator review.
+     */
+    public function exportPdf(Request $request, AssessmentPdfService $pdf, string $id)
+    {
+        $record = TiaAssessment::query()->findOrFail($id);
+        $filename = "TIA_{$record->tia_code}.pdf";
+
+        AuditLog::log('tia', $record->id, 'pdf_exported', [
+            'filename' => $filename,
+            'status' => $record->status,
+        ], 'manual');
+
+        return $pdf->tia($record, $request->user())->download($filename);
     }
 
     // ─── Helpers ────────────────────────────────────────────────────────────

@@ -899,6 +899,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::post('/{id}/approve', [LiaController::class, 'approve']);  // Approver: 3 verdicts + final
         Route::post('/{id}/reject', [LiaController::class, 'reject']);    // Approver: reject + reason
         Route::post('/{id}/unlock', [LiaController::class, 'unlock']);    // root only — emergency unlock
+        Route::get('/{id}/export.pdf', [LiaController::class, 'exportPdf']); // Sprint X4 — branded PDF
     });
 
     // =============================================
@@ -923,6 +924,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::post('/{id}/approve', [TiaController::class, 'approve']);
         Route::post('/{id}/reject', [TiaController::class, 'reject']);
         Route::post('/{id}/unlock', [TiaController::class, 'unlock']);
+        Route::get('/{id}/export.pdf', [TiaController::class, 'exportPdf']); // Sprint X4
     });
 
     // =============================================
@@ -947,6 +949,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::post('/{id}/submit', [MaturityController::class, 'submit']);
         Route::post('/{id}/publish', [MaturityController::class, 'publish']);
         Route::get('/{id}/recommendations', [MaturityController::class, 'recommendations']);
+        Route::get('/{id}/export.pdf', [MaturityController::class, 'exportPdf']); // Sprint X4
     });
 
     // =============================================

@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\MaturityAssessment;
 use App\Models\MaturityQuestion;
 use App\Models\MaturityQuestionResponse;
+use App\Services\AssessmentPdfService;
 use App\Services\MaturityAutoDeriveService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -413,5 +414,26 @@ class MaturityController extends Controller
         $r->forceDelete();
         AuditLog::log('maturity', $id, 'hard_deleted', [], 'manual');
         return response()->json(['message' => 'Permanently deleted.']);
+    }
+
+    /**
+     * Stream the maturity assessment as a branded PDF including the
+     * level gauge result, per-domain scores, and the full 18-question
+     * answer table.
+     */
+    public function exportPdf(Request $request, AssessmentPdfService $pdf, string $id)
+    {
+        $record = MaturityAssessment::query()->with('responses')->findOrFail($id);
+        $slug = preg_replace('/[^A-Za-z0-9_-]+/', '_', $record->title ?: 'maturity');
+        $filename = "Maturity_{$slug}_{$record->version}.pdf";
+
+        AuditLog::log('maturity', $record->id, 'pdf_exported', [
+            'filename' => $filename,
+            'status' => $record->status,
+            'overall_score' => $record->overall_score,
+            'overall_level' => $record->overall_level,
+        ], 'manual');
+
+        return $pdf->maturity($record, $request->user())->download($filename);
     }
 }
