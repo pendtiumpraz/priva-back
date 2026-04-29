@@ -17,3 +17,5 @@ Artisan::command('inspire', function () {
 \Illuminate\Support\Facades\Schedule::command('notifications:digest weekly')->weeklyOn(1, '08:00'); // Monday 08:00
 \Illuminate\Support\Facades\Schedule::command('dsr:scan-sla')->hourly()->withoutOverlapping();
 \Illuminate\Support\Facades\Schedule::command('consent:prune-cookie-logs')->dailyAt('02:30');
+// Phase 3a — daily privacy posture snapshot per org. Drives trend chart.
+\Illuminate\Support\Facades\Schedule::command('privasimu:posture-snapshot')->dailyAt('05:00')->withoutOverlapping();

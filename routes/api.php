@@ -773,6 +773,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
     Route::prefix('security')->group(function () {
         Route::get('/posture', [PostureController::class, 'getPosture']);
         Route::get('/posture/trend', [PostureController::class, 'getTrend']);
+        Route::post('/posture/snapshot', [PostureController::class, 'takeSnapshot']); // Phase 3a — manual refresh
 
         // Alert Engine / Notifications
         Route::get('/alerts', [AlertController::class, 'index']);
