@@ -11,7 +11,9 @@ use App\Models\Ropa;
 use App\Models\User;
 use App\Models\Vendor;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Throwable;
 
 /**
  * Maturity Assessment auto-derivation. For each of the 18 UU PDP
@@ -38,26 +40,43 @@ class MaturityAutoDeriveService
         $org = Organization::query()->withoutGlobalScope('org')->find($orgId);
         if (!$org) return [];
 
-        return [
-            'A1' => $this->scoreDpoAppointment($orgId),
-            'A2' => $this->scoreOrgStructure($orgId),
-            'B3' => $this->scoreProcessingBasis($orgId),
-            'B4' => $this->scoreSubjectRights($orgId),
-            'C5' => $this->scoreRopaQuality($orgId),
-            'C6' => $this->scoreDpiaQuality($orgId),
-            'C7' => $this->scoreDataMapping($orgId),
-            'C8' => $this->scoreDpaContracts($orgId),
-            'C9' => $this->scoreDataAccuracy($orgId),
-            'C10' => $this->scorePurposeLimitation($orgId),
-            'C11' => $this->scoreRetention($orgId),
-            'C12' => $this->scoreEncryption($orgId),
-            'C13' => $this->scoreBreachLog($orgId),
-            'C14' => $this->scoreProcessorAudit($orgId),
-            'C15' => $this->scorePrivacyByDesign($orgId),
-            'C16' => $this->scoreStaffTraining($orgId),
-            'D17' => $this->scoreSecurity($orgId),
-            'D18' => $this->scoreBreachResponse($orgId),
+        $methods = [
+            'A1' => 'scoreDpoAppointment',
+            'A2' => 'scoreOrgStructure',
+            'B3' => 'scoreProcessingBasis',
+            'B4' => 'scoreSubjectRights',
+            'C5' => 'scoreRopaQuality',
+            'C6' => 'scoreDpiaQuality',
+            'C7' => 'scoreDataMapping',
+            'C8' => 'scoreDpaContracts',
+            'C9' => 'scoreDataAccuracy',
+            'C10' => 'scorePurposeLimitation',
+            'C11' => 'scoreRetention',
+            'C12' => 'scoreEncryption',
+            'C13' => 'scoreBreachLog',
+            'C14' => 'scoreProcessorAudit',
+            'C15' => 'scorePrivacyByDesign',
+            'C16' => 'scoreStaffTraining',
+            'D17' => 'scoreSecurity',
+            'D18' => 'scoreBreachResponse',
         ];
+
+        $out = [];
+        foreach ($methods as $code => $method) {
+            try {
+                $out[$code] = $this->{$method}($orgId);
+            } catch (Throwable $e) {
+                Log::warning("Maturity auto-derive {$code} ({$method}) failed", [
+                    'org_id' => $orgId,
+                    'error' => $e->getMessage(),
+                ]);
+                $out[$code] = [
+                    'score' => 5,
+                    'metadata' => ['auto_derive_error' => substr($e->getMessage(), 0, 200)],
+                ];
+            }
+        }
+        return $out;
     }
 
     // ─── Domain A: Tata Kelola ──────────────────────────────────────────────
@@ -221,12 +240,11 @@ class MaturityAutoDeriveService
     {
         $vendorCount = Vendor::query()->withoutGlobalScope('org')
             ->where('org_id', $orgId)->whereNull('deleted_at')->count();
-        // VendorAssessment has dpa_status — query if column exists
+        // vendor_assessments has no soft-delete column — count is the count
         $assessed = 0;
         if (Schema::hasTable('vendor_assessments')) {
             $assessed = DB::table('vendor_assessments')
-                ->whereIn('vendor_id', Vendor::query()->withoutGlobalScope('org')->where('org_id', $orgId)->pluck('id'))
-                ->whereNull('deleted_at')
+                ->where('org_id', $orgId)
                 ->count();
         }
 
@@ -336,8 +354,7 @@ class MaturityAutoDeriveService
         $assessed = 0;
         if (Schema::hasTable('vendor_assessments')) {
             $assessed = DB::table('vendor_assessments')
-                ->whereIn('vendor_id', Vendor::query()->withoutGlobalScope('org')->where('org_id', $orgId)->pluck('id'))
-                ->whereNull('deleted_at')
+                ->where('org_id', $orgId)
                 ->where('updated_at', '>=', now()->subDays(365))
                 ->count();
         }
@@ -373,13 +390,14 @@ class MaturityAutoDeriveService
     {
         // Use security_postures findings as proxy if exists
         $score = 5;
+        $count = 0;
         if (Schema::hasTable('security_postures')) {
             $count = DB::table('security_postures')->where('org_id', $orgId)->count();
             if ($count >= 1) $score += 2;
             if ($count >= 10) $score += 2;
         }
         $score = min(10, $score);
-        return ['score' => $score, 'metadata' => ['security_posture_records' => $count ?? 0]];
+        return ['score' => $score, 'metadata' => ['security_posture_records' => $count]];
     }
 
     private function scoreBreachResponse(string $orgId): array
@@ -392,12 +410,25 @@ class MaturityAutoDeriveService
         if ($total === 0) {
             return ['score' => 6, 'metadata' => ['breach_count' => 0]];   // no breaches → neutral-positive
         }
-        // Count breaches notified within 72h (deadline_at <= reported_at + 72h)
-        $onTime = DB::table('breach_incidents')
-            ->where('org_id', $orgId)->whereNull('deleted_at')
-            ->whereRaw("notified_at IS NOT NULL")
-            ->count();
+        // Count breaches that were notified to either KOMDIGI or affected subjects.
+        // The schema tracks two separate notification timestamps; either fulfils
+        // the regulator-notified obligation under UU PDP Pasal 46.
+        $notifiedColumns = ['notified_komdigi_at', 'notified_subjects_at'];
+        $existing = array_filter($notifiedColumns, fn ($c) => Schema::hasColumn('breach_incidents', $c));
+
+        $onTime = 0;
+        if (!empty($existing)) {
+            $q = DB::table('breach_incidents')
+                ->where('org_id', $orgId)->whereNull('deleted_at');
+            $q->where(function ($w) use ($existing) {
+                foreach ($existing as $col) {
+                    $w->orWhereNotNull($col);
+                }
+            });
+            $onTime = $q->count();
+        }
         $score = (int) ceil(3 + ($onTime / max(1, $total)) * 7);
-        return ['score' => $score, 'metadata' => ['breach_count' => $total, 'notified' => $onTime]];
+        $score = min(10, $score);
+        return ['score' => $score, 'metadata' => ['breach_count' => $total, 'notified' => $onTime, 'columns_used' => array_values($existing)]];
     }
 }
