@@ -57,16 +57,27 @@ class PostureController extends Controller
      * to see the impact immediately instead of waiting for tomorrow's
      * scheduled run.
      */
-    public function takeSnapshot(Request $request)
+    public function takeSnapshot(Request $request, \App\Services\PostureFindingService $findings)
     {
         $orgId = $request->user()->org_id;
         if (!$orgId) return response()->json(['message' => 'Organization context required'], 400);
+
+        // Re-materialize findings first so the snapshot reflects the latest
+        // open/resolved state. Wrapped so a detector failure can't kill the
+        // snapshot — it'll just snapshot the slightly-stale finding state.
+        $findingsResult = null;
+        try {
+            $findingsResult = $findings->materialize($orgId);
+        } catch (\Throwable $e) {
+            \Log::warning('Findings rematerialize during snapshot failed: ' . $e->getMessage());
+        }
 
         $snap = $this->postureService->takeSnapshot($orgId, PostureSnapshot::SOURCE_MANUAL);
 
         return response()->json([
             'message' => 'Snapshot diambil. Skor: ' . $snap->overall_score . '/100.',
             'snapshot' => $snap,
+            'findings' => $findingsResult,
         ], 201);
     }
 }

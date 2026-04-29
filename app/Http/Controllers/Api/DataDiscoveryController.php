@@ -174,6 +174,16 @@ class DataDiscoveryController extends Controller
             'engine'         => $engine,
         ], 'system');
 
+        // Phase 3b — re-materialize posture findings now that scan changed.
+        // Wrapped so a finding-side bug can't fail the scan response.
+        $findingsResult = null;
+        try {
+            $findingsResult = app(\App\Services\PostureFindingService::class)
+                ->materialize($request->user()->org_id);
+        } catch (\Throwable $e) {
+            \Log::warning('Posture findings rematerialize failed (non-fatal): ' . $e->getMessage());
+        }
+
         return response()->json([
             'data'         => $system->fresh(),
             'scan_summary' => [
@@ -182,6 +192,7 @@ class DataDiscoveryController extends Controller
                 'pdp_alerts'     => $pdpCount,
                 'engine'         => $engine,
             ],
+            'findings'     => $findingsResult,
         ]);
     }
 

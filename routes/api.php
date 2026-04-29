@@ -775,6 +775,14 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::get('/posture/trend', [PostureController::class, 'getTrend']);
         Route::post('/posture/snapshot', [PostureController::class, 'takeSnapshot']); // Phase 3a — manual refresh
 
+        // Phase 3b — Findings workflow
+        Route::get('/findings/stats', [\App\Http\Controllers\Api\PostureFindingController::class, 'stats']);
+        Route::post('/findings/rematerialize', [\App\Http\Controllers\Api\PostureFindingController::class, 'rematerialize']);
+        Route::get('/findings', [\App\Http\Controllers\Api\PostureFindingController::class, 'index']);
+        Route::get('/findings/{id}', [\App\Http\Controllers\Api\PostureFindingController::class, 'show']);
+        Route::post('/findings/{id}/assign', [\App\Http\Controllers\Api\PostureFindingController::class, 'assign']);
+        Route::post('/findings/{id}/status', [\App\Http\Controllers\Api\PostureFindingController::class, 'changeStatus']);
+
         // Alert Engine / Notifications
         Route::get('/alerts', [AlertController::class, 'index']);
         Route::get('/alerts/count', [AlertController::class, 'count']);
