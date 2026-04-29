@@ -62,38 +62,31 @@ Status       = draft → submitted → published
 
 Status: 🔵 not started · 🟡 in progress · 🟢 done · 🔴 blocked
 
-### Sprint X1 — LIA Full Implementation 🟡 (in progress)
+### Sprint X1 — LIA Full Implementation 🟢 (BE + FE done 2026-04-29; PDF export deferred to X4)
 
 **Goal**: LIA module sesuai PDF spec end-to-end — RoPA auto-fill, 5-step wizard, risk register, RACI workflow, lock state, PDF export.
 
 **Effort**: 1.5 minggu
 
-**Backend tasks**:
-- [ ] Migration `extend_lia_assessments`: tambah `lia_code`, `linked_dpia_id`, `legitimate_interest_basis`, `legitimate_interest_reason`, `balancing_risk_events`, `subject_loses_control`, `subject_loses_control_reason`, conclusion_*, `maker_id`, `checker_id`, `approver_id`, timestamps, `is_locked`
-- [ ] `LiaController` dengan workflow methods:
-  - [ ] `index`, `show`, `store`, `update` (block kalau is_locked unless root)
-  - [ ] `submit` — Maker action, set is_locked=true, status=submitted
-  - [ ] `check` — Checker action, comment + status=checked (atau reject ke maker)
-  - [ ] `approve` — Approver action, isi 3 conclusions + final status
-  - [ ] `reject` — Approver action, unlock + set status=rejected, kembali ke maker
-  - [ ] `fromRopa` — quick-create dari RoPA detail page, auto-fill 13 fields
-  - [ ] `unlock` — root-only emergency, audit-logged
-  - [ ] `export` — PDF compliance report
-- [ ] Routes `/api/lia/*` (separate from generic `/api/assessments/lia/*`)
-- [ ] Auto-trigger di RoPA save: kalau `legal_basis === 'legitimate_interest'` → notify DPO suggest LIA
-- [ ] Service `LiaContextResolver` — query RoPA + return 13 fields untuk auto-fill
+**Backend tasks** (BE commit: `c5a40ae`):
+- [x] Migration `extend_lia_assessments`: 13 kolom baru (lia_code, linked_dpia_id, legitimate_interest_*, balancing_risk_events, subject_loses_control_*, conclusion_*, maker_id/checker_id/approver_id + timestamps, is_locked + unlocked_*)
+- [x] `LiaController` dengan workflow methods (CRUD + submit/check/approve/reject/fromRopa/unlock + override `update` block kalau locked)
+- [x] Routes `/api/lia/*` (13 endpoints, verified via `php artisan route:list`)
+- [x] `ROPA_AUTOFILL_FIELDS` const + `fromRopa()` snapshot logic
+- [ ] Auto-trigger di RoPA save: deferred (notif system rebuild di sprint terpisah)
+- [ ] PDF export → Sprint X4
 
-**Frontend tasks**:
-- [ ] Component `<MaturityRuler>` (reusable for LIA balancing test, TIA, Maturity)
-- [ ] Component `<RopaAutoFillCard>` — read-only display dari 13 RoPA fields
-- [ ] Component `<RaciWorkflowStepper>` — visual stepper (Maker → Checker → Approver → Done)
-- [ ] Component `<RiskRegisterTable>` — risk register editor (dampak, prob, control, residual auto-calc)
-- [ ] Refactor `(dashboard)/lia/page.tsx`:
-  - [ ] List view dengan KPI cards + filter chips
-  - [ ] 5-step wizard (RoPA picker, Dasar, Purpose, Necessity, Balancing)
-  - [ ] Detail page dengan tabs (Overview, Purpose, Necessity, Balancing, Risk Register, Approval)
-  - [ ] Lock-state UI (gray + lock icon)
-- [ ] PDF export integration (existing `TemplateExportController` pattern)
+**Frontend tasks** (FE commit: `feat(lia): 5-step wizard + RACI workflow UI`):
+- [x] `<MaturityRuler>` — 1-10 ruler red→green gradient, level labels, `inverted` prop, customLevelLabels
+- [x] `<RopaAutoFillCard>` — read-only 13-field display dengan icon per field
+- [x] `<RaciWorkflowStepper>` — horizontal stepper Maker→Checker→Approver→Done + lock badge + rejection banner + compact mode
+- [x] `<RiskRegisterTable>` — auto-calc Inheren (dampak × prob) + Residual (× faktor kontrol), seed-5-defaults, locked mode
+- [x] Refactor `(dashboard)/lia/page.tsx`:
+  - [x] List view: 4 KPI cards + status filter + search + lock icon + verdict pill
+  - [x] 5-step wizard mengikuti PDF spec persis
+  - [x] Detail view dengan RaciWorkflowStepper + section cards + workflow buttons + Approve modal (3 verdict picker)
+  - [x] Lock-state UI di list + edit blocked + root-only Emergency Unlock button
+- [ ] PDF export → Sprint X4
 
 **Acceptance criteria**:
 - [ ] Bisa create LIA dari RoPA detail page (button "Create LIA")
