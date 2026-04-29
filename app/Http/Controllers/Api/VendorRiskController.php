@@ -120,7 +120,142 @@ class VendorRiskController extends Controller
             'last_assessed_at' => "{$opt}|date",
             'contact_name' => "{$opt}|string|max:200",
             'contact_email' => "{$opt}|email|max:200",
+            // Phase 2 — TPRM category
+            'category' => "{$opt}|in:" . implode(',', \App\Models\VendorQuestionnaire::ALL_CATEGORIES),
         ];
+    }
+
+    // =========================================================
+    //  Phase 2 — Deterministic questionnaire (no AI required)
+    // =========================================================
+
+    /**
+     * Get the questionnaire for a category — used by the FE wizard
+     * Step 2 to render the form. Platform-level data so org_id is irrelevant.
+     */
+    public function getQuestionnaire(Request $request, string $category)
+    {
+        if (!in_array($category, \App\Models\VendorQuestionnaire::ALL_CATEGORIES, true)) {
+            return response()->json(['message' => 'Unknown vendor category'], 422);
+        }
+        $version = $request->get('version', 'v1');
+
+        $questions = \App\Models\VendorQuestionnaire::query()
+            ->where('category', $category)
+            ->where('version', $version)
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->get();
+
+        return response()->json([
+            'category' => $category,
+            'category_label' => \App\Models\VendorQuestionnaire::CATEGORY_LABELS[$category] ?? $category,
+            'category_description' => \App\Models\VendorQuestionnaire::CATEGORY_DESCRIPTIONS[$category] ?? null,
+            'version' => $version,
+            'sections' => \App\Models\VendorQuestionnaire::SECTION_LABELS,
+            'data' => $questions,
+        ]);
+    }
+
+    /**
+     * Available vendor categories — for the wizard Step 1 picker.
+     */
+    public function listCategories()
+    {
+        $list = collect(\App\Models\VendorQuestionnaire::ALL_CATEGORIES)
+            ->map(fn ($c) => [
+                'value' => $c,
+                'label' => \App\Models\VendorQuestionnaire::CATEGORY_LABELS[$c] ?? $c,
+                'description' => \App\Models\VendorQuestionnaire::CATEGORY_DESCRIPTIONS[$c] ?? null,
+                'question_count' => \App\Models\VendorQuestionnaire::query()
+                    ->where('category', $c)->where('version', 'v1')->where('is_active', true)->count(),
+            ])->values();
+        return response()->json(['data' => $list]);
+    }
+
+    /**
+     * Run the deterministic scoring formula against a set of answers
+     * and persist the result as a VendorAssessment. Updates vendor's
+     * cached risk_score/risk_level/last_assessed_at + next_assessment_due_at.
+     *
+     * Mode 'create_vendor' — creates a brand-new vendor with the answers
+     * (Step 1 of wizard captures vendor metadata, Step 2-3 questionnaire).
+     * Mode 'reassess'      — reassesses an existing vendor.
+     */
+    public function assessDeterministic(
+        Request $request,
+        \App\Services\VendorRiskScoreService $scorer,
+        ?string $id = null,
+    ) {
+        $data = $request->validate([
+            'category' => 'required|in:' . implode(',', \App\Models\VendorQuestionnaire::ALL_CATEGORIES),
+            'answers' => 'required|array',
+            'version' => 'nullable|string|max:16',
+            'notes' => 'nullable|string|max:2000',
+            // For create_vendor mode — vendor metadata
+            'vendor_name' => 'sometimes|required_without:id|string|max:255',
+            'vendor_country' => 'nullable|string|max:100',
+            'vendor_website' => 'nullable|url|max:500',
+            'vendor_services' => 'nullable|array',
+            'vendor_services.*' => 'string|max:200',
+        ]);
+
+        $orgId = $request->user()->org_id;
+        $version = $data['version'] ?? 'v1';
+
+        // Resolve or create the vendor
+        if ($id) {
+            $vendor = Vendor::where('org_id', $orgId)->findOrFail($id);
+            $vendor->category = $data['category'];
+        } else {
+            $vendor = Vendor::create([
+                'org_id' => $orgId,
+                'name' => $data['vendor_name'],
+                'category' => $data['category'],
+                'country' => $data['vendor_country'] ?? null,
+                'website' => $data['vendor_website'] ?? null,
+                'services_provided' => $data['vendor_services'] ?? [],
+            ]);
+        }
+
+        // Compute score
+        $result = $scorer->compute($data['category'], $data['answers'], $version);
+
+        // Persist assessment
+        $assessment = VendorAssessment::create([
+            'vendor_id' => $vendor->id,
+            'org_id' => $orgId,
+            'assessed_by' => $request->user()->id,
+            'answers' => $data['answers'],
+            'score' => $result['score'],
+            'risk_level' => $result['risk_level'],
+            'recommendations' => $result['recommendations'],
+            'notes' => $data['notes'] ?? null,
+            'source' => VendorAssessment::SOURCE_DETERMINISTIC,
+            'category' => $data['category'],
+            'score_breakdown' => $result['breakdown'],
+            'questionnaire_version' => $version,
+        ]);
+
+        // Update vendor cached fields
+        $vendor->risk_score = $result['score'];
+        $vendor->risk_level = $result['risk_level'];
+        $vendor->last_assessed_at = now();
+        $vendor->next_assessment_due_at = $scorer->nextDueDate($result['risk_level']);
+        $vendor->save();
+
+        return response()->json([
+            'message' => 'Assessment selesai. Skor: ' . $result['score'] . '/100 (' . strtoupper($result['risk_level']) . ').',
+            'data' => [
+                'vendor' => $vendor->fresh(),
+                'assessment' => $assessment,
+                'questions_total' => $result['questions_total'],
+                'questions_answered' => $result['questions_answered'],
+                'unanswered' => $result['unanswered'] ?? [],
+                'breakdown' => $result['breakdown'],
+                'recommendations' => $result['recommendations'],
+            ],
+        ], 201);
     }
 
     public function destroy(Request $request, $id)

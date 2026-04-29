@@ -10,6 +10,10 @@ class VendorAssessment extends Model
 {
     use HasFactory, HasUuids;
 
+    public const SOURCE_DETERMINISTIC = 'deterministic';
+    public const SOURCE_AI = 'ai';
+    public const SOURCE_IMPORTED = 'imported';
+
     protected $fillable = [
         'vendor_id',
         'org_id',
@@ -19,11 +23,16 @@ class VendorAssessment extends Model
         'risk_level',
         'recommendations',
         'notes',
+        'source',
+        'category',
+        'score_breakdown',
+        'questionnaire_version',
     ];
 
     protected $casts = [
         'answers' => 'array',
         'recommendations' => 'array',
+        'score_breakdown' => 'array',
         'score' => 'integer',
     ];
 

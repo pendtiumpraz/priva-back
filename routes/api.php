@@ -471,6 +471,12 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
     // Phase 2: Vendor Risk Management (Third Party Management)
     // =============================================
     Route::prefix('vendor-risk')->group(function () {
+        // Phase 2 — Deterministic questionnaire endpoints. Must precede /{id}.
+        Route::get('/categories', [VendorRiskController::class, 'listCategories']);
+        Route::get('/questionnaire/{category}', [VendorRiskController::class, 'getQuestionnaire']);
+        Route::post('/assess-deterministic', [VendorRiskController::class, 'assessDeterministic']);                  // create + assess in one call
+        Route::post('/{id}/assess-deterministic', [VendorRiskController::class, 'assessDeterministic']);             // re-assess existing
+
         Route::get('/trashed', [VendorRiskController::class, 'trashed']);
         Route::get('/', [VendorRiskController::class, 'index']);
         Route::post('/', [VendorRiskController::class, 'store']);
@@ -479,7 +485,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::delete('/{id}', [VendorRiskController::class, 'destroy']);
         Route::post('/{id}/restore', [VendorRiskController::class, 'restore']);
         Route::delete('/{id}/force', [VendorRiskController::class, 'forceDelete']);
-        // AI Assessment
+        // AI Assessment (existing — parallel path to deterministic)
         Route::post('/extract', [VendorRiskController::class, 'extract']);
         Route::post('/generate-questions', [VendorRiskController::class, 'generateQuestions']);
         Route::post('/assess', [VendorRiskController::class, 'assess']);
@@ -488,7 +494,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::post('/{id}/documents', [VendorRiskController::class, 'uploadDocument']);
         Route::delete('/{id}/documents/{docId}', [VendorRiskController::class, 'deleteDocument']);
         Route::post('/{id}/screen-documents', [VendorRiskController::class, 'screenDocuments']);
-        // Re-assessment (manual atau AI) — replaces "belum diimplementasi" placeholder
+        // Re-assessment (manual override atau AI re-run) — legacy path
         Route::post('/{id}/reassess', [VendorRiskController::class, 'reassess']);
     });
 

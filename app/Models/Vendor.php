@@ -16,6 +16,7 @@ class Vendor extends Model
         'org_id',
         'name',
         'type',
+        'category',                  // Phase 2 — drives questionnaire bank
         'country',
         'contact_name',
         'contact_email',
@@ -27,6 +28,7 @@ class Vendor extends Model
         'risk_score',
         'risk_level',
         'last_assessed_at',
+        'next_assessment_due_at',    // Phase 2 — re-assessment cadence
         'data_shared',
         'services_provided',
         'documents',
@@ -36,6 +38,7 @@ class Vendor extends Model
         'dpa_signed_at' => 'date',
         'dpa_expires_at' => 'date',
         'last_assessed_at' => 'date',
+        'next_assessment_due_at' => 'date',
         'data_shared' => 'array',
         'services_provided' => 'array',
         'documents' => 'array',

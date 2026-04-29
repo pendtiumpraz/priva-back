@@ -29,6 +29,8 @@ class DatabaseSeeder extends Seeder
             MaturityQuestionsSeeder::class,
             // Country adequacy lookup — UU PDP Pasal 56 working classification.
             CountryAdequacySeeder::class,
+            // TPRM vendor questionnaire bank (3 categories × 12-15 questions).
+            VendorQuestionnaireSeeder::class,
         ]);
 
         if (User::where('email', 'superadmin@privasimu.com')->exists()) {
