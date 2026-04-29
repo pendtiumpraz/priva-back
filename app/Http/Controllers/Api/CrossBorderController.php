@@ -42,7 +42,22 @@ class CrossBorderController extends Controller
             'status' => $data['status'] ?? 'draft',
         ]));
 
-        return response()->json(['message' => 'Data transfer berhasil didaftarkan', 'data' => $transfer], 201);
+        // Sprint X4 — every cross-border transfer needs a TIA per UU PDP Pasal 56.
+        // Service wraps in try/catch so failures can't fail the create.
+        $autoTiaId = null;
+        try {
+            $tia = app(\App\Services\AssessmentAutoTriggerService::class)
+                ->fromCrossBorder($transfer, $request->user()->id);
+            $autoTiaId = $tia?->id;
+        } catch (\Throwable $e) {
+            Log::warning('Auto-TIA on CrossBorder store failed (non-fatal): ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'message' => 'Data transfer berhasil didaftarkan',
+            'data' => $transfer,
+            'auto_tia_id' => $autoTiaId,
+        ], 201);
     }
 
     public function show(Request $request, $id)

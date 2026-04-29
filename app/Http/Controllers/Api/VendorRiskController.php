@@ -59,7 +59,22 @@ class VendorRiskController extends Controller
             'org_id' => $request->user()->org_id,
         ]));
 
-        return response()->json(['message' => 'Vendor berhasil ditambahkan', 'data' => $vendor], 201);
+        // Sprint X4 — high-risk OR offshore vendor → auto-seed draft TIA.
+        // Service handles both criteria + try/catch wrap.
+        $autoTiaId = null;
+        try {
+            $tia = app(\App\Services\AssessmentAutoTriggerService::class)
+                ->fromVendor($vendor, $request->user()->id);
+            $autoTiaId = $tia?->id;
+        } catch (\Throwable $e) {
+            Log::warning('Auto-TIA on Vendor store failed (non-fatal): ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'message' => 'Vendor berhasil ditambahkan',
+            'data' => $vendor,
+            'auto_tia_id' => $autoTiaId,
+        ], 201);
     }
 
     public function show(Request $request, $id)

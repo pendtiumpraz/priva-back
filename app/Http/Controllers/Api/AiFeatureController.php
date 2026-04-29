@@ -552,6 +552,56 @@ class AiFeatureController extends Controller
     }
 
     /**
+     * Sprint X4: "Tanya AI" — free-form question against a specific
+     * LIA/TIA/Maturity record. Distinct from `assessmentAnalysis`
+     * (which returns full structured analysis) — this is conversational
+     * Q&A grounded in the specific record so an auditor can drill into
+     * "kenapa skor balancing test segini?" or "apa risiko utama transfer
+     * ini?" with citations.
+     */
+    public function assessmentAskAi(Request $request, string $kind)
+    {
+        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        $feature = "assessment_ask_{$kind}";
+        $creditErr = $this->checkCredit($request, $feature);
+        if ($creditErr) return $creditErr;
+
+        $data = $request->validate([
+            'id' => 'required|uuid',
+            'question' => 'required|string|min:5|max:1000',
+        ]);
+
+        $orgId = $request->user()->org_id;
+        $model = match ($kind) {
+            'lia' => \App\Models\LiaAssessment::class,
+            'tia' => \App\Models\TiaAssessment::class,
+            'maturity' => \App\Models\MaturityAssessment::class,
+            default => null,
+        };
+        if (!$model) return response()->json(['message' => 'Unknown assessment kind'], 422);
+
+        $record = $model::where('org_id', $orgId)->find($data['id']);
+        if (!$record) return response()->json(['message' => 'Assessment tidak ditemukan'], 404);
+
+        // For maturity, attach question responses so the AI can reason about
+        // specific sub-question scores (e.g. "kenapa C12 enkripsi cuma 4?")
+        $payload = $record->toArray();
+        if ($kind === 'maturity') {
+            $payload['responses'] = $record->responses()->get(['question_code', 'domain', 'score', 'notes', 'source'])->toArray();
+        }
+
+        $ai = (new AiService($orgId))->setLocale($request->user()->locale ?? 'id');
+        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+
+        $response = $ai->assessmentAskAi($kind, $payload, $data['question']);
+
+        return $this->saveAndRespond($request, $feature, $response, [
+            'id' => $data['id'],
+            'question' => $data['question'],
+        ]);
+    }
+
+    /**
      * Sprint D4: Generate dynamic containment steps for a breach incident.
      */
     public function breachContainmentSteps(Request $request)

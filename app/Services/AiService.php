@@ -634,6 +634,40 @@ class AiService
     }
 
     /**
+     * Sprint X4: "Tanya AI" — free-form Q&A grounded in a specific
+     * LIA / TIA / Maturity record. Returns a markdown-friendly answer
+     * with citations to UU PDP articles. Distinct from {kind}Analysis
+     * (which produces a structured JSON evaluation) — this endpoint
+     * is conversational so an auditor can drill into specifics.
+     */
+    public function assessmentAskAi(string $kind, array $record, string $question): ?array
+    {
+        $kindLabel = match ($kind) {
+            'lia' => 'Legitimate Interest Assessment',
+            'tia' => 'Transfer Impact Assessment',
+            'maturity' => 'Maturity Assessment',
+            default => ucfirst($kind),
+        };
+        $system = "Kamu adalah privacy lawyer & data protection officer ahli UU PDP Indonesia (UU 27/2022).\n"
+            . "Konteksnya: kamu sedang membantu auditor / DPO menganalisis sebuah {$kindLabel}.\n\n"
+            . "Output WAJIB JSON valid dengan format:\n"
+            . json_encode([
+                'answer' => 'string — jawaban langsung & jelas (boleh markdown, bullet, dan tabel)',
+                'citations' => [['article' => 'Pasal X UU PDP', 'note' => 'kenapa relevan dengan jawaban di atas']],
+                'confidence' => 'high | medium | low',
+                'follow_up_questions' => ['pertanyaan lanjutan yang relevan untuk auditor'],
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+            . "\n\nKalau pertanyaan di luar konteks record, tolak halus dan minta klarifikasi.";
+
+        $user = "Record {$kindLabel}:\n"
+            . json_encode($record, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+            . "\n\nPertanyaan auditor:\n" . $question
+            . "\n\nJawab HANYA JSON valid sesuai format.";
+
+        return $this->ask($system, $user, 2000);
+    }
+
+    /**
      * Sprint F3: Maturity analysis — evaluate & recommend roadmap.
      */
     public function maturityAnalysis(array $maturity): ?array

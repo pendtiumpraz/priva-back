@@ -561,6 +561,19 @@ class ModuleCrudController extends Controller
                 }
             }
 
+            // Auto-trigger: ROPA with legal_basis = legitimate interest → draft LIA.
+            // Sprint X4 — wraps in try/catch via the service so failure can't roll back ROPA.
+            $autoLiaId = null;
+            if ($module === 'ropa') {
+                try {
+                    $lia = app(\App\Services\AssessmentAutoTriggerService::class)
+                        ->fromRopa($record, $data['created_by'] ?? null);
+                    $autoLiaId = $lia?->id;
+                } catch (\Throwable $e) {
+                    \Log::warning('Auto-LIA on ROPA store failed (non-fatal): ' . $e->getMessage());
+                }
+            }
+
             // Auto-trigger: DSR with app_id → seed scopes from app.default_information_system_ids
             // so DPO doesn't need to manually pick. Tab Scope page langsung pre-populated.
             $autoScopeCount = 0;
@@ -600,6 +613,7 @@ class ModuleCrudController extends Controller
                 'message' => 'Created',
                 'data' => $record,
                 'auto_dpia_id' => $autoDpiaId,
+                'auto_lia_id' => $autoLiaId ?? null,
                 'auto_scope_count' => $autoScopeCount,
             ], 201);
         } catch (\Exception $e) {

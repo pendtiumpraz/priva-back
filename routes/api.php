@@ -854,6 +854,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::get('/batch-review/{batchId}', [AiFeatureController::class, 'batchReviewStatus']);
         Route::post('/breach/containment-steps', [AiFeatureController::class, 'breachContainmentSteps']);
         Route::post('/assessment/{kind}/analysis', [AiFeatureController::class, 'assessmentAnalysis'])->where('kind', 'lia|tia|maturity');
+        Route::post('/assessment/{kind}/ask', [AiFeatureController::class, 'assessmentAskAi'])->where('kind', 'lia|tia|maturity'); // Sprint X4 Tanya AI
         Route::post('/autofill/breach', [AiFeatureController::class, 'autofillBreach']);
         Route::post('/autofill/dsr', [AiFeatureController::class, 'autofillDsr']);
         Route::post('/autofill/consent-items/{id}', [AiFeatureController::class, 'autofillConsentItems']);
