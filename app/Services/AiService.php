@@ -1114,11 +1114,11 @@ class AiService
               . $hintStr
               . "Urutan kolom yang diduga bocor dari sumber eksternal:\n{$leakedStr}\n\n"
               . "Cari maksimal 5 tabel di skema yang paling cocok. Kriteria penilaian:\n"
-              . "1. Exact column-name match (tertinggi)\n"
-              . "2. Semantic match (email ≈ email_address, hp ≈ phone_number)\n"
-              . "3. Urutan kolom cocok\n"
-              . "4. Completeness — makin banyak kolom leaked yang ada di tabel, makin tinggi confidence\n"
-              . "5. Confidence 0–1. Jangan melebihi 0.98 kecuali benar-benar exact match.\n\n"
+              . "1. EXACT MATCH ONLY: Prioritaskan tabel dengan nama kolom yang PERSIS SAMA (100% exact literal match) dengan daftar kolom bocor.\n"
+              . "2. PENALTI KEMIRIPAN: Jika nama kolom hanya mirip (contoh: 'users' vs 'user', 'emails' vs 'email'), turunkan nilai confidence secara drastis (maksimal 0.40).\n"
+              . "3. Confidence hanya boleh melebihi 0.80 jika sebagian besar kolom adalah EXACT MATCH tanpa tambahan atau pengurangan karakter apapun.\n"
+              . "4. Urutan kolom yang cocok (exact match) menambah skor confidence.\n"
+              . "5. Range Confidence 0–1. Berikan skor rendah (<= 0.40) jika kalkulasi didominasi oleh sekadar kemiripan kata.\n\n"
               . "Keluarkan HANYA JSON valid.";
 
         return $this->ask($system, $user, 1500);
