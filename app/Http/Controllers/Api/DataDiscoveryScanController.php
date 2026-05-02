@@ -68,14 +68,31 @@ class DataDiscoveryScanController extends Controller
         );
 
         return response()->json([
-            'plan_id' => $plan->id,
+            'plan' => $this->serializePlan($plan),
+        ], 201);
+    }
+
+    /**
+     * Serialize plan model to the shape the frontend ScanPlan type expects.
+     * Excludes identifier_hashes (server-only fingerprints).
+     */
+    private function serializePlan(DataDiscoveryScanPlan $plan): array
+    {
+        return [
+            'id' => $plan->id,
+            'label' => $plan->label,
             'status' => $plan->status,
-            'total_systems' => $plan->total_systems,
-            'total_tables' => $plan->total_tables,
-            'skipped_tables' => $plan->skipped_tables,
+            'total_systems' => (int) $plan->total_systems,
+            'total_tables' => (int) $plan->total_tables,
+            'skipped_tables' => (int) $plan->skipped_tables,
+            'total_hits' => (int) $plan->total_hits,
+            'progress' => (int) ($plan->progress ?? 0),
+            'parent_ai_job_id' => $plan->parent_ai_job_id,
+            'saas_pack_path' => $plan->saas_pack_path,
             'identifiers_masked' => $plan->identifiers,
             'expires_at' => $plan->expires_at,
-        ], 201);
+            'created_at' => $plan->created_at,
+        ];
     }
 
     // =========================================================================
@@ -105,26 +122,23 @@ class DataDiscoveryScanController extends Controller
         }
 
         return response()->json([
-            'plan' => $plan,
-            'plan_systems' => $plan->planSystems->map(fn ($ps) => [
-                'id' => $ps->id,
-                'app_name' => $ps->app_name,
-                'information_system_id' => $ps->information_system_id,
-                'status' => $ps->status,
-                'hit_count' => $ps->hit_count,
-                'error' => $ps->error,
-                'started_at' => $ps->started_at,
-                'finished_at' => $ps->finished_at,
-                'tables' => array_map(
-                    fn ($q) => [
-                        'table' => $q['table'] ?? null,
-                        'confidence' => $q['confidence'] ?? null,
-                        'matched_columns' => $q['matched_columns'] ?? [],
-                    ],
-                    $ps->table_queries ?? [],
-                ),
-            ]),
+            'plan' => $this->serializePlan($plan),
+            'systems' => $plan->planSystems->map(fn ($ps) => $this->serializeSystem($ps))->values(),
         ]);
+    }
+
+    private function serializeSystem(DataDiscoveryScanPlanSystem $ps): array
+    {
+        return [
+            'id' => $ps->id,
+            'information_system_id' => $ps->information_system_id,
+            'app_name' => $ps->app_name,
+            'table_count' => is_array($ps->table_queries) ? count($ps->table_queries) : 0,
+            'status' => $ps->status,
+            'hit_count' => (int) $ps->hit_count,
+            'error' => $ps->error,
+            'child_ai_job_id' => $ps->child_ai_job_id,
+        ];
     }
 
     // =========================================================================
@@ -413,20 +427,20 @@ class DataDiscoveryScanController extends Controller
             return response()->json(['error' => 'Not found'], 404);
         }
 
+        $plan->load(['planSystems' => fn ($q) => $q->orderBy('app_name')]);
+
         $results = DataDiscoveryScanResult::forOrg($user->org_id)
             ->where('scan_plan_id', $plan->id)
-            ->with(['planSystem:id,app_name,information_system_id'])
             ->orderBy('plan_system_id')
             ->orderBy('table_name')
-            ->paginate(50);
+            ->limit(2000)
+            ->get(['id', 'scan_plan_id', 'plan_system_id', 'information_system_id',
+                'table_name', 'confidence', 'matched_columns', 'match_count',
+                'row_pks', 'masked_row', 'revealed', 'revealed_at', 'created_at']);
 
         return response()->json([
-            'plan' => [
-                'id' => $plan->id,
-                'status' => $plan->status,
-                'total_hits' => $plan->total_hits,
-                'progress' => $plan->progress,
-            ],
+            'plan' => $this->serializePlan($plan),
+            'systems' => $plan->planSystems->map(fn ($ps) => $this->serializeSystem($ps))->values(),
             'results' => $results,
         ]);
     }

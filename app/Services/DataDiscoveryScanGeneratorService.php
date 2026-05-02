@@ -6,37 +6,30 @@ use App\Models\AuditLog;
 use App\Models\DataDiscoveryScanPlan;
 use App\Models\DataDiscoveryScanPlanSystem;
 use App\Models\InformationSystem;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use RuntimeException;
 
 /**
- * Person Scan plan generator (Step 1).
+ * Person Scan plan generator (Step 1) — AI Text-to-SQL across all systems.
  *
- * INVARIANT (mirrors DsrSqlGeneratorService): Privasimu does NOT execute SQL
- * on a tenant's database during plan generation. This service only iterates
- * the schema metadata (`InformationSystem.scan_results`) and emits SELECT
- * statements that EITHER:
- *   - get bundled into a ZIP for the SaaS admin to run manually, or
- *   - get handed to DataDiscoveryAppExecutor as a child AiJob in OnPrem mode.
+ * Mirrors `DataDiscoveryController::specificSearchAi` but cross-system. For
+ * every InformationSystem with a populated `scan_results` schema, we send a
+ * compact `[{name, columns:[name]}, ...]` slice (NEVER row data) to the LLM
+ * along with a natural-language identifier prompt. The LLM returns SELECT
+ * queries that we persist on `data_discovery_scan_plan_systems.table_queries`
+ * — execution is a separate, user-explicit step (DataDiscoveryAppExecutor /
+ * SaaS pack).
  *
- * Hard-coded query LIMIT (`SELF::QUERY_ROW_LIMIT`) protects every individual
- * SELECT — throughput scales via concurrency (parallel child jobs), not via
- * larger per-query result sets.
+ * INVARIANT: AI provider only ever sees schema metadata (table + column
+ * names) and the identifier prompt. No real row data leaves the backend.
  *
- * See DATA_DISCOVERY_SEARCH_PLAN.md §2 "SQL Strategy Matrix" + §5.1.
+ * Defense in depth — destructive verbs are regex-rejected before persisting,
+ * the executor regex-rejects again at run time, and `DatabaseScanner`'s
+ * read-only transaction rolls back any mutation that slips through both.
  */
 class DataDiscoveryScanGeneratorService
 {
-    /** Hard-coded LIMIT applied to every generated SELECT — anti-runaway. */
-    private const QUERY_ROW_LIMIT = 100;
-
-    /** Whitelist regex for column / table identifiers — anti SQL injection. */
-    private const IDENT_RE = '/^[a-zA-Z_][a-zA-Z0-9_]*$/';
-
-    /**
-     * Reject any SQL that contains a write/DDL verb. Defense in depth — the
-     * generator only ever emits SELECT, but we double-check before persisting
-     * so a future bug can't smuggle a destructive statement through.
-     */
+    /** Reject any SQL containing a write/DDL verb before persisting. */
     private const DESTRUCTIVE_RE = '/\b(DELETE|UPDATE|DROP|INSERT|TRUNCATE|ALTER|CREATE|GRANT|REVOKE|MERGE|REPLACE)\b/i';
 
     public function __construct(
@@ -44,20 +37,25 @@ class DataDiscoveryScanGeneratorService
     ) {}
 
     /**
-     * Generate a scan plan + plan_systems for a single org / user / set of
-     * identifiers. Persists everything in one transaction.
+     * Generate a scan plan + plan_systems via AI Text-to-SQL.
      *
-     * @param  array{email:string,name:string,nik?:?string,phone?:?string,dob?:?string}  $identifiers
+     * @param  array{email?:?string,name?:?string,nik?:?string,phone?:?string,dob?:?string}  $identifiers
      */
     public function generate(string $orgId, string $userId, array $identifiers): DataDiscoveryScanPlan
     {
+        $aiService = app(AiService::class);
+        if (! $aiService->isAvailable()) {
+            throw new RuntimeException('AI Provider belum dikonfigurasi.');
+        }
+
         $normalized = $this->normalize($identifiers);
         $hashes = $this->hashIdentifiers($orgId, $normalized);
         $maskedForStorage = $this->maskIdentifiersForStorage($normalized);
+        $prompt = $this->buildPrompt($normalized);
 
         // Iterate org's information_systems WITHOUT relying on
-        // BelongsToOrg request-scope (this service may be called from a worker
-        // later) — explicit org_id filter via ::query()->withoutGlobalScope().
+        // BelongsToOrg request-scope (this service may run from a worker
+        // later) — explicit org_id filter via withoutGlobalScope().
         $systems = InformationSystem::query()
             ->withoutGlobalScope('org')
             ->where('org_id', $orgId)
@@ -65,103 +63,110 @@ class DataDiscoveryScanGeneratorService
             ->whereNotNull('scan_results')
             ->get();
 
-        $totalSystems = 0;
+        $plan = DataDiscoveryScanPlan::create([
+            'org_id' => $orgId,
+            'user_id' => $userId,
+            'label' => $this->buildLabel($maskedForStorage),
+            'identifiers' => $maskedForStorage,
+            'identifier_hashes' => $hashes,
+            'status' => DataDiscoveryScanPlan::STATUS_GENERATED,
+            'total_systems' => 0,
+            'total_tables' => 0,
+            'skipped_tables' => 0,
+            'total_hits' => 0,
+            'progress' => 0,
+            'expires_at' => now()->addDays((int) config('ai.history_retention_days', 30)),
+        ]);
+
         $totalTables = 0;
-        $skippedTables = 0;
-        $planSystemsToCreate = [];
+        $skippedSystems = 0;
+        $createdSystems = 0;
 
         foreach ($systems as $sys) {
-            $tables = $sys->scan_results['tables'] ?? [];
+            $tables = $sys->scan_results['tables'] ?? null;
             if (! is_array($tables) || empty($tables)) {
+                $skippedSystems++;
+
                 continue;
             }
 
-            $tableQueries = [];
-            foreach ($tables as $tableMeta) {
-                $tableName = $tableMeta['name'] ?? null;
-                if (! is_string($tableName) || ! preg_match(self::IDENT_RE, $tableName)) {
-                    $skippedTables++;
+            // Compact schema — only {name, columns:[name]} per table. No
+            // sample values, no classification, nothing PII-adjacent. Same
+            // shape as DataDiscoveryController::specificSearchAi line 502-507.
+            $compactSchema = collect($tables)->map(fn ($t) => [
+                'name' => $t['name'] ?? null,
+                'columns' => collect($t['columns'] ?? [])
+                    ->map(fn ($c) => $c['name'] ?? null)
+                    ->filter()
+                    ->values()
+                    ->toArray(),
+            ])->filter(fn ($t) => ! empty($t['name']) && ! empty($t['columns']))->values()->toArray();
 
-                    continue;
-                }
-                $columns = $tableMeta['columns'] ?? [];
-                if (! is_array($columns) || empty($columns)) {
-                    $skippedTables++;
+            if (empty($compactSchema)) {
+                $skippedSystems++;
 
-                    continue;
-                }
-
-                $strategy = $this->pickStrategy($columns, $normalized);
-                if ($strategy === null) {
-                    $skippedTables++;
-
-                    continue;
-                }
-
-                $sql = $this->buildSelectSql($tableName, $strategy, $columns);
-                if (preg_match(self::DESTRUCTIVE_RE, $sql)) {
-                    // Should be unreachable — generator only emits SELECT.
-                    $skippedTables++;
-
-                    continue;
-                }
-
-                $tableQueries[] = [
-                    'table' => $tableName,
-                    'sql' => $sql,
-                    'params' => $strategy['params'],
-                    'confidence' => $strategy['confidence'],
-                    'matched_columns' => $strategy['matched_columns'],
-                    'returned_columns' => $strategy['returned_columns'],
-                    'primary_key' => $strategy['primary_key'],
-                ];
-                $totalTables++;
-            }
-
-            if (empty($tableQueries)) {
                 continue;
             }
 
-            $totalSystems++;
-            $planSystemsToCreate[] = [
+            $aiResult = $aiService->generateSqlFromText(
+                $compactSchema,
+                $prompt,
+                $sys->source_type ?? 'mysql',
+            );
+
+            $queries = $aiResult['sql_queries'] ?? [];
+            if (! is_array($queries) || empty($queries)) {
+                $skippedSystems++;
+
+                continue;
+            }
+
+            // Defense-in-depth: reject anything destructive BEFORE persisting.
+            $safeQueries = array_values(array_filter(
+                $queries,
+                fn ($sql) => is_string($sql) && $sql !== '' && ! preg_match(self::DESTRUCTIVE_RE, $sql),
+            ));
+
+            if (empty($safeQueries)) {
+                $skippedSystems++;
+
+                continue;
+            }
+
+            $explanation = $aiResult['explanation'] ?? null;
+
+            $tableQueries = array_map(fn (string $sql) => [
+                'sql' => $sql,
+                // AI generates complete SQL with literal values inline (same
+                // as DataDiscoveryController::specificSearchAi). No bound
+                // params — kept for shape compat with downstream consumers.
+                'params' => [],
+                'table' => $this->extractTableName($sql) ?? 'unknown',
+                'confidence' => 'ai_generated',
+                'matched_columns' => [],
+                'returned_columns' => ['*'],
+                'primary_key' => null,
+                'ai_explanation' => $explanation,
+            ], $safeQueries);
+
+            DataDiscoveryScanPlanSystem::create([
+                'org_id' => $orgId,
+                'scan_plan_id' => $plan->id,
                 'information_system_id' => $sys->id,
                 'app_name' => $sys->name,
                 'table_queries' => $tableQueries,
-            ];
-        }
-
-        $plan = DB::transaction(function () use (
-            $orgId, $userId, $maskedForStorage, $hashes,
-            $totalSystems, $totalTables, $skippedTables, $planSystemsToCreate
-        ) {
-            $plan = DataDiscoveryScanPlan::create([
-                'org_id' => $orgId,
-                'user_id' => $userId,
-                'label' => $this->buildLabel($maskedForStorage),
-                'identifiers' => $maskedForStorage,
-                'identifier_hashes' => $hashes,
-                'status' => DataDiscoveryScanPlan::STATUS_GENERATED,
-                'total_systems' => $totalSystems,
-                'total_tables' => $totalTables,
-                'skipped_tables' => $skippedTables,
-                'total_hits' => 0,
-                'progress' => 0,
-                'expires_at' => now()->addDays((int) config('ai.history_retention_days', 30)),
+                'status' => DataDiscoveryScanPlanSystem::STATUS_PENDING,
             ]);
 
-            foreach ($planSystemsToCreate as $row) {
-                DataDiscoveryScanPlanSystem::create([
-                    'org_id' => $orgId,
-                    'scan_plan_id' => $plan->id,
-                    'information_system_id' => $row['information_system_id'],
-                    'app_name' => $row['app_name'],
-                    'table_queries' => $row['table_queries'],
-                    'status' => DataDiscoveryScanPlanSystem::STATUS_PENDING,
-                ]);
-            }
+            $createdSystems++;
+            $totalTables += count($tableQueries);
+        }
 
-            return $plan;
-        });
+        $plan->update([
+            'total_systems' => $createdSystems,
+            'total_tables' => $totalTables,
+            'skipped_tables' => $skippedSystems,
+        ]);
 
         try {
             AuditLog::create([
@@ -171,133 +176,17 @@ class DataDiscoveryScanGeneratorService
                 'user_id' => $userId,
                 'changes' => [
                     'identifier_hashes' => $hashes,
-                    'total_systems' => $totalSystems,
+                    'systems_processed' => $systems->count(),
+                    'systems_skipped' => $skippedSystems,
+                    'total_systems' => $createdSystems,
                     'total_tables' => $totalTables,
-                    'skipped_tables' => $skippedTables,
                 ],
             ]);
         } catch (\Throwable $e) {
-            \Log::warning('AuditLog write failed in scan generate', ['err' => $e->getMessage()]);
+            Log::warning('AuditLog write failed in scan generate', ['err' => $e->getMessage()]);
         }
 
         return $plan;
-    }
-
-    /**
-     * Decide which SQL strategy applies for a given table's columns + the
-     * identifiers the user provided. Returns null = skip (no useful match).
-     *
-     * Returned shape:
-     *   ['where' => string, 'params' => array, 'confidence' => 'high'|'medium',
-     *    'matched_columns' => ['email','name'], 'returned_columns' => ['*'],
-     *    'primary_key' => 'id'|null]
-     */
-    public function pickStrategy(array $columns, array $identifiers): ?array
-    {
-        $byClass = $this->indexColumnsByClassification($columns);
-        $pk = $this->detectPrimaryKey($columns);
-
-        $hasEmail = isset($byClass['email']) && ! empty($identifiers['email']);
-        $hasName = isset($byClass['name']) && ! empty($identifiers['name']);
-        $hasNik = isset($byClass['nik']) && ! empty($identifiers['nik']);
-        $hasPhone = isset($byClass['phone']) && ! empty($identifiers['phone']);
-        $hasDob = isset($byClass['dob']) && ! empty($identifiers['dob']);
-
-        // Helper: pick the first column in a classification group that has a
-        // safe identifier name. Returns null if none safe.
-        $pickSafe = function (string $cls) use ($byClass): ?string {
-            foreach ($byClass[$cls] ?? [] as $colName) {
-                if (preg_match(self::IDENT_RE, (string) $colName)) {
-                    return $colName;
-                }
-            }
-
-            return null;
-        };
-
-        // Strategy 1: email + name + (optional nik) — high confidence
-        if ($hasEmail && $hasName) {
-            $emailCol = $pickSafe('email');
-            $nameCol = $pickSafe('name');
-            if ($emailCol && $nameCol) {
-                $where = "LOWER({$emailCol}) = LOWER(?) AND LOWER({$nameCol}) = LOWER(?)";
-                $params = [$identifiers['email'], $identifiers['name']];
-                $matched = ['email', 'name'];
-                if ($hasNik && ($nikCol = $pickSafe('nik'))) {
-                    $where .= " AND {$nikCol} = ?";
-                    $params[] = $identifiers['nik'];
-                    $matched[] = 'nik';
-                }
-
-                return [
-                    'where' => $where,
-                    'params' => $params,
-                    'confidence' => 'high',
-                    'matched_columns' => $matched,
-                    'returned_columns' => ['*'],
-                    'primary_key' => $pk,
-                ];
-            }
-        }
-
-        // Strategy 2: email alone — high confidence
-        if ($hasEmail && ($emailCol = $pickSafe('email'))) {
-            return [
-                'where' => "LOWER({$emailCol}) = LOWER(?)",
-                'params' => [$identifiers['email']],
-                'confidence' => 'high',
-                'matched_columns' => ['email'],
-                'returned_columns' => ['*'],
-                'primary_key' => $pk,
-            ];
-        }
-
-        // Strategy 3: NIK alone — high confidence
-        if ($hasNik && ($nikCol = $pickSafe('nik'))) {
-            return [
-                'where' => "{$nikCol} = ?",
-                'params' => [$identifiers['nik']],
-                'confidence' => 'high',
-                'matched_columns' => ['nik'],
-                'returned_columns' => ['*'],
-                'primary_key' => $pk,
-            ];
-        }
-
-        // Strategy 4: phone + name — medium confidence
-        if ($hasPhone && $hasName) {
-            $phoneCol = $pickSafe('phone');
-            $nameCol = $pickSafe('name');
-            if ($phoneCol && $nameCol) {
-                return [
-                    'where' => "{$phoneCol} = ? AND LOWER({$nameCol}) = LOWER(?)",
-                    'params' => [$identifiers['phone'], $identifiers['name']],
-                    'confidence' => 'medium',
-                    'matched_columns' => ['phone', 'name'],
-                    'returned_columns' => ['*'],
-                    'primary_key' => $pk,
-                ];
-            }
-        }
-
-        // Strategy 5: name + dob — medium confidence
-        if ($hasName && $hasDob) {
-            $nameCol = $pickSafe('name');
-            $dobCol = $pickSafe('dob');
-            if ($nameCol && $dobCol) {
-                return [
-                    'where' => "LOWER({$nameCol}) = LOWER(?) AND {$dobCol} = ?",
-                    'params' => [$identifiers['name'], $identifiers['dob']],
-                    'confidence' => 'medium',
-                    'matched_columns' => ['name', 'dob'],
-                    'returned_columns' => ['*'],
-                    'primary_key' => $pk,
-                ];
-            }
-        }
-
-        // Name-only / no matching PII column → skip (per plan §2).
-        return null;
     }
 
     /**
@@ -327,68 +216,53 @@ class DataDiscoveryScanGeneratorService
     // Internals
     // =========================================================================
 
-    private function buildSelectSql(string $tableName, array $strategy, array $columns): string
+    /**
+     * Build the natural-language identifier prompt the AI Text-to-SQL agent
+     * receives. Tells the model how to combine identifiers and what guard
+     * rails to apply (read-only, LIMIT 100).
+     */
+    private function buildPrompt(array $n): string
     {
-        // Validate identifier whitelist already happened in pickStrategy — this
-        // is the final assembly. We cap with LIMIT to prevent runaway scans.
-        return sprintf(
-            'SELECT * FROM %s WHERE %s LIMIT %d',
-            $tableName,
-            $strategy['where'],
-            self::QUERY_ROW_LIMIT,
-        );
+        $parts = [];
+        if (! empty($n['email'])) {
+            $parts[] = "email = \"{$n['email']}\"";
+        }
+        if (! empty($n['name'])) {
+            $parts[] = "name (case-insensitive) = \"{$n['name']}\"";
+        }
+        if (! empty($n['nik'])) {
+            $parts[] = "NIK = \"{$n['nik']}\"";
+        }
+        if (! empty($n['phone'])) {
+            $parts[] = "phone = \"{$n['phone']}\"";
+        }
+        if (! empty($n['dob'])) {
+            $parts[] = "date of birth = \"{$n['dob']}\"";
+        }
+
+        $criteria = $parts === [] ? '(no identifier provided)' : implode(' AND ', $parts);
+
+        return 'Cari semua baris yang merepresentasikan satu orang dengan kriteria: '.$criteria.'. '
+            .'Gunakan kombinasi kolom yang paling kuat (email + name lebih reliable daripada name saja). '
+            .'Skip tabel yang hanya punya kolom name tanpa identifier kuat lain. '
+            .'Output WAJIB SELECT only, batasi setiap query dengan LIMIT 100.';
     }
 
     /**
-     * Build classification → [columnName, …] index from scan_results columns.
-     * Skips columns whose name fails the identifier whitelist regex.
+     * Best-effort extract of the first FROM table name from a SELECT for
+     * downstream display / pack ZIP filename purposes. Returns null if the
+     * regex doesn't match.
      */
-    private function indexColumnsByClassification(array $columns): array
+    private function extractTableName(string $sql): ?string
     {
-        $byClass = [];
-        foreach ($columns as $col) {
-            $name = $col['name'] ?? null;
-            $cls = strtolower((string) ($col['classification'] ?? ''));
-            if (! is_string($name) || $cls === '') {
-                continue;
-            }
-            if (! preg_match(self::IDENT_RE, $name)) {
-                continue;
+        if (preg_match('/\bFROM\s+["`]?([a-zA-Z0-9_\.]+)["`]?/i', $sql, $m)) {
+            // Strip schema prefix if present (e.g. public.users → users)
+            $name = $m[1];
+            if (str_contains($name, '.')) {
+                $name = substr($name, (int) strrpos($name, '.') + 1);
             }
 
-            // Normalize plan-aliases. e.g. mobile → phone, full_name → name
-            $key = match ($cls) {
-                'mobile', 'phone_number' => 'phone',
-                'full_name', 'first_name', 'last_name' => 'name',
-                'national_id', 'identity_number' => 'nik',
-                'birth_date', 'date_of_birth' => 'dob',
-                default => $cls,
-            };
-            $byClass[$key][] = $name;
-        }
-
-        return $byClass;
-    }
-
-    /**
-     * Pick the table's primary key from scan_results metadata if present.
-     * Falls back to a column literally named "id" (must pass whitelist).
-     */
-    private function detectPrimaryKey(array $columns): ?string
-    {
-        foreach ($columns as $col) {
-            $name = $col['name'] ?? null;
-            if (! is_string($name) || ! preg_match(self::IDENT_RE, $name)) {
-                continue;
-            }
-            if (! empty($col['is_primary_key']) || ! empty($col['primary_key'])) {
-                return $name;
-            }
-        }
-        foreach ($columns as $col) {
-            if (($col['name'] ?? null) === 'id') {
-                return 'id';
-            }
+            return $name;
         }
 
         return null;
