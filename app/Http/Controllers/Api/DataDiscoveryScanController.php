@@ -176,11 +176,21 @@ class DataDiscoveryScanController extends Controller
 
     private function serializeSystem(DataDiscoveryScanPlanSystem $ps): array
     {
+        // Expose generated SQL queries (sql + ai_explanation) supaya frontend
+        // bisa render debug view — important untuk diagnose 0-hit cases.
+        $tableQueries = is_array($ps->table_queries) ? $ps->table_queries : [];
+
         return [
             'id' => $ps->id,
             'information_system_id' => $ps->information_system_id,
             'app_name' => $ps->app_name,
-            'table_count' => is_array($ps->table_queries) ? count($ps->table_queries) : 0,
+            'table_count' => count($tableQueries),
+            'table_queries' => array_map(fn ($q) => [
+                'table' => $q['table'] ?? null,
+                'sql' => $q['sql'] ?? null,
+                'confidence' => $q['confidence'] ?? null,
+                'ai_explanation' => $q['ai_explanation'] ?? null,
+            ], $tableQueries),
             'status' => $ps->status,
             'hit_count' => (int) $ps->hit_count,
             'error' => $ps->error,
