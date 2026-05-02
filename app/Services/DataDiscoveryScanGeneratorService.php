@@ -66,7 +66,9 @@ class DataDiscoveryScanGeneratorService
         $plan = DataDiscoveryScanPlan::create([
             'org_id' => $orgId,
             'user_id' => $userId,
-            'label' => $this->buildLabel($maskedForStorage),
+            // Label pakai input asli (org-scoped, audit-worthy). Yang
+            // ter-mask di DB cuma kolom `identifiers` JSON.
+            'label' => $this->buildLabel($normalized),
             'identifiers' => $maskedForStorage,
             'identifier_hashes' => $hashes,
             'status' => DataDiscoveryScanPlan::STATUS_GENERATED,
