@@ -620,6 +620,10 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
             ->middleware('permission:data_discovery,read');
         Route::get('plans/{id}', [DataDiscoveryScanController::class, 'show'])
             ->middleware('permission:data_discovery,read');
+        Route::delete('plans/{id}', [DataDiscoveryScanController::class, 'destroy'])
+            ->middleware('permission:data_discovery,write');
+        Route::post('plans/{id}/restore', [DataDiscoveryScanController::class, 'restore'])
+            ->middleware('permission:data_discovery,write');
         Route::post('plans/{id}/execute', [DataDiscoveryScanController::class, 'execute'])
             ->middleware('permission:data_discovery,write');
         Route::get('plans/{id}/results', [DataDiscoveryScanController::class, 'results'])

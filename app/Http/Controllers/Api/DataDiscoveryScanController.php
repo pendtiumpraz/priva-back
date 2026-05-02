@@ -94,16 +94,67 @@ class DataDiscoveryScanController extends Controller
     }
 
     // =========================================================================
-    // GET /plans
+    // GET /plans (?trash=1 untuk lihat soft-deleted)
     // =========================================================================
     public function index(Request $req): JsonResponse
     {
         $user = $req->user();
-        $plans = DataDiscoveryScanPlan::forOrg($user->org_id)
-            ->orderByDesc('created_at')
-            ->paginate(20);
+        $trash = $req->boolean('trash');
+
+        $query = DataDiscoveryScanPlan::forOrg($user->org_id);
+        if ($trash) {
+            $query->onlyTrashed();
+        }
+
+        $plans = $query->orderByDesc('created_at')->paginate((int) ($req->per_page ?? 20));
+
+        // Map paginator data → serializePlan untuk konsistensi shape.
+        $plans->getCollection()->transform(fn ($p) => $this->serializePlan($p));
 
         return response()->json($plans);
+    }
+
+    // =========================================================================
+    // DELETE /plans/{id} — soft delete
+    // =========================================================================
+    public function destroy(Request $req, string $id): JsonResponse
+    {
+        $user = $req->user();
+        $plan = DataDiscoveryScanPlan::forOrg($user->org_id)->find($id);
+        if (! $plan) {
+            return response()->json(['error' => 'Not found'], 404);
+        }
+
+        $plan->delete();
+
+        $this->writeAudit('data_discovery.scan_plan.delete', $plan->id, $user, [
+            'soft' => true,
+        ]);
+
+        return response()->json(['message' => 'Plan archived', 'id' => $plan->id]);
+    }
+
+    // =========================================================================
+    // POST /plans/{id}/restore
+    // =========================================================================
+    public function restore(Request $req, string $id): JsonResponse
+    {
+        $user = $req->user();
+        $plan = DataDiscoveryScanPlan::forOrg($user->org_id)
+            ->onlyTrashed()
+            ->find($id);
+        if (! $plan) {
+            return response()->json(['error' => 'Not found'], 404);
+        }
+
+        $plan->restore();
+
+        $this->writeAudit('data_discovery.scan_plan.restore', $plan->id, $user, []);
+
+        return response()->json([
+            'message' => 'Plan restored',
+            'plan' => $this->serializePlan($plan),
+        ]);
     }
 
     // =========================================================================
