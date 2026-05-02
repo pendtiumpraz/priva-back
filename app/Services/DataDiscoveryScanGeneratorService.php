@@ -217,34 +217,38 @@ class DataDiscoveryScanGeneratorService
     // =========================================================================
 
     /**
-     * Build the natural-language identifier prompt the AI Text-to-SQL agent
-     * receives. Tells the model how to combine identifiers and what guard
-     * rails to apply (read-only, LIMIT 100).
+     * Build the natural-language identifier prompt for AI Text-to-SQL.
+     *
+     * Strategy: search by NAME using fuzzy / LIKE pattern, project email
+     * column when ada, supaya frontend bisa filter berdasarkan email setelah
+     * kandidat dengan nama mirip muncul. Email/NIK/phone/dob hanya hint
+     * tambahan ke AI bukan strict filter.
      */
     private function buildPrompt(array $n): string
     {
-        $parts = [];
+        $name = $n['name'] ?? '';
+        $hints = [];
         if (! empty($n['email'])) {
-            $parts[] = "email = \"{$n['email']}\"";
-        }
-        if (! empty($n['name'])) {
-            $parts[] = "name (case-insensitive) = \"{$n['name']}\"";
+            $hints[] = "email yang mungkin dipakai: \"{$n['email']}\"";
         }
         if (! empty($n['nik'])) {
-            $parts[] = "NIK = \"{$n['nik']}\"";
+            $hints[] = "NIK: \"{$n['nik']}\"";
         }
         if (! empty($n['phone'])) {
-            $parts[] = "phone = \"{$n['phone']}\"";
+            $hints[] = "phone: \"{$n['phone']}\"";
         }
         if (! empty($n['dob'])) {
-            $parts[] = "date of birth = \"{$n['dob']}\"";
+            $hints[] = "date of birth: \"{$n['dob']}\"";
         }
 
-        $criteria = $parts === [] ? '(no identifier provided)' : implode(' AND ', $parts);
+        $hintsLine = $hints === [] ? '' : ('Hint identifier tambahan untuk kalkulasi confidence (BUKAN filter strict): '.implode(', ', $hints).'. ');
 
-        return 'Cari semua baris yang merepresentasikan satu orang dengan kriteria: '.$criteria.'. '
-            .'Gunakan kombinasi kolom yang paling kuat (email + name lebih reliable daripada name saja). '
-            .'Skip tabel yang hanya punya kolom name tanpa identifier kuat lain. '
+        return 'Cari semua baris orang dengan nama mirip "'.$name.'" — '
+            .'pakai fuzzy / partial match pada kolom nama (`LOWER(name_col) LIKE LOWER(\'%'.$name.'%\')` atau ILIKE di Postgres). '
+            .'Boleh juga pakai per-token LIKE untuk handle urutan nama yang dibalik. '
+            .'PROYEKSIKAN kolom email/nama/identifier lain di SELECT supaya hasil bisa di-filter manual nanti. '
+            .$hintsLine
+            .'JANGAN strict filter — biarkan kandidat dengan nama mirip semua muncul, frontend yang akan narrow down. '
             .'Output WAJIB SELECT only, batasi setiap query dengan LIMIT 100.';
     }
 
