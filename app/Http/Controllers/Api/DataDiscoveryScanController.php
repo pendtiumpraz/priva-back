@@ -12,27 +12,24 @@ use App\Models\DataDiscoveryScanPlanSystem;
 use App\Models\DataDiscoveryScanResult;
 use App\Models\DsrRequest;
 use App\Models\DsrRequestScope;
-use App\Models\InformationSystem;
 use App\Models\Organization;
-use App\Services\DataDiscoveryMaskerService;
 use App\Services\DataDiscoveryScanGeneratorService;
-use App\Services\DataDiscoveryScanPackService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
-use Illuminate\Support\Facades\Storage;
 
 /**
- * Person Scan endpoints (DATA_DISCOVERY_SEARCH_PLAN.md §4).
+ * Person Scan endpoints.
  *
  * Endpoints:
  *   POST   /api/data-discovery/scan/generate          — store
  *   GET    /api/data-discovery/scan/plans             — index
  *   GET    /api/data-discovery/scan/plans/{id}        — show
- *   POST   /api/data-discovery/scan/plans/{id}/execute — execute (mode-aware)
- *   POST   /api/data-discovery/scan/plans/{id}/upload  — upload (SaaS)
+ *   POST   /api/data-discovery/scan/plans/{id}/execute — execute (always
+ *           dispatches against registered InformationSystem via DatabaseScanner)
  *   GET    /api/data-discovery/scan/plans/{id}/results — results
- *   POST   /api/data-discovery/scan-results/{id}/reveal — reveal (OnPrem)
+ *   POST   /api/data-discovery/scan-results/{id}/reveal — reveal (OnPrem only —
+ *           OnPrem stores encrypted_row, SaaS stores masked_row only)
  *   POST   /api/data-discovery/scan/plans/{id}/to-dsr  — toDsr
  *
  * Multi-tenant: every read uses ::forOrg($user->org_id) — the plan model does
@@ -42,7 +39,6 @@ class DataDiscoveryScanController extends Controller
 {
     public function __construct(
         private DataDiscoveryScanGeneratorService $generator,
-        private DataDiscoveryScanPackService $packBuilder,
     ) {}
 
     // =========================================================================
@@ -88,10 +84,12 @@ class DataDiscoveryScanController extends Controller
             'total_hits' => (int) $plan->total_hits,
             'progress' => (int) ($plan->progress ?? 0),
             'parent_ai_job_id' => $plan->parent_ai_job_id,
-            'saas_pack_path' => $plan->saas_pack_path,
             'identifiers_masked' => $plan->identifiers,
             'expires_at' => $plan->expires_at,
             'created_at' => $plan->created_at,
+            // Mode flag for frontend — controls Reveal availability (OnPrem
+            // stores encrypted_row, SaaS stores masked_row only).
+            'deployment_mode' => config('ai.deployment_mode', 'saas'),
         ];
     }
 
@@ -142,7 +140,12 @@ class DataDiscoveryScanController extends Controller
     }
 
     // =========================================================================
-    // POST /plans/{id}/execute (mode-aware)
+    // POST /plans/{id}/execute
+    //
+    // Always dispatch background execution against registered InformationSystem
+    // connections via DatabaseScanner (read-only, mirip pattern existing
+    // specificSearchExecute). Mode hanya pengaruhi storage encrypted_row di
+    // worker — Reveal flow only available di OnPrem (lihat AppExecutor).
     // =========================================================================
     public function execute(Request $req, string $id): JsonResponse
     {
@@ -156,55 +159,15 @@ class DataDiscoveryScanController extends Controller
                 'error' => 'Plan has no systems to execute. Re-generate after registering at least one InformationSystem with a scan.',
             ], 422);
         }
-
-        $mode = config('ai.deployment_mode', 'saas');
-
-        if ($mode === 'onprem') {
-            return $this->executeOnPrem($plan, $user);
-        }
-
-        return $this->executeSaas($plan, $user);
-    }
-
-    private function executeSaas(DataDiscoveryScanPlan $plan, $user): JsonResponse
-    {
-        // Idempotent — overwrites previous pack, keeps the same plan row.
-        $packPath = $this->packBuilder->buildZip($plan);
-        $plan->update([
-            'saas_pack_path' => $packPath,
-            'status' => DataDiscoveryScanPlan::STATUS_AWAITING_UPLOAD,
-        ]);
-
-        $this->writeAudit('data_discovery.scan.execute', $plan->id, $user, [
-            'mode' => 'saas',
-            'pack_path' => $packPath,
-        ]);
-        $this->writeAudit('data_discovery.scan_pack.download', $plan->id, $user, [
-            'mode' => 'saas',
-            'reason' => 'pack_url_issued',
-        ]);
-
-        return response()->json([
-            'mode' => 'saas',
-            'plan_id' => $plan->id,
-            'status' => $plan->status,
-            // Frontend should hit GET /scan/plans/{id} pack endpoint or use a
-            // signed download via the existing controller download method.
-            'pack_url' => route('data_discovery.scan.pack.download', ['id' => $plan->id]),
-            'upload_endpoint' => "/api/data-discovery/scan/plans/{$plan->id}/upload",
-        ]);
-    }
-
-    private function executeOnPrem(DataDiscoveryScanPlan $plan, $user): JsonResponse
-    {
         if (! config('ai.jobs_enabled', true)) {
             return response()->json([
-                'error' => 'AI background jobs disabled by admin — cannot dispatch OnPrem scan.',
+                'error' => 'AI background jobs disabled by admin — cannot dispatch scan.',
             ], 503);
         }
 
-        // Spawn a parent AiJob; ProcessAiJob will fan-out children via the
-        // orchestrator. credits_used stays 0 (this isn't AI inference).
+        // Spawn parent AiJob; ProcessAiJob fan-out child per plan_system via
+        // DataDiscoveryExecuteOrchestrator. credits_used stays 0 (this isn't
+        // AI inference — AI was the generator step).
         $parent = AiJob::create([
             'org_id' => $plan->org_id,
             'user_id' => $user->id,
@@ -226,192 +189,12 @@ class DataDiscoveryScanController extends Controller
         ]);
 
         $this->writeAudit('data_discovery.scan.execute', $plan->id, $user, [
-            'mode' => 'onprem',
             'parent_ai_job_id' => $parent->id,
         ]);
 
         return response()->json([
-            'mode' => 'onprem',
             'plan_id' => $plan->id,
             'parent_job_id' => $parent->id,
-            'status' => $plan->status,
-        ]);
-    }
-
-    /**
-     * GET /scan/plans/{id}/pack/download — name route for executeSaas.
-     * Wired separately via routes to keep middleware tight; reused in the
-     * pack_url returned to the frontend.
-     */
-    public function downloadPack(Request $req, string $id)
-    {
-        $user = $req->user();
-        $plan = DataDiscoveryScanPlan::forOrg($user->org_id)->find($id);
-        if (! $plan || ! $plan->saas_pack_path) {
-            abort(404, 'Pack not generated.');
-        }
-        $disk = Storage::disk('local');
-        if (! $disk->exists($plan->saas_pack_path)) {
-            abort(404, 'Pack file missing — re-execute to regenerate.');
-        }
-
-        $this->writeAudit('data_discovery.scan_pack.download', $plan->id, $user, [
-            'mode' => 'saas',
-            'ip' => $req->ip(),
-        ]);
-
-        return $disk->download(
-            $plan->saas_pack_path,
-            "scan-pack-{$plan->id}.zip",
-            ['Content-Type' => 'application/zip'],
-        );
-    }
-
-    // =========================================================================
-    // POST /plans/{id}/upload (SaaS)
-    // =========================================================================
-    public function upload(Request $req, string $id): JsonResponse
-    {
-        $user = $req->user();
-        $plan = DataDiscoveryScanPlan::forOrg($user->org_id)->find($id);
-        if (! $plan) {
-            return response()->json(['error' => 'Not found'], 404);
-        }
-        if (config('ai.deployment_mode', 'saas') !== 'saas') {
-            return response()->json(['error' => 'Upload only valid in SaaS deployment.'], 400);
-        }
-
-        $req->validate([
-            'csv' => ['required', 'file', 'mimes:csv,txt', 'max:20480'], // 20 MB
-        ]);
-
-        $file = $req->file('csv');
-        $hash = hash_file('sha256', $file->getRealPath());
-        $size = $file->getSize();
-        $handle = fopen($file->getRealPath(), 'r');
-        if (! $handle) {
-            return response()->json(['error' => 'Cannot read uploaded file.'], 400);
-        }
-
-        $headerRow = fgetcsv($handle);
-        if (! $headerRow) {
-            fclose($handle);
-
-            return response()->json(['error' => 'CSV is empty.'], 422);
-        }
-        $expected = ['plan_system_id', 'table', 'confidence', 'match_count', 'row_pks_json', 'matched_columns_json', 'masked_row_json'];
-        $missing = array_diff($expected, $headerRow);
-        if (! empty($missing)) {
-            fclose($handle);
-
-            return response()->json([
-                'error' => 'CSV header missing columns: '.implode(',', $missing),
-            ], 422);
-        }
-        $colIndex = array_flip($headerRow);
-
-        // Index plan_system → IS so we can look up classifications for
-        // the masked-row validator without a query per row.
-        $planSystems = DataDiscoveryScanPlanSystem::forOrg($user->org_id)
-            ->where('scan_plan_id', $plan->id)
-            ->with('informationSystem')
-            ->get()
-            ->keyBy('id');
-
-        $inserted = 0;
-        $rejected = 0;
-        $rowNum = 1;
-        while (($row = fgetcsv($handle)) !== false) {
-            $rowNum++;
-            try {
-                $psId = $row[$colIndex['plan_system_id']] ?? '';
-                $ps = $planSystems[$psId] ?? null;
-                if (! $ps) {
-                    $rejected++;
-
-                    continue;
-                }
-
-                $maskedJson = $row[$colIndex['masked_row_json']] ?? '{}';
-                $masked = json_decode($maskedJson, true);
-                if (! is_array($masked)) {
-                    $rejected++;
-
-                    continue;
-                }
-
-                $classMap = $this->columnClassifications($ps->informationSystem);
-                $valid = true;
-                foreach ($masked as $col => $val) {
-                    $cls = $classMap[$col] ?? null;
-                    if (! DataDiscoveryMaskerService::validateMasked($val, $cls)) {
-                        $valid = false;
-                        break;
-                    }
-                }
-                if (! $valid) {
-                    $rejected++;
-
-                    continue;
-                }
-
-                $pks = json_decode($row[$colIndex['row_pks_json']] ?? '[]', true) ?: [];
-                $matched = json_decode($row[$colIndex['matched_columns_json']] ?? '[]', true) ?: [];
-
-                DataDiscoveryScanResult::create([
-                    'org_id' => $plan->org_id,
-                    'scan_plan_id' => $plan->id,
-                    'plan_system_id' => $ps->id,
-                    'information_system_id' => $ps->information_system_id,
-                    'table_name' => $row[$colIndex['table']] ?? 'unknown',
-                    'confidence' => $row[$colIndex['confidence']] ?? 'medium',
-                    'matched_columns' => $matched,
-                    'match_count' => (int) ($row[$colIndex['match_count']] ?? 1),
-                    'row_pks' => $pks,
-                    'masked_row' => $masked,
-                    'encrypted_row' => null, // SaaS — never sees raw values
-                    'revealed' => false,
-                ]);
-                $inserted++;
-            } catch (\Throwable $e) {
-                $rejected++;
-            }
-        }
-        fclose($handle);
-
-        // Update plan_system hit counts + plan totals.
-        $totalHits = DataDiscoveryScanResult::forOrg($user->org_id)
-            ->where('scan_plan_id', $plan->id)
-            ->count();
-        $plan->update([
-            'total_hits' => $totalHits,
-            'status' => DataDiscoveryScanPlan::STATUS_COMPLETED,
-            'progress' => 100,
-        ]);
-        // Roll up hit_count per plan_system.
-        foreach ($planSystems as $ps) {
-            $count = DataDiscoveryScanResult::forOrg($user->org_id)
-                ->where('plan_system_id', $ps->id)
-                ->count();
-            $ps->update([
-                'status' => DataDiscoveryScanPlanSystem::STATUS_DONE,
-                'hit_count' => $count,
-                'finished_at' => now(),
-            ]);
-        }
-
-        $this->writeAudit('data_discovery.scan_results.upload', $plan->id, $user, [
-            'file_size' => $size,
-            'file_sha256' => $hash,
-            'inserted' => $inserted,
-            'rejected' => $rejected,
-        ]);
-
-        return response()->json([
-            'plan_id' => $plan->id,
-            'inserted' => $inserted,
-            'rejected' => $rejected,
-            'total_hits' => $totalHits,
             'status' => $plan->status,
         ]);
     }
@@ -577,23 +360,6 @@ class DataDiscoveryScanController extends Controller
     // =========================================================================
     // Helpers
     // =========================================================================
-
-    private function columnClassifications(?InformationSystem $sys): array
-    {
-        if (! $sys) {
-            return [];
-        }
-        $map = [];
-        foreach (($sys->scan_results['tables'] ?? []) as $t) {
-            foreach (($t['columns'] ?? []) as $c) {
-                if (isset($c['name'], $c['classification'])) {
-                    $map[$c['name']] = $c['classification'];
-                }
-            }
-        }
-
-        return $map;
-    }
 
     private function queueFor(?Organization $org): string
     {

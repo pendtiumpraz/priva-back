@@ -1,9 +1,13 @@
 <?php
 
+use App\Http\Controllers\Api\Admin\ConsentExtractController;
+use App\Http\Controllers\Api\Admin\CookieLogAdminController;
+use App\Http\Controllers\Api\Admin\CrmCredentialController;
 use App\Http\Controllers\Api\Admin\LandingAdminController;
 use App\Http\Controllers\Api\AiAgentController;
 use App\Http\Controllers\Api\AiChatController;
 use App\Http\Controllers\Api\AiFeatureController;
+use App\Http\Controllers\Api\AiJobController;
 use App\Http\Controllers\Api\AiProviderController;
 use App\Http\Controllers\Api\AlertController;
 use App\Http\Controllers\Api\ApiHubController;
@@ -22,6 +26,7 @@ use App\Http\Controllers\Api\ContractReviewCrudController;
 use App\Http\Controllers\Api\CrossBorderController;
 use App\Http\Controllers\Api\CustomFieldController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\DatabasePoolController;
 use App\Http\Controllers\Api\DataDiscoveryController;
 use App\Http\Controllers\Api\DataDiscoveryScanController;
 use App\Http\Controllers\Api\DecryptorProfileController;
@@ -45,10 +50,10 @@ use App\Http\Controllers\Api\HoldingDashboardController;
 use App\Http\Controllers\Api\IntegrationController;
 use App\Http\Controllers\Api\KnowledgeBaseController;
 use App\Http\Controllers\Api\LiaController;
-use App\Http\Controllers\Api\MaturityController;
 use App\Http\Controllers\Api\LicenseController;
 use App\Http\Controllers\Api\LogAnalyzerController;
 use App\Http\Controllers\Api\MaintenanceController;
+use App\Http\Controllers\Api\MaturityController;
 use App\Http\Controllers\Api\MenuRegistryController;
 use App\Http\Controllers\Api\ModuleCommentController;
 use App\Http\Controllers\Api\ModuleCrudController;
@@ -56,9 +61,11 @@ use App\Http\Controllers\Api\NotificationPreferenceController;
 use App\Http\Controllers\Api\OrganizationAppController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PlatformConfigController;
+use App\Http\Controllers\Api\PlatformStorageSettingsController;
 use App\Http\Controllers\Api\PolicyReviewCrudController;
 use App\Http\Controllers\Api\PositionController;
 use App\Http\Controllers\Api\PostureController;
+use App\Http\Controllers\Api\PostureFindingController;
 use App\Http\Controllers\Api\ProcessingCategoryController;
 use App\Http\Controllers\Api\PublicLandingController;
 use App\Http\Controllers\Api\RaciTemplateController;
@@ -70,25 +77,25 @@ use App\Http\Controllers\Api\RopaLinkController;
 use App\Http\Controllers\Api\RopaTemplateController;
 use App\Http\Controllers\Api\SimulationController;
 use App\Http\Controllers\Api\SsoLoginController;
-use App\Http\Controllers\Api\DatabasePoolController;
-use App\Http\Controllers\Api\PlatformStorageSettingsController;
 use App\Http\Controllers\Api\StoragePoolController;
-use App\Http\Controllers\Api\TenantChangeRequestController;
-use App\Http\Controllers\Api\TenantIsolationController;
 use App\Http\Controllers\Api\StorageSettingsController;
+use App\Http\Controllers\Api\SystemSettingsController;
 use App\Http\Controllers\Api\SystemUpdateController;
 use App\Http\Controllers\Api\TemplateExportController;
+use App\Http\Controllers\Api\TenantChangeRequestController;
 use App\Http\Controllers\Api\TenantExportController;
+use App\Http\Controllers\Api\TenantIsolationController;
 use App\Http\Controllers\Api\TenantOffboardController;
 use App\Http\Controllers\Api\TenantRoleController;
 use App\Http\Controllers\Api\TenantSsoController;
 use App\Http\Controllers\Api\TenantThemeController;
-use App\Http\Controllers\Api\TiaController;
 use App\Http\Controllers\Api\ThreatIntelController;
+use App\Http\Controllers\Api\TiaController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\V1\BreachApiController;
 use App\Http\Controllers\Api\V1\ConsentApiV1Controller;
 use App\Http\Controllers\Api\V1\DsrApiV1Controller;
+use App\Http\Controllers\Api\V2\CookieCaptureController;
 use App\Http\Controllers\Api\VendorRiskController;
 use App\Http\Controllers\Api\VoiceTtsController;
 use App\Http\Controllers\GapComparisonController;
@@ -117,9 +124,9 @@ Route::middleware('throttle:api')->group(function () {
     Route::get('/public/consent/state', [ConsentLogController::class, 'state']);
 
     // Public Cookie Banner API v2 (Phase B — anonymous visitor capture)
-    Route::post('/v2/cookies/capture', [\App\Http\Controllers\Api\V2\CookieCaptureController::class, 'capture']);
-    Route::get('/v2/cookies/state', [\App\Http\Controllers\Api\V2\CookieCaptureController::class, 'state']);
-    Route::post('/v2/cookies/withdraw', [\App\Http\Controllers\Api\V2\CookieCaptureController::class, 'withdraw']);
+    Route::post('/v2/cookies/capture', [CookieCaptureController::class, 'capture']);
+    Route::get('/v2/cookies/state', [CookieCaptureController::class, 'state']);
+    Route::post('/v2/cookies/withdraw', [CookieCaptureController::class, 'withdraw']);
 
     // =============================================
     // Public DSR endpoints (untuk embed widget di klien websites)
@@ -615,11 +622,6 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
             ->middleware('permission:data_discovery,read');
         Route::post('plans/{id}/execute', [DataDiscoveryScanController::class, 'execute'])
             ->middleware('permission:data_discovery,write');
-        Route::get('plans/{id}/pack/download', [DataDiscoveryScanController::class, 'downloadPack'])
-            ->middleware('permission:data_discovery,read')
-            ->name('data_discovery.scan.pack.download');
-        Route::post('plans/{id}/upload', [DataDiscoveryScanController::class, 'upload'])
-            ->middleware('permission:data_discovery,write');
         Route::get('plans/{id}/results', [DataDiscoveryScanController::class, 'results'])
             ->middleware('permission:data_discovery,read');
         Route::post('plans/{id}/to-dsr', [DataDiscoveryScanController::class, 'toDsr'])
@@ -698,22 +700,22 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
     Route::get('/consent-logs', [ConsentLogController::class, 'index'])->middleware('permission:consent,read');
 
     // Phase B — Cookie Logs admin (tenant-scoped, separate from consent_logs)
-    Route::get('/cookie-logs', [\App\Http\Controllers\Api\Admin\CookieLogAdminController::class, 'index'])->middleware('permission:consent,read');
-    Route::get('/cookie-logs/stats', [\App\Http\Controllers\Api\Admin\CookieLogAdminController::class, 'stats'])->middleware('permission:consent,read');
-    Route::get('/cookie-logs/{id}', [\App\Http\Controllers\Api\Admin\CookieLogAdminController::class, 'show'])->middleware('permission:consent,read')->where('id', '[0-9a-fA-F-]{36}');
-    Route::delete('/cookie-logs/{id}', [\App\Http\Controllers\Api\Admin\CookieLogAdminController::class, 'destroy'])->middleware('permission:consent,write')->where('id', '[0-9a-fA-F-]{36}');
+    Route::get('/cookie-logs', [CookieLogAdminController::class, 'index'])->middleware('permission:consent,read');
+    Route::get('/cookie-logs/stats', [CookieLogAdminController::class, 'stats'])->middleware('permission:consent,read');
+    Route::get('/cookie-logs/{id}', [CookieLogAdminController::class, 'show'])->middleware('permission:consent,read')->where('id', '[0-9a-fA-F-]{36}');
+    Route::delete('/cookie-logs/{id}', [CookieLogAdminController::class, 'destroy'])->middleware('permission:consent,write')->where('id', '[0-9a-fA-F-]{36}');
 
     // Phase B — Consent Extract (CRM extractor wizard backbone)
-    Route::post('/consent-extract/preview', [\App\Http\Controllers\Api\Admin\ConsentExtractController::class, 'preview'])->middleware('permission:consent,read');
-    Route::post('/consent-extract/run', [\App\Http\Controllers\Api\Admin\ConsentExtractController::class, 'run'])->middleware('permission:consent,write');
-    Route::get('/consent-extract/runs', [\App\Http\Controllers\Api\Admin\ConsentExtractController::class, 'index'])->middleware('permission:consent,read');
+    Route::post('/consent-extract/preview', [ConsentExtractController::class, 'preview'])->middleware('permission:consent,read');
+    Route::post('/consent-extract/run', [ConsentExtractController::class, 'run'])->middleware('permission:consent,write');
+    Route::get('/consent-extract/runs', [ConsentExtractController::class, 'index'])->middleware('permission:consent,read');
 
     // Phase F — CRM credentials (per-org, encrypted secrets)
-    Route::get('/crm-credentials', [\App\Http\Controllers\Api\Admin\CrmCredentialController::class, 'index'])->middleware('permission:consent,read');
-    Route::post('/crm-credentials', [\App\Http\Controllers\Api\Admin\CrmCredentialController::class, 'store'])->middleware('permission:consent,write');
-    Route::put('/crm-credentials/{id}', [\App\Http\Controllers\Api\Admin\CrmCredentialController::class, 'update'])->middleware('permission:consent,write')->where('id', '[0-9a-fA-F-]{36}');
-    Route::delete('/crm-credentials/{id}', [\App\Http\Controllers\Api\Admin\CrmCredentialController::class, 'destroy'])->middleware('permission:consent,write')->where('id', '[0-9a-fA-F-]{36}');
-    Route::post('/crm-credentials/{id}/probe', [\App\Http\Controllers\Api\Admin\CrmCredentialController::class, 'probe'])->middleware('permission:consent,write')->where('id', '[0-9a-fA-F-]{36}');
+    Route::get('/crm-credentials', [CrmCredentialController::class, 'index'])->middleware('permission:consent,read');
+    Route::post('/crm-credentials', [CrmCredentialController::class, 'store'])->middleware('permission:consent,write');
+    Route::put('/crm-credentials/{id}', [CrmCredentialController::class, 'update'])->middleware('permission:consent,write')->where('id', '[0-9a-fA-F-]{36}');
+    Route::delete('/crm-credentials/{id}', [CrmCredentialController::class, 'destroy'])->middleware('permission:consent,write')->where('id', '[0-9a-fA-F-]{36}');
+    Route::post('/crm-credentials/{id}/probe', [CrmCredentialController::class, 'probe'])->middleware('permission:consent,write')->where('id', '[0-9a-fA-F-]{36}');
     Route::post('/consent-items', [ConsentItemController::class, 'store'])->middleware('permission:consent,write');
     Route::put('/consent-items/{id}', [ConsentItemController::class, 'update'])->middleware('permission:consent,write');
     Route::delete('/consent-items/{id}', [ConsentItemController::class, 'destroy'])->middleware('permission:consent,write');
@@ -802,12 +804,12 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::post('/posture/snapshot', [PostureController::class, 'takeSnapshot']); // Phase 3a — manual refresh
 
         // Phase 3b — Findings workflow
-        Route::get('/findings/stats', [\App\Http\Controllers\Api\PostureFindingController::class, 'stats']);
-        Route::post('/findings/rematerialize', [\App\Http\Controllers\Api\PostureFindingController::class, 'rematerialize']);
-        Route::get('/findings', [\App\Http\Controllers\Api\PostureFindingController::class, 'index']);
-        Route::get('/findings/{id}', [\App\Http\Controllers\Api\PostureFindingController::class, 'show']);
-        Route::post('/findings/{id}/assign', [\App\Http\Controllers\Api\PostureFindingController::class, 'assign']);
-        Route::post('/findings/{id}/status', [\App\Http\Controllers\Api\PostureFindingController::class, 'changeStatus']);
+        Route::get('/findings/stats', [PostureFindingController::class, 'stats']);
+        Route::post('/findings/rematerialize', [PostureFindingController::class, 'rematerialize']);
+        Route::get('/findings', [PostureFindingController::class, 'index']);
+        Route::get('/findings/{id}', [PostureFindingController::class, 'show']);
+        Route::post('/findings/{id}/assign', [PostureFindingController::class, 'assign']);
+        Route::post('/findings/{id}/status', [PostureFindingController::class, 'changeStatus']);
 
         // Alert Engine / Notifications
         Route::get('/alerts', [AlertController::class, 'index']);
@@ -1289,10 +1291,10 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
     // Async dispatch + polling endpoints used by the AI Jobs Footer.
     // =============================================
     Route::prefix('ai/jobs')->group(function () {
-        Route::post('/', [\App\Http\Controllers\Api\AiJobController::class, 'store']);
-        Route::get('/active', [\App\Http\Controllers\Api\AiJobController::class, 'active']);
-        Route::get('/history', [\App\Http\Controllers\Api\AiJobController::class, 'history']);
-        Route::get('/{id}', [\App\Http\Controllers\Api\AiJobController::class, 'show']);
+        Route::post('/', [AiJobController::class, 'store']);
+        Route::get('/active', [AiJobController::class, 'active']);
+        Route::get('/history', [AiJobController::class, 'history']);
+        Route::get('/{id}', [AiJobController::class, 'show']);
     });
 
     // =============================================
@@ -1303,10 +1305,10 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
     Route::prefix('platform-admin/settings')
         ->middleware('permission:settings,write')
         ->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\SystemSettingsController::class, 'index']);
-            Route::get('/health', [\App\Http\Controllers\Api\SystemSettingsController::class, 'health']);
-            Route::put('/{section}', [\App\Http\Controllers\Api\SystemSettingsController::class, 'update']);
-            Route::post('/{section}/test', [\App\Http\Controllers\Api\SystemSettingsController::class, 'test']);
+            Route::get('/', [SystemSettingsController::class, 'index']);
+            Route::get('/health', [SystemSettingsController::class, 'health']);
+            Route::put('/{section}', [SystemSettingsController::class, 'update']);
+            Route::post('/{section}/test', [SystemSettingsController::class, 'test']);
         });
 
 });
