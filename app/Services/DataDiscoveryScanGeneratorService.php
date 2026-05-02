@@ -84,7 +84,19 @@ class DataDiscoveryScanGeneratorService
         $skippedSystems = 0;
         $createdSystems = 0;
 
+        // Source types yang DataDiscoveryAppExecutor support saat ini.
+        // Non-DB sources (s3, saas, dst.) di-skip di tahap generate biar
+        // tidak nyangkut sebagai 'failed' saat execute.
+        $supportedTypes = ['mysql', 'mariadb', 'postgres', 'postgresql', 'pgsql'];
+
         foreach ($systems as $sys) {
+            $sourceType = strtolower((string) ($sys->source_type ?? ''));
+            if (! in_array($sourceType, $supportedTypes, true)) {
+                $skippedSystems++;
+
+                continue;
+            }
+
             $tables = $sys->scan_results['tables'] ?? null;
             if (! is_array($tables) || empty($tables)) {
                 $skippedSystems++;
@@ -221,10 +233,11 @@ class DataDiscoveryScanGeneratorService
     /**
      * Build the natural-language identifier prompt for AI Text-to-SQL.
      *
-     * Strategy: search by NAME using fuzzy / LIKE pattern, project email
-     * column when ada, supaya frontend bisa filter berdasarkan email setelah
-     * kandidat dengan nama mirip muncul. Email/NIK/phone/dob hanya hint
-     * tambahan ke AI bukan strict filter.
+     * Strategy: search by NAME using fuzzy / LIKE pattern. Pakai SELECT *
+     * untuk hindari hallucinated column projection — AI sering invent
+     * kolom 'email' walaupun tabel target gak punya, hasilnya error
+     * "Unknown column 'email'". SELECT * juga lebih simple dan rows
+     * tetap bisa di-filter di frontend (kolom apapun yang ada).
      */
     private function buildPrompt(array $n): string
     {
@@ -243,15 +256,18 @@ class DataDiscoveryScanGeneratorService
             $hints[] = "date of birth: \"{$n['dob']}\"";
         }
 
-        $hintsLine = $hints === [] ? '' : ('Hint identifier tambahan untuk kalkulasi confidence (BUKAN filter strict): '.implode(', ', $hints).'. ');
+        $hintsLine = $hints === [] ? '' : ('Hint identifier tambahan: '.implode(', ', $hints).' (sebagai context, BUKAN filter wajib). ');
 
-        return 'Cari semua baris orang dengan nama mirip "'.$name.'" — '
-            .'pakai fuzzy / partial match pada kolom nama (`LOWER(name_col) LIKE LOWER(\'%'.$name.'%\')` atau ILIKE di Postgres). '
-            .'Boleh juga pakai per-token LIKE untuk handle urutan nama yang dibalik. '
-            .'PROYEKSIKAN kolom email/nama/identifier lain di SELECT supaya hasil bisa di-filter manual nanti. '
+        return 'Cari semua baris orang dengan nama mirip "'.$name.'" di setiap tabel yang punya kolom nama. '
+            .'WAJIB pakai `SELECT *` — proyeksikan SEMUA kolom dari tabel apa adanya. '
+            .'JANGAN sebutkan nama kolom tertentu di SELECT (hindari error "unknown column" kalau kolom tidak ada di tabel itu). '
+            .'WHERE clause: pakai fuzzy / partial match pada kolom yang nama-nya kelihatan seperti name field '
+            .'(misal: name, full_name, nama, nama_lengkap, customer_name, applicant_name, dst.) — '
+            .'`LOWER(<col>) LIKE LOWER(\'%'.$name.'%\')` (MySQL/Postgres) atau gunakan ILIKE di Postgres. '
+            .'Boleh per-token LIKE untuk handle urutan nama yang dibalik. '
+            .'Skip tabel yang tidak punya kolom nama orang (misal cuma punya id+timestamp). '
             .$hintsLine
-            .'JANGAN strict filter — biarkan kandidat dengan nama mirip semua muncul, frontend yang akan narrow down. '
-            .'Output WAJIB SELECT only, batasi setiap query dengan LIMIT 100.';
+            .'Output WAJIB SELECT only (no DELETE/UPDATE/INSERT). Batasi setiap query dengan LIMIT 100.';
     }
 
     /**
