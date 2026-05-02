@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\CrossBorderController;
 use App\Http\Controllers\Api\CustomFieldController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DataDiscoveryController;
+use App\Http\Controllers\Api\DataDiscoveryScanController;
 use App\Http\Controllers\Api\DecryptorProfileController;
 use App\Http\Controllers\Api\DepartmentController;
 use App\Http\Controllers\Api\DiscoveryChangelogController;
@@ -601,6 +602,31 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::post('/{id}/changelogs', [DiscoveryChangelogController::class, 'store'])->middleware('permission:data_discovery,write');
         Route::post('/{id}/patrol-config', [DiscoveryChangelogController::class, 'saveConfig'])->middleware('permission:data_discovery,write');
     });
+
+    // =============================================
+    // Data Discovery — Person Scan (cross-app PII discovery)
+    // =============================================
+    Route::prefix('data-discovery/scan')->group(function () {
+        Route::post('generate', [DataDiscoveryScanController::class, 'store'])
+            ->middleware('permission:data_discovery,write');
+        Route::get('plans', [DataDiscoveryScanController::class, 'index'])
+            ->middleware('permission:data_discovery,read');
+        Route::get('plans/{id}', [DataDiscoveryScanController::class, 'show'])
+            ->middleware('permission:data_discovery,read');
+        Route::post('plans/{id}/execute', [DataDiscoveryScanController::class, 'execute'])
+            ->middleware('permission:data_discovery,write');
+        Route::get('plans/{id}/pack/download', [DataDiscoveryScanController::class, 'downloadPack'])
+            ->middleware('permission:data_discovery,read')
+            ->name('data_discovery.scan.pack.download');
+        Route::post('plans/{id}/upload', [DataDiscoveryScanController::class, 'upload'])
+            ->middleware('permission:data_discovery,write');
+        Route::get('plans/{id}/results', [DataDiscoveryScanController::class, 'results'])
+            ->middleware('permission:data_discovery,read');
+        Route::post('plans/{id}/to-dsr', [DataDiscoveryScanController::class, 'toDsr'])
+            ->middleware('permission:data_discovery,write');
+    });
+    Route::post('data-discovery/scan-results/{id}/reveal', [DataDiscoveryScanController::class, 'reveal'])
+        ->middleware('permission:data_discovery,reveal');
 
     // Consent Logs & Items
     // =============================================

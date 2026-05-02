@@ -8,6 +8,8 @@ use App\Services\AiAgentToolExecutor;
 use App\Services\AiFieldMappingService;
 use App\Services\AiService;
 use App\Services\CreditService;
+use App\Services\DataDiscoveryAppExecutor;
+use App\Services\DataDiscoveryExecuteOrchestrator;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -61,6 +63,7 @@ class ProcessAiJob implements ShouldQueue
                 'error' => 'AI jobs disabled by admin',
                 'finished_at' => now(),
             ]);
+
             return;
         }
 
@@ -75,6 +78,10 @@ class ProcessAiJob implements ShouldQueue
                 'analyzer' => $this->runAnalyzer($job),
                 'summary' => $this->runSummary($ai, $job),
                 'deep_scan' => throw new \RuntimeException('deep_scan not implemented in MVP'),
+                'person_scan_execute' => app(DataDiscoveryExecuteOrchestrator::class)
+                    ->orchestrate($job),
+                'person_scan_execute_app' => app(DataDiscoveryAppExecutor::class)
+                    ->execute((string) ($job->payload['plan_system_id'] ?? '')),
                 default => throw new \InvalidArgumentException("Unknown AI job type: {$job->type}"),
             };
 
@@ -191,6 +198,7 @@ class ProcessAiJob implements ShouldQueue
                 recordId: $job->subject_id,
                 meta: ['ai_job_id' => $job->id, 'tokens' => $result['tokens'] ?? null],
             );
+
             return (int) ceil((float) $log->credits_used);
         } catch (\Throwable $e) {
             // Never let a credit-ledger hiccup mask a successful AI run.
@@ -198,6 +206,7 @@ class ProcessAiJob implements ShouldQueue
                 'job_id' => $job->id,
                 'error' => $e->getMessage(),
             ]);
+
             return 0;
         }
     }
@@ -240,6 +249,7 @@ class ProcessAiJob implements ShouldQueue
         if (is_array($result)) {
             return $result;
         }
+
         return ['value' => $result];
     }
 

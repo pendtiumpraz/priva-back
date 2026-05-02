@@ -27,8 +27,13 @@ class TenantRoleSeeder extends Seeder
             $allRead[] = "$mod:read";
         }
 
-        $dpoPerms = array_merge([], $allWrite);
-        
+        // DPO gets all read+write across modules, plus granular custom actions
+        // that are NOT covered by the read/write split.
+        $dpoPerms = array_merge([], $allWrite, [
+            // Person Scan reveal — decrypts raw row + audit-logged. DPO only.
+            'data_discovery:reveal',
+        ]);
+
         $makerPerms = [
             'dashboard:read',
             'gap_assessment:read', 'gap_assessment:write',
