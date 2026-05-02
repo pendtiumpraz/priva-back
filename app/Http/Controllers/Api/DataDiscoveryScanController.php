@@ -4,15 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\DataDiscoveryScan\GenerateScanRequest;
-use App\Jobs\ProcessAiJob;
-use App\Models\AiJob;
 use App\Models\AuditLog;
 use App\Models\DataDiscoveryScanPlan;
 use App\Models\DataDiscoveryScanPlanSystem;
 use App\Models\DataDiscoveryScanResult;
 use App\Models\DsrRequest;
 use App\Models\DsrRequestScope;
-use App\Models\Organization;
+use App\Services\DataDiscoveryAppExecutor;
 use App\Services\DataDiscoveryScanGeneratorService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -193,15 +191,17 @@ class DataDiscoveryScanController extends Controller
     // =========================================================================
     // POST /plans/{id}/execute
     //
-    // Always dispatch background execution against registered InformationSystem
-    // connections via DatabaseScanner (read-only, mirip pattern existing
-    // specificSearchExecute). Mode hanya pengaruhi storage encrypted_row di
-    // worker — Reveal flow only available di OnPrem (lihat AppExecutor).
+    // Synchronous execution — loop plan_systems → DataDiscoveryAppExecutor
+    // (read-only via DatabaseScanner). No background queue. PHP timeout
+    // bumped to 600s untuk handle scan banyak app. Frontend tinggal redirect
+    // ke results page setelah response done.
     // =========================================================================
-    public function execute(Request $req, string $id): JsonResponse
+    public function execute(Request $req, string $id, DataDiscoveryAppExecutor $executor): JsonResponse
     {
         $user = $req->user();
-        $plan = DataDiscoveryScanPlan::forOrg($user->org_id)->find($id);
+        $plan = DataDiscoveryScanPlan::forOrg($user->org_id)
+            ->with(['planSystems' => fn ($q) => $q->orderBy('app_name')])
+            ->find($id);
         if (! $plan) {
             return response()->json(['error' => 'Not found'], 404);
         }
@@ -210,43 +210,60 @@ class DataDiscoveryScanController extends Controller
                 'error' => 'Plan has no systems to execute. Re-generate after registering at least one InformationSystem with a scan.',
             ], 422);
         }
-        if (! config('ai.jobs_enabled', true)) {
-            return response()->json([
-                'error' => 'AI background jobs disabled by admin — cannot dispatch scan.',
-            ], 503);
-        }
 
-        // Spawn parent AiJob; ProcessAiJob fan-out child per plan_system via
-        // DataDiscoveryExecuteOrchestrator. credits_used stays 0 (this isn't
-        // AI inference — AI was the generator step).
-        $parent = AiJob::create([
-            'org_id' => $plan->org_id,
-            'user_id' => $user->id,
-            'type' => 'person_scan_execute',
-            'module' => 'data_discovery',
-            'subject_id' => $plan->id,
-            'label' => $plan->label,
-            'status' => AiJob::STATUS_PENDING,
-            'progress' => 0,
-            'payload' => ['plan_id' => $plan->id],
-        ]);
-
-        $org = Organization::find($plan->org_id);
-        ProcessAiJob::dispatch($parent->id)->onQueue($this->queueFor($org));
+        // Bump PHP timeout — scan banyak app bisa makan beberapa menit.
+        @set_time_limit(600);
+        @ini_set('max_execution_time', '600');
 
         $plan->update([
-            'parent_ai_job_id' => $parent->id,
             'status' => DataDiscoveryScanPlan::STATUS_EXECUTING,
+            'progress' => 0,
         ]);
 
         $this->writeAudit('data_discovery.scan.execute', $plan->id, $user, [
-            'parent_ai_job_id' => $parent->id,
+            'mode' => 'sync',
+            'systems' => $plan->planSystems->count(),
+        ]);
+
+        $totalSystems = $plan->planSystems->count();
+        $totalHits = 0;
+        $failedSystems = 0;
+
+        foreach ($plan->planSystems as $i => $planSys) {
+            // Skip ones already done (idempotent re-run).
+            if ($planSys->status === DataDiscoveryScanPlanSystem::STATUS_DONE) {
+                $totalHits += (int) $planSys->hit_count;
+
+                continue;
+            }
+
+            $res = $executor->execute($planSys->id);
+            $totalHits += (int) ($res['hits'] ?? 0);
+            if (! empty($res['error'])) {
+                $failedSystems++;
+            }
+
+            // Update plan progress incrementally — even though sync, this lets
+            // the UI show partial state if user reloads mid-execution.
+            $plan->update([
+                'progress' => (int) (($i + 1) / max(1, $totalSystems) * 100),
+                'total_hits' => $totalHits,
+            ]);
+        }
+
+        $plan->refresh()->update([
+            'status' => $failedSystems === $totalSystems
+                ? DataDiscoveryScanPlan::STATUS_FAILED
+                : DataDiscoveryScanPlan::STATUS_COMPLETED,
+            'progress' => 100,
+            'total_hits' => $totalHits,
         ]);
 
         return response()->json([
             'plan_id' => $plan->id,
-            'parent_job_id' => $parent->id,
-            'status' => $plan->status,
+            'status' => $plan->fresh()->status,
+            'total_hits' => $totalHits,
+            'failed_systems' => $failedSystems,
         ]);
     }
 
@@ -411,17 +428,6 @@ class DataDiscoveryScanController extends Controller
     // =========================================================================
     // Helpers
     // =========================================================================
-
-    private function queueFor(?Organization $org): string
-    {
-        $tier = $org?->tier ?? 'standard';
-
-        return match ($tier) {
-            'enterprise' => 'ai-jobs-priority',
-            'pro' => 'ai-jobs',
-            default => 'ai-jobs-low',
-        };
-    }
 
     private function writeAudit(string $action, string $recordId, $user, array $changes): void
     {
