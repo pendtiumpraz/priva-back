@@ -91,6 +91,7 @@ class MenuRegistrySeeder extends Seeder
             ['menu_key' => 'platform-config', 'label' => 'Platform Config', 'href' => '/platform-config', 'icon' => 'Settings', 'section' => 'Platform (Root)', 'sort' => 760, 'roles' => self::PLATFORM_ROOT],
 
             // Superadmin (not root)
+            ['menu_key' => 'system-settings', 'label' => 'System Settings', 'href' => '/platform-admin/system-settings', 'icon' => 'Settings2', 'section' => 'Superadmin', 'sort' => 790, 'roles' => ['root', 'superadmin']],
             ['menu_key' => 'landing-admin', 'label' => 'Landing Admin', 'href' => '/landing-admin', 'icon' => 'Globe', 'section' => 'Superadmin', 'sort' => 795, 'roles' => ['root', 'superadmin']],
             ['menu_key' => 'platform-storage', 'label' => 'Platform Storage', 'href' => '/platform-storage', 'icon' => 'HardDrive', 'section' => 'Superadmin', 'sort' => 797, 'roles' => ['root', 'superadmin']],
             ['menu_key' => 'database-pools', 'label' => 'Database Pools', 'href' => '/platform-admin/database-pools', 'icon' => 'Database', 'section' => 'Superadmin', 'sort' => 798, 'roles' => ['root', 'superadmin']],

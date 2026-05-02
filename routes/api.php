@@ -1258,6 +1258,31 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::post('/breach/{id}/siem', [IntegrationController::class, 'syncBreachSiem']);
     });
 
+    // =============================================
+    // AI Background Jobs (INFRASTRUCTURE_PLAN.md §5)
+    // Async dispatch + polling endpoints used by the AI Jobs Footer.
+    // =============================================
+    Route::prefix('ai/jobs')->group(function () {
+        Route::post('/', [\App\Http\Controllers\Api\AiJobController::class, 'store']);
+        Route::get('/active', [\App\Http\Controllers\Api\AiJobController::class, 'active']);
+        Route::get('/history', [\App\Http\Controllers\Api\AiJobController::class, 'history']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\AiJobController::class, 'show']);
+    });
+
+    // =============================================
+    // Platform System Settings (INFRASTRUCTURE_PLAN.md §4)
+    // Section-based config: infrastructure, redis, ai, mail, aws, deployment.
+    // Gated by `permission:settings,write` — superadmin role bypasses.
+    // =============================================
+    Route::prefix('platform-admin/settings')
+        ->middleware('permission:settings,write')
+        ->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\SystemSettingsController::class, 'index']);
+            Route::get('/health', [\App\Http\Controllers\Api\SystemSettingsController::class, 'health']);
+            Route::put('/{section}', [\App\Http\Controllers\Api\SystemSettingsController::class, 'update']);
+            Route::post('/{section}/test', [\App\Http\Controllers\Api\SystemSettingsController::class, 'test']);
+        });
+
 });
 
 // =============================================
