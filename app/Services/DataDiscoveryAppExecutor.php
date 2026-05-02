@@ -174,20 +174,75 @@ class DataDiscoveryAppExecutor
 
             return ['hits' => $hits, 'tokens' => 0, 'status' => 'done'];
         } catch (\Throwable $e) {
-            Log::warning('DataDiscoveryAppExecutor failed', [
+            $msg = $e->getMessage();
+            // Connection-level errors (host blocked, refused, timeout, auth
+            // denied, source type unsupported) → mark 'skipped' supaya app
+            // lain tetap diproses dan plan keseluruhan tetap completed.
+            // SQL-level errors (column not found, syntax) → tetap 'failed'
+            // karena itu indikasi bug AI generate atau schema drift yang
+            // perlu di-surface ke user.
+            $isConnectionLevel = $this->isConnectionLevelError($msg);
+            $newStatus = $isConnectionLevel
+                ? DataDiscoveryScanPlanSystem::STATUS_SKIPPED
+                : DataDiscoveryScanPlanSystem::STATUS_FAILED;
+
+            Log::warning('DataDiscoveryAppExecutor '.($isConnectionLevel ? 'skipped' : 'failed'), [
                 'plan_system_id' => $ps->id,
                 'org_id' => $ps->org_id,
-                'error' => $e->getMessage(),
+                'error' => $msg,
             ]);
             $ps->update([
-                'status' => DataDiscoveryScanPlanSystem::STATUS_FAILED,
-                'error' => substr($e->getMessage(), 0, 1024),
+                'status' => $newStatus,
+                'error' => substr($msg, 0, 1024),
                 'finished_at' => now(),
             ]);
             $this->recomputeParentProgress($ps->scan_plan_id);
 
-            return ['hits' => 0, 'tokens' => 0, 'status' => 'failed', 'error' => $e->getMessage()];
+            return [
+                'hits' => 0,
+                'tokens' => 0,
+                'status' => $isConnectionLevel ? 'skipped' : 'failed',
+                'error' => $msg,
+            ];
         }
+    }
+
+    /**
+     * Heuristic: apakah error ini connection-level (env/infra issue) atau
+     * SQL-level (bug/schema issue)? Connection-level → skipped supaya
+     * scan lain lanjut.
+     */
+    private function isConnectionLevelError(string $msg): bool
+    {
+        $patterns = [
+            'is blocked because of many connection errors',  // MySQL host block
+            'mysqladmin flush-hosts',
+            'Connection refused',
+            'Connection timed out',
+            'timeout exceeded',
+            "Can't connect to",
+            'Lost connection',
+            'MySQL server has gone away',
+            'Server has gone away',
+            'SSL connection error',
+            'Access denied for user',
+            'Authentication failed',
+            'Unknown database',
+            'Unknown MySQL server host',
+            'No route to host',
+            'Network is unreachable',
+            'not supported in MVP',  // Source type unsupported
+            'getaddrinfo',
+            'could not translate host name',  // Postgres unreachable
+            'Operation timed out',
+        ];
+        foreach ($patterns as $needle) {
+            if (stripos($msg, $needle) !== false) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // =========================================================================

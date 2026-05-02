@@ -237,6 +237,7 @@ class DataDiscoveryScanController extends Controller
 
         $totalSystems = $plan->planSystems->count();
         $totalHits = 0;
+        $skippedSystems = 0;
         $failedSystems = 0;
 
         foreach ($plan->planSystems as $i => $planSys) {
@@ -249,7 +250,10 @@ class DataDiscoveryScanController extends Controller
 
             $res = $executor->execute($planSys->id);
             $totalHits += (int) ($res['hits'] ?? 0);
-            if (! empty($res['error'])) {
+            $resStatus = $res['status'] ?? null;
+            if ($resStatus === 'skipped') {
+                $skippedSystems++;
+            } elseif ($resStatus === 'failed') {
                 $failedSystems++;
             }
 
@@ -261,6 +265,9 @@ class DataDiscoveryScanController extends Controller
             ]);
         }
 
+        // Plan = failed hanya kalau SEMUA system failed (real SQL bugs everywhere).
+        // Sebagian skipped + sebagian sukses tetap completed — skipped itu infra
+        // issue (host blocked, source unsupported), bukan bug Privasimu.
         $plan->refresh()->update([
             'status' => $failedSystems === $totalSystems
                 ? DataDiscoveryScanPlan::STATUS_FAILED
@@ -273,6 +280,7 @@ class DataDiscoveryScanController extends Controller
             'plan_id' => $plan->id,
             'status' => $plan->fresh()->status,
             'total_hits' => $totalHits,
+            'skipped_systems' => $skippedSystems,
             'failed_systems' => $failedSystems,
         ]);
     }
