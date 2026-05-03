@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\ModuleCustomField;
 use App\Models\ModuleCustomSection;
 use App\Models\ModuleTemplate;
+use App\Services\WizardSchemaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -103,6 +104,26 @@ class CustomFieldController extends Controller
 
         if ($err = $this->validateOptionsForType($data['field_type'], $data['field_options'] ?? null)) {
             return $err;
+        }
+
+        // Accept section_key when it's either:
+        //  (a) a built-in step key for the target module (e.g. ROPA's
+        //      `detail_pemrosesan`) — no backing module_custom_sections row, OR
+        //  (b) an existing org-custom section in this org+module, OR
+        //  (c) the legacy "custom" bucket (default when section_key omitted).
+        $builtinKeys = WizardSchemaService::BUILTIN_SECTION_KEYS[$data['module']] ?? [];
+        $isBuiltin = in_array($sectionKey, $builtinKeys, true);
+        $isLegacyCustom = $sectionKey === 'custom';
+        if (! $isBuiltin && ! $isLegacyCustom) {
+            $sectionExists = ModuleCustomSection::forOrg($orgId)
+                ->forModule($data['module'])
+                ->where('section_key', $sectionKey)
+                ->exists();
+            if (! $sectionExists) {
+                return response()->json([
+                    'message' => "Section key '{$sectionKey}' tidak ditemukan di module {$data['module']}.",
+                ], 422);
+            }
         }
 
         $exists = ModuleCustomField::forOrg($orgId)
