@@ -27,6 +27,12 @@ class AiRequest extends FormRequest
             'local_llm_url' => 'nullable|string|url|max:255',
             'max_concurrent_per_user' => 'required|integer|min:1|max:50',
             'history_retention_days' => 'required|integer|min:1|max:365',
+
+            // Visual OCR fallback (opt-in). Provider/model resolved via active
+            // "document" mode di ai_active_selections (user pilih VL2/OCR/etc).
+            'use_visual_ocr_fallback' => 'nullable|boolean',
+            'visual_ocr_text_threshold' => 'nullable|integer|min:10|max:1000',
+            'visual_ocr_max_pages' => 'nullable|integer|min:1|max:50',
         ];
     }
 }

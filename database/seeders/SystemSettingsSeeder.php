@@ -75,6 +75,17 @@ class SystemSettingsSeeder extends Seeder
             ['key' => 'ai.max_concurrent_per_user', 'value' => 5, 'is_encrypted' => false, 'section' => 'ai'],
             ['key' => 'ai.history_retention_days', 'value' => 30, 'is_encrypted' => false, 'section' => 'ai'],
 
+            // OCR fallback to DeepSeek Vision (DeepInfra). Default OFF — opt-in
+            // because it costs per-page tokens. When enabled, OcrScannerService
+            // routes to deepseek-vision provider whenever tesseract/pdfparser
+            // returns less than `visual_ocr_text_threshold` characters.
+            // Visual OCR fallback (opt-in). Provider/model resolved via active
+            // "document" mode in ai_active_selections — admin pilih DeepSeek-OCR,
+            // VL2, atau provider vision lain via standar provider config UI.
+            ['key' => 'ai.use_visual_ocr_fallback', 'value' => false, 'is_encrypted' => false, 'section' => 'ai'],
+            ['key' => 'ai.visual_ocr_text_threshold', 'value' => 100, 'is_encrypted' => false, 'section' => 'ai'],
+            ['key' => 'ai.visual_ocr_max_pages', 'value' => 10, 'is_encrypted' => false, 'section' => 'ai'],
+
             // Mail
             ['key' => 'mail.smtp_host', 'value' => null, 'is_encrypted' => false, 'section' => 'mail'],
             ['key' => 'mail.smtp_port', 'value' => 587, 'is_encrypted' => false, 'section' => 'mail'],

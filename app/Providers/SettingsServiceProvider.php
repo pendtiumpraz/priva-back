@@ -2,7 +2,6 @@
 
 namespace App\Providers;
 
-use App\Models\SystemSetting;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
@@ -108,6 +107,7 @@ class SettingsServiceProvider extends ServiceProvider
             Log::warning('SettingsServiceProvider: DB read failed, using defaults', [
                 'error' => $e->getMessage(),
             ]);
+
             return null;
         }
     }
@@ -142,6 +142,9 @@ class SettingsServiceProvider extends ServiceProvider
             'ai.local_llm_url' => 'ai.local_llm_url',
             'ai.max_concurrent_per_user' => 'ai.max_concurrent_per_user',
             'ai.history_retention_days' => 'ai.history_retention_days',
+            'ai.use_visual_ocr_fallback' => 'ai.use_visual_ocr_fallback',
+            'ai.visual_ocr_text_threshold' => 'ai.visual_ocr_text_threshold',
+            'ai.visual_ocr_max_pages' => 'ai.visual_ocr_max_pages',
 
             // Deployment mode.
             'deployment.mode' => 'ai.deployment_mode',

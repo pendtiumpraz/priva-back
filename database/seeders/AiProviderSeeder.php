@@ -116,6 +116,30 @@ class AiProviderSeeder extends Seeder
             ],
 
             // =============================================
+            // 4b. DeepSeek Vision/OCR (separate provider record so the OCR
+            // fallback can target a vision model without colliding with the
+            // text-only DeepSeek selection above). Accessed via DeepInfra's
+            // OpenAI-compatible endpoint — same Bearer-auth shape as OpenAI.
+            // =============================================
+            [
+                'slug' => 'deepseek-vision',
+                'name' => 'DeepSeek Vision/OCR',
+                'api_base_url' => 'https://api.deepinfra.com/v1/openai',
+                'auth_header' => 'Authorization',
+                'auth_prefix' => 'Bearer',
+                'supports_tools' => false,
+                'supports_streaming' => false,
+                'sort_order' => 5,
+                'description' => 'DeepSeek-OCR & VL2 untuk extract text dari scanned PDF / image. Diakses via DeepInfra OpenAI-compatible API.',
+                'website' => 'https://deepinfra.com/deepseek-ai/DeepSeek-OCR',
+                'icon' => '👁️',
+                'models' => [
+                    ['model_id' => 'deepseek-ai/DeepSeek-OCR', 'name' => 'DeepSeek OCR', 'category' => 'vision', 'context_window' => 32000, 'max_output_tokens' => 8192, 'supports_tools' => false, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.03, 'output_price_per_m' => 0.10, 'sort_order' => 1],
+                    ['model_id' => 'deepseek-ai/deepseek-vl2', 'name' => 'DeepSeek VL2', 'category' => 'vision', 'context_window' => 32000, 'max_output_tokens' => 8192, 'supports_tools' => false, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.10, 'output_price_per_m' => 0.30, 'sort_order' => 2],
+                ],
+            ],
+
+            // =============================================
             // 5. Mistral AI
             // =============================================
             [
