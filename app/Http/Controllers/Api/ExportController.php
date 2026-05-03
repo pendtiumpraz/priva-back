@@ -3,7 +3,17 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Ropa, Dpia, DsrRequest, ConsentCollectionPoint, ConsentRecord, BreachIncident, BreachSimulation, InformationSystem, AiResult, GapAssessment};
+use App\Models\AiResult;
+use App\Models\BreachIncident;
+use App\Models\BreachSimulation;
+use App\Models\ConsentCollectionPoint;
+use App\Models\ConsentRecord;
+use App\Models\Dpia;
+use App\Models\DpiaRiskEventTemplate;
+use App\Models\DsrRequest;
+use App\Models\GapAssessment;
+use App\Models\InformationSystem;
+use App\Models\Ropa;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -18,6 +28,7 @@ class ExportController extends Controller
         } elseif ($request->filled('org_id')) {
             $query->where('org_id', $request->org_id);
         }
+
         return $query;
     }
 
@@ -25,7 +36,7 @@ class ExportController extends Controller
     {
         return response()->streamDownload(function () use ($headers, $rows) {
             $handle = fopen('php://output', 'w');
-            fprintf($handle, chr(0xEF) . chr(0xBB) . chr(0xBF));
+            fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
             fputcsv($handle, $headers);
             foreach ($rows as $row) {
                 fputcsv($handle, $row);
@@ -39,8 +50,13 @@ class ExportController extends Controller
 
     private function flattenJson($data, int $maxLen = 200): string
     {
-        if (is_null($data)) return '';
-        if (is_array($data)) return mb_substr(json_encode($data, JSON_UNESCAPED_UNICODE), 0, $maxLen);
+        if (is_null($data)) {
+            return '';
+        }
+        if (is_array($data)) {
+            return mb_substr(json_encode($data, JSON_UNESCAPED_UNICODE), 0, $maxLen);
+        }
+
         return (string) $data;
     }
 
@@ -63,7 +79,7 @@ class ExportController extends Controller
             'Penerima Data', 'Transfer Luar Negeri', 'Negara Tujuan', 'Safeguards',
             'Kontrol Keamanan', 'Masa Retensi', 'Prosedur Pemusnahan',
             'Kategori Data', 'Subjek Data', 'Penerima (Array)', 'Security Measures',
-            'Level Risiko', 'Status', 'Progress (%)', 'Dibuat', 'Diperbarui'
+            'Level Risiko', 'Status', 'Progress (%)', 'Dibuat', 'Diperbarui',
         ];
 
         $rows = $items->map(function ($r) {
@@ -113,13 +129,13 @@ class ExportController extends Controller
                 $r->security_measures ?? '',
                 strtoupper($r->risk_level),
                 $r->status,
-                ($r->progress ?? 0) . '%',
+                ($r->progress ?? 0).'%',
                 $r->created_at?->format('Y-m-d H:i'),
                 $r->updated_at?->format('Y-m-d H:i'),
             ];
         });
 
-        return $this->streamCsv('ropa_export_' . date('Y-m-d') . '.csv', $headers, $rows);
+        return $this->streamCsv('ropa_export_'.date('Y-m-d').'.csv', $headers, $rows);
     }
 
     // =============================================
@@ -135,13 +151,49 @@ class ExportController extends Controller
             'Likelihood (1-5)', 'Impact (1-5)', 'Risk Score',
             'Risiko #1', 'Risiko #2', 'Risiko #3',
             'Mitigasi #1', 'Mitigasi #2', 'Mitigasi #3',
-            'Approver', 'Tanggal Approval', 'Dibuat', 'Diperbarui'
+            'Approver', 'Tanggal Approval', 'Dibuat', 'Diperbarui',
+            // Comprehensive risk export columns (extends from wizard_data.potensi_risiko)
+            'Total Risk Events', 'Risk Categories Covered', 'Risk Events (Detailed)',
         ];
 
         $rows = $items->map(function ($d) {
             $ra = $d->risk_assessment ?? [];
             $risks = $ra['risks'] ?? [];
             $mitigations = $d->mitigation_measures ?? [];
+
+            // Aggregate wizard_data.potensi_risiko[*].risk_events[]
+            $potensi = ($d->wizard_data ?? [])['potensi_risiko'] ?? [];
+            $totalEvents = 0;
+            $categoriesCovered = [];
+            $detailedLines = [];
+            foreach ($potensi as $categoryName => $categoryData) {
+                $events = $categoryData['risk_events'] ?? [];
+                if (! is_array($events) || empty($events)) {
+                    continue;
+                }
+                $categoriesCovered[] = (string) $categoryName;
+                foreach ($events as $ev) {
+                    $totalEvents++;
+                    $dampak = $ev['dampak'] ?? null;
+                    $probab = $ev['probabilitas'] ?? null;
+                    $score = (is_numeric($dampak) && is_numeric($probab)) ? ((int) $dampak * (int) $probab) : null;
+                    $line = '['.$categoryName.'] '
+                        .($ev['risk_event'] ?? '-')
+                        .' — Dampak:'.($dampak ?? '-')
+                        .' Probab:'.($probab ?? '-')
+                        .' Score:'.($score ?? '-')
+                        .' Penanganan:'.($ev['penanganan'] ?? '-');
+                    if (! empty($ev['notes'])) {
+                        $line .= '; Notes: '.$ev['notes'];
+                    }
+                    $detailedLines[] = $line;
+                }
+            }
+            $detailed = implode("\n", $detailedLines);
+            // Truncate to 5000 chars (CSV-friendly cell size)
+            if (mb_strlen($detailed) > 5000) {
+                $detailed = mb_substr($detailed, 0, 4990)."\n[...]";
+            }
 
             return [
                 $d->registration_number,
@@ -153,20 +205,106 @@ class ExportController extends Controller
                 $ra['likelihood'] ?? '-',
                 $ra['impact'] ?? '-',
                 isset($ra['likelihood'], $ra['impact']) ? ($ra['likelihood'] * $ra['impact']) : '-',
-                isset($risks[0]) ? ($risks[0]['category'] ?? '') . ': ' . ($risks[0]['description'] ?? '') : '',
-                isset($risks[1]) ? ($risks[1]['category'] ?? '') . ': ' . ($risks[1]['description'] ?? '') : '',
-                isset($risks[2]) ? ($risks[2]['category'] ?? '') . ': ' . ($risks[2]['description'] ?? '') : '',
-                isset($mitigations[0]) ? ($mitigations[0]['measure'] ?? '') . ' [' . ($mitigations[0]['priority'] ?? '') . ']' : '',
-                isset($mitigations[1]) ? ($mitigations[1]['measure'] ?? '') . ' [' . ($mitigations[1]['priority'] ?? '') . ']' : '',
-                isset($mitigations[2]) ? ($mitigations[2]['measure'] ?? '') . ' [' . ($mitigations[2]['priority'] ?? '') . ']' : '',
+                isset($risks[0]) ? ($risks[0]['category'] ?? '').': '.($risks[0]['description'] ?? '') : '',
+                isset($risks[1]) ? ($risks[1]['category'] ?? '').': '.($risks[1]['description'] ?? '') : '',
+                isset($risks[2]) ? ($risks[2]['category'] ?? '').': '.($risks[2]['description'] ?? '') : '',
+                isset($mitigations[0]) ? ($mitigations[0]['measure'] ?? '').' ['.($mitigations[0]['priority'] ?? '').']' : '',
+                isset($mitigations[1]) ? ($mitigations[1]['measure'] ?? '').' ['.($mitigations[1]['priority'] ?? '').']' : '',
+                isset($mitigations[2]) ? ($mitigations[2]['measure'] ?? '').' ['.($mitigations[2]['priority'] ?? '').']' : '',
                 $d->approver_id ?? '-',
                 $d->approved_at?->format('Y-m-d H:i') ?? '-',
                 $d->created_at?->format('Y-m-d H:i'),
                 $d->updated_at?->format('Y-m-d H:i'),
+                $totalEvents,
+                implode(', ', $categoriesCovered),
+                $detailed,
             ];
         });
 
-        return $this->streamCsv('dpia_export_' . date('Y-m-d') . '.csv', $headers, $rows);
+        return $this->streamCsv('dpia_export_'.date('Y-m-d').'.csv', $headers, $rows);
+    }
+
+    // =============================================
+    // DPIA Risks Export — denormalized 1 row per risk event
+    // =============================================
+    public function dpiaRisks(Request $request)
+    {
+        $items = $this->getQuery($request, Dpia::class)
+            ->whereNull('deleted_at')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Resolve org for template scope (superadmin can pass ?org_id=)
+        $orgId = $request->user()->role === 'superadmin'
+            ? ($request->filled('org_id') ? $request->org_id : null)
+            : $request->user()->org_id;
+
+        // Single query: load template library once (system + org-scoped custom).
+        // Indexed by risk_event text for O(1) match lookup. NO per-DPIA query.
+        $templateQuery = DpiaRiskEventTemplate::query()
+            ->where('is_active', true)
+            ->where(function ($q) use ($orgId) {
+                $q->whereNull('org_id');
+                if ($orgId) {
+                    $q->orWhere('org_id', $orgId);
+                }
+            });
+        $templates = $templateQuery->get(['risk_event'])->keyBy('risk_event');
+
+        $headers = [
+            'DPIA No. Registrasi', 'DPIA Description', 'DPIA Risk Level', 'DPIA Status',
+            'Category Label', 'Category Answer', 'Category Description',
+            'Risk Event', 'Dampak (1-5)', 'Probabilitas (1-5)', 'Risk Score (Dampak × Probabilitas)',
+            'Penanganan', 'Notes', 'Match Template', 'Created', 'Updated',
+        ];
+
+        $rows = [];
+        foreach ($items as $d) {
+            $potensi = ($d->wizard_data ?? [])['potensi_risiko'] ?? [];
+            if (! is_array($potensi) || empty($potensi)) {
+                continue;
+            }
+
+            foreach ($potensi as $categoryLabel => $categoryData) {
+                $answer = $categoryData['answer'] ?? '';
+                $description = $categoryData['description'] ?? '';
+                $events = $categoryData['risk_events'] ?? [];
+                if (! is_array($events) || empty($events)) {
+                    continue;
+                }
+
+                foreach ($events as $ev) {
+                    $eventText = (string) ($ev['risk_event'] ?? '');
+                    $dampak = $ev['dampak'] ?? null;
+                    $probab = $ev['probabilitas'] ?? null;
+                    $score = (is_numeric($dampak) && is_numeric($probab))
+                        ? ((int) $dampak * (int) $probab)
+                        : '';
+                    $matchTpl = ($eventText !== '' && $templates->has($eventText)) ? 'Yes' : 'No';
+
+                    $rows[] = [
+                        $d->registration_number,
+                        $d->description,
+                        strtoupper($d->risk_level ?? ''),
+                        $d->status,
+                        (string) $categoryLabel,
+                        $answer,
+                        $description,
+                        $eventText,
+                        $dampak ?? '',
+                        $probab ?? '',
+                        $score,
+                        $ev['penanganan'] ?? '',
+                        $ev['notes'] ?? '',
+                        $matchTpl,
+                        $d->created_at?->format('Y-m-d H:i') ?? '',
+                        $d->updated_at?->format('Y-m-d H:i') ?? '',
+                    ];
+                }
+            }
+        }
+
+        return $this->streamCsv('dpia_risks_export_'.date('Y-m-d').'.csv', $headers, $rows);
     }
 
     // =============================================
@@ -189,7 +327,7 @@ class ExportController extends Controller
 
         $rows = $items->map(function ($b) {
             $checklist = $b->containment_checklist ?? [];
-            $done = collect($checklist)->filter(fn($c) => ($c['completed'] ?? false))->count();
+            $done = collect($checklist)->filter(fn ($c) => ($c['completed'] ?? false))->count();
             $total = count($checklist);
 
             return [
@@ -217,7 +355,7 @@ class ExportController extends Controller
             ];
         });
 
-        return $this->streamCsv('breach_export_' . date('Y-m-d') . '.csv', $headers, $rows);
+        return $this->streamCsv('breach_export_'.date('Y-m-d').'.csv', $headers, $rows);
     }
 
     // =============================================
@@ -233,7 +371,7 @@ class ExportController extends Controller
             'Deadline (3x24 jam)', 'Sisa Waktu (jam)',
             'Respons', 'Alasan Penolakan',
             'Direspon Pada', 'Ditutup Pada', 'Assigned To',
-            'Dibuat', 'Diperbarui'
+            'Dibuat', 'Diperbarui',
         ];
 
         $rows = $items->map(function ($d) {
@@ -261,7 +399,7 @@ class ExportController extends Controller
             ];
         });
 
-        return $this->streamCsv('dsr_export_' . date('Y-m-d') . '.csv', $headers, $rows);
+        return $this->streamCsv('dsr_export_'.date('Y-m-d').'.csv', $headers, $rows);
     }
 
     // =============================================
@@ -279,11 +417,12 @@ class ExportController extends Controller
             'Collection ID', 'Nama', 'Domain', 'Redirect URL',
             'Guardian/Wali Mode', 'Label Wali', 'Opsi Hubungan Wali',
             'Jumlah Items', 'Jumlah Records',
-            'Dibuat', 'Diperbarui'
+            'Dibuat', 'Diperbarui',
         ];
 
         $rows = $items->map(function ($c) {
             $settings = $c->settings ?? [];
+
             return [
                 $c->collection_id,
                 $c->name,
@@ -299,7 +438,7 @@ class ExportController extends Controller
             ];
         });
 
-        return $this->streamCsv('consent_export_' . date('Y-m-d') . '.csv', $headers, $rows);
+        return $this->streamCsv('consent_export_'.date('Y-m-d').'.csv', $headers, $rows);
     }
 
     // =============================================
@@ -313,7 +452,9 @@ class ExportController extends Controller
             ->join('consent_collection_points', 'consent_records.collection_point_id', '=', 'consent_collection_points.id')
             ->join('consent_items', 'consent_records.consent_item_id', '=', 'consent_items.id');
 
-        if ($orgId) $query->where('consent_collection_points.org_id', $orgId);
+        if ($orgId) {
+            $query->where('consent_collection_points.org_id', $orgId);
+        }
 
         $records = $query->select(
             'consent_records.*',
@@ -324,10 +465,10 @@ class ExportController extends Controller
         $headers = [
             'Collection Point', 'Consent Item', 'Subject ID', 'Subject Name',
             'Channel', 'Granted', 'IP Address',
-            'Granted At', 'Revoked At', 'Revoke Reason'
+            'Granted At', 'Revoked At', 'Revoke Reason',
         ];
 
-        $rows = $records->map(fn($r) => [
+        $rows = $records->map(fn ($r) => [
             $r->cp_name, $r->item_title, $r->subject_identifier, $r->subject_name ?? '-',
             $r->channel, $r->is_granted ? 'Ya' : 'Tidak', $r->ip_address ?? '-',
             $r->granted_at?->format('Y-m-d H:i') ?? '-',
@@ -335,7 +476,7 @@ class ExportController extends Controller
             $r->revoke_reason ?? '-',
         ]);
 
-        return $this->streamCsv('consent_records_export_' . date('Y-m-d') . '.csv', $headers, $rows);
+        return $this->streamCsv('consent_records_export_'.date('Y-m-d').'.csv', $headers, $rows);
     }
 
     // =============================================
@@ -349,20 +490,20 @@ class ExportController extends Controller
             'Assessment ID', 'Versi', 'Skor Keseluruhan (%)', 'Level Kepatuhan',
             'Progress (%)', 'Jumlah Pertanyaan Dijawab', 'Total Pertanyaan',
             'Skor Tata Kelola', 'Skor Siklus Proses',
-            'Dibuat', 'Diperbarui'
+            'Dibuat', 'Diperbarui',
         ];
 
         $rows = $items->map(function ($g) {
             $answers = $g->answers ?? [];
-            $answered = collect($answers)->filter(fn($a) => !empty($a))->count();
+            $answered = collect($answers)->filter(fn ($a) => ! empty($a))->count();
             $summary = $g->summary ?? [];
 
             return [
                 $g->id,
                 $g->version ?? '1.0',
-                ($g->score ?? $g->overall_score ?? 0) . '%',
+                ($g->score ?? $g->overall_score ?? 0).'%',
                 $g->compliance_level ?? '-',
-                ($g->progress ?? 0) . '%',
+                ($g->progress ?? 0).'%',
                 $answered,
                 count($answers) ?: 33,
                 $summary['tata_kelola_score'] ?? '-',
@@ -372,7 +513,7 @@ class ExportController extends Controller
             ];
         });
 
-        return $this->streamCsv('gap_assessment_export_' . date('Y-m-d') . '.csv', $headers, $rows);
+        return $this->streamCsv('gap_assessment_export_'.date('Y-m-d').'.csv', $headers, $rows);
     }
 
     // =============================================
@@ -386,22 +527,22 @@ class ExportController extends Controller
             'Nama Sistem', 'Tipe Sumber', 'Owner', 'Status Scan', 'Progress Scan',
             'PDP Alert', 'PII Alert',
             'Jumlah Tabel', 'Total Kolom', 'Kolom PII', 'Kolom Perlu Enkripsi',
-            'Last Scanned', 'Scan Engine', 'Dibuat'
+            'Last Scanned', 'Scan Engine', 'Dibuat',
         ];
 
         $rows = $items->map(function ($s) {
             $results = $s->scan_results ?? [];
             $tables = $results['tables'] ?? [];
-            $allCols = collect($tables)->flatMap(fn($t) => $t['columns'] ?? []);
-            $piiCols = $allCols->filter(fn($c) => $c['pii_detected'] ?? false)->count();
-            $encCols = $allCols->filter(fn($c) => $c['encryption_required'] ?? false)->count();
+            $allCols = collect($tables)->flatMap(fn ($t) => $t['columns'] ?? []);
+            $piiCols = $allCols->filter(fn ($c) => $c['pii_detected'] ?? false)->count();
+            $encCols = $allCols->filter(fn ($c) => $c['encryption_required'] ?? false)->count();
 
             return [
                 $s->name,
                 $s->source_type,
                 $s->owner ?? '-',
                 $s->scanning_status,
-                ($s->scanning_progress ?? 0) . '%',
+                ($s->scanning_progress ?? 0).'%',
                 $s->pdp_alert_count ?? 0,
                 $s->pii_alert_count ?? 0,
                 count($tables),
@@ -414,7 +555,7 @@ class ExportController extends Controller
             ];
         });
 
-        return $this->streamCsv('data_discovery_export_' . date('Y-m-d') . '.csv', $headers, $rows);
+        return $this->streamCsv('data_discovery_export_'.date('Y-m-d').'.csv', $headers, $rows);
     }
 
     // =============================================
@@ -427,7 +568,7 @@ class ExportController extends Controller
         $headers = [
             'Sistem', 'Tipe Sumber', 'Tabel/Collection', 'Row Count', 'Size (MB)',
             'Kolom', 'Tipe Data', 'PII Detected', 'Klasifikasi',
-            'Kategori PDP', 'Perlu Enkripsi', 'Retensi (hari)', 'Manual Override'
+            'Kategori PDP', 'Perlu Enkripsi', 'Retensi (hari)', 'Manual Override',
         ];
 
         $rows = [];
@@ -454,7 +595,7 @@ class ExportController extends Controller
             }
         }
 
-        return $this->streamCsv('data_discovery_columns_export_' . date('Y-m-d') . '.csv', $headers, $rows);
+        return $this->streamCsv('data_discovery_columns_export_'.date('Y-m-d').'.csv', $headers, $rows);
     }
 
     // =============================================
@@ -470,7 +611,7 @@ class ExportController extends Controller
             'Skor Keseluruhan', 'Jumlah Peserta',
             'Mulai', 'Selesai', 'Durasi (menit)',
             'Temuan', 'Rekomendasi',
-            'Dibuat'
+            'Dibuat',
         ];
 
         $rows = $items->map(function ($s) {
@@ -497,7 +638,7 @@ class ExportController extends Controller
             ];
         });
 
-        return $this->streamCsv('simulation_export_' . date('Y-m-d') . '.csv', $headers, $rows);
+        return $this->streamCsv('simulation_export_'.date('Y-m-d').'.csv', $headers, $rows);
     }
 
     // =============================================
@@ -519,7 +660,7 @@ class ExportController extends Controller
 
             $summary = $result['summary'] ?? $result['title'] ?? '';
             if (empty($summary) && isset($result['sections'])) {
-                $summary = count($result['sections']) . ' sections generated';
+                $summary = count($result['sections']).' sections generated';
             }
             if (empty($summary)) {
                 $summary = mb_substr(json_encode($result, JSON_UNESCAPED_UNICODE), 0, 200);
@@ -537,7 +678,7 @@ class ExportController extends Controller
             ];
         });
 
-        return $this->streamCsv('ai_results_export_' . date('Y-m-d') . '.csv', $headers, $rows);
+        return $this->streamCsv('ai_results_export_'.date('Y-m-d').'.csv', $headers, $rows);
     }
 
     // =============================================

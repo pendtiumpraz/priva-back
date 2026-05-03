@@ -1114,6 +1114,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
     Route::prefix('export')->group(function () {
         Route::get('/ropa', [ExportController::class, 'ropa']);
         Route::get('/dpia', [ExportController::class, 'dpia']);
+        Route::get('/dpia-risks', [ExportController::class, 'dpiaRisks']);
         Route::get('/breach', [ExportController::class, 'breach']);
         Route::get('/dsr', [ExportController::class, 'dsr']);
         Route::get('/consent', [ExportController::class, 'consent']);
