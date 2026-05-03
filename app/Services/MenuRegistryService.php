@@ -78,8 +78,11 @@ class MenuRegistryService
 
         // Layer 0.5: license package gate. Tenant's active license package_type
         // must match menu_item.required_packages (if set). Null → available to all.
+        // Superadmin bypass package gate — mereka platform-level admin, boleh
+        // akses semua feature regardless of license. (Root sudah bypass earlier.)
         $packageType = null;
-        if ($orgId) {
+        $bypassPackageGate = ($role === 'superadmin');
+        if ($orgId && ! $bypassPackageGate) {
             $packageType = License::where('org_id', $orgId)
                 ->where('status', 'active')
                 ->value('package_type');
@@ -92,10 +95,12 @@ class MenuRegistryService
             if (isset($revoked[$menu->id])) continue;
             if (isset($hidden[$menu->id])) continue;
 
-            // License package gate
-            $required = $menu->required_packages;
-            if (is_array($required) && count($required) > 0) {
-                if (!$packageType || !in_array($packageType, $required, true)) continue;
+            // License package gate (skip kalau superadmin)
+            if (! $bypassPackageGate) {
+                $required = $menu->required_packages;
+                if (is_array($required) && count($required) > 0) {
+                    if (!$packageType || !in_array($packageType, $required, true)) continue;
+                }
             }
 
             // If this is a sub-item, its parent must also be visible.
