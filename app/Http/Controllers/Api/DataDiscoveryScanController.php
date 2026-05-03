@@ -15,6 +15,7 @@ use App\Services\DataDiscoveryScanGeneratorService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Person Scan endpoints.
@@ -154,6 +155,42 @@ class DataDiscoveryScanController extends Controller
             'message' => 'Plan restored',
             'plan' => $this->serializePlan($plan),
         ]);
+    }
+
+    // =========================================================================
+    // DELETE /plans/{id}/force — hard delete (permanent), bypass soft delete.
+    //
+    // Hanya untuk plan yang SUDAH soft-deleted (di tab Archived). Cascade
+    // delete child rows (plan_systems + scan_results) secara manual dalam
+    // satu transaksi karena forceDelete pada parent tidak otomatis cascade
+    // ke child yang masih dalam state non-trashed.
+    // =========================================================================
+    public function forceDelete(Request $req, string $id): JsonResponse
+    {
+        $user = $req->user();
+        $plan = DataDiscoveryScanPlan::forOrg($user->org_id)
+            ->onlyTrashed()
+            ->find($id);
+        if (! $plan) {
+            return response()->json(['error' => 'Not found in trash'], 404);
+        }
+
+        DB::transaction(function () use ($plan) {
+            // Hard delete child results & systems (include trashed) supaya
+            // tidak ada orphan row tertinggal.
+            DataDiscoveryScanResult::where('scan_plan_id', $plan->id)
+                ->withTrashed()
+                ->forceDelete();
+            DataDiscoveryScanPlanSystem::where('scan_plan_id', $plan->id)
+                ->forceDelete();
+            $plan->forceDelete();
+        });
+
+        $this->writeAudit('data_discovery.scan_plan.force_delete', $plan->id, $user, [
+            'permanent' => true,
+        ]);
+
+        return response()->json(['message' => 'Plan permanently deleted', 'id' => $id]);
     }
 
     // =========================================================================
