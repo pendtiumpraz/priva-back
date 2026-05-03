@@ -4,14 +4,13 @@ namespace App\Models;
 
 use App\Casts\EncryptedString;
 use App\Models\Concerns\LandlordPinned;
-
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Organization extends Model
 {
-    use HasUuids, SoftDeletes, LandlordPinned;
+    use HasUuids, LandlordPinned, SoftDeletes;
 
     protected $fillable = [
         'parent_id', 'org_level',
@@ -51,7 +50,7 @@ class Organization extends Model
 
     public function users()
     {
-        return $this->hasMany(User::class , 'org_id');
+        return $this->hasMany(User::class, 'org_id');
     }
 
     // ============ Holding Hierarchy ============
@@ -85,6 +84,7 @@ class Organization extends Model
             $ids[] = $child->id;
             $ids = array_merge($ids, $child->getDescendantIds());
         }
+
         return $ids;
     }
 
@@ -127,29 +127,29 @@ class Organization extends Model
         static::created(function ($organization) {
             $presets = [
                 'admin' => [
-                    'name' => 'Admin', 
+                    'name' => 'Admin',
                     'desc' => 'Administrator dengan full akses konfigurasi',
-                    'permissions' => ['*']
+                    'permissions' => ['*'],
                 ],
-                'dpo'   => [
-                    'name' => 'DPO', 
+                'dpo' => [
+                    'name' => 'DPO',
                     'desc' => 'Data Protection Officer untuk review dan approval',
-                    'permissions' => ['dashboard', 'ropa', 'dpia', 'dsr', 'breach', 'simulation', 'consent', 'contract-review', 'data-discovery', 'gap-assessment', 'settings']
+                    'permissions' => ['dashboard', 'ropa', 'dpia', 'dsr', 'breach', 'simulation', 'consent', 'contract-review', 'data-discovery', 'gap-assessment', 'settings'],
                 ],
                 'maker' => [
-                    'name' => 'Maker', 
-                    'desc' => 'User operasional yang input data ROPA/DPIA',
-                    'permissions' => ['dashboard', 'ropa', 'dpia', 'dsr', 'breach', 'consent', 'contract-review', 'data-discovery', 'gap-assessment']
+                    'name' => 'Maker',
+                    'desc' => 'User operasional yang input data RoPA/DPIA',
+                    'permissions' => ['dashboard', 'ropa', 'dpia', 'dsr', 'breach', 'consent', 'contract-review', 'data-discovery', 'gap-assessment'],
                 ],
-                'viewer'=> [
-                    'name' => 'Viewer', 
+                'viewer' => [
+                    'name' => 'Viewer',
                     'desc' => 'Akses hanya baca (read-only)',
-                    'permissions' => ['dashboard', 'ropa', 'dpia']
+                    'permissions' => ['dashboard', 'ropa', 'dpia'],
                 ],
             ];
 
             foreach ($presets as $code => $data) {
-                \App\Models\TenantRole::create([
+                TenantRole::create([
                     'org_id' => $organization->id,
                     'name' => $data['name'],
                     'is_system' => true,

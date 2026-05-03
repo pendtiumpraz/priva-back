@@ -311,8 +311,8 @@ Run this drill quarterly. Document RTO + RPO in your DR runbook.
 2. Login as superadmin → `/platform-admin/tenants` → find test org → **Aktifkan Isolation**
 3. Pick the AWS RDS Jakarta pool → confirm
 4. Watch state cycle: shared → provisioning → migrating → isolated (~30s)
-5. Login as a user of the test org → make a ROPA, upload a file
-6. Verify ROPA row lives in `privasimu_tenant_<uuid>` on the tenant cluster (not landlord)
+5. Login as a user of the test org → make a RoPA, upload a file
+6. Verify RoPA row lives in `privasimu_tenant_<uuid>` on the tenant cluster (not landlord)
 7. Verify file in S3 under `tenants/<org-id>/`
 8. Run `php artisan tenants:migrate --pretend` — should report no pending migrations after step 4
 

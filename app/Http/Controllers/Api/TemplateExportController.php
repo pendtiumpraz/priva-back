@@ -3,17 +3,27 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AiResult;
+use App\Models\BreachIncident;
+use App\Models\ConsentCollectionPoint;
+use App\Models\DocumentTemplate;
+use App\Models\Dpia;
+use App\Models\DsrRequest;
+use App\Models\GapAssessment;
+use App\Models\InformationSystem;
+use App\Models\Organization;
+use App\Models\RegulationFramework;
+use App\Models\Ropa;
+use App\Services\DocxTemplateService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use PhpOffice\PhpWord\PhpWord;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpWord\IOFactory;
+use PhpOffice\PhpWord\PhpWord;
 use PhpOffice\PhpWord\SimpleType\Jc;
-use App\Models\Ropa;
-use App\Models\Dpia;
-use App\Models\GapAssessment;
-use App\Models\DocumentTemplate;
-use App\Models\Organization;
-use App\Services\DocxTemplateService;
+use PhpOffice\PhpWord\SimpleType\TblWidth;
 
 class TemplateExportController extends Controller
 {
@@ -40,12 +50,18 @@ class TemplateExportController extends Controller
     //    Caption   → Roboto 8pt (gray)
     // ────────────────────────────────────────────────────────────────
 
-    private const NAVY  = '16284C';
-    private const LAV   = 'F4F2FE';
-    private const INK   = '0F172A';
-    private const GRAY  = '767171';
-    private const RULE  = 'D9D9D9';
+    private const NAVY = '16284C';
+
+    private const LAV = 'F4F2FE';
+
+    private const INK = '0F172A';
+
+    private const GRAY = '767171';
+
+    private const RULE = 'D9D9D9';
+
     private const HEAD_FONT = 'Poppins';
+
     private const BODY_FONT = 'Roboto';
 
     private function applyDefaultFont(PhpWord $phpWord): void
@@ -84,7 +100,7 @@ class TemplateExportController extends Controller
      * and a 4-column meta strip. Bottom band is a white confidentiality
      * and issue-date block.
      *
-     * @param array $orgMeta keys: name, website, dpo_name, dpo_email, logo_path
+     * @param  array  $orgMeta  keys: name, website, dpo_name, dpo_email, logo_path
      */
     private function addCoverPage(PhpWord $phpWord, string $docType, string $title, string $regNumber, string $status, string $riskLevel, array $orgMeta)
     {
@@ -93,7 +109,7 @@ class TemplateExportController extends Controller
             'marginTop' => 0, 'marginBottom' => 0, 'marginLeft' => 0, 'marginRight' => 0,
         ]);
 
-        $phpWord->addTableStyle('CoverBase', ['borderSize' => 0, 'cellMargin' => 0, 'width' => 11905, 'unit' => \PhpOffice\PhpWord\SimpleType\TblWidth::TWIP]);
+        $phpWord->addTableStyle('CoverBase', ['borderSize' => 0, 'cellMargin' => 0, 'width' => 11905, 'unit' => TblWidth::TWIP]);
 
         // ── Hero band ──
         $hero = $section->addTable('CoverBase');
@@ -121,7 +137,7 @@ class TemplateExportController extends Controller
                 ['alignment' => Jc::CENTER]);
         }
 
-        if (!empty($orgMeta['website'])) {
+        if (! empty($orgMeta['website'])) {
             $heroCell->addText($this->t($orgMeta['website']),
                 ['size' => 9, 'color' => 'D9D9D9', 'italic' => true],
                 ['alignment' => Jc::CENTER]);
@@ -192,13 +208,13 @@ class TemplateExportController extends Controller
         $contactTable = $footCell->addTable(['cellMargin' => 100, 'alignment' => Jc::CENTER]);
         $contactRow = $contactTable->addRow();
         $contactCell = $contactRow->addCell(11000, []);
-        if (!empty($orgMeta['dpo_name']) || !empty($orgMeta['dpo_email'])) {
+        if (! empty($orgMeta['dpo_name']) || ! empty($orgMeta['dpo_email'])) {
             $contactCell->addText(
-                'Data Protection Officer: ' . trim(($orgMeta['dpo_name'] ?? '') . (isset($orgMeta['dpo_email']) ? ' · ' . $orgMeta['dpo_email'] : ''), ' ·'),
+                'Data Protection Officer: '.trim(($orgMeta['dpo_name'] ?? '').(isset($orgMeta['dpo_email']) ? ' · '.$orgMeta['dpo_email'] : ''), ' ·'),
                 ['size' => 8, 'color' => self::GRAY], ['alignment' => Jc::CENTER]
             );
         }
-        $contactCell->addText('Issued on ' . now()->format('d F Y H:i') . ' WIB',
+        $contactCell->addText('Issued on '.now()->format('d F Y H:i').' WIB',
             ['size' => 8, 'color' => self::GRAY], ['alignment' => Jc::CENTER]);
 
         return $section;
@@ -218,10 +234,10 @@ class TemplateExportController extends Controller
      * Inner content section — running header uses the TENANT's name (not
      * Privasimu) so the exported document is fully white-labeled.
      *
-     * @param string $headerText  Free-text shown on the right of the header
-     *                            (typically "<DocType> · <reg number>")
-     * @param array  $orgMeta     Optional tenant meta (name, website) to show
-     *                            on the left of the header + footer.
+     * @param  string  $headerText  Free-text shown on the right of the header
+     *                              (typically "<DocType> · <reg number>")
+     * @param  array  $orgMeta  Optional tenant meta (name, website) to show
+     *                          on the left of the header + footer.
      */
     private function addContentSection(PhpWord $phpWord, string $headerText, array $orgMeta = [])
     {
@@ -266,9 +282,11 @@ class TemplateExportController extends Controller
      * we don't fetch it (would require HTTP), we only use locally stored
      * files reachable via public disk.
      */
-    private function resolveOrgMeta(?\App\Models\Organization $org): array
+    private function resolveOrgMeta(?Organization $org): array
     {
-        if (!$org) return ['name' => 'Organization'];
+        if (! $org) {
+            return ['name' => 'Organization'];
+        }
         $meta = [
             'name' => $org->name ?? 'Organization',
             'website' => $org->website ?? '',
@@ -281,10 +299,13 @@ class TemplateExportController extends Controller
             // Only try local files via the public disk
             if (str_starts_with($url, '/storage/')) {
                 $rel = substr($url, strlen('/storage/'));
-                $local = storage_path('app/public/' . $rel);
-                if (is_file($local)) $meta['logo_path'] = $local;
+                $local = storage_path('app/public/'.$rel);
+                if (is_file($local)) {
+                    $meta['logo_path'] = $local;
+                }
             }
         }
+
         return $meta;
     }
 
@@ -311,7 +332,7 @@ class TemplateExportController extends Controller
             $badge->addText($num, ['size' => 11, 'bold' => true, 'color' => 'ffffff', 'name' => self::HEAD_FONT], ['alignment' => Jc::CENTER]);
         }
         $titleCell = $row->addCell($num !== '' ? 10300 : 11000, ['bgColor' => self::NAVY, 'valign' => 'center']);
-        $titleCell->addText('  ' . $this->t($clean), [
+        $titleCell->addText('  '.$this->t($clean), [
             'size' => 12, 'bold' => true, 'color' => 'ffffff',
             'name' => self::HEAD_FONT,
         ]);
@@ -368,13 +389,15 @@ class TemplateExportController extends Controller
      * recipient lists — anything that's naturally a grid. Header row is navy
      * with white Poppins text, body rows alternate white / lavender.
      *
-     * @param array $headers  ['Nomor', 'Nama', 'Email', 'Phone']
-     * @param array $rows     [['1', 'DPO Corp', 'dpo@x.com', '+62…'], ...]
-     * @param array $widths   Optional twip widths per col; defaults equal split
+     * @param  array  $headers  ['Nomor', 'Nama', 'Email', 'Phone']
+     * @param  array  $rows  [['1', 'DPO Corp', 'dpo@x.com', '+62…'], ...]
+     * @param  array  $widths  Optional twip widths per col; defaults equal split
      */
     private function addDataTable($section, array $headers, array $rows, array $widths = []): void
     {
-        if (empty($headers)) return;
+        if (empty($headers)) {
+            return;
+        }
         $n = count($headers);
         if (empty($widths)) {
             $total = 100 * 50;
@@ -384,7 +407,7 @@ class TemplateExportController extends Controller
         $t = $section->addTable([
             'borderSize' => 4, 'borderColor' => self::RULE,
             'cellMargin' => 80, 'width' => 100 * 50,
-            'unit' => \PhpOffice\PhpWord\SimpleType\TblWidth::PERCENT,
+            'unit' => TblWidth::PERCENT,
         ]);
 
         // Header row
@@ -418,7 +441,7 @@ class TemplateExportController extends Controller
             'borderSize' => 0,
             'cellMargin' => 120,
             'width' => 100 * 50,
-            'unit' => \PhpOffice\PhpWord\SimpleType\TblWidth::PERCENT,
+            'unit' => TblWidth::PERCENT,
             'alignment' => Jc::CENTER,
         ]);
     }
@@ -431,7 +454,7 @@ class TemplateExportController extends Controller
         $t = $section->addTable(['cellMargin' => 100, 'alignment' => Jc::START]);
         $r = $t->addRow(320, ['exactHeight' => true]);
         $c = $r->addCell(3500, ['bgColor' => $bgColor, 'valign' => 'center']);
-        $c->addText(strtoupper($label) . ': ' . $this->t($value), [
+        $c->addText(strtoupper($label).': '.$this->t($value), [
             'size' => 10, 'bold' => true, 'color' => 'ffffff', 'allCaps' => true,
         ], ['alignment' => Jc::CENTER]);
         $section->addTextBreak(1);
@@ -439,13 +462,18 @@ class TemplateExportController extends Controller
 
     private function fmtArray($arr): string
     {
-        if (!$arr) return '-';
-        if (is_array($arr)) return implode(', ', array_filter($arr)) ?: '-';
+        if (! $arr) {
+            return '-';
+        }
+        if (is_array($arr)) {
+            return implode(', ', array_filter($arr)) ?: '-';
+        }
+
         return (string) $arr ?: '-';
     }
 
     /**
-     * 7-step ROPA trigger helpers — mirror RopaRiskCalculator rules so export
+     * 7-step RoPA trigger helpers — mirror RopaRiskCalculator rules so export
      * can mark which fields actually contributed to HIGH risk.
      */
     private function isHighAi(?string $v): bool
@@ -460,17 +488,23 @@ class TemplateExportController extends Controller
 
     private function isProfilingTrigger($v): bool
     {
-        if (empty($v)) return false;
+        if (empty($v)) {
+            return false;
+        }
         if (is_string($v)) {
             $s = strtolower(trim($v));
+
             return $s !== '' && $s !== 'not applicable';
         }
         if (is_array($v)) {
             foreach ($v as $item) {
-                $s = strtolower(trim((string)$item));
-                if ($s !== '' && $s !== 'not applicable') return true;
+                $s = strtolower(trim((string) $item));
+                if ($s !== '' && $s !== 'not applicable') {
+                    return true;
+                }
             }
         }
+
         return false;
     }
 
@@ -484,55 +518,69 @@ class TemplateExportController extends Controller
     private function tryRenderFromTenantTemplate(string $kind, $model, string $baseFileName)
     {
         $user = auth()->user();
-        if (!$user || !$user->org_id) return null;
+        if (! $user || ! $user->org_id) {
+            return null;
+        }
 
         // Phase H1 — resolve per-kind assignment. tryRenderFromTenantTemplate
         // is called with kind values that match DocumentTemplate::DOCUMENT_KINDS
         // ('ropa', 'dpia', 'gap_report'). The map lookup falls through to
         // default → legacy → system when no specific template is assigned.
         $mapKind = match ($kind) {
-            'gap'  => 'gap_report',
+            'gap' => 'gap_report',
             default => $kind,
         };
         $docTpl = DocumentTemplate::activeForOrg($user->org_id, $mapKind);
-        if (!$docTpl || empty(($docTpl->docx_templates ?? [])[$kind]['path'] ?? null)) return null;
+        if (! $docTpl || empty(($docTpl->docx_templates ?? [])[$kind]['path'] ?? null)) {
+            return null;
+        }
 
         $org = Organization::find($user->org_id);
-        if (!$org) return null;
+        if (! $org) {
+            return null;
+        }
 
         try {
             $svc = app(DocxTemplateService::class);
             $tempFile = match ($kind) {
                 'ropa' => $svc->renderRopa($model, $docTpl, $org),
                 'dpia' => $svc->renderDpia($model, $docTpl, $org),
-                'gap'  => $svc->renderGap($model, $docTpl, $org),
+                'gap' => $svc->renderGap($model, $docTpl, $org),
                 default => null,
             };
-            if (!$tempFile) return null;
+            if (! $tempFile) {
+                return null;
+            }
 
-            while (ob_get_level() > 0) { ob_end_clean(); }
+            while (ob_get_level() > 0) {
+                ob_end_clean();
+            }
+
             return response()->download($tempFile, $baseFileName, [
                 'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             ])->deleteFileAfterSend(true);
         } catch (\Throwable $e) {
-            \Log::warning("Tenant DOCX template render failed ({$kind}): " . $e->getMessage());
+            \Log::warning("Tenant DOCX template render failed ({$kind}): ".$e->getMessage());
+
             return null;
         }
     }
 
     // ================================================================
-    //  ROPA EXPORT
+    //  RoPA EXPORT
     // ================================================================
     public function exportRopa($id)
     {
         $ropa = Ropa::where('org_id', auth()->user()->org_id)->findOrFail($id);
 
         // Custom tenant template wins when present.
-        $outputFileName = 'ROPA_' . ($ropa->registration_number ?? 'export') . '.docx';
-        if ($resp = $this->tryRenderFromTenantTemplate('ropa', $ropa, $outputFileName)) return $resp;
+        $outputFileName = 'RoPA_'.($ropa->registration_number ?? 'export').'.docx';
+        if ($resp = $this->tryRenderFromTenantTemplate('ropa', $ropa, $outputFileName)) {
+            return $resp;
+        }
 
         try {
-            $phpWord = new PhpWord();
+            $phpWord = new PhpWord;
             $this->applyDefaultFont($phpWord);
 
             $wiz = $ropa->wizard_data ?? [];
@@ -547,8 +595,8 @@ class TemplateExportController extends Controller
 
             // Cover Page
             $this->addCoverPage(
-                $phpWord, 'Record of Processing Activities (ROPA)',
-                $ropa->processing_activity ?? $detail['nama_pemrosesan'] ?? 'Untitled ROPA',
+                $phpWord, 'Record of Processing Activities (RoPA)',
+                $ropa->processing_activity ?? $detail['nama_pemrosesan'] ?? 'Untitled RoPA',
                 $ropa->registration_number ?? '-',
                 $ropa->status ?? 'draft',
                 $ropa->risk_level ?? 'low',
@@ -556,7 +604,7 @@ class TemplateExportController extends Controller
             );
 
             // Content Page
-            $sec = $this->addContentSection($phpWord, 'ROPA · ' . ($ropa->registration_number ?? ''), $orgMeta);
+            $sec = $this->addContentSection($phpWord, 'RoPA · '.($ropa->registration_number ?? ''), $orgMeta);
 
             // 1. Detail Pemrosesan
             $this->addSectionTitle($sec, '1. Detail Pemrosesan');
@@ -566,12 +614,12 @@ class TemplateExportController extends Controller
             $this->addInfoRow($t, 'Divisi / Departemen', $ropa->division ?? $detail['divisi'] ?? '-');
             $this->addInfoRow($t, 'Unit Kerja', $ropa->work_unit ?? $detail['unit_kerja'] ?? '-');
             $this->addInfoRow($t, 'Deskripsi Pemrosesan', $detail['deskripsi'] ?? $ropa->description ?? '-');
-            $this->addInfoRow($t, 'Risk Level', strtoupper($ropa->risk_level ?? '-') . ($ropa->risk_level_locked ? ' (override manual)' : ' (otomatis)'));
+            $this->addInfoRow($t, 'Risk Level', strtoupper($ropa->risk_level ?? '-').($ropa->risk_level_locked ? ' (override manual)' : ' (otomatis)'));
 
             // Multi-system via accessor
             $sistems = $ropa->sistem_list;
-            if (!empty($sistems)) {
-                $sistemText = implode("\n", array_map(fn($s) => '• ' . $s['name'] . ($s['lokasi'] ? " ({$s['lokasi']})" : ''), $sistems));
+            if (! empty($sistems)) {
+                $sistemText = implode("\n", array_map(fn ($s) => '• '.$s['name'].($s['lokasi'] ? " ({$s['lokasi']})" : ''), $sistems));
                 $this->addInfoRow($t, 'Sistem / Aplikasi Terkait', $sistemText);
             }
 
@@ -580,7 +628,7 @@ class TemplateExportController extends Controller
             $t = $this->makeInfoTable($sec);
             $this->addInfoRow($t, 'Kategori Pemrosesan', $ropa->kategori_pemrosesan ?? $dpo['kategori_pemrosesan'] ?? '-');
             foreach ($ropa->dpo_list as $i => $d) {
-                $label = 'DPO #' . ($i + 1);
+                $label = 'DPO #'.($i + 1);
                 $lines = array_filter([
                     $d['name'] ?? '',
                     $d['jabatan'] ? "Jabatan: {$d['jabatan']}" : '',
@@ -590,7 +638,7 @@ class TemplateExportController extends Controller
                 $this->addInfoRow($t, $label, implode("\n", $lines) ?: '-');
             }
             foreach ($ropa->pic_list as $i => $p) {
-                $label = 'PIC #' . ($i + 1);
+                $label = 'PIC #'.($i + 1);
                 $lines = array_filter([
                     $p['name'] ?? '',
                     $p['jabatan'] ? "Jabatan: {$p['jabatan']}" : '',
@@ -608,13 +656,13 @@ class TemplateExportController extends Controller
             $this->addInfoRow($t, 'Detail / Keterangan Dasar Hukum', $ropa->legal_basis_detail ?? $info['legal_basis_detail'] ?? $info['keterangan_dasar'] ?? '-');
             // Risk trigger fields — append with ⚠ when they contribute to HIGH
             $aiLabel = $info['bantuan_ai'] ?? 'Tidak disebutkan';
-            $this->addInfoRow($t, 'Bantuan AI', $aiLabel . ($this->isHighAi($aiLabel) ? ' ⚠ HIGH trigger' : ''));
+            $this->addInfoRow($t, 'Bantuan AI', $aiLabel.($this->isHighAi($aiLabel) ? ' ⚠ HIGH trigger' : ''));
             $otoLabel = $info['otomatis'] ?? 'Tidak disebutkan';
-            $this->addInfoRow($t, 'Pengambilan Otomatis', $otoLabel . ($this->isHighAuto($otoLabel) ? ' ⚠ HIGH trigger' : ''));
+            $this->addInfoRow($t, 'Pengambilan Otomatis', $otoLabel.($this->isHighAuto($otoLabel) ? ' ⚠ HIGH trigger' : ''));
             $profLabel = is_array($info['pemrofilan'] ?? null) ? implode(', ', $info['pemrofilan']) : ($info['pemrofilan'] ?? 'Tidak disebutkan');
-            $this->addInfoRow($t, 'Pemrofilan', $profLabel . ($this->isProfilingTrigger($info['pemrofilan'] ?? null) ? ' ⚠ HIGH trigger' : ''));
+            $this->addInfoRow($t, 'Pemrofilan', $profLabel.($this->isProfilingTrigger($info['pemrofilan'] ?? null) ? ' ⚠ HIGH trigger' : ''));
             $newTechLabel = $info['teknologi_baru'] ?? 'Tidak disebutkan';
-            $this->addInfoRow($t, 'Teknologi Baru', $newTechLabel . ($newTechLabel === 'Ya' ? ' ⚠ HIGH trigger' : ''));
+            $this->addInfoRow($t, 'Teknologi Baru', $newTechLabel.($newTechLabel === 'Ya' ? ' ⚠ HIGH trigger' : ''));
 
             // 4. Pengumpulan Data
             $this->addSectionTitle($sec, '4. Pengumpulan Data');
@@ -644,22 +692,22 @@ class TemplateExportController extends Controller
             $this->addInfoRow($t, 'Safeguards', $pengiriman['safeguards'] ?? '-');
             $penerima = $pengiriman['penerima'] ?? [];
             if (is_array($penerima) && count($penerima) > 0) {
-                $this->addInfoRow($t, 'Daftar Penerima', $this->fmtArray(array_map(fn($p) => is_array($p) ? ($p['nama'] ?? $p['name'] ?? json_encode($p)) : $p, $penerima)));
+                $this->addInfoRow($t, 'Daftar Penerima', $this->fmtArray(array_map(fn ($p) => is_array($p) ? ($p['nama'] ?? $p['name'] ?? json_encode($p)) : $p, $penerima)));
             }
 
             // 7. Retensi dan Keamanan — master data retensi_list (Sprint E3)
             $this->addSectionTitle($sec, '7. Retensi dan Keamanan Data');
             $t = $this->makeInfoTable($sec);
             foreach ($ropa->retensi_rows as $i => $row) {
-                $label = count($ropa->retensi_rows) > 1 ? "Retensi #" . ($i + 1) : 'Retensi';
+                $label = count($ropa->retensi_rows) > 1 ? 'Retensi #'.($i + 1) : 'Retensi';
                 $dur = ($row['duration_unit'] ?? null) === 'indefinite'
                     ? 'Tidak terbatas'
-                    : (($row['duration_value'] ?? '?') . ' ' . ($row['duration_unit'] ?? ''));
+                    : (($row['duration_value'] ?? '?').' '.($row['duration_unit'] ?? ''));
                 $lines = array_filter([
                     $row['name'] ?? '',
                     "Durasi: {$dur}",
                     $row['trigger_event'] ? "Trigger: {$row['trigger_event']}" : '',
-                    $row['disposal_method'] ? "Metode: " . $row['disposal_method'] : '',
+                    $row['disposal_method'] ? 'Metode: '.$row['disposal_method'] : '',
                     $row['legal_basis'] ? "Dasar hukum: {$row['legal_basis']}" : '',
                 ]);
                 $this->addInfoRow($t, $label, implode("\n", $lines) ?: '-');
@@ -669,12 +717,12 @@ class TemplateExportController extends Controller
             }
             $this->addInfoRow($t, 'Prosedur Pemusnahan', $retensi['prosedur_pemusnahan'] ?? '-');
             $pernahInsiden = $retensi['pernah_insiden'] ?? '-';
-            $this->addInfoRow($t, 'Pernah Insiden', $pernahInsiden . (strtolower(trim((string)$pernahInsiden)) === 'ya' ? ' ⚠ HIGH trigger' : ''));
+            $this->addInfoRow($t, 'Pernah Insiden', $pernahInsiden.(strtolower(trim((string) $pernahInsiden)) === 'ya' ? ' ⚠ HIGH trigger' : ''));
             $this->addInfoRow($t, 'Kontrol Keamanan', $this->fmtArray($retensi['kontrol_keamanan'] ?? []));
 
             // Risk triggers summary box (Sprint E5)
             $triggers = $wiz['risk_triggers'] ?? null;
-            if ($triggers && !empty($triggers['reasons'])) {
+            if ($triggers && ! empty($triggers['reasons'])) {
                 $this->addSectionTitle($sec, 'Ringkasan Risiko (Otomatis)');
                 $t = $this->makeInfoTable($sec);
                 $this->addInfoRow($t, 'Level Terkomputasi', strtoupper($triggers['level'] ?? '-'));
@@ -686,23 +734,25 @@ class TemplateExportController extends Controller
             $this->addSectionTitle($sec, 'Status Dokumen');
             $t = $this->makeInfoTable($sec);
             $this->addInfoRow($t, 'Status', strtoupper($ropa->status ?? '-'));
-            $this->addInfoRow($t, 'Progress', ($ropa->progress ?? 0) . '%');
+            $this->addInfoRow($t, 'Progress', ($ropa->progress ?? 0).'%');
             $this->addInfoRow($t, 'Regulasi', $ropa->regulation_code ?? '-');
             $this->addInfoRow($t, 'Dibuat', $ropa->created_at ? $ropa->created_at->format('d F Y H:i') : '-');
             $this->addInfoRow($t, 'Terakhir Diupdate', $ropa->updated_at ? $ropa->updated_at->format('d F Y H:i') : '-');
 
-            $outputFileName = 'ROPA_' . ($ropa->registration_number ?? 'export') . '.docx';
+            $outputFileName = 'RoPA_'.($ropa->registration_number ?? 'export').'.docx';
             $tempFile = tempnam(sys_get_temp_dir(), 'ropa_');
             $writer = IOFactory::createWriter($phpWord, 'Word2007');
             $writer->save($tempFile);
 
-            while (ob_get_level() > 0) { ob_end_clean(); }
+            while (ob_get_level() > 0) {
+                ob_end_clean();
+            }
 
             return response()->download($tempFile, $outputFileName, [
                 'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             ])->deleteFileAfterSend(true);
         } catch (\Throwable $e) {
-            return response()->json(['message' => 'Export error: ' . $e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
+            return response()->json(['message' => 'Export error: '.$e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
         }
     }
 
@@ -713,11 +763,13 @@ class TemplateExportController extends Controller
     {
         $dpia = Dpia::with('ropa')->where('org_id', auth()->user()->org_id)->findOrFail($id);
 
-        $outputFileName = 'DPIA_' . ($dpia->registration_number ?? 'export') . '.docx';
-        if ($resp = $this->tryRenderFromTenantTemplate('dpia', $dpia, $outputFileName)) return $resp;
+        $outputFileName = 'DPIA_'.($dpia->registration_number ?? 'export').'.docx';
+        if ($resp = $this->tryRenderFromTenantTemplate('dpia', $dpia, $outputFileName)) {
+            return $resp;
+        }
 
         try {
-            $phpWord = new PhpWord();
+            $phpWord = new PhpWord;
             $this->applyDefaultFont($phpWord);
 
             $wiz = $dpia->wizard_data ?? [];
@@ -738,7 +790,7 @@ class TemplateExportController extends Controller
             );
 
             // Content Page
-            $sec = $this->addContentSection($phpWord, 'DPIA · ' . ($dpia->registration_number ?? ''), $orgMeta);
+            $sec = $this->addContentSection($phpWord, 'DPIA · '.($dpia->registration_number ?? ''), $orgMeta);
 
             // 1. Informasi DPIA
             $this->addSectionTitle($sec, '1. Informasi DPIA');
@@ -751,17 +803,17 @@ class TemplateExportController extends Controller
             $this->addInfoRow($t, 'Risk Level', strtoupper($dpia->risk_level ?? '-'));
             $this->addInfoRow($t, 'Regulasi', $dpia->regulation_code ?? '-');
 
-            // 2. Koneksi ROPA
-            $this->addSectionTitle($sec, '2. Koneksi ROPA');
+            // 2. Koneksi RoPA
+            $this->addSectionTitle($sec, '2. Koneksi RoPA');
             $connectedRopas = $koneksi['connected_ropas'] ?? [];
             $hasRopaConnection = false;
-            if (!empty($connectedRopas)) {
+            if (! empty($connectedRopas)) {
                 $ropaRecords = Ropa::whereIn('id', $connectedRopas)->get();
                 if ($ropaRecords->isNotEmpty()) {
                     $hasRopaConnection = true;
                     $rt = $sec->addTable(['borderSize' => 4, 'borderColor' => 'e0e0e0', 'cellMargin' => 80]);
                     $headerRow = $rt->addRow();
-                    foreach (['No. ROPA', 'Nama Pemrosesan', 'Divisi', 'Risk'] as $h) {
+                    foreach (['No. RoPA', 'Nama Pemrosesan', 'Divisi', 'Risk'] as $h) {
                         $headerRow->addCell(2500, ['bgColor' => '6366f1', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
                             ->addText($h, ['size' => 9, 'bold' => true, 'color' => 'ffffff']);
                     }
@@ -774,11 +826,11 @@ class TemplateExportController extends Controller
                     }
                 }
             }
-            if (!$hasRopaConnection && $dpia->ropa) {
+            if (! $hasRopaConnection && $dpia->ropa) {
                 $t = $this->makeInfoTable($sec);
-                $this->addInfoRow($t, 'ROPA Terhubung', $this->t(($dpia->ropa->registration_number ?? '') . ' - ' . ($dpia->ropa->processing_activity ?? '')));
-            } elseif (!$hasRopaConnection) {
-                $sec->addText($this->t('Tidak ada ROPA yang terhubung.'), ['size' => 10, 'color' => '888888', 'italic' => true]);
+                $this->addInfoRow($t, 'RoPA Terhubung', $this->t(($dpia->ropa->registration_number ?? '').' - '.($dpia->ropa->processing_activity ?? '')));
+            } elseif (! $hasRopaConnection) {
+                $sec->addText($this->t('Tidak ada RoPA yang terhubung.'), ['size' => 10, 'color' => '888888', 'italic' => true]);
             }
 
             // 3. Tabel 21 Kategori Risiko
@@ -823,7 +875,7 @@ class TemplateExportController extends Controller
 
                 $row = $riskTable->addRow();
                 $row->addCell(800, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
-                    ->addText($this->t((string)($idx + 1)), ['size' => 8, 'color' => '666666'], ['alignment' => Jc::CENTER]);
+                    ->addText($this->t((string) ($idx + 1)), ['size' => 8, 'color' => '666666'], ['alignment' => Jc::CENTER]);
                 $row->addCell(3500, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
                     ->addText($this->t($cat), ['size' => 8, 'bold' => true, 'color' => '333333']);
                 $row->addCell(2000, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
@@ -833,10 +885,10 @@ class TemplateExportController extends Controller
             }
 
             // 4. Ringkasan
-            $sudah = count(array_filter($risiko, fn($r) => ($r['answer'] ?? '') === 'sudah'));
-            $sebagian = count(array_filter($risiko, fn($r) => ($r['answer'] ?? '') === 'sebagian'));
-            $belum = count(array_filter($risiko, fn($r) => ($r['answer'] ?? '') === 'belum'));
-            $tidakBerlaku = count(array_filter($risiko, fn($r) => ($r['answer'] ?? '') === 'tidak_berlaku'));
+            $sudah = count(array_filter($risiko, fn ($r) => ($r['answer'] ?? '') === 'sudah'));
+            $sebagian = count(array_filter($risiko, fn ($r) => ($r['answer'] ?? '') === 'sebagian'));
+            $belum = count(array_filter($risiko, fn ($r) => ($r['answer'] ?? '') === 'belum'));
+            $tidakBerlaku = count(array_filter($risiko, fn ($r) => ($r['answer'] ?? '') === 'tidak_berlaku'));
 
             $this->addSectionTitle($sec, '4. Ringkasan Penilaian');
             $t = $this->makeInfoTable($sec);
@@ -846,7 +898,7 @@ class TemplateExportController extends Controller
             $this->addInfoRow($t, 'Tidak Berlaku', "$tidakBerlaku kategori");
 
             // 5. Risk Assessment Matrix
-            if (!empty($ra['risks']) && is_array($ra['risks'])) {
+            if (! empty($ra['risks']) && is_array($ra['risks'])) {
                 $this->addSectionTitle($sec, '5. Risk Assessment Matrix');
                 $raTable = $sec->addTable(['borderSize' => 4, 'borderColor' => 'e0e0e0', 'cellMargin' => 60]);
                 $h = $raTable->addRow();
@@ -857,10 +909,10 @@ class TemplateExportController extends Controller
                 foreach ($ra['risks'] as $risk) {
                     $row = $raTable->addRow();
                     $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($risk['risk'] ?? '-'), ['size' => 8]);
-                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t((string)($risk['likelihood'] ?? '-')), ['size' => 8], ['alignment' => Jc::CENTER]);
-                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t((string)($risk['impact'] ?? '-')), ['size' => 8], ['alignment' => Jc::CENTER]);
-                    $score = (int)($risk['likelihood'] ?? 0) * (int)($risk['impact'] ?? 0);
-                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t((string)$score), ['size' => 8, 'bold' => true], ['alignment' => Jc::CENTER]);
+                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t((string) ($risk['likelihood'] ?? '-')), ['size' => 8], ['alignment' => Jc::CENTER]);
+                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t((string) ($risk['impact'] ?? '-')), ['size' => 8], ['alignment' => Jc::CENTER]);
+                    $score = (int) ($risk['likelihood'] ?? 0) * (int) ($risk['impact'] ?? 0);
+                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t((string) $score), ['size' => 8, 'bold' => true], ['alignment' => Jc::CENTER]);
                     $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($risk['mitigation'] ?? '-'), ['size' => 8]);
                     $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($risk['status'] ?? '-'), ['size' => 8], ['alignment' => Jc::CENTER]);
                 }
@@ -870,22 +922,24 @@ class TemplateExportController extends Controller
             $this->addSectionTitle($sec, 'Status Dokumen');
             $t = $this->makeInfoTable($sec);
             $this->addInfoRow($t, 'Status', strtoupper($dpia->status ?? '-'));
-            $this->addInfoRow($t, 'Progress', ($dpia->progress ?? 0) . '%');
+            $this->addInfoRow($t, 'Progress', ($dpia->progress ?? 0).'%');
             $this->addInfoRow($t, 'Dibuat', $dpia->created_at ? $dpia->created_at->format('d F Y H:i') : '-');
             $this->addInfoRow($t, 'Terakhir Diupdate', $dpia->updated_at ? $dpia->updated_at->format('d F Y H:i') : '-');
 
-            $outputFileName = 'DPIA_' . ($dpia->registration_number ?? 'export') . '.docx';
+            $outputFileName = 'DPIA_'.($dpia->registration_number ?? 'export').'.docx';
             $tempFile = tempnam(sys_get_temp_dir(), 'dpia_');
             $writer = IOFactory::createWriter($phpWord, 'Word2007');
             $writer->save($tempFile);
 
-            while (ob_get_level() > 0) { ob_end_clean(); }
+            while (ob_get_level() > 0) {
+                ob_end_clean();
+            }
 
             return response()->download($tempFile, $outputFileName, [
                 'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             ])->deleteFileAfterSend(true);
         } catch (\Throwable $e) {
-            return response()->json(['message' => 'Export error: ' . $e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
+            return response()->json(['message' => 'Export error: '.$e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
         }
     }
 
@@ -898,85 +952,90 @@ class TemplateExportController extends Controller
         $templatePath = storage_path('app/templates/gap-template.xls');
 
         // Fallback to a blank spreadsheet if template is missing
-        $spreadsheet = file_exists($templatePath) 
+        $spreadsheet = file_exists($templatePath)
             ? \PhpOffice\PhpSpreadsheet\IOFactory::load($templatePath)
-            : new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-            
+            : new Spreadsheet;
+
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Gap Analysis');
 
         // Styles
         $headerStyle = [
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
-            'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '4F46E5']],
-            'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '4F46E5']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
         ];
 
         // 1. Metadata Header
         $sheet->setCellValue('A1', 'PRIVASIMU NEXUS - GAP ASSESSMENT REPORT');
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
-        
-        $sheet->setCellValue('A3', 'Version:'); $sheet->setCellValue('B3', $gap->version);
-        $sheet->setCellValue('A4', 'Compliance Score:'); $sheet->setCellValue('B4', $gap->overall_score . '%');
-        $sheet->setCellValue('A5', 'Compliance Level:'); $sheet->setCellValue('B5', strtoupper($gap->compliance_level));
-        $sheet->setCellValue('A6', 'Date Generated:'); $sheet->setCellValue('B6', now()->format('d M Y H:i'));
-        $sheet->setCellValue('A7', 'Framework:'); $sheet->setCellValue('B7', $gap->regulation_code ?: 'UU PDP');
+
+        $sheet->setCellValue('A3', 'Version:');
+        $sheet->setCellValue('B3', $gap->version);
+        $sheet->setCellValue('A4', 'Compliance Score:');
+        $sheet->setCellValue('B4', $gap->overall_score.'%');
+        $sheet->setCellValue('A5', 'Compliance Level:');
+        $sheet->setCellValue('B5', strtoupper($gap->compliance_level));
+        $sheet->setCellValue('A6', 'Date Generated:');
+        $sheet->setCellValue('B6', now()->format('d M Y H:i'));
+        $sheet->setCellValue('A7', 'Framework:');
+        $sheet->setCellValue('B7', $gap->regulation_code ?: 'UU PDP');
 
         // 2. Category Breakdown
         $sheet->setCellValue('A9', 'Category Breakdown');
         $sheet->getStyle('A9')->getFont()->setBold(true);
-        
+
         $row = 10;
         $scoreData = GapAssessment::calculateScore($gap->answers ?: [], $gap->regulation_code ?: 'uupdp');
         foreach ($scoreData['category_breakdown'] as $cat => $score) {
-            $sheet->setCellValue('A' . $row, $cat);
-            $sheet->setCellValue('B' . $row, $score . '%');
+            $sheet->setCellValue('A'.$row, $cat);
+            $sheet->setCellValue('B'.$row, $score.'%');
             $row++;
         }
 
         // 3. Detailed Results Table
         $startRow = $row + 2;
-        $sheet->setCellValue('A' . $startRow, 'ID');
-        $sheet->setCellValue('B' . $startRow, 'Category');
-        $sheet->setCellValue('C' . $startRow, 'Question');
-        $sheet->setCellValue('D' . $startRow, 'Answer');
-        $sheet->setCellValue('E' . $startRow, 'Recommendation');
-        
+        $sheet->setCellValue('A'.$startRow, 'ID');
+        $sheet->setCellValue('B'.$startRow, 'Category');
+        $sheet->setCellValue('C'.$startRow, 'Question');
+        $sheet->setCellValue('D'.$startRow, 'Answer');
+        $sheet->setCellValue('E'.$startRow, 'Recommendation');
+
         $sheet->getStyle("A{$startRow}:E{$startRow}")->applyFromArray($headerStyle);
-        
+
         $questions = GapAssessment::getQuestionBank($gap->regulation_code ?: 'uupdp');
         $currentRow = $startRow + 1;
-        
+
         foreach ($questions as $q) {
             $ansCode = $gap->answers[$q['id']] ?? 'n/a';
-            $ansLabel = match($ansCode) {
+            $ansLabel = match ($ansCode) {
                 'yes' => 'Sudah Memenuhi',
                 'partial' => 'Memenuhi Sebagian',
                 'no' => 'Belum Memenuhi',
                 'na' => 'N/A',
                 default => 'Belum Dijawab'
             };
-            
-            $sheet->setCellValue('A' . $currentRow, $q['id']);
-            $sheet->setCellValue('B' . $currentRow, $q['category']);
-            $sheet->setCellValue('C' . $currentRow, $q['question']);
-            $sheet->setCellValue('D' . $currentRow, $ansLabel);
-            
+
+            $sheet->setCellValue('A'.$currentRow, $q['id']);
+            $sheet->setCellValue('B'.$currentRow, $q['category']);
+            $sheet->setCellValue('C'.$currentRow, $q['question']);
+            $sheet->setCellValue('D'.$currentRow, $ansLabel);
+
             // Set color for answer
-            $color = match($ansCode) {
+            $color = match ($ansCode) {
                 'yes' => '22C55E',
                 'partial' => 'F59E0B',
                 'no' => 'EF4444',
                 default => '94A3B8'
             };
-            $sheet->getStyle('D' . $currentRow)->getFont()->getColor()->setRGB($color);
-            $sheet->getStyle('D' . $currentRow)->getFont()->setBold(true);
+            $sheet->getStyle('D'.$currentRow)->getFont()->getColor()->setRGB($color);
+            $sheet->getStyle('D'.$currentRow)->getFont()->setBold(true);
 
             // Recommendation (only if not 'yes')
             if ($ansCode !== 'yes' && $ansCode !== 'na') {
-                $sheet->setCellValue('E' . $currentRow, $q['recommendation']);
+                $sheet->setCellValue('E'.$currentRow, $q['recommendation']);
             }
-            
+
             $currentRow++;
         }
 
@@ -991,17 +1050,19 @@ class TemplateExportController extends Controller
 
         try {
             $writer = \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($spreadsheet, 'Xls');
-            $outputFileName = 'Gap_Assessment_' . str_replace(' ', '_', $gap->version) . '.xls';
+            $outputFileName = 'Gap_Assessment_'.str_replace(' ', '_', $gap->version).'.xls';
             $tempFile = tempnam(sys_get_temp_dir(), 'phpxls');
             $writer->save($tempFile);
 
-            while (ob_get_level() > 0) { ob_end_clean(); }
+            while (ob_get_level() > 0) {
+                ob_end_clean();
+            }
 
             return response()->download($tempFile, $outputFileName, [
                 'Content-Type' => 'application/vnd.ms-excel',
             ])->deleteFileAfterSend(true);
         } catch (\Throwable $e) {
-            return response()->json(['message' => 'Gagal export: ' . $e->getMessage()], 500);
+            return response()->json(['message' => 'Gagal export: '.$e->getMessage()], 500);
         }
     }
 
@@ -1012,15 +1073,17 @@ class TemplateExportController extends Controller
     {
         $gap = GapAssessment::where('org_id', auth()->user()->org_id)->findOrFail($id);
 
-        $outputFileName = 'Gap_Assessment_Report_' . str_replace(' ', '_', $gap->version ?? 'export') . '.docx';
-        if ($resp = $this->tryRenderFromTenantTemplate('gap', $gap, $outputFileName)) return $resp;
+        $outputFileName = 'Gap_Assessment_Report_'.str_replace(' ', '_', $gap->version ?? 'export').'.docx';
+        if ($resp = $this->tryRenderFromTenantTemplate('gap', $gap, $outputFileName)) {
+            return $resp;
+        }
 
         try {
-            $phpWord = new PhpWord();
+            $phpWord = new PhpWord;
             $this->applyDefaultFont($phpWord);
             $orgMeta = $this->resolveOrgMeta(auth()->user()->organization);
             $regCode = $gap->regulation_code ?? 'uupdp';
-            $regName = \App\Models\RegulationFramework::where('code', $regCode)->value('name') ?? 'UU No. 27 Tahun 2022 (UU PDP)';
+            $regName = RegulationFramework::where('code', $regCode)->value('name') ?? 'UU No. 27 Tahun 2022 (UU PDP)';
             $scoreData = GapAssessment::calculateScore($gap->answers ?: [], $regCode);
 
             // Cover Page
@@ -1034,7 +1097,7 @@ class TemplateExportController extends Controller
             );
 
             // Content Page
-            $sec = $this->addContentSection($phpWord, 'GAP ASSESSMENT · ' . ($gap->version ?? ''), $orgMeta);
+            $sec = $this->addContentSection($phpWord, 'GAP ASSESSMENT · '.($gap->version ?? ''), $orgMeta);
 
             // 1. Informasi Assessment
             $this->addSectionTitle($sec, '1. Informasi Assessment');
@@ -1042,9 +1105,9 @@ class TemplateExportController extends Controller
             $this->addInfoRow($t, 'Versi Assessment', $gap->version ?? '-');
             $this->addInfoRow($t, 'Organisasi', $orgMeta['name'] ?? '-');
             $this->addInfoRow($t, 'Framework Regulasi', $regName);
-            $this->addInfoRow($t, 'Skor Kepatuhan', round($gap->overall_score ?? 0) . '%');
+            $this->addInfoRow($t, 'Skor Kepatuhan', round($gap->overall_score ?? 0).'%');
             $this->addInfoRow($t, 'Level Kepatuhan', strtoupper($gap->compliance_level ?? '-'));
-            $this->addInfoRow($t, 'Progress', ($gap->progress ?? 0) . '%');
+            $this->addInfoRow($t, 'Progress', ($gap->progress ?? 0).'%');
             $this->addInfoRow($t, 'Tanggal Dibuat', $gap->created_at ? $gap->created_at->format('d F Y H:i') : '-');
             $this->addInfoRow($t, 'Terakhir Diupdate', $gap->updated_at ? $gap->updated_at->format('d F Y H:i') : '-');
 
@@ -1066,7 +1129,7 @@ class TemplateExportController extends Controller
                 $row->addCell(6000, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])
                     ->addText($this->t($cat), ['size' => 9, 'bold' => true]);
                 $row->addCell(2000, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])
-                    ->addText($this->t(round($catScore) . '%'), ['size' => 9, 'bold' => true, 'color' => $scoreColor], ['alignment' => Jc::CENTER]);
+                    ->addText($this->t(round($catScore).'%'), ['size' => 9, 'bold' => true, 'color' => $scoreColor], ['alignment' => Jc::CENTER]);
                 $row->addCell(2000, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])
                     ->addText($this->t($statusLabel), ['size' => 8, 'bold' => true, 'color' => $scoreColor], ['alignment' => Jc::CENTER]);
             }
@@ -1085,7 +1148,7 @@ class TemplateExportController extends Controller
             $detailTable = $sec->addTable(['borderSize' => 4, 'borderColor' => 'e0e0e0', 'cellMargin' => 60]);
             $dh = $detailTable->addRow();
             foreach (['ID', 'Kategori', 'Pertanyaan', 'Jawaban', 'Rekomendasi'] as $h) {
-                $w = match($h) {
+                $w = match ($h) {
                     'ID' => 800, 'Kategori' => 1500, 'Pertanyaan' => 3500, 'Jawaban' => 1600, 'Rekomendasi' => 2600,
                     default => 2000,
                 };
@@ -1116,10 +1179,10 @@ class TemplateExportController extends Controller
             if (count($recs) > 0) {
                 $this->addSectionTitle($sec, '4. Rekomendasi Prioritas');
                 $t = $this->makeInfoTable($sec);
-                $critCount = count(array_filter($recs, fn($r) => $r['priority'] === 'critical'));
-                $highCount = count(array_filter($recs, fn($r) => $r['priority'] === 'high'));
-                $medCount = count(array_filter($recs, fn($r) => $r['priority'] === 'medium'));
-                $this->addInfoRow($t, 'Total Rekomendasi', (string)count($recs));
+                $critCount = count(array_filter($recs, fn ($r) => $r['priority'] === 'critical'));
+                $highCount = count(array_filter($recs, fn ($r) => $r['priority'] === 'high'));
+                $medCount = count(array_filter($recs, fn ($r) => $r['priority'] === 'medium'));
+                $this->addInfoRow($t, 'Total Rekomendasi', (string) count($recs));
                 $this->addInfoRow($t, 'Critical', "$critCount item");
                 $this->addInfoRow($t, 'High', "$highCount item");
                 $this->addInfoRow($t, 'Medium', "$medCount item");
@@ -1127,13 +1190,17 @@ class TemplateExportController extends Controller
                 $recTable = $sec->addTable(['borderSize' => 4, 'borderColor' => 'e0e0e0', 'cellMargin' => 60]);
                 $rh = $recTable->addRow();
                 foreach (['Prioritas', 'Artikel', 'Pertanyaan', 'Rekomendasi'] as $h) {
-                    $w = match($h) { 'Prioritas' => 1200, 'Artikel' => 1300, 'Pertanyaan' => 3500, 'Rekomendasi' => 4000, default => 2500 };
+                    $w = match ($h) {
+                        'Prioritas' => 1200, 'Artikel' => 1300, 'Pertanyaan' => 3500, 'Rekomendasi' => 4000, default => 2500
+                    };
                     $rh->addCell($w, ['bgColor' => 'ef4444', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
                         ->addText($h, ['size' => 8, 'bold' => true, 'color' => 'ffffff']);
                 }
 
                 foreach ($recs as $idx => $rec) {
-                    $pColor = match($rec['priority']) { 'critical' => 'ef4444', 'high' => 'f59e0b', default => '3b82f6' };
+                    $pColor = match ($rec['priority']) {
+                        'critical' => 'ef4444', 'high' => 'f59e0b', default => '3b82f6'
+                    };
                     $bgColor = ($idx % 2 === 0) ? 'ffffff' : 'fff5f5';
                     $row = $recTable->addRow();
                     $row->addCell(1200, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
@@ -1153,18 +1220,20 @@ class TemplateExportController extends Controller
             $this->addInfoRow($t, 'Status', strtoupper($gap->compliance_level ?? '-'));
             $this->addInfoRow($t, 'Digenerate Pada', now()->format('d F Y H:i'));
 
-            $outputFileName = 'Gap_Assessment_Report_' . str_replace(' ', '_', $gap->version ?? 'export') . '.docx';
+            $outputFileName = 'Gap_Assessment_Report_'.str_replace(' ', '_', $gap->version ?? 'export').'.docx';
             $tempFile = tempnam(sys_get_temp_dir(), 'gap_report_');
             $writer = IOFactory::createWriter($phpWord, 'Word2007');
             $writer->save($tempFile);
 
-            while (ob_get_level() > 0) { ob_end_clean(); }
+            while (ob_get_level() > 0) {
+                ob_end_clean();
+            }
 
             return response()->download($tempFile, $outputFileName, [
                 'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             ])->deleteFileAfterSend(true);
         } catch (\Throwable $e) {
-            return response()->json(['message' => 'Export error: ' . $e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
+            return response()->json(['message' => 'Export error: '.$e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
         }
     }
 
@@ -1177,7 +1246,7 @@ class TemplateExportController extends Controller
      */
     private function addStatGrid($section, array $stats): void
     {
-        $t = $section->addTable(['cellMargin' => 120, 'width' => 100 * 50, 'unit' => \PhpOffice\PhpWord\SimpleType\TblWidth::PERCENT]);
+        $t = $section->addTable(['cellMargin' => 120, 'width' => 100 * 50, 'unit' => TblWidth::PERCENT]);
         $colCount = min(4, max(1, count($stats)));
         $cellWidth = (int) floor(100 * 50 / $colCount);
 
@@ -1185,7 +1254,11 @@ class TemplateExportController extends Controller
             $row = $t->addRow(null, ['cantSplit' => true]);
             for ($j = 0; $j < $colCount; $j++) {
                 $s = $stats[$i + $j] ?? null;
-                if ($s === null) { $row->addCell($cellWidth); continue; }
+                if ($s === null) {
+                    $row->addCell($cellWidth);
+
+                    continue;
+                }
                 $cell = $row->addCell($cellWidth, [
                     'bgColor' => self::LAV, 'valign' => 'center',
                     'borderTopSize' => 24, 'borderTopColor' => $s['color'] ?? self::NAVY,
@@ -1210,6 +1283,7 @@ class TemplateExportController extends Controller
             $section->addText($this->t($emptyMessage ?? 'Belum ada data.'),
                 ['size' => 10, 'italic' => true, 'color' => self::GRAY],
                 ['spaceBefore' => 100, 'spaceAfter' => 100]);
+
             return;
         }
         $t = $this->makeInfoTable($section);
@@ -1228,45 +1302,45 @@ class TemplateExportController extends Controller
             // Same queries as ExportController::complianceReport, scoped to org.
             $q = fn ($cls) => $cls::where('org_id', $orgId);
 
-            $ropaTotal      = $q(\App\Models\Ropa::class)->whereNull('deleted_at')->count();
-            $ropaByStatus   = $q(\App\Models\Ropa::class)->whereNull('deleted_at')->select('status', DB::raw('count(*) as c'))->groupBy('status')->pluck('c', 'status')->toArray();
-            $ropaByRisk     = $q(\App\Models\Ropa::class)->whereNull('deleted_at')->select('risk_level', DB::raw('count(*) as c'))->groupBy('risk_level')->pluck('c', 'risk_level')->toArray();
+            $ropaTotal = $q(Ropa::class)->whereNull('deleted_at')->count();
+            $ropaByStatus = $q(Ropa::class)->whereNull('deleted_at')->select('status', DB::raw('count(*) as c'))->groupBy('status')->pluck('c', 'status')->toArray();
+            $ropaByRisk = $q(Ropa::class)->whereNull('deleted_at')->select('risk_level', DB::raw('count(*) as c'))->groupBy('risk_level')->pluck('c', 'risk_level')->toArray();
 
-            $dpiaTotal      = $q(\App\Models\Dpia::class)->whereNull('deleted_at')->count();
-            $dpiaByStatus   = $q(\App\Models\Dpia::class)->whereNull('deleted_at')->select('status', DB::raw('count(*) as c'))->groupBy('status')->pluck('c', 'status')->toArray();
-            $dpiaApproved   = $q(\App\Models\Dpia::class)->whereNull('deleted_at')->where('status', 'approved')->count();
+            $dpiaTotal = $q(Dpia::class)->whereNull('deleted_at')->count();
+            $dpiaByStatus = $q(Dpia::class)->whereNull('deleted_at')->select('status', DB::raw('count(*) as c'))->groupBy('status')->pluck('c', 'status')->toArray();
+            $dpiaApproved = $q(Dpia::class)->whereNull('deleted_at')->where('status', 'approved')->count();
 
-            $breachTotal    = $q(\App\Models\BreachIncident::class)->whereNull('deleted_at')->where('is_simulation', false)->count();
-            $breachActive   = $q(\App\Models\BreachIncident::class)->whereNull('deleted_at')->where('is_simulation', false)->whereNotIn('status', ['closed'])->count();
-            $breachBySev    = $q(\App\Models\BreachIncident::class)->whereNull('deleted_at')->where('is_simulation', false)->select('severity', DB::raw('count(*) as c'))->groupBy('severity')->pluck('c', 'severity')->toArray();
+            $breachTotal = $q(BreachIncident::class)->whereNull('deleted_at')->where('is_simulation', false)->count();
+            $breachActive = $q(BreachIncident::class)->whereNull('deleted_at')->where('is_simulation', false)->whereNotIn('status', ['closed'])->count();
+            $breachBySev = $q(BreachIncident::class)->whereNull('deleted_at')->where('is_simulation', false)->select('severity', DB::raw('count(*) as c'))->groupBy('severity')->pluck('c', 'severity')->toArray();
 
-            $dsrTotal       = $q(\App\Models\DsrRequest::class)->whereNull('deleted_at')->count();
-            $dsrByStatus    = $q(\App\Models\DsrRequest::class)->whereNull('deleted_at')->select('status', DB::raw('count(*) as c'))->groupBy('status')->pluck('c', 'status')->toArray();
-            $dsrByType      = $q(\App\Models\DsrRequest::class)->whereNull('deleted_at')->select('request_type', DB::raw('count(*) as c'))->groupBy('request_type')->pluck('c', 'request_type')->toArray();
+            $dsrTotal = $q(DsrRequest::class)->whereNull('deleted_at')->count();
+            $dsrByStatus = $q(DsrRequest::class)->whereNull('deleted_at')->select('status', DB::raw('count(*) as c'))->groupBy('status')->pluck('c', 'status')->toArray();
+            $dsrByType = $q(DsrRequest::class)->whereNull('deleted_at')->select('request_type', DB::raw('count(*) as c'))->groupBy('request_type')->pluck('c', 'request_type')->toArray();
 
-            $consentPoints  = $q(\App\Models\ConsentCollectionPoint::class)->whereNull('deleted_at')->count();
+            $consentPoints = $q(ConsentCollectionPoint::class)->whereNull('deleted_at')->count();
 
-            $discoveryTotal = $q(\App\Models\InformationSystem::class)->whereNull('deleted_at')->count();
-            $discoveryScanned = $q(\App\Models\InformationSystem::class)->whereNull('deleted_at')->where('scanning_status', 'done')->count();
-            $pdpAlerts      = (int) $q(\App\Models\InformationSystem::class)->whereNull('deleted_at')->sum('pdp_alert_count');
-            $piiAlerts      = (int) $q(\App\Models\InformationSystem::class)->whereNull('deleted_at')->sum('pii_alert_count');
+            $discoveryTotal = $q(InformationSystem::class)->whereNull('deleted_at')->count();
+            $discoveryScanned = $q(InformationSystem::class)->whereNull('deleted_at')->where('scanning_status', 'done')->count();
+            $pdpAlerts = (int) $q(InformationSystem::class)->whereNull('deleted_at')->sum('pdp_alert_count');
+            $piiAlerts = (int) $q(InformationSystem::class)->whereNull('deleted_at')->sum('pii_alert_count');
 
             // Prefer the most recent COMPLETED assessment (progress=100). If
             // none is completed yet, fall back to the latest draft so the
             // report still shows something — but label it as draft.
-            $latestCompleted = $q(\App\Models\GapAssessment::class)->whereNull('deleted_at')
+            $latestCompleted = $q(GapAssessment::class)->whereNull('deleted_at')
                 ->where('progress', 100)->latest()->first();
-            $latestAny = $q(\App\Models\GapAssessment::class)->whereNull('deleted_at')->latest()->first();
+            $latestAny = $q(GapAssessment::class)->whereNull('deleted_at')->latest()->first();
             $latestGap = $latestCompleted ?: $latestAny;
             $gapScore = $latestGap->overall_score ?? $latestGap->score ?? 0;
             $gapLevel = $latestGap->compliance_level ?? '-';
             $gapVersion = $latestGap
-                ? ($latestGap->version ?? '-') . ($latestCompleted ? '' : ' (draft — ' . (int) ($latestGap->progress ?? 0) . '%)')
+                ? ($latestGap->version ?? '-').($latestCompleted ? '' : ' (draft — '.(int) ($latestGap->progress ?? 0).'%)')
                 : '-';
 
-            $aiTotal        = \App\Models\AiResult::where('org_id', $orgId)->count();
+            $aiTotal = AiResult::where('org_id', $orgId)->count();
 
-            $phpWord = new PhpWord();
+            $phpWord = new PhpWord;
             $this->applyDefaultFont($phpWord);
 
             $this->addCoverPage(
@@ -1279,7 +1353,7 @@ class TemplateExportController extends Controller
                 $orgMeta
             );
 
-            $sec = $this->addContentSection($phpWord, 'Compliance Report · ' . now()->format('d M Y'), $orgMeta);
+            $sec = $this->addContentSection($phpWord, 'Compliance Report · '.now()->format('d M Y'), $orgMeta);
 
             // Executive summary
             $this->addSectionTitle($sec, '1. Executive Summary');
@@ -1287,25 +1361,25 @@ class TemplateExportController extends Controller
                 ['size' => 10, 'color' => '475569'], ['spaceBefore' => 0, 'spaceAfter' => 160]);
 
             $this->addStatGrid($sec, [
-                ['label' => 'ROPA Records',      'value' => $ropaTotal,      'color' => self::NAVY],
+                ['label' => 'RoPA Records',      'value' => $ropaTotal,      'color' => self::NAVY],
                 ['label' => 'DPIA Records',      'value' => $dpiaTotal,      'color' => '8b5cf6'],
                 ['label' => 'Active Breaches',   'value' => $breachActive,   'color' => $breachActive > 0 ? 'dc2626' : '16a34a'],
                 ['label' => 'Open DSR',          'value' => ($dsrByStatus['new'] ?? 0) + ($dsrByStatus['in_progress'] ?? 0), 'color' => 'f59e0b'],
             ]);
             $sec->addTextBreak(1);
             $this->addStatGrid($sec, [
-                ['label' => 'Gap Score',         'value' => round((float) $gapScore) . '%', 'color' => $this->riskColor($gapLevel)],
+                ['label' => 'Gap Score',         'value' => round((float) $gapScore).'%', 'color' => $this->riskColor($gapLevel)],
                 ['label' => 'Consent Points',    'value' => $consentPoints,                 'color' => '06b6d4'],
-                ['label' => 'Systems Scanned',   'value' => $discoveryScanned . ' / ' . $discoveryTotal, 'color' => '0ea5e9'],
+                ['label' => 'Systems Scanned',   'value' => $discoveryScanned.' / '.$discoveryTotal, 'color' => '0ea5e9'],
                 ['label' => 'PDP / PII Alerts',  'value' => $pdpAlerts + $piiAlerts,        'color' => ($pdpAlerts + $piiAlerts) > 0 ? 'ea580c' : '16a34a'],
             ]);
 
-            // ROPA
-            $this->addSectionTitle($sec, '2. Record of Processing Activities (ROPA)');
-            $sec->addText('Status distribusi + sebaran risiko untuk ROPA aktif.',
+            // RoPA
+            $this->addSectionTitle($sec, '2. Record of Processing Activities (RoPA)');
+            $sec->addText('Status distribusi + sebaran risiko untuk RoPA aktif.',
                 ['size' => 10, 'color' => '475569'], ['spaceAfter' => 120]);
             $sec->addText('Breakdown by Status', ['size' => 11, 'bold' => true, 'color' => self::NAVY, 'name' => self::HEAD_FONT], ['spaceBefore' => 60, 'spaceAfter' => 60]);
-            $this->addBreakdown($sec, $ropaByStatus, 'Belum ada ROPA.');
+            $this->addBreakdown($sec, $ropaByStatus, 'Belum ada RoPA.');
             $sec->addText('Breakdown by Risk Level', ['size' => 11, 'bold' => true, 'color' => self::NAVY, 'name' => self::HEAD_FONT], ['spaceBefore' => 120, 'spaceAfter' => 60]);
             $this->addBreakdown($sec, $ropaByRisk, 'Belum ada data risk.');
 
@@ -1347,31 +1421,33 @@ class TemplateExportController extends Controller
             $this->addSectionTitle($sec, '7. Gap Assessment & AI Usage');
             $t = $this->makeInfoTable($sec);
             $this->addInfoRow($t, 'Latest Gap Version', (string) $gapVersion);
-            $this->addInfoRow($t, 'Overall Score', round((float) $gapScore) . '%');
+            $this->addInfoRow($t, 'Overall Score', round((float) $gapScore).'%');
             $this->addInfoRow($t, 'Compliance Level', strtoupper((string) $gapLevel));
             $this->addInfoRow($t, 'AI Analysis Runs (total)', (string) $aiTotal);
 
             // Meta
             $this->addSectionTitle($sec, '8. Report Metadata');
             $t = $this->makeInfoTable($sec);
-            $this->addInfoRow($t, 'Report Generated', now()->format('d F Y H:i') . ' WIB');
+            $this->addInfoRow($t, 'Report Generated', now()->format('d F Y H:i').' WIB');
             $this->addInfoRow($t, 'Generated By', $user->name ?? '-');
             $this->addInfoRow($t, 'Organization', $orgMeta['name'] ?? '-');
-            $this->addInfoRow($t, 'DPO', ($orgMeta['dpo_name'] ?? '—') . (isset($orgMeta['dpo_email']) && $orgMeta['dpo_email'] ? ' · ' . $orgMeta['dpo_email'] : ''));
+            $this->addInfoRow($t, 'DPO', ($orgMeta['dpo_name'] ?? '—').(isset($orgMeta['dpo_email']) && $orgMeta['dpo_email'] ? ' · '.$orgMeta['dpo_email'] : ''));
 
             $safeOrgSlug = preg_replace('/[^a-z0-9]+/i', '_', $orgMeta['name'] ?? 'org') ?: 'org';
-            $outputFileName = 'Compliance_Report_' . $safeOrgSlug . '_' . now()->format('Ymd') . '.docx';
+            $outputFileName = 'Compliance_Report_'.$safeOrgSlug.'_'.now()->format('Ymd').'.docx';
             $tempFile = tempnam(sys_get_temp_dir(), 'compliance_');
             $writer = IOFactory::createWriter($phpWord, 'Word2007');
             $writer->save($tempFile);
 
-            while (ob_get_level() > 0) { ob_end_clean(); }
+            while (ob_get_level() > 0) {
+                ob_end_clean();
+            }
 
             return response()->download($tempFile, $outputFileName, [
                 'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             ])->deleteFileAfterSend(true);
         } catch (\Throwable $e) {
-            return response()->json(['message' => 'Export error: ' . $e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
+            return response()->json(['message' => 'Export error: '.$e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
         }
     }
 }

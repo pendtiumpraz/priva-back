@@ -2,13 +2,12 @@
 
 namespace App\Services;
 
-use App\Models\DsrApp;
 use App\Models\DsrExecution;
 use App\Models\DsrRequest;
 use App\Models\DsrRequestScope;
 use App\Models\InformationSystem;
+use App\Models\Organization;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use ZipArchive;
 
 /**
@@ -70,7 +69,9 @@ class DsrSqlGeneratorService
         $fileSeq = 1;
         foreach ($scopes as $scope) {
             $is = $scope->informationSystem;
-            if (!$is) continue;
+            if (! $is) {
+                continue;
+            }
             $shards = $this->resolveShards($is, $scope);
             foreach ($shards as $shardName) {
                 foreach ($scope->request_types ?? [] as $type) {
@@ -139,16 +140,22 @@ class DsrSqlGeneratorService
      */
     private function resolveShards(InformationSystem $is, DsrRequestScope $scope): array
     {
-        if (!$is->is_sharded) return [null];  // 1 file untuk non-sharded
+        if (! $is->is_sharded) {
+            return [null];
+        }  // 1 file untuk non-sharded
 
         $picked = $scope->shards_affected ?? [];
-        if (!empty($picked)) return $picked;
+        if (! empty($picked)) {
+            return $picked;
+        }
 
         // Fallback: all shards dari IS metadata
         $allShards = $is->shards ?? [];
-        if (empty($allShards)) return [null];  // sharded but no shards listed → treat as 1
+        if (empty($allShards)) {
+            return [null];
+        }  // sharded but no shards listed → treat as 1
 
-        return array_map(fn($s) => is_array($s) ? ($s['name'] ?? $s) : $s, $allShards);
+        return array_map(fn ($s) => is_array($s) ? ($s['name'] ?? $s) : $s, $allShards);
     }
 
     /**
@@ -184,7 +191,8 @@ class DsrSqlGeneratorService
             $body .= "SELECT * FROM {$t}\n WHERE {$w};\n\n";
         }
         $body .= "COMMIT;\n";
-        return $h . $body . $this->footer();
+
+        return $h.$body.$this->footer();
     }
 
     private function buildCorrectionSql(DsrRequest $dsr, InformationSystem $is, ?string $shard): string
@@ -192,12 +200,13 @@ class DsrSqlGeneratorService
         $h = $this->header($dsr, $is, $shard, 'CORRECTION REQUEST', 'Subject minta data field di-update. ⚠️ TEMPLATE ONLY — DPO/admin EDIT field+value yang spesifik sebelum execute.');
         $w = $this->whereClauseTemplate($dsr);
         $body = "BEGIN;\n\n"
-            . "-- TODO: replace `<table>`, `<column>`, `<new_value>` dengan input DPO\n"
-            . "-- Contoh skenario: subject minta update alamat\n"
-            . "UPDATE customers\n   SET address = '<new_value>',\n       updated_at = NOW()\n WHERE {$w};\n\n"
-            . "-- Verify rows_affected sebelum commit\n"
-            . "COMMIT;\n";
-        return $h . $body . $this->footer();
+            ."-- TODO: replace `<table>`, `<column>`, `<new_value>` dengan input DPO\n"
+            ."-- Contoh skenario: subject minta update alamat\n"
+            ."UPDATE customers\n   SET address = '<new_value>',\n       updated_at = NOW()\n WHERE {$w};\n\n"
+            ."-- Verify rows_affected sebelum commit\n"
+            ."COMMIT;\n";
+
+        return $h.$body.$this->footer();
     }
 
     private function buildDeletionSql(DsrRequest $dsr, InformationSystem $is, ?string $shard): string
@@ -214,7 +223,8 @@ class DsrSqlGeneratorService
         $body .= "-- DELETE FROM activity_log WHERE {$w};\n\n";
         $body .= "-- Verify rows_affected for each table sebelum commit\n";
         $body .= "COMMIT;\n";
-        return $h . $body . $this->footer();
+
+        return $h.$body.$this->footer();
     }
 
     private function buildPortabilitySql(DsrRequest $dsr, InformationSystem $is, ?string $shard): string
@@ -223,15 +233,16 @@ class DsrSqlGeneratorService
         $w = $this->whereClauseTemplate($dsr);
         $tables = $this->guessPiiTables($is);
         $body = "BEGIN;\n\n"
-            . "-- Export untuk subject — JSON aggregation pattern (PostgreSQL/MySQL 8+)\n"
-            . "-- Untuk MySQL <8 atau MSSQL/Oracle, run separate SELECT per table dan merge di tool.\n\n";
+            ."-- Export untuk subject — JSON aggregation pattern (PostgreSQL/MySQL 8+)\n"
+            ."-- Untuk MySQL <8 atau MSSQL/Oracle, run separate SELECT per table dan merge di tool.\n\n";
         foreach ($tables as $t) {
             $body .= "SELECT * FROM {$t}\n WHERE {$w};\n\n";
         }
         $body .= "-- Format export: JSON (recommended), CSV, atau XML\n";
         $body .= "-- Manifest: include source_attestation signed by DPO untuk transfer ke service penerima\n";
         $body .= "COMMIT;\n";
-        return $h . $body . $this->footer();
+
+        return $h.$body.$this->footer();
     }
 
     private function buildWithdrawSql(DsrRequest $dsr, InformationSystem $is, ?string $shard): string
@@ -239,12 +250,13 @@ class DsrSqlGeneratorService
         $h = $this->header($dsr, $is, $shard, 'WITHDRAW CONSENT', 'Subject withdraw consent yang previously diberikan (Pasal 8 UU PDP). UPDATE flag/status. Cascade ke marketing list.');
         $w = $this->whereClauseTemplate($dsr);
         $body = "BEGIN;\n\n"
-            . "-- Mark consent withdrawn\n"
-            . "UPDATE consent_records\n   SET withdrawn_at = NOW(),\n       withdraw_reason = 'subject_request_dsr_{$dsr->request_id}'\n WHERE {$w}\n   AND withdrawn_at IS NULL;\n\n"
-            . "-- Cascade: stop marketing\n"
-            . "UPDATE marketing_subscribers\n   SET is_active = false,\n       unsubscribed_at = NOW()\n WHERE {$w};\n\n"
-            . "COMMIT;\n";
-        return $h . $body . $this->footer();
+            ."-- Mark consent withdrawn\n"
+            ."UPDATE consent_records\n   SET withdrawn_at = NOW(),\n       withdraw_reason = 'subject_request_dsr_{$dsr->request_id}'\n WHERE {$w}\n   AND withdrawn_at IS NULL;\n\n"
+            ."-- Cascade: stop marketing\n"
+            ."UPDATE marketing_subscribers\n   SET is_active = false,\n       unsubscribed_at = NOW()\n WHERE {$w};\n\n"
+            ."COMMIT;\n";
+
+        return $h.$body.$this->footer();
     }
 
     private function buildObjectionSql(DsrRequest $dsr, InformationSystem $is, ?string $shard): string
@@ -252,11 +264,12 @@ class DsrSqlGeneratorService
         $h = $this->header($dsr, $is, $shard, 'OBJECTION REQUEST', 'Subject objection ke specific processing — biasanya profiling atau direct marketing (Pasal 9 UU PDP). DPO assess dulu apakah ada legitimate interest yang override.');
         $w = $this->whereClauseTemplate($dsr);
         $body = "BEGIN;\n\n"
-            . "-- TODO DPO decision: ACCEPT (stop processing) atau REJECT (justify)\n"
-            . "-- Kalau ACCEPT, jalankan UPDATE flag dibawah. Kalau REJECT, skip dan kasih decision letter.\n\n"
-            . "UPDATE customer_preferences\n   SET allow_profiling = false,\n       allow_direct_marketing = false,\n       updated_at = NOW()\n WHERE {$w};\n\n"
-            . "COMMIT;\n";
-        return $h . $body . $this->footer();
+            ."-- TODO DPO decision: ACCEPT (stop processing) atau REJECT (justify)\n"
+            ."-- Kalau ACCEPT, jalankan UPDATE flag dibawah. Kalau REJECT, skip dan kasih decision letter.\n\n"
+            ."UPDATE customer_preferences\n   SET allow_profiling = false,\n       allow_direct_marketing = false,\n       updated_at = NOW()\n WHERE {$w};\n\n"
+            ."COMMIT;\n";
+
+        return $h.$body.$this->footer();
     }
 
     private function buildRestrictionSql(DsrRequest $dsr, InformationSystem $is, ?string $shard): string
@@ -264,26 +277,29 @@ class DsrSqlGeneratorService
         $h = $this->header($dsr, $is, $shard, 'RESTRICTION REQUEST', 'Subject minta processing di-pause sementara (selama dispute / verifikasi). Set status flag — JANGAN delete data, hanya block usage.');
         $w = $this->whereClauseTemplate($dsr);
         $body = "BEGIN;\n\n"
-            . "-- Mark customer status restricted\n"
-            . "UPDATE customers\n   SET status = 'processing_restricted',\n       restriction_reason = 'subject_request_dsr_{$dsr->request_id}',\n       restricted_at = NOW()\n WHERE {$w};\n\n"
-            . "-- Optional: notify dependent services via app-level (di luar SQL)\n"
-            . "COMMIT;\n";
-        return $h . $body . $this->footer();
+            ."-- Mark customer status restricted\n"
+            ."UPDATE customers\n   SET status = 'processing_restricted',\n       restriction_reason = 'subject_request_dsr_{$dsr->request_id}',\n       restricted_at = NOW()\n WHERE {$w};\n\n"
+            ."-- Optional: notify dependent services via app-level (di luar SQL)\n"
+            ."COMMIT;\n";
+
+        return $h.$body.$this->footer();
     }
 
     private function buildInfoSql(DsrRequest $dsr, InformationSystem $is, ?string $shard): string
     {
-        $h = $this->header($dsr, $is, $shard, 'INFORMATION REQUEST', 'Subject tanya data apa, untuk apa, berapa lama. Tidak butuh SQL execution — render dari ROPA + Privacy Notice. File ini hanya placeholder.');
-        return $h . "-- INFO request tidak butuh SQL execution.\n"
-            . "-- Generate Information Disclosure Letter via Privasimu UI (data dari ROPA).\n"
-            . "-- File ini bisa di-skip (mark execution status='skipped').\n"
-            . $this->footer();
+        $h = $this->header($dsr, $is, $shard, 'INFORMATION REQUEST', 'Subject tanya data apa, untuk apa, berapa lama. Tidak butuh SQL execution — render dari RoPA + Privacy Notice. File ini hanya placeholder.');
+
+        return $h."-- INFO request tidak butuh SQL execution.\n"
+            ."-- Generate Information Disclosure Letter via Privasimu UI (data dari RoPA).\n"
+            ."-- File ini bisa di-skip (mark execution status='skipped').\n"
+            .$this->footer();
     }
 
     private function buildPlaceholderSql(DsrRequest $dsr, InformationSystem $is, ?string $shard, string $type): string
     {
-        $h = $this->header($dsr, $is, $shard, strtoupper($type) . ' REQUEST', 'Custom request type. SQL template manual — silakan modifikasi sesuai use case.');
-        return $h . "-- TODO: implement SQL untuk request type '{$type}'\n" . $this->footer();
+        $h = $this->header($dsr, $is, $shard, strtoupper($type).' REQUEST', 'Custom request type. SQL template manual — silakan modifikasi sesuai use case.');
+
+        return $h."-- TODO: implement SQL untuk request type '{$type}'\n".$this->footer();
     }
 
     // =========================================================================
@@ -294,17 +310,17 @@ class DsrSqlGeneratorService
     {
         $email = $dsr->requester_email ? $this->maskEmail($dsr->requester_email) : '<unknown>';
         $shardLabel = $shard ?: '(non-sharded)';
-        $h = implode("\n", self::PRIVASIMU_HEADER_LINES) . "\n";
+        $h = implode("\n", self::PRIVASIMU_HEADER_LINES)."\n";
         $h .= "-- {$title}\n";
         $h .= "-- DSR Reference: {$dsr->request_id}\n";
         $h .= "-- Information System: {$is->name} (code: {$is->code})\n";
         $h .= "-- Shard: {$shardLabel}\n";
         $h .= "-- Subject: {$email}\n";
-        $h .= "-- Generated: " . now()->toIso8601String() . "\n";
-        $h .= "-- Deadline: " . ($dsr->deadline_at?->toIso8601String() ?: 'N/A') . "\n";
+        $h .= '-- Generated: '.now()->toIso8601String()."\n";
+        $h .= '-- Deadline: '.($dsr->deadline_at?->toIso8601String() ?: 'N/A')."\n";
         $h .= "--\n";
         $h .= "-- ⚠️ NOTE\n";
-        $h .= "-- " . wordwrap($note, 64, "\n-- ", true) . "\n";
+        $h .= '-- '.wordwrap($note, 64, "\n-- ", true)."\n";
         $h .= "--\n";
         $h .= "-- BEFORE EXECUTING:\n";
         $h .= "-- 1. Verify subject identifiers di WHERE clause sesuai konvensi DB Anda\n";
@@ -312,7 +328,8 @@ class DsrSqlGeneratorService
         $h .= "-- 3. Backup table affected sebelum DESTRUCTIVE operation\n";
         $h .= "-- 4. Execute dalam transaction (BEGIN ... COMMIT)\n";
         $h .= "-- 5. Catat rows_affected, upload evidence ke Privasimu DSR page\n";
-        $h .= "-- " . str_repeat('═', 65) . "\n\n";
+        $h .= '-- '.str_repeat('═', 65)."\n\n";
+
         return $h;
     }
 
@@ -320,9 +337,10 @@ class DsrSqlGeneratorService
     {
         // Auto-detect base from APP_URL or current request host (white-label safe).
         $base = rtrim(config('app.url') ?: url('/'), '/');
-        return "\n-- " . str_repeat('═', 65) . "\n"
-            . "-- After execution, upload evidence (rows_affected + screenshot) at:\n"
-            . "-- {$base}/dsr — open this DSR detail → Executions tab\n";
+
+        return "\n-- ".str_repeat('═', 65)."\n"
+            ."-- After execution, upload evidence (rows_affected + screenshot) at:\n"
+            ."-- {$base}/dsr — open this DSR detail → Executions tab\n";
     }
 
     /**
@@ -337,16 +355,16 @@ class DsrSqlGeneratorService
         $clauses[] = "email = '{$email}'";
 
         $sd = $dsr->subject_data ?? [];
-        if (!empty($sd['nik'])) {
-            $nik = preg_replace('/[^0-9]/', '', (string)$sd['nik']);
+        if (! empty($sd['nik'])) {
+            $nik = preg_replace('/[^0-9]/', '', (string) $sd['nik']);
             $clauses[] = "OR nik = '{$nik}'";
         }
-        if (!empty($sd['customer_id'])) {
-            $cid = str_replace("'", "''", (string)$sd['customer_id']);
+        if (! empty($sd['customer_id'])) {
+            $cid = str_replace("'", "''", (string) $sd['customer_id']);
             $clauses[] = "OR customer_id = '{$cid}'";
         }
-        if (!empty($sd['phone'])) {
-            $phone = preg_replace('/[^0-9+]/', '', (string)$sd['phone']);
+        if (! empty($sd['phone'])) {
+            $phone = preg_replace('/[^0-9+]/', '', (string) $sd['phone']);
             $clauses[] = "OR phone = '{$phone}'";
         }
 
@@ -360,9 +378,10 @@ class DsrSqlGeneratorService
     private function guessPiiTables(InformationSystem $is): array
     {
         $scan = $is->scan_results ?? [];
-        if (!empty($scan['pii_tables'])) {
+        if (! empty($scan['pii_tables'])) {
             return is_array($scan['pii_tables']) ? array_slice($scan['pii_tables'], 0, 10) : [];
         }
+
         // Fallback: 3 common table names
         return ['customers', 'users', 'profiles'];
     }
@@ -370,15 +389,19 @@ class DsrSqlGeneratorService
     private function maskEmail(string $email): string
     {
         $parts = explode('@', $email);
-        if (count($parts) !== 2) return '***';
+        if (count($parts) !== 2) {
+            return '***';
+        }
         $local = $parts[0];
-        $masked = mb_substr($local, 0, 2) . str_repeat('*', max(1, mb_strlen($local) - 2));
-        return $masked . '@' . $parts[1];
+        $masked = mb_substr($local, 0, 2).str_repeat('*', max(1, mb_strlen($local) - 2));
+
+        return $masked.'@'.$parts[1];
     }
 
     private function slugify(string $s): string
     {
         $s = preg_replace('/[^A-Za-z0-9]+/', '_', $s);
+
         return mb_strtoupper(mb_substr(trim($s, '_'), 0, 16));
     }
 
@@ -394,12 +417,12 @@ class DsrSqlGeneratorService
         $base = rtrim(config('app.url') ?: url('/'), '/');
 
         $md = "# DSR Fulfillment Pack — {$dsr->request_id}\n\n";
-        $md .= "**Generated by " . (config('app.name') ?: 'Privasimu Nexus') . "** • " . now()->toIso8601String() . "\n\n";
+        $md .= '**Generated by '.(config('app.name') ?: 'Privasimu Nexus').'** • '.now()->toIso8601String()."\n\n";
         $md .= "## Request Info\n\n";
         $md .= "- **Reference**: `{$dsr->request_id}`\n";
-        $md .= "- **App**: " . ($dsr->app?->name ?: '(direct submission)') . "\n";
+        $md .= '- **App**: '.($dsr->app?->name ?: '(direct submission)')."\n";
         $md .= "- **Request Type**: `{$dsr->request_type}`\n";
-        $md .= "- **Subject** (hashed): `" . substr(hash('sha256', $dsr->requester_email ?? ''), 0, 16) . "`\n";
+        $md .= '- **Subject** (hashed): `'.substr(hash('sha256', $dsr->requester_email ?? ''), 0, 16)."`\n";
         $md .= "- **Deadline**: `{$deadline}` ({$hoursLeft} hours remaining)\n";
         $md .= "- **SLA**: 72 hours (UU PDP Pasal 32)\n\n";
 
@@ -415,7 +438,7 @@ class DsrSqlGeneratorService
         $md .= "|---|------|---------------------|-------|------|\n";
         $i = 1;
         foreach ($manifest['scopes'] ?? [] as $s) {
-            $md .= "| {$i} | `{$s['file']}` | {$s['information_system']} | " . ($s['shard'] ?: '-') . " | `{$s['request_type']}` |\n";
+            $md .= "| {$i} | `{$s['file']}` | {$s['information_system']} | ".($s['shard'] ?: '-')." | `{$s['request_type']}` |\n";
             $i++;
         }
         $md .= "\n";
@@ -447,7 +470,7 @@ class DsrSqlGeneratorService
         $md .= "- ✅ Send notification ke DPO + Subject\n\n";
 
         // Support contact: prefer org's own contact email if set, else generic
-        $org = $dsr->organization ?? \App\Models\Organization::find($dsr->org_id);
+        $org = $dsr->organization ?? Organization::find($dsr->org_id);
         $supportContact = $org?->email
             ?: $org?->settings['support_email'] ?? null;
         $md .= "---\n";
@@ -456,6 +479,7 @@ class DsrSqlGeneratorService
         } else {
             $md .= "*Need help? Contact your organization's DPO team.*\n";
         }
+
         return $md;
     }
 
@@ -465,9 +489,9 @@ class DsrSqlGeneratorService
     private function buildZip(DsrRequest $dsr, array $files): string
     {
         $tmpZip = tempnam(sys_get_temp_dir(), 'dsr-pack-');
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         if ($zip->open($tmpZip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-            throw new \RuntimeException('Cannot create ZIP archive at ' . $tmpZip);
+            throw new \RuntimeException('Cannot create ZIP archive at '.$tmpZip);
         }
         foreach ($files as $name => $content) {
             $zip->addFromString($name, $content);

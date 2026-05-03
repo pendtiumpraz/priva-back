@@ -72,7 +72,7 @@ Status: 🔵 not started · 🟡 in progress · 🟢 done · 🔴 blocked
 - [x] Migration `extend_lia_assessments`: 13 kolom baru (lia_code, linked_dpia_id, legitimate_interest_*, balancing_risk_events, subject_loses_control_*, conclusion_*, maker_id/checker_id/approver_id + timestamps, is_locked + unlocked_*)
 - [x] `LiaController` dengan workflow methods (CRUD + submit/check/approve/reject/fromRopa/unlock + override `update` block kalau locked)
 - [x] Routes `/api/lia/*` (13 endpoints, verified via `php artisan route:list`)
-- [x] `ROPA_AUTOFILL_FIELDS` const + `fromRopa()` snapshot logic
+- [x] `RoPA_AUTOFILL_FIELDS` const + `fromRopa()` snapshot logic
 - [ ] Auto-trigger di RoPA save: deferred (notif system rebuild di sprint terpisah)
 - [ ] PDF export → Sprint X4
 
@@ -202,7 +202,7 @@ Status: 🔵 not started · 🟡 in progress · 🟢 done · 🔴 blocked
 | Date | Decision | Reasoning |
 |---|---|---|
 | 2026-04-29 | LIA + TIA wajib approval workflow, Maturity tidak | PDF spec eksplisit RACI untuk LIA/TIA; Maturity adalah self-assessment internal |
-| 2026-04-29 | Approval workflow pakai dedicated columns, bukan `ApprovalWorkflow` pivot | Query-friendly + lebih jelas state per record. ApprovalWorkflow pivot tetap dipakai untuk modul lain (ROPA, DPIA) |
+| 2026-04-29 | Approval workflow pakai dedicated columns, bukan `ApprovalWorkflow` pivot | Query-friendly + lebih jelas state per record. ApprovalWorkflow pivot tetap dipakai untuk modul lain (RoPA, DPIA) |
 | 2026-04-29 | Maturity 3 input methods — staged release | Method 2 (document AI) butuh AI tooling yang baru → Sprint X4. Method 1 (questionnaire) + 3 (auto-derive) bisa di Sprint X3 |
 | 2026-04-29 | LIA conclusion = 3 verdict separate (Tujuan/Kebutuhan/Keseimbangan), bukan single verdict | Sesuai PDF spec; UX juga lebih jelas |
 | 2026-04-29 | Lock state irreversible kecuali emergency unlock by root | Audit-friendly + sesuai PDF "tidak bisa diedit kembali" |

@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Sprint C4: Threaded comments on ROPA/DPIA/Breach/etc records.
+ * Sprint C4: Threaded comments on RoPA/DPIA/Breach/etc records.
  */
 return new class extends Migration
 {
@@ -32,8 +32,10 @@ return new class extends Migration
                 $table->index(['org_id', 'module', 'record_id'], 'module_comments_record_idx');
                 $table->index('parent_id');
             });
-        } catch (\Throwable $e) {
-            if (!$this->alreadyExists($e)) throw $e;
+        } catch (Throwable $e) {
+            if (! $this->alreadyExists($e)) {
+                throw $e;
+            }
         }
     }
 
@@ -42,9 +44,10 @@ return new class extends Migration
         Schema::dropIfExists('module_comments');
     }
 
-    private function alreadyExists(\Throwable $e): bool
+    private function alreadyExists(Throwable $e): bool
     {
         $msg = $e->getMessage();
+
         return str_contains($msg, 'already exists')
             || str_contains($msg, '1050')
             || str_contains($msg, '42S01')

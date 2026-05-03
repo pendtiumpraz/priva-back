@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
-use App\Models\Dpia;
 use App\Models\LiaAssessment;
 use App\Models\Ropa;
 use App\Services\AssessmentPdfService;
@@ -38,7 +37,7 @@ class LiaController extends Controller
      * Snapshot stored in wizard_data so subsequent RoPA edits don't
      * silently change the frozen LIA.
      */
-    public const ROPA_AUTOFILL_FIELDS = [
+    public const RoPA_AUTOFILL_FIELDS = [
         'processing_activity',     // Nama Aktivitas
         'entity',
         'division',                // Unit Kerja
@@ -57,9 +56,12 @@ class LiaController extends Controller
     public function index(Request $request)
     {
         $query = LiaAssessment::query();
-        if ($request->boolean('trash')) $query->onlyTrashed();
+        if ($request->boolean('trash')) {
+            $query->onlyTrashed();
+        }
         $this->applyFilters($query, $request);
         $records = $query->orderByDesc('created_at')->paginate($request->integer('per_page', 25));
+
         return response()->json(['data' => $records]);
     }
 
@@ -67,10 +69,11 @@ class LiaController extends Controller
     {
         $record = LiaAssessment::query()
             ->with(['ropa:id,custom_number,registration_number,processing_activity,division,risk_level',
-                    'dpia:id,custom_number,registration_number,description',
-                    'maker:id,name,email', 'checker:id,name,email', 'approver:id,name,email'])
+                'dpia:id,custom_number,registration_number,description',
+                'maker:id,name,email', 'checker:id,name,email', 'approver:id,name,email'])
             ->withTrashed()
             ->findOrFail($id);
+
         return response()->json(['data' => $this->presentRecord($record)]);
     }
 
@@ -99,7 +102,9 @@ class LiaController extends Controller
     {
         $ropa = Ropa::query()->findOrFail($ropaId);
         $orgId = $request->user()->org_id;
-        if ($ropa->org_id !== $orgId) abort(403, 'RoPA belongs to another org.');
+        if ($ropa->org_id !== $orgId) {
+            abort(403, 'RoPA belongs to another org.');
+        }
 
         // Auto-suggest LIA code: LIA-[UNIT]-[ACTIVITY]-[NEXT]
         $unit = strtoupper(substr(preg_replace('/[^a-zA-Z0-9]/', '', $ropa->division ?? $ropa->work_unit ?? 'GEN'), 0, 4));
@@ -111,8 +116,10 @@ class LiaController extends Controller
         $codeSuggestion = sprintf('LIA-%s-%s-%02d', $unit, $activity, $existingCount + 1);
 
         $snapshot = [];
-        foreach (self::ROPA_AUTOFILL_FIELDS as $f) {
-            if (isset($ropa->$f)) $snapshot[$f] = $ropa->$f;
+        foreach (self::RoPA_AUTOFILL_FIELDS as $f) {
+            if (isset($ropa->$f)) {
+                $snapshot[$f] = $ropa->$f;
+            }
         }
         // Resolve people from RoPA (DPO from org, maker = current user, checker = supervisor lookup)
         $org = $ropa->organization;
@@ -139,7 +146,7 @@ class LiaController extends Controller
         ], 'manual');
 
         return response()->json([
-            'message' => "LIA draft '{$record->lia_code}' created from ROPA.",
+            'message' => "LIA draft '{$record->lia_code}' created from RoPA.",
             'data' => $record,
         ], 201);
     }
@@ -151,9 +158,9 @@ class LiaController extends Controller
     public function update(Request $request, string $id)
     {
         $record = LiaAssessment::query()->findOrFail($id);
-        if (!$record->isEditableBy($request->user())) {
+        if (! $record->isEditableBy($request->user())) {
             return response()->json([
-                'message' => 'LIA is locked (status=' . $record->status . '). Use the reject flow or root unlock to edit.',
+                'message' => 'LIA is locked (status='.$record->status.'). Use the reject flow or root unlock to edit.',
             ], 423);
         }
 
@@ -180,7 +187,7 @@ class LiaController extends Controller
             ], 409);
         }
 
-        if (!$request->boolean('confirm')) {
+        if (! $request->boolean('confirm')) {
             return response()->json([
                 'message' => 'Submission requires confirmation. Set confirm=true.',
             ], 400);
@@ -188,7 +195,7 @@ class LiaController extends Controller
 
         // Sanity check the wizard payload — surface obvious gaps
         $issues = $this->validateForSubmission($record);
-        if (!empty($issues) && !$request->boolean('force')) {
+        if (! empty($issues) && ! $request->boolean('force')) {
             return response()->json([
                 'message' => 'LIA has missing required fields. Use force=true to submit anyway.',
                 'issues' => $issues,
@@ -227,7 +234,7 @@ class LiaController extends Controller
         ]);
 
         $record = LiaAssessment::query()->findOrFail($id);
-        if (!in_array($record->status, [LiaAssessment::STATUS_SUBMITTED], true)) {
+        if (! in_array($record->status, [LiaAssessment::STATUS_SUBMITTED], true)) {
             return response()->json(['message' => "Cannot check from state '{$record->status}'."], 409);
         }
 
@@ -246,7 +253,7 @@ class LiaController extends Controller
             $record->save();
         });
 
-        AuditLog::log('lia', $record->id, 'checked_' . $data['action'], [
+        AuditLog::log('lia', $record->id, 'checked_'.$data['action'], [
             'lia_code' => $record->lia_code,
             'checker_id' => $record->checker_id,
             'notes' => $data['notes'] ?? null,
@@ -268,14 +275,14 @@ class LiaController extends Controller
     public function approve(Request $request, string $id)
     {
         $data = $request->validate([
-            'conclusion_purpose'    => ['required', Rule::in([LiaAssessment::VERDICT_PASS, LiaAssessment::VERDICT_FAIL])],
-            'conclusion_necessity'  => ['required', Rule::in([LiaAssessment::VERDICT_PASS, LiaAssessment::VERDICT_FAIL])],
-            'conclusion_balancing'  => ['required', Rule::in([LiaAssessment::VERDICT_PASS, LiaAssessment::VERDICT_FAIL])],
-            'conclusion_notes'      => 'nullable|string|max:5000',
+            'conclusion_purpose' => ['required', Rule::in([LiaAssessment::VERDICT_PASS, LiaAssessment::VERDICT_FAIL])],
+            'conclusion_necessity' => ['required', Rule::in([LiaAssessment::VERDICT_PASS, LiaAssessment::VERDICT_FAIL])],
+            'conclusion_balancing' => ['required', Rule::in([LiaAssessment::VERDICT_PASS, LiaAssessment::VERDICT_FAIL])],
+            'conclusion_notes' => 'nullable|string|max:5000',
         ]);
 
         $record = LiaAssessment::query()->findOrFail($id);
-        if (!in_array($record->status, [LiaAssessment::STATUS_SUBMITTED, LiaAssessment::STATUS_CHECKED], true)) {
+        if (! in_array($record->status, [LiaAssessment::STATUS_SUBMITTED, LiaAssessment::STATUS_CHECKED], true)) {
             return response()->json(['message' => "Cannot approve from state '{$record->status}'."], 409);
         }
 
@@ -301,7 +308,7 @@ class LiaController extends Controller
         ], 'manual');
 
         return response()->json([
-            'message' => 'LIA approved. Overall verdict: ' . $record->overallVerdict(),
+            'message' => 'LIA approved. Overall verdict: '.$record->overallVerdict(),
             'data' => $record->fresh(),
         ]);
     }
@@ -316,7 +323,7 @@ class LiaController extends Controller
         ]);
 
         $record = LiaAssessment::query()->findOrFail($id);
-        if (!in_array($record->status, [LiaAssessment::STATUS_SUBMITTED, LiaAssessment::STATUS_CHECKED], true)) {
+        if (! in_array($record->status, [LiaAssessment::STATUS_SUBMITTED, LiaAssessment::STATUS_CHECKED], true)) {
             return response()->json(['message' => "Cannot reject from state '{$record->status}'."], 409);
         }
 
@@ -350,7 +357,7 @@ class LiaController extends Controller
         }
 
         $record = LiaAssessment::query()->findOrFail($id);
-        if (!$record->is_locked) {
+        if (! $record->is_locked) {
             return response()->json(['message' => 'LIA is not locked.'], 200);
         }
 
@@ -375,6 +382,7 @@ class LiaController extends Controller
         $record = LiaAssessment::query()->findOrFail($id);
         $record->delete();
         AuditLog::log('lia', $record->id, 'soft_deleted', [], 'manual');
+
         return response()->json(['message' => 'Moved to trash.']);
     }
 
@@ -383,6 +391,7 @@ class LiaController extends Controller
         $record = LiaAssessment::onlyTrashed()->findOrFail($id);
         $record->restore();
         AuditLog::log('lia', $record->id, 'restored', [], 'manual');
+
         return response()->json(['message' => 'Restored.']);
     }
 
@@ -391,6 +400,7 @@ class LiaController extends Controller
         $record = LiaAssessment::withTrashed()->findOrFail($id);
         $record->forceDelete();
         AuditLog::log('lia', $id, 'hard_deleted', [], 'manual');
+
         return response()->json(['message' => 'Permanently deleted.']);
     }
 
@@ -415,8 +425,12 @@ class LiaController extends Controller
 
     private function applyFilters($query, Request $request): void
     {
-        if ($s = $request->get('status')) $query->where('status', $s);
-        if ($r = $request->get('result')) $query->where('assessment_result', $r);
+        if ($s = $request->get('status')) {
+            $query->where('status', $s);
+        }
+        if ($r = $request->get('result')) {
+            $query->where('assessment_result', $r);
+        }
         if ($u = $request->get('unit')) {
             $query->whereHas('ropa', fn ($q) => $q->where('division', $u));
         }
@@ -459,13 +473,28 @@ class LiaController extends Controller
     private function validateForSubmission(LiaAssessment $r): array
     {
         $issues = [];
-        if (empty($r->lia_code))             $issues[] = 'lia_code is required';
-        if (empty($r->processing_activity))  $issues[] = 'processing_activity is required';
-        if (empty($r->linked_ropa_id))       $issues[] = 'linked_ropa_id is required';
-        if (empty($r->legitimate_interest_basis)) $issues[] = 'Section 3 (Dasar Pemrosesan) is empty';
-        if (empty($r->purpose_test))         $issues[] = 'Section 4 (Purpose Test) is empty';
-        if (empty($r->necessity_test))       $issues[] = 'Section 5 (Necessity Test) is empty';
-        if (empty($r->balancing_risk_events)) $issues[] = 'Section 6 (Balancing risk register) is empty';
+        if (empty($r->lia_code)) {
+            $issues[] = 'lia_code is required';
+        }
+        if (empty($r->processing_activity)) {
+            $issues[] = 'processing_activity is required';
+        }
+        if (empty($r->linked_ropa_id)) {
+            $issues[] = 'linked_ropa_id is required';
+        }
+        if (empty($r->legitimate_interest_basis)) {
+            $issues[] = 'Section 3 (Dasar Pemrosesan) is empty';
+        }
+        if (empty($r->purpose_test)) {
+            $issues[] = 'Section 4 (Purpose Test) is empty';
+        }
+        if (empty($r->necessity_test)) {
+            $issues[] = 'Section 5 (Necessity Test) is empty';
+        }
+        if (empty($r->balancing_risk_events)) {
+            $issues[] = 'Section 6 (Balancing risk register) is empty';
+        }
+
         return $issues;
     }
 
@@ -474,6 +503,7 @@ class LiaController extends Controller
         $arr = $r->toArray();
         $arr['overall_verdict'] = $r->overallVerdict();
         $arr['is_editable'] = $r->isEditableBy(request()->user());
+
         return $arr;
     }
 }

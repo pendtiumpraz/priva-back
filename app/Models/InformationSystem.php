@@ -1,14 +1,15 @@
 <?php
+
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToOrg;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class InformationSystem extends Model
 {
-    use HasUuids, SoftDeletes, BelongsToOrg;
+    use BelongsToOrg, HasUuids, SoftDeletes;
 
     protected $fillable = [
         'org_id', 'name', 'code', 'description', 'owner', 'owner_id',
@@ -28,11 +29,11 @@ class InformationSystem extends Model
 
     public function organization()
     {
-        return $this->belongsTo(Organization::class , 'org_id');
+        return $this->belongsTo(Organization::class, 'org_id');
     }
 
     /**
-     * Many-to-many: 1 information system bisa muncul di banyak ROPA processing activity.
+     * Many-to-many: 1 information system bisa muncul di banyak RoPA processing activity.
      * Pivot: information_system_ropa (org_id mirrored for fast tenant scoping).
      */
     public function ropas()

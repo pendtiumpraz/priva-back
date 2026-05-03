@@ -2,7 +2,9 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 return new class extends Migration
 {
@@ -16,20 +18,20 @@ return new class extends Migration
         });
 
         // Migrate predefined roles into tenant_roles and link existing users
-        $orgs = \Illuminate\Support\Facades\DB::table('organizations')->get();
-        
+        $orgs = DB::table('organizations')->get();
+
         $presets = [
             'admin' => ['name' => 'Admin', 'desc' => 'Administrator dengan full akses konfigurasi'],
-            'dpo'   => ['name' => 'DPO', 'desc' => 'Data Protection Officer untuk review dan approval'],
-            'maker' => ['name' => 'Maker', 'desc' => 'User operasional yang input data ROPA/DPIA'],
-            'viewer'=> ['name' => 'Viewer', 'desc' => 'Akses hanya baca (read-only)'],
+            'dpo' => ['name' => 'DPO', 'desc' => 'Data Protection Officer untuk review dan approval'],
+            'maker' => ['name' => 'Maker', 'desc' => 'User operasional yang input data RoPA/DPIA'],
+            'viewer' => ['name' => 'Viewer', 'desc' => 'Akses hanya baca (read-only)'],
         ];
 
         foreach ($orgs as $org) {
             $roleIds = [];
             foreach ($presets as $code => $data) {
-                $id = \Illuminate\Support\Str::uuid()->toString();
-                \Illuminate\Support\Facades\DB::table('tenant_roles')->insert([
+                $id = Str::uuid()->toString();
+                DB::table('tenant_roles')->insert([
                     'id' => $id,
                     'org_id' => $org->id,
                     'name' => $data['name'],
@@ -44,7 +46,7 @@ return new class extends Migration
 
             // Sync existing users
             foreach ($roleIds as $code => $id) {
-                \Illuminate\Support\Facades\DB::table('users')
+                DB::table('users')
                     ->where('org_id', $org->id)
                     ->where('role', $code)
                     ->update(['tenant_role_id' => $id]);

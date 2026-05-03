@@ -14,7 +14,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Sprint C6: Batch AI review for ROPA / DPIA.
+ * Sprint C6: Batch AI review for RoPA / DPIA.
  * Processes one record at a time via the queue and writes to ai_results.
  */
 class BatchAiReviewJob implements ShouldQueue
@@ -22,6 +22,7 @@ class BatchAiReviewJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $timeout = 300;
+
     public int $tries = 2;
 
     public function __construct(
@@ -36,21 +37,26 @@ class BatchAiReviewJob implements ShouldQueue
     public function handle(): void
     {
         $ai = (new AiService($this->orgId))->setLocale($this->locale ?? 'id');
-        if (!$ai->isAvailable()) {
+        if (! $ai->isAvailable()) {
             Log::warning("BatchAiReviewJob: AI not available for org {$this->orgId}");
+
             return;
         }
 
         try {
             if ($this->module === 'ropa') {
                 $record = Ropa::where('org_id', $this->orgId)->find($this->recordId);
-                if (!$record) return;
+                if (! $record) {
+                    return;
+                }
                 $response = $ai->ropaAnalysis(array_merge($record->toArray(), [
                     'wizard_data' => $record->wizard_data ?? [],
                 ]));
             } elseif ($this->module === 'dpia') {
                 $record = Dpia::where('org_id', $this->orgId)->find($this->recordId);
-                if (!$record) return;
+                if (! $record) {
+                    return;
+                }
                 $response = $ai->dpiaRiskScoring($record->toArray(), $record->risk_assessment ?? []);
             } else {
                 return;

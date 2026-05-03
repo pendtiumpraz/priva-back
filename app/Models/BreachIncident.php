@@ -1,15 +1,16 @@
 <?php
+
 namespace App\Models;
 
 use App\Casts\EncryptedString;
 use App\Models\Concerns\BelongsToOrg;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class BreachIncident extends Model
 {
-    use HasUuids, SoftDeletes, BelongsToOrg;
+    use BelongsToOrg, HasUuids, SoftDeletes;
 
     protected $fillable = [
         'org_id', 'incident_code', 'linked_ropa_id', 'linked_ropa_ids', 'title', 'description', 'severity', 'source',
@@ -41,17 +42,17 @@ class BreachIncident extends Model
 
     public function organization()
     {
-        return $this->belongsTo(Organization::class , 'org_id');
+        return $this->belongsTo(Organization::class, 'org_id');
     }
 
-    /** Primary (first) ROPA — kept for legacy callers. */
+    /** Primary (first) RoPA — kept for legacy callers. */
     public function ropa()
     {
         return $this->belongsTo(Ropa::class, 'linked_ropa_id');
     }
 
     /**
-     * Materialized list of linked ROPAs. Uses the new linked_ropa_ids array
+     * Materialized list of linked RoPAs. Uses the new linked_ropa_ids array
      * when populated, else falls back to the legacy single linked_ropa_id.
      * Returns [{id, registration_number, processing_activity}] so the UI
      * can label the multi-select without a second query.
@@ -62,7 +63,9 @@ class BreachIncident extends Model
         if (empty($ids) && $this->linked_ropa_id) {
             $ids = [$this->linked_ropa_id];
         }
-        if (empty($ids) || !is_array($ids)) return [];
+        if (empty($ids) || ! is_array($ids)) {
+            return [];
+        }
 
         return Ropa::whereIn('id', $ids)
             ->get(['id', 'registration_number', 'processing_activity'])

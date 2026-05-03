@@ -8,7 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 /**
- * Sprint C4: Threaded comments for ROPA / DPIA / Breach / etc records.
+ * Sprint C4: Threaded comments for RoPA / DPIA / Breach / etc records.
  */
 class ModuleCommentController extends Controller
 {
@@ -78,6 +78,7 @@ class ModuleCommentController extends Controller
         }
 
         $comment->delete();
+
         return response()->json(['message' => 'Komentar dihapus']);
     }
 }

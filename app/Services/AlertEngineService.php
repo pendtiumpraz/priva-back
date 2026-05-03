@@ -2,14 +2,14 @@
 
 namespace App\Services;
 
-use App\Models\SecurityAlert;
-use App\Models\DsrRequest;
 use App\Models\BreachIncident;
-use App\Models\Vendor;
-use App\Models\Ropa;
 use App\Models\Dpia;
+use App\Models\DsrRequest;
+use App\Models\GapAssessment;
+use App\Models\Ropa;
+use App\Models\SecurityAlert;
+use App\Models\Vendor;
 use Carbon\Carbon;
-use Illuminate\Support\Str;
 
 class AlertEngineService
 {
@@ -51,9 +51,11 @@ class AlertEngineService
                 ->where('record_id', $b->id)
                 ->whereIn('status', ['open', 'acknowledged'])
                 ->exists();
-            if ($exists) continue;
+            if ($exists) {
+                continue;
+            }
 
-            $alerts = array_merge($alerts, \App\Services\NotificationService::dispatch(
+            $alerts = array_merge($alerts, NotificationService::dispatch(
                 kind: 'alert',
                 severity: 'critical',
                 module: 'breach',
@@ -66,11 +68,12 @@ class AlertEngineService
                 metadata: ['record_id' => $b->id]
             ));
         }
+
         return $alerts;
     }
 
     /**
-     * ROPA that was approved >90 days ago and hasn't been reviewed since.
+     * RoPA that was approved >90 days ago and hasn't been reviewed since.
      * Fires once per record via type dedup. Reminds assignees to re-review.
      */
     protected function checkRopaReview90d(string $orgId): array
@@ -89,24 +92,27 @@ class AlertEngineService
                 ->where('record_id', $r->id)
                 ->whereIn('status', ['open', 'acknowledged'])
                 ->exists();
-            if ($exists) continue;
+            if ($exists) {
+                continue;
+            }
 
             $assignees = is_array($r->assignees) ? $r->assignees : [];
-            $recipient = count($assignees) > 0 ? 'user:' . $assignees[0] : 'role:dpo';
+            $recipient = count($assignees) > 0 ? 'user:'.$assignees[0] : 'role:dpo';
 
-            $alerts = array_merge($alerts, \App\Services\NotificationService::dispatch(
+            $alerts = array_merge($alerts, NotificationService::dispatch(
                 kind: 'warning',
                 severity: 'medium',
                 module: 'ropa',
                 type: 'ropa.review.90d',
                 recipient: $recipient,
                 orgId: $orgId,
-                title: "📋 Review ROPA {$r->registration_number}",
-                body: 'ROPA sudah disetujui >90 hari — sudah waktunya review ulang akurasi data.',
+                title: "📋 Review RoPA {$r->registration_number}",
+                body: 'RoPA sudah disetujui >90 hari — sudah waktunya review ulang akurasi data.',
                 actionUrl: "/ropa/{$r->id}",
                 metadata: ['record_id' => $r->id]
             ));
         }
+
         return $alerts;
     }
 
@@ -124,17 +130,21 @@ class AlertEngineService
         foreach ($dpias as $d) {
             $threshold = $d->risk_level === 'high' ? 30 : 180;
             $dueDate = Carbon::parse($d->approved_at)->addDays($threshold);
-            if ($dueDate->isFuture()) continue;
+            if ($dueDate->isFuture()) {
+                continue;
+            }
 
-            $type = 'dpia.review.' . ($d->risk_level === 'high' ? '30d' : '180d');
+            $type = 'dpia.review.'.($d->risk_level === 'high' ? '30d' : '180d');
             $exists = SecurityAlert::where('org_id', $orgId)
                 ->where('type', $type)
                 ->where('record_id', $d->id)
                 ->whereIn('status', ['open', 'acknowledged'])
                 ->exists();
-            if ($exists) continue;
+            if ($exists) {
+                continue;
+            }
 
-            $alerts = array_merge($alerts, \App\Services\NotificationService::dispatch(
+            $alerts = array_merge($alerts, NotificationService::dispatch(
                 kind: 'warning',
                 severity: $d->risk_level === 'high' ? 'high' : 'medium',
                 module: 'dpia',
@@ -147,6 +157,7 @@ class AlertEngineService
                 metadata: ['record_id' => $d->id]
             ));
         }
+
         return $alerts;
     }
 
@@ -169,9 +180,11 @@ class AlertEngineService
                 ->where('record_id', $dsr->id)
                 ->whereIn('status', ['open', 'acknowledged'])
                 ->exists();
-            if ($exists) continue;
+            if ($exists) {
+                continue;
+            }
 
-            $alert = \App\Services\NotificationService::dispatch(
+            $alert = NotificationService::dispatch(
                 kind: 'warning',
                 severity: 'high',
                 module: 'dsr',
@@ -179,7 +192,7 @@ class AlertEngineService
                 recipient: 'role:dpo',
                 orgId: $orgId,
                 title: "⏰ DSR #{$dsr->reference_number} — 24 jam tersisa",
-                body: "Batas waktu respon DSR tinggal 24 jam. Segera tangani permintaan subjek data.",
+                body: 'Batas waktu respon DSR tinggal 24 jam. Segera tangani permintaan subjek data.',
                 actionUrl: "/dsr/{$dsr->id}",
                 metadata: [
                     'record_id' => $dsr->id,
@@ -189,6 +202,7 @@ class AlertEngineService
             );
             $alerts = array_merge($alerts, $alert);
         }
+
         return $alerts;
     }
 
@@ -210,9 +224,9 @@ class AlertEngineService
                 ->whereIn('status', ['open', 'acknowledged'])
                 ->exists();
 
-            if (!$exists) {
+            if (! $exists) {
                 $daysSince = (int) Carbon::parse($dsr->created_at)->diffInDays(now());
-                $alerts = array_merge($alerts, \App\Services\NotificationService::dispatch(
+                $alerts = array_merge($alerts, NotificationService::dispatch(
                     kind: 'alert',
                     severity: $daysSince > 7 ? 'critical' : 'high',
                     module: 'dsr',
@@ -230,6 +244,7 @@ class AlertEngineService
                 ));
             }
         }
+
         return $alerts;
     }
 
@@ -251,14 +266,14 @@ class AlertEngineService
                 ->whereIn('status', ['open', 'acknowledged'])
                 ->exists();
 
-            if (!$exists) {
+            if (! $exists) {
                 $hoursSince = Carbon::parse($breach->created_at)->diffInHours(now());
                 $alert = SecurityAlert::create([
                     'org_id' => $orgId,
                     'rule_code' => 'breach_unresolved',
                     'severity' => 'critical',
                     'title' => "Insiden data breach belum ditangani ({$hoursSince} jam)",
-                    'description' => "Insiden breach telah terbuka selama lebih dari 24 jam. Segera lakukan eskalasi dan notifikasi sesuai prosedur.",
+                    'description' => 'Insiden breach telah terbuka selama lebih dari 24 jam. Segera lakukan eskalasi dan notifikasi sesuai prosedur.',
                     'module' => 'breach',
                     'record_id' => $breach->id,
                     'metadata' => [
@@ -268,6 +283,7 @@ class AlertEngineService
                 $alerts[] = $alert;
             }
         }
+
         return $alerts;
     }
 
@@ -281,7 +297,7 @@ class AlertEngineService
 
         foreach ($vendors as $vendor) {
             $dpaExpiry = $vendor->dpa_expiry;
-            if (!$dpaExpiry) {
+            if (! $dpaExpiry) {
                 // No DPA at all
                 $exists = SecurityAlert::where('org_id', $orgId)
                     ->where('rule_code', 'dpa_missing')
@@ -289,19 +305,20 @@ class AlertEngineService
                     ->whereIn('status', ['open', 'acknowledged'])
                     ->exists();
 
-                if (!$exists) {
+                if (! $exists) {
                     $alert = SecurityAlert::create([
                         'org_id' => $orgId,
                         'rule_code' => 'dpa_missing',
                         'severity' => 'high',
                         'title' => "Vendor '{$vendor->name}' tidak memiliki DPA",
-                        'description' => "Vendor belum memiliki Data Processing Agreement (DPA). Ini merupakan pelanggaran kepatuhan regulasi.",
+                        'description' => 'Vendor belum memiliki Data Processing Agreement (DPA). Ini merupakan pelanggaran kepatuhan regulasi.',
                         'module' => 'vendor-risk',
                         'record_id' => $vendor->id,
                         'metadata' => ['vendor_name' => $vendor->name],
                     ]);
                     $alerts[] = $alert;
                 }
+
                 continue;
             }
 
@@ -316,7 +333,7 @@ class AlertEngineService
                     ->whereIn('status', ['open', 'acknowledged'])
                     ->exists();
 
-                if (!$exists) {
+                if (! $exists) {
                     $severity = $daysUntilExpiry < 0 ? 'critical' : ($daysUntilExpiry <= 7 ? 'high' : 'medium');
                     $titleText = $daysUntilExpiry < 0
                         ? "DPA vendor '{$vendor->name}' sudah kedaluwarsa"
@@ -327,7 +344,7 @@ class AlertEngineService
                         'rule_code' => $ruleCode,
                         'severity' => $severity,
                         'title' => $titleText,
-                        'description' => "Pastikan pembaruan DPA dilakukan sebelum kontrak berakhir.",
+                        'description' => 'Pastikan pembaruan DPA dilakukan sebelum kontrak berakhir.',
                         'module' => 'vendor-risk',
                         'record_id' => $vendor->id,
                         'metadata' => [
@@ -340,11 +357,12 @@ class AlertEngineService
                 }
             }
         }
+
         return $alerts;
     }
 
     /**
-     * Rule 4: High-risk ROPA without corresponding DPIA.
+     * Rule 4: High-risk RoPA without corresponding DPIA.
      */
     protected function checkRopaHighRiskNoDpia(string $orgId): array
     {
@@ -354,24 +372,24 @@ class AlertEngineService
             ->get();
 
         foreach ($highRiskRopas as $ropa) {
-            // Check if DPIA exists linked to this ROPA
+            // Check if DPIA exists linked to this RoPA
             $hasDpia = Dpia::where('org_id', $orgId)
                 ->where('ropa_id', $ropa->id)
                 ->exists();
 
-            if (!$hasDpia) {
+            if (! $hasDpia) {
                 $exists = SecurityAlert::where('org_id', $orgId)
                     ->where('rule_code', 'ropa_high_no_dpia')
                     ->where('record_id', $ropa->id)
                     ->whereIn('status', ['open', 'acknowledged'])
                     ->exists();
 
-                if (!$exists) {
+                if (! $exists) {
                     $alert = SecurityAlert::create([
                         'org_id' => $orgId,
                         'rule_code' => 'ropa_high_no_dpia',
                         'severity' => 'high',
-                        'title' => "ROPA berisiko tinggi tanpa DPIA",
+                        'title' => 'RoPA berisiko tinggi tanpa DPIA',
                         'description' => "Aktivitas pemrosesan '{$ropa->processing_activity_name}' teridentifikasi berisiko tinggi namun belum memiliki DPIA terkait.",
                         'module' => 'ropa',
                         'record_id' => $ropa->id,
@@ -383,6 +401,7 @@ class AlertEngineService
                 }
             }
         }
+
         return $alerts;
     }
 
@@ -392,7 +411,7 @@ class AlertEngineService
     protected function checkStaleGapAssessment(string $orgId): array
     {
         $alerts = [];
-        $latestGap = \App\Models\GapAssessment::where('org_id', $orgId)
+        $latestGap = GapAssessment::where('org_id', $orgId)
             ->orderBy('updated_at', 'desc')
             ->first();
 
@@ -404,13 +423,13 @@ class AlertEngineService
                     ->whereIn('status', ['open', 'acknowledged'])
                     ->exists();
 
-                if (!$exists) {
+                if (! $exists) {
                     $alert = SecurityAlert::create([
                         'org_id' => $orgId,
                         'rule_code' => 'gap_stale',
                         'severity' => 'medium',
                         'title' => "Gap Assessment belum diperbarui ({$daysSince} hari)",
-                        'description' => "Disarankan melakukan assessment ulang setiap 90 hari untuk menjaga akurasi compliance posture.",
+                        'description' => 'Disarankan melakukan assessment ulang setiap 90 hari untuk menjaga akurasi compliance posture.',
                         'module' => 'gap-assessment',
                         'metadata' => [
                             'last_updated' => $latestGap->updated_at->toISOString(),
@@ -421,6 +440,7 @@ class AlertEngineService
                 }
             }
         }
+
         return $alerts;
     }
 }

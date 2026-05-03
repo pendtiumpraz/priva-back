@@ -225,7 +225,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
     Route::put('/positions/{id}', [PositionController::class, 'update']);
     Route::delete('/positions/{id}', [PositionController::class, 'destroy']);
 
-    // DPO Users (for auto-fill in ROPA/DPIA)
+    // DPO Users (for auto-fill in RoPA/DPIA)
     Route::get('/dpo-users', [PositionController::class, 'dpoUsers']);
 
     // =============================================
@@ -289,7 +289,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
     );
 
     // =============================================
-    // Universal Module CRUD (ROPA, DPIA, DSR, Consent, Breach, Data Discovery)
+    // Universal Module CRUD (RoPA, DPIA, DSR, Consent, Breach, Data Discovery)
     // =============================================
     Route::prefix('m/{module}')->where(['module' => 'ropa|dpia|dsr|consent|breach|data-discovery'])->group(function () {
         // Module name mapping for permission check (URL slug -> permission module_id)
@@ -347,7 +347,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
     });
 
     // =============================================
-    // ROPA — DPO Approval Workflow
+    // RoPA — DPO Approval Workflow
     // =============================================
     Route::prefix('ropa/{id}')->group(function () {
         Route::post('/submit', [RopaApprovalController::class, 'submit'])->middleware('permission:ropa,write');
@@ -356,13 +356,13 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
     });
 
     // =============================================
-    // ROPA — Industry Templates (seeded library)
+    // RoPA — Industry Templates (seeded library)
     // =============================================
     Route::get('/ropa-templates', [RopaTemplateController::class, 'index'])->middleware('permission:ropa,read');
     Route::get('/ropa-templates/{id}', [RopaTemplateController::class, 'show'])->middleware('permission:ropa,read');
 
     // =============================================
-    // Processing Categories — used for ROPA/DPIA naming (ROPA-HR-001).
+    // Processing Categories — used for RoPA/DPIA naming (ROPA-HR-001).
     // Org-scoped, user-extendable via LazySearchSelect allowCreate.
     // =============================================
     Route::prefix('processing-categories')->group(function () {
@@ -438,7 +438,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::delete('/{id}/force', [RaciTemplateController::class, 'forceDelete']);
     });
 
-    // Retention master data (Sprint E3) — reusable library referenced from ROPA wizard step 7
+    // Retention master data (Sprint E3) — reusable library referenced from RoPA wizard step 7
     Route::prefix('retention-policies')->middleware('permission:ropa,read')->group(function () {
         Route::get('/', [RetentionPolicyController::class, 'index']);
         Route::get('/{id}', [RetentionPolicyController::class, 'show']);
@@ -553,7 +553,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::put('/{id}/classify-column', [DataDiscoveryController::class, 'updateColumnClassification'])->middleware('permission:data_discovery,write');
         Route::get('/{id}/ropa-links', [DataDiscoveryController::class, 'ropaLinks'])->middleware('permission:data_discovery,read');
 
-        // Many-to-many ROPA pivot management
+        // Many-to-many RoPA pivot management
         Route::get('/{id}/ropas', [RopaLinkController::class, 'indexForInformationSystem'])->middleware('permission:data_discovery,read');
         Route::put('/{id}/ropas', [RopaLinkController::class, 'syncForInformationSystem'])->middleware('permission:data_discovery,write');
         Route::post('/{id}/ropas', [RopaLinkController::class, 'attachToInformationSystem'])->middleware('permission:data_discovery,write');
@@ -920,7 +920,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
     Route::post('/ai-credits/topup', [AiFeatureController::class, 'creditTopup']);
 
     // =============================================
-    // Sprint C1: Custom Fields & Templates (ROPA / DPIA)
+    // Sprint C1: Custom Fields & Templates (RoPA / DPIA)
     // =============================================
     // =============================================
     // Sprint F1/F2/F3: LIA / TIA / Maturity Assessment

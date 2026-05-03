@@ -1,8 +1,9 @@
 <?php
+
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\KnowledgeBaseSection;
+use Illuminate\Database\Seeder;
 
 class KnowledgeBaseSectionsSeeder extends Seeder
 {
@@ -23,7 +24,7 @@ PRIVASIMU adalah platform SaaS untuk membantu organisasi mematuhi UU Pelindungan
 ## Modul yang Tersedia
 1. **Dashboard** — Ringkasan kepatuhan real-time
 2. **Gap Assessment** — Analisis kesenjangan UU PDP
-3. **ROPA** — Record of Processing Activities
+3. **RoPA** — Record of Processing Activities
 4. **DPIA** — Data Protection Impact Assessment
 5. **Data Breach Management** — Penanganan insiden kebocoran data
 6. **DSR** — Data Subject Request (Hak Subjek Data)
@@ -57,7 +58,7 @@ KB
 Dashboard menampilkan ringkasan kepatuhan organisasi secara real-time dalam satu halaman.
 
 ## Komponen Dashboard
-1. **KPI Cards** — Total ROPA, DPIA, Breach Incidents, Gap Score
+1. **KPI Cards** — Total RoPA, DPIA, Breach Incidents, Gap Score
 2. **Compliance Score** — Persentase kepatuhan berdasarkan Gap Assessment
 3. **Grafik Tren** — Tren kepatuhan dari waktu ke waktu
 4. **Distribusi Risiko** — Pie chart: Low, Medium, High risk items
@@ -117,11 +118,11 @@ KB
             ],
             [
                 'module_key' => 'ropa',
-                'title' => 'ROPA (Record of Processing Activities)',
+                'title' => 'RoPA (Record of Processing Activities)',
                 'sort_order' => 3,
                 'keywords' => 'ropa,record,processing,activities,pemrosesan,wizard,langkah,risk,risiko,data kategori,legal basis,retensi',
                 'content' => <<<'KB'
-# ROPA (Record of Processing Activities)
+# RoPA (Record of Processing Activities)
 
 ## Fungsi
 Mencatat seluruh aktivitas pemrosesan data pribadi di organisasi, sesuai kewajiban UU PDP Pasal 31.
@@ -132,7 +133,7 @@ Mencatat seluruh aktivitas pemrosesan data pribadi di organisasi, sesuai kewajib
 3. **Kategori Data** — Jenis data yang diproses (umum/sensitif)
 4. **Keamanan** — Langkah-langkah perlindungan data
 5. **Review** — Ringkasan sebelum submit
-6. **Submit** — Simpan dan generate kode ROPA
+6. **Submit** — Simpan dan generate kode RoPA
 
 ## Kategori Legal Basis (Dasar Hukum)
 - Persetujuan (Consent)
@@ -147,9 +148,9 @@ Mencatat seluruh aktivitas pemrosesan data pribadi di organisasi, sesuai kewajib
 - Data **umum** → LOW/MEDIUM risk berdasarkan volume dan tujuan
 
 ## Tips
-- Setiap departemen/divisi harus memiliki minimal 1 ROPA
-- Update ROPA setiap ada perubahan proses bisnis
-- ROPA dengan risk HIGH wajib ditindaklanjuti dengan DPIA
+- Setiap departemen/divisi harus memiliki minimal 1 RoPA
+- Update RoPA setiap ada perubahan proses bisnis
+- RoPA dengan risk HIGH wajib ditindaklanjuti dengan DPIA
 KB
             ],
             [
@@ -167,7 +168,7 @@ Menilai dampak pemrosesan data pribadi berisiko tinggi terhadap hak dan kebebasa
 - Pemrosesan data **sensitif** (kesehatan, biometrik, dll)
 - **Profiling** atau pengambilan keputusan otomatis
 - **Pemantauan sistematis** skala besar
-- ROPA dengan risk level **HIGH**
+- RoPA dengan risk level **HIGH**
 
 ## Wizard 4 Langkah
 1. **Identifikasi** — Deskripsi pemrosesan, tujuan, scope
@@ -403,7 +404,7 @@ Memetakan seluruh alur data pribadi dalam organisasi — dari mana data masuk, k
 5. Review dan update berkala
 
 ## Manfaat
-- Memudahkan pembuatan ROPA
+- Memudahkan pembuatan RoPA
 - Identifikasi data sensitif yang mungkin terlewat
 - Basis untuk DPIA
 - Membantu response saat breach (tahu data apa yang terdampak)
@@ -459,7 +460,7 @@ UU PDP adalah undang-undang yang mengatur pelindungan data pribadi di Indonesia,
 - **Pasal 4**: Jenis data pribadi (umum & spesifik/sensitif)
 - **Pasal 6-13**: Hak-hak subjek data
 - **Pasal 16-19**: Kewajiban pengendali data
-- **Pasal 20**: Record of Processing Activities (ROPA) wajib
+- **Pasal 20**: Record of Processing Activities (RoPA) wajib
 - **Pasal 34**: DPIA untuk pemrosesan berisiko tinggi
 - **Pasal 46**: Notifikasi breach dalam 3×24 jam
 - **Pasal 57**: Lembaga pengawas (KOMDIGI)
@@ -661,9 +662,9 @@ Subjek dapat submit DSR via:
 
 | DSR Action | Auto-trigger |
 |---|---|
-| Hak Hapus | Cascade ke ROPA (mark archived), Consent (revoke all), Vendor sub-processor (notify) |
+| Hak Hapus | Cascade ke RoPA (mark archived), Consent (revoke all), Vendor sub-processor (notify) |
 | Tarik Consent | Update `consent_logs.status='withdrawn'`, fire webhook ke CRM klien untuk unsubscribe |
-| Hak Akses | Generate ZIP dari ROPA + Consent + Audit Logs subjek |
+| Hak Akses | Generate ZIP dari RoPA + Consent + Audit Logs subjek |
 | Hak Portabilitas | Sama dengan akses, format JSON ekspor |
 
 ## D. Embed Widget Klien
@@ -710,6 +711,6 @@ KB
             );
         }
 
-        $this->command->info('✅ ' . count($sections) . ' knowledge base sections seeded.');
+        $this->command->info('✅ '.count($sections).' knowledge base sections seeded.');
     }
 }

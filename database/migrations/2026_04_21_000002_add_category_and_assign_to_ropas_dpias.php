@@ -5,11 +5,12 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Extends ROPA + DPIA with naming-category link, optional custom number,
+ * Extends RoPA + DPIA with naming-category link, optional custom number,
  * and assign-group/assignees. These back the new Step-0 wizard screen
  * and the locked-after-submit assign rule.
  */
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         Schema::table('ropas', function (Blueprint $table) {

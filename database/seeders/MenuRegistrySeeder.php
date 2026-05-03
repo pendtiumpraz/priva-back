@@ -22,22 +22,34 @@ class MenuRegistrySeeder extends Seeder
     //          settings sub-tabs beyond profile/security/notifications.
     //   TENANT (admin/dpo/maker/viewer) = actual compliance work.
     private const TENANT_ALL = ['admin', 'dpo', 'maker', 'viewer'];
+
     private const COMPLIANCE = ['admin', 'dpo', 'maker', 'viewer'];
+
     private const EDITOR = ['admin', 'dpo', 'maker'];
+
     private const ROOT_ONLY = ['root'];
+
     private const SA_ONLY = ['superadmin'];
+
     private const SA_ADMIN = ['superadmin', 'admin'];
+
     private const EVERYONE = ['root', 'superadmin', 'admin', 'dpo', 'maker', 'viewer'];
+
     // Kept for legacy tabs that should be visible to everyone-ish. Prefer
     // the more specific lists above.
     private const ALL = self::EVERYONE;
+
     private const PLATFORM_ROOT = self::ROOT_ONLY;
+
     private const PLATFORM_SUPERADMIN = self::SA_ONLY;
+
     private const ADMIN_SUPERADMIN = self::SA_ADMIN;
 
     // Package gates: null → all tiers; array → only listed packages
     private const PKG_AI_ONLY = ['ai', 'ai_agent', 'perpetual'];
+
     private const PKG_AI_AGENT_ONLY = ['ai_agent', 'perpetual'];
+
     private const PKG_PRO_UP = ['pro', 'ai', 'ai_agent', 'perpetual'];
 
     public function run(): void
@@ -49,7 +61,7 @@ class MenuRegistrySeeder extends Seeder
             ['menu_key' => 'gap-assessment', 'label' => 'Gap Assessment', 'href' => '/gap-assessment', 'icon' => 'ClipboardCheck', 'section' => 'Menu Utama', 'sort' => 30, 'roles' => array_merge(['root'], self::COMPLIANCE)],
 
             // PDP Modules
-            ['menu_key' => 'ropa', 'label' => 'ROPA', 'href' => '/ropa', 'icon' => 'FileText', 'section' => 'PDP Modules', 'sort' => 110, 'roles' => array_merge(['root'], self::COMPLIANCE)],
+            ['menu_key' => 'ropa', 'label' => 'RoPA', 'href' => '/ropa', 'icon' => 'FileText', 'section' => 'PDP Modules', 'sort' => 110, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'dpia', 'label' => 'DPIA', 'href' => '/dpia', 'icon' => 'ShieldCheck', 'section' => 'PDP Modules', 'sort' => 120, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'lia', 'label' => 'LIA', 'href' => '/lia', 'icon' => 'Scale', 'section' => 'PDP Modules', 'sort' => 130, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'tia', 'label' => 'TIA', 'href' => '/tia', 'icon' => 'Globe', 'section' => 'PDP Modules', 'sort' => 140, 'roles' => array_merge(['root'], self::COMPLIANCE)],
@@ -180,7 +192,7 @@ class MenuRegistrySeeder extends Seeder
                 [
                     'parent_menu_id' => $parentId,
                     'label' => $t['label'],
-                    'href' => '/settings#' . str_replace('settings.', '', $t['key']),
+                    'href' => '/settings#'.str_replace('settings.', '', $t['key']),
                     'icon' => $t['icon'] ?? null,
                     'section' => $t['section'] ?? null,
                     'sort_order' => $t['sort'] ?? 0,

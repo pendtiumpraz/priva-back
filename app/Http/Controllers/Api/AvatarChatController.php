@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Avatar Chat Controller
- * 
+ *
  * Dedicated endpoint for the 3D Avatar (Priva) chat.
  * - Uses 'avatar' mode from AI Provider
  * - Has a strict system prompt: platform Q&A only, no AI system discussion
@@ -32,14 +32,14 @@ class AvatarChatController extends Controller
 
         // Get avatar AI provider config, fallback to chat
         $providerConfig = AiProviderController::getActiveConfig($orgId, 'avatar');
-        if (!$providerConfig) {
+        if (! $providerConfig) {
             $providerConfig = AiProviderController::getActiveConfig($orgId, 'chat');
         }
-        if (!$providerConfig) {
+        if (! $providerConfig) {
             $providerConfig = AiProviderController::getActiveConfig($orgId, 'agent');
         }
 
-        if (!$providerConfig || empty($providerConfig['api_key'])) {
+        if (! $providerConfig || empty($providerConfig['api_key'])) {
             return response()->json([
                 'reply' => 'Maaf, AI belum dikonfigurasi. Silakan set Avatar AI Provider di menu Settings > AI Providers terlebih dahulu.',
                 'error' => true,
@@ -76,11 +76,11 @@ class AvatarChatController extends Controller
         $model = $providerConfig['model']->model_id;
         $baseUrl = rtrim($providerConfig['base_url'], '/');
         $authHeader = $providerConfig['auth_header'] ?: 'Authorization';
-        $authPrefix = ($providerConfig['auth_header'] && !($providerConfig['auth_prefix'] ?? '')) ? '' : ($providerConfig['auth_prefix'] ?: 'Bearer');
+        $authPrefix = ($providerConfig['auth_header'] && ! ($providerConfig['auth_prefix'] ?? '')) ? '' : ($providerConfig['auth_prefix'] ?: 'Bearer');
 
         $headers = ['Content-Type' => 'application/json'];
         if ($authPrefix) {
-            $headers[$authHeader] = $authPrefix . ' ' . $apiKey;
+            $headers[$authHeader] = $authPrefix.' '.$apiKey;
         } else {
             $headers[$authHeader] = $apiKey;
         }
@@ -89,7 +89,7 @@ class AvatarChatController extends Controller
             $response = Http::timeout(30)
                 ->withoutVerifying()
                 ->withHeaders($headers)
-                ->post($baseUrl . '/chat/completions', [
+                ->post($baseUrl.'/chat/completions', [
                     'model' => $model,
                     'messages' => $messages,
                     'max_tokens' => 2048,
@@ -117,7 +117,7 @@ class AvatarChatController extends Controller
             } else {
                 $errBody = $response->json();
                 $errMsg = $errBody['error']['message'] ?? $response->body();
-                Log::error('Avatar Chat AI Error: ' . $errMsg);
+                Log::error('Avatar Chat AI Error: '.$errMsg);
 
                 return response()->json([
                     'reply' => 'Maaf, terjadi kesalahan pada AI. Silakan coba lagi.',
@@ -125,7 +125,8 @@ class AvatarChatController extends Controller
                 ]);
             }
         } catch (\Exception $e) {
-            Log::error('Avatar Chat Exception: ' . $e->getMessage());
+            Log::error('Avatar Chat Exception: '.$e->getMessage());
+
             return response()->json([
                 'reply' => 'Koneksi ke AI terputus. Silakan coba lagi.',
                 'error' => true,
@@ -189,7 +190,7 @@ PROMPT;
     {
         $kb = $this->getKnowledgeBase();
         $query = mb_strtolower($query);
-        $queryWords = array_filter(explode(' ', $query), fn($w) => mb_strlen($w) >= 3);
+        $queryWords = array_filter(explode(' ', $query), fn ($w) => mb_strlen($w) >= 3);
 
         $matches = [];
 
@@ -219,7 +220,7 @@ PROMPT;
         }
 
         // Sort by score descending
-        usort($matches, fn($a, $b) => $b['score'] - $a['score']);
+        usort($matches, fn ($a, $b) => $b['score'] - $a['score']);
 
         // Take top 3 matches to keep context manageable
         $topMatches = array_slice($matches, 0, 3);
@@ -249,7 +250,7 @@ PRIVASIMU adalah platform SaaS/On-Premises untuk kepatuhan perlindungan data pri
 Fitur utama:
 • Dashboard — Pemantauan compliance score real-time
 • Gap Assessment — Audit kepatuhan dengan kuesioner berdasarkan UU PDP/GDPR/PDPA
-• ROPA — Pencatatan aktivitas pemrosesan data pribadi (Record of Processing Activities)
+• RoPA — Pencatatan aktivitas pemrosesan data pribadi (Record of Processing Activities)
 • DPIA — Data Protection Impact Assessment untuk proyek berisiko tinggi
 • DSR — Pengelolaan permintaan hak subjek data (Data Subject Request)
 • Data Discovery — Pemindaian database untuk deteksi PII (Personal Identifiable Information)
@@ -277,7 +278,7 @@ OVERVIEW;
             [
                 'title' => 'Dashboard Utama & Compliance Score',
                 'keywords' => ['dashboard', 'compliance', 'score', 'skor', 'kepatuhan', 'kpi', 'statistik', 'beranda', 'home'],
-                'content' => 'Dashboard menampilkan Compliance Score (persentase kepatuhan keseluruhan), jumlah DSR yang belum diproses, statistik ROPA/DPIA, dan status breach. Data real-time dari semua modul. Compliance Score dihitung dari Gap Assessment terbaru. KPI: Open DSR, Active Breaches, ROPA Coverage, DPIA Pending. Ada grafik tren 6 bulan dan pie chart per kategori.',
+                'content' => 'Dashboard menampilkan Compliance Score (persentase kepatuhan keseluruhan), jumlah DSR yang belum diproses, statistik RoPA/DPIA, dan status breach. Data real-time dari semua modul. Compliance Score dihitung dari Gap Assessment terbaru. KPI: Open DSR, Active Breaches, RoPA Coverage, DPIA Pending. Ada grafik tren 6 bulan dan pie chart per kategori.',
             ],
 
             // ===== GAP ASSESSMENT =====
@@ -287,11 +288,11 @@ OVERVIEW;
                 'content' => 'Modul Gap Assessment mengevaluasi kepatuhan organisasi terhadap UU PDP, GDPR, atau PDPA. Fitur: kuesioner dinamis (Tata Kelola & Siklus Proses PDP), scoring otomatis, AI Remediation Plan, dan Compare Assessment (radar chart). Langkah: Mulai Assessment → Pilih Framework → Isi Kuesioner → Lihat Skor & Rekomendasi → Export PDF. AI Remediation Plan menganalisis gap dan membuat roadmap perbaikan (memotong 1 credit AI).',
             ],
 
-            // ===== ROPA =====
+            // ===== RoPA =====
             [
-                'title' => 'ROPA (Record of Processing Activities)',
+                'title' => 'RoPA (Record of Processing Activities)',
                 'keywords' => ['ropa', 'pemrosesan', 'data pribadi', 'record', 'aktivitas', 'retensi', 'dasar hukum'],
-                'content' => 'Berdasarkan Pasal 31 UU PDP, wajib memiliki rekam jejak pemrosesan. ROPA merekam: divisi, tujuan pemrosesan, jenis data, masa retensi, mekanisme keamanan. Fitur AI Auto-Fill: isi semua field hanya dengan kata kunci singkat (1 credit). Risk Level (Low/Medium/High/Critical) dihitung otomatis. Bisa trigger DPIA otomatis jika risiko tinggi. Export PDF untuk audit.',
+                'content' => 'Berdasarkan Pasal 31 UU PDP, wajib memiliki rekam jejak pemrosesan. RoPA merekam: divisi, tujuan pemrosesan, jenis data, masa retensi, mekanisme keamanan. Fitur AI Auto-Fill: isi semua field hanya dengan kata kunci singkat (1 credit). Risk Level (Low/Medium/High/Critical) dihitung otomatis. Bisa trigger DPIA otomatis jika risiko tinggi. Export PDF untuk audit.',
             ],
 
             // ===== DPIA =====
@@ -396,7 +397,7 @@ OVERVIEW;
             [
                 'title' => 'AI Agent',
                 'keywords' => ['agent', 'chat', 'ai agent', 'function calling', 'otomasi', 'agentic'],
-                'content' => 'AI Agent adalah asisten cerdas dengan kemampuan function calling — bisa mengeksekusi aksi langsung di platform. Fitur: membuat ROPA/DPIA/DSR/Breach otomatis, mengisi form, menganalisis data, menjawab pertanyaan compliance. Memerlukan model yang mendukung Tools/Function Calling. Tersedia di menu AI Agent.',
+                'content' => 'AI Agent adalah asisten cerdas dengan kemampuan function calling — bisa mengeksekusi aksi langsung di platform. Fitur: membuat RoPA/DPIA/DSR/Breach otomatis, mengisi form, menganalisis data, menjawab pertanyaan compliance. Memerlukan model yang mendukung Tools/Function Calling. Tersedia di menu AI Agent.',
             ],
 
             // ===== AI ASSISTANT / KNOWLEDGE BASE =====

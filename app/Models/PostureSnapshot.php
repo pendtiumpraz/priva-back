@@ -12,15 +12,17 @@ use Illuminate\Database\Eloquent\Model;
  *
  * Three layers map to UU PDP compliance reality:
  *   - Layer 1 Data (50%):     DSPM core — discovery, classification, encryption
- *   - Layer 2 Process (30%):  ROPA, DPIA, RTP, vendor, cross-border
+ *   - Layer 2 Process (30%):  RoPA, DPIA, RTP, vendor, cross-border
  *   - Layer 3 Response (20%): breach readiness, DSR SLA, maturity
  */
 class PostureSnapshot extends Model
 {
-    use HasUuids, BelongsToOrg;
+    use BelongsToOrg, HasUuids;
 
     public const SOURCE_SCHEDULED = 'scheduled';
+
     public const SOURCE_MANUAL = 'manual';
+
     public const SOURCE_EVENT = 'event';
 
     protected $fillable = [

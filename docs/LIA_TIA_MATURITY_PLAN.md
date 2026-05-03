@@ -8,7 +8,7 @@
 
 | Module | Model | Migration | Controller | FE Page | Linked relations | Spec coverage |
 |---|---|---|---|---|---|---|
-| LIA | `LiaAssessment` | `2026_04_17_000008_create_lia_assessments_table` | `AssessmentsController` (generic) | `(dashboard)/lia/page.tsx` | ROPA via `linked_ropa_id` | ~30% (3-phase test JSON columns ada, tapi pertanyaan + RACI + risk register + RoPA auto-fill belum) |
+| LIA | `LiaAssessment` | `2026_04_17_000008_create_lia_assessments_table` | `AssessmentsController` (generic) | `(dashboard)/lia/page.tsx` | RoPA via `linked_ropa_id` | ~30% (3-phase test JSON columns ada, tapi pertanyaan + RACI + risk register + RoPA auto-fill belum) |
 | TIA | `TiaAssessment` | `2026_04_17_000009_create_tia_assessments_table` | `AssessmentsController` (generic) | `(dashboard)/tia/page.tsx` | CrossBorderTransfer via `linked_cross_border_id` | ~25% (JSON column ada, tapi 8 risk-metric ruler + country assessment + maturity scoring + supplementary docs belum, tidak ada Vendor relation) |
 | Maturity | `MaturityAssessment` | `2026_04_17_000010_create_maturity_assessments_table` | `AssessmentsController` (generic) | `(dashboard)/maturity/page.tsx` | (none) | ~20% (`dimensions` JSON, `overall_level` integer ada, tapi 18 UU PDP questions + ruler 1-10 + 3 input methods + auto-derive belum) |
 
@@ -24,12 +24,12 @@
 
 Sesuai PDF `Fitur LIA.pdf`:
 
-**Section 1 — Informasi Pengisi Formulir** (auto-resolved dari ROPA):
+**Section 1 — Informasi Pengisi Formulir** (auto-resolved dari RoPA):
 - Pejabat PDP (Approver) — DPO of org
 - Process Owner/PIC (Maker)
 - Atasan Process Owner (Checker, opsional)
 
-**Section 2 — Informasi Internal Organisasi** (semua auto dari ROPA except ID LIA):
+**Section 2 — Informasi Internal Organisasi** (semua auto dari RoPA except ID LIA):
 - ID LIA (text, format: `LIA-[UNIT]-[AKTIVITAS]-[NOMOR]`)
 - ID RoPA (FK)
 - ID DPIA opsional (FK ← **belum ada di model existing**)
@@ -81,9 +81,9 @@ Plus pertanyaan terakhir: subjek bisa kehilangan kendali? (Yes/No + alasan)
 
 Sesuai PDF `Fitur TIA.pdf`:
 
-**Section 1 — Informasi Pengisi** (auto dari ROPA): Approver/Maker/Checker
+**Section 1 — Informasi Pengisi** (auto dari RoPA): Approver/Maker/Checker
 
-**Section 2 — Informasi Internal** (auto dari ROPA + ID TIA + ID RoPA), dan tambahan **deskripsi transfer**:
+**Section 2 — Informasi Internal** (auto dari RoPA + ID TIA + ID RoPA), dan tambahan **deskripsi transfer**:
 - Volume Data
 - Frekuensi Data
 - Dasar Transfer (Kontrak / Persetujuan / Binding Corporate Rules / Lainnya)
@@ -115,7 +115,7 @@ Sesuai PDF `Fitur TIA.pdf`:
 **Penting — relasi**:
 - TIA ↔ Cross-Border Transfer (existing FK)
 - TIA ↔ **Vendor / TPRM** (BARU — penerima data adalah pihak ketiga yang juga di-assess di Vendor Risk Management)
-- TIA ↔ ROPA (untuk context auto-fill)
+- TIA ↔ RoPA (untuk context auto-fill)
 
 Auto-flow yang harus diadd:
 - Saat submit Cross-Border Transfer dengan negara tujuan = luar Indonesia → suggest create TIA
@@ -163,7 +163,7 @@ Sesuai PDF `Privacy Compliance Maturity Assessment.pdf`:
 **3 Input Methods** (penting):
 1. **Self-questionnaire** — DPO klik 1-10 ruler manual per pertanyaan
 2. **Document upload** — upload SOP/Kebijakan/SDLC, AI baca + score otomatis
-3. **Auto-derive from Nexus dashboard** — sistem hitung otomatis dari data existing (jumlah ROPA, jumlah DPIA, breach response time, audit log frequency, dll.)
+3. **Auto-derive from Nexus dashboard** — sistem hitung otomatis dari data existing (jumlah RoPA, jumlah DPIA, breach response time, audit log frequency, dll.)
 
 **Output**:
 - Overall score (rata-rata)
@@ -320,7 +320,7 @@ The 18 questions get seeded via `MaturityQuestionsSeeder` from the PDF spec (cod
 
 ```
                   ┌─────────────┐
-                  │    ROPA     │  ← context source untuk LIA + TIA
+                  │    RoPA     │  ← context source untuk LIA + TIA
                   └──────┬──────┘
                          │
         ┌────────────────┼─────────────────┐
@@ -368,9 +368,9 @@ Tabel relasi: tetap pakai `tia_assessments.linked_vendor_id` (single FK). Kalau 
 
 ### LIA ↔ DPIA
 
-Existing: ROPA dengan risk=HIGH auto-create DPIA draft (sudah jalan). Baru: kalau RoPA pakai legitimate interest sebagai legal basis, tambahan trigger:
+Existing: RoPA dengan risk=HIGH auto-create DPIA draft (sudah jalan). Baru: kalau RoPA pakai legitimate interest sebagai legal basis, tambahan trigger:
 - Auto-suggest "Buat LIA untuk pemrosesan ini"
-- Linked DPIA fillable di LIA wizard step 1 (auto-detect dari ROPA's linked DPIA)
+- Linked DPIA fillable di LIA wizard step 1 (auto-detect dari RoPA's linked DPIA)
 
 ### Maturity ↔ All modules (read-only auto-derive)
 
@@ -382,10 +382,10 @@ public function deriveScores(string $orgId): array
     return [
         'A1_dpo_appointment' => $this->scoreDpoAppointment($orgId),         // dari User table dengan role=dpo
         'A2_org_structure'   => $this->scoreOrgStructure($orgId),           // dari Department table
-        'B3_processing_basis'=> $this->scoreProcessingBasis($orgId),        // % ROPA dengan legal_basis filled
+        'B3_processing_basis'=> $this->scoreProcessingBasis($orgId),        // % RoPA dengan legal_basis filled
         'B4_subject_rights'  => $this->scoreSubjectRights($orgId),          // dari DSR module config
-        'C5_ropa_quality'    => $this->scoreRopaQuality($orgId),            // ROPA count + completeness rate
-        'C6_dpia_quality'    => $this->scoreDpiaQuality($orgId),            // DPIA count for HIGH-risk ROPA
+        'C5_ropa_quality'    => $this->scoreRopaQuality($orgId),            // RoPA count + completeness rate
+        'C6_dpia_quality'    => $this->scoreDpiaQuality($orgId),            // DPIA count for HIGH-risk RoPA
         'C7_data_mapping'    => $this->scoreDataMapping($orgId),            // InformationSystem coverage
         'C8_dpa_contracts'   => $this->scoreDpaContracts($orgId),           // Vendor contract status
         'C9_data_accuracy'   => $this->scoreDataAccuracy($orgId),           // DSR rectification handled rate
@@ -495,7 +495,7 @@ Route::prefix('maturity')->group(function () { ... });
 
 ## Dependencies & Auto-Triggers
 
-Update `App\Services\CrossModuleAutoTriggerService` (atau pattern existing di ROPA save hook):
+Update `App\Services\CrossModuleAutoTriggerService` (atau pattern existing di RoPA save hook):
 
 ```php
 // Di RoPA save:
@@ -518,7 +518,7 @@ if ($vendor->processes_personal_data && $vendor->is_cross_border && !$vendor->ti
 
 ## RACI Workflow Implementation
 
-Reuse existing `ApprovalWorkflow` model + `ApprovalController` (already used by ROPA/DPIA/etc) — tambah module identifier `lia` + `tia`. Approval steps:
+Reuse existing `ApprovalWorkflow` model + `ApprovalController` (already used by RoPA/DPIA/etc) — tambah module identifier `lia` + `tia`. Approval steps:
 
 | Step | Role | Action |
 |---|---|---|
@@ -544,7 +544,7 @@ Existing route `POST /api/ai/assessment/{kind}/analysis` sudah ada. Tambahan nee
 3. **Recommendation generator**: setelah submit, kalau level=1, AI suggest action plan untuk move to level 2.
    - Endpoint: `POST /api/ai/maturity/{id}/recommendations`
 
-4. **TIA risk auto-score**: berdasarkan country + vendor profile + ROPA scope, AI suggest 6 risk metrics (1-10).
+4. **TIA risk auto-score**: berdasarkan country + vendor profile + RoPA scope, AI suggest 6 risk metrics (1-10).
    - Endpoint: `POST /api/ai/tia/{id}/risk-suggest`
 
 Semua via `AiFeatureController` + `AiAgentToolExecutor` pattern existing — no new architecture, just new tools.

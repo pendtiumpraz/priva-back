@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\DB;
  *
  * Layer weighting (sum 100%):
  *   - Data Layer    (50%) — DSPM core (discovery, classification, encryption)
- *   - Process Layer (30%) — Compliance pipeline (ROPA, DPIA, RTP, vendor, CBDT)
+ *   - Process Layer (30%) — Compliance pipeline (RoPA, DPIA, RTP, vendor, CBDT)
  *   - Response Layer (20%) — When things go wrong (breach, DSR, maturity)
  *
  * Each pillar returns a score 0-100 + raw_metrics + reason. Layer score is
@@ -36,26 +36,28 @@ use Illuminate\Support\Facades\DB;
 class PostureScoreService
 {
     public const LAYER_DATA = 'data';
+
     public const LAYER_PROCESS = 'process';
+
     public const LAYER_RESPONSE = 'response';
 
     /** Pillar weight in points within its layer. Sum per layer = layer total. */
     public const PILLAR_WEIGHTS = [
         // Layer Data — sum 50
-        'discovery_coverage'      => ['layer' => self::LAYER_DATA,     'weight' => 15],
+        'discovery_coverage' => ['layer' => self::LAYER_DATA,     'weight' => 15],
         'classification_coverage' => ['layer' => self::LAYER_DATA,     'weight' => 15],
-        'sensitive_protection'    => ['layer' => self::LAYER_DATA,     'weight' => 15],
-        'schema_drift'            => ['layer' => self::LAYER_DATA,     'weight' =>  5],
+        'sensitive_protection' => ['layer' => self::LAYER_DATA,     'weight' => 15],
+        'schema_drift' => ['layer' => self::LAYER_DATA,     'weight' => 5],
         // Layer Process — sum 30
-        'ropa_coverage'           => ['layer' => self::LAYER_PROCESS,  'weight' =>  8],
-        'dpia_compliance'         => ['layer' => self::LAYER_PROCESS,  'weight' => 10],
-        'rtp_hygiene'             => ['layer' => self::LAYER_PROCESS,  'weight' =>  7],
-        'vendor_risk'             => ['layer' => self::LAYER_PROCESS,  'weight' =>  3],
-        'cross_border_basis'      => ['layer' => self::LAYER_PROCESS,  'weight' =>  2],
+        'ropa_coverage' => ['layer' => self::LAYER_PROCESS,  'weight' => 8],
+        'dpia_compliance' => ['layer' => self::LAYER_PROCESS,  'weight' => 10],
+        'rtp_hygiene' => ['layer' => self::LAYER_PROCESS,  'weight' => 7],
+        'vendor_risk' => ['layer' => self::LAYER_PROCESS,  'weight' => 3],
+        'cross_border_basis' => ['layer' => self::LAYER_PROCESS,  'weight' => 2],
         // Layer Response — sum 20
-        'breach_readiness'        => ['layer' => self::LAYER_RESPONSE, 'weight' => 10],
-        'dsr_compliance'          => ['layer' => self::LAYER_RESPONSE, 'weight' =>  5],
-        'maturity_self_eval'      => ['layer' => self::LAYER_RESPONSE, 'weight' =>  5],
+        'breach_readiness' => ['layer' => self::LAYER_RESPONSE, 'weight' => 10],
+        'dsr_compliance' => ['layer' => self::LAYER_RESPONSE, 'weight' => 5],
+        'maturity_self_eval' => ['layer' => self::LAYER_RESPONSE, 'weight' => 5],
     ];
 
     public const PILLAR_LABELS = [
@@ -80,24 +82,24 @@ class PostureScoreService
     public function compute(string $orgId): array
     {
         $pillars = [
-            'discovery_coverage'      => $this->discoveryCoverage($orgId),
+            'discovery_coverage' => $this->discoveryCoverage($orgId),
             'classification_coverage' => $this->classificationCoverage($orgId),
-            'sensitive_protection'    => $this->sensitiveProtection($orgId),
-            'schema_drift'            => $this->schemaDrift($orgId),
-            'ropa_coverage'           => $this->ropaCoverage($orgId),
-            'dpia_compliance'         => $this->dpiaCompliance($orgId),
-            'rtp_hygiene'             => $this->rtpHygiene($orgId),
-            'vendor_risk'             => $this->vendorRisk($orgId),
-            'cross_border_basis'      => $this->crossBorderBasis($orgId),
-            'breach_readiness'        => $this->breachReadiness($orgId),
-            'dsr_compliance'          => $this->dsrCompliance($orgId),
-            'maturity_self_eval'      => $this->maturitySelfEval($orgId),
+            'sensitive_protection' => $this->sensitiveProtection($orgId),
+            'schema_drift' => $this->schemaDrift($orgId),
+            'ropa_coverage' => $this->ropaCoverage($orgId),
+            'dpia_compliance' => $this->dpiaCompliance($orgId),
+            'rtp_hygiene' => $this->rtpHygiene($orgId),
+            'vendor_risk' => $this->vendorRisk($orgId),
+            'cross_border_basis' => $this->crossBorderBasis($orgId),
+            'breach_readiness' => $this->breachReadiness($orgId),
+            'dsr_compliance' => $this->dsrCompliance($orgId),
+            'maturity_self_eval' => $this->maturitySelfEval($orgId),
         ];
 
         // Roll up per layer
         $layerScores = [
-            self::LAYER_DATA     => $this->aggregateLayer($pillars, self::LAYER_DATA),
-            self::LAYER_PROCESS  => $this->aggregateLayer($pillars, self::LAYER_PROCESS),
+            self::LAYER_DATA => $this->aggregateLayer($pillars, self::LAYER_DATA),
+            self::LAYER_PROCESS => $this->aggregateLayer($pillars, self::LAYER_PROCESS),
             self::LAYER_RESPONSE => $this->aggregateLayer($pillars, self::LAYER_RESPONSE),
         ];
 
@@ -112,12 +114,13 @@ class PostureScoreService
             'overall_score' => $overall,
             'status' => $this->scoreToStatus($overall),
             'layer_scores' => [
-                'data'     => $layerScores[self::LAYER_DATA],
-                'process'  => $layerScores[self::LAYER_PROCESS],
+                'data' => $layerScores[self::LAYER_DATA],
+                'process' => $layerScores[self::LAYER_PROCESS],
                 'response' => $layerScores[self::LAYER_RESPONSE],
             ],
             'pillars' => collect(self::PILLAR_WEIGHTS)->map(function ($meta, $key) use ($pillars) {
                 $p = $pillars[$key] ?? ['score' => 0, 'raw' => [], 'reason' => null];
+
                 return [
                     'pillar' => $key,
                     'label' => self::PILLAR_LABELS[$key] ?? $key,
@@ -151,6 +154,7 @@ class PostureScoreService
         $pillarsWithDelta = collect($current['pillars'])->map(function ($p) use ($prevPillars) {
             $prevScore = $prevPillars->get($p['pillar'])['score'] ?? null;
             $p['delta_vs_prev'] = $prevScore !== null ? $p['score'] - $prevScore : null;
+
             return $p;
         })->all();
 
@@ -226,6 +230,7 @@ class PostureScoreService
             ->count();
 
         $score = (int) round(($scanned / $total) * 100);
+
         return [
             'score' => $score,
             'raw' => ['systems_total' => $total, 'systems_scanned_30d' => $scanned],
@@ -260,10 +265,12 @@ class PostureScoreService
             foreach ($tables as $t) {
                 $tableName = $t['name'] ?? '';
                 foreach (($t['columns'] ?? []) as $c) {
-                    if (!($c['pii_detected'] ?? false)) continue;
+                    if (! ($c['pii_detected'] ?? false)) {
+                        continue;
+                    }
                     $piiCount++;
-                    $key = "{$tableName}." . ($c['name'] ?? '');
-                    if (isset($protections[$key]) && !empty($protections[$key])) {
+                    $key = "{$tableName}.".($c['name'] ?? '');
+                    if (isset($protections[$key]) && ! empty($protections[$key])) {
                         $assessedCount++;
                     }
                 }
@@ -276,6 +283,7 @@ class PostureScoreService
         }
 
         $score = (int) round(($assessedCount / $piiCount) * 100);
+
         return [
             'score' => $score,
             'raw' => ['pii_columns' => $piiCount, 'assessed' => $assessedCount],
@@ -309,16 +317,20 @@ class PostureScoreService
             foreach ($tables as $t) {
                 $tableName = $t['name'] ?? '';
                 foreach (($t['columns'] ?? []) as $c) {
-                    if (($c['pdp_category'] ?? null) !== 'spesifik') continue;
+                    if (($c['pdp_category'] ?? null) !== 'spesifik') {
+                        continue;
+                    }
                     $sensitiveCount++;
-                    $key = "{$tableName}." . ($c['name'] ?? '');
+                    $key = "{$tableName}.".($c['name'] ?? '');
                     $a = $protections[$key] ?? null;
                     // Counts as protected if assessment indicates encryption OR access control
                     $protected = $a && (
-                        !empty($a['encryption']) || !empty($a['access_control']) ||
-                        !empty($a['masking']) || !empty($a['tokenization'])
+                        ! empty($a['encryption']) || ! empty($a['access_control']) ||
+                        ! empty($a['masking']) || ! empty($a['tokenization'])
                     );
-                    if ($protected) $protectedCount++;
+                    if ($protected) {
+                        $protectedCount++;
+                    }
                 }
             }
         }
@@ -329,6 +341,7 @@ class PostureScoreService
         }
 
         $score = (int) round(($protectedCount / $sensitiveCount) * 100);
+
         return [
             'score' => $score,
             'raw' => ['sensitive_columns' => $sensitiveCount, 'protected' => $protectedCount],
@@ -353,6 +366,7 @@ class PostureScoreService
         }
 
         $score = max(0, 100 - ($alertsTotal * 10));
+
         return [
             'score' => $score,
             'raw' => ['unresolved_alerts' => $alertsTotal],
@@ -383,6 +397,7 @@ class PostureScoreService
             ->count('information_system_id');
 
         $score = (int) round(($linked / $total) * 100);
+
         return [
             'score' => $score,
             'raw' => ['systems_total' => $total, 'systems_with_ropa' => $linked],
@@ -418,6 +433,7 @@ class PostureScoreService
             ->count();
 
         $score = (int) round(($approved / $highRisk) * 100);
+
         return [
             'score' => $score,
             'raw' => ['high_risk_ropa' => $highRisk, 'with_approved_dpia' => $approved],
@@ -436,16 +452,24 @@ class PostureScoreService
             ->whereNotNull('mitigation_tracking')
             ->get(['id', 'mitigation_tracking']);
 
-        $total = 0; $overdue = 0; $verified = 0; $today = Carbon::today();
+        $total = 0;
+        $overdue = 0;
+        $verified = 0;
+        $today = Carbon::today();
         foreach ($dpias as $d) {
             foreach (($d->mitigation_tracking ?? []) as $it) {
                 $total++;
                 $status = $it['status'] ?? 'planned';
-                if ($status === 'verified') $verified++;
-                if (!empty($it['due_date']) && !in_array($status, ['verified', 'cancelled', 'on_hold'], true)) {
+                if ($status === 'verified') {
+                    $verified++;
+                }
+                if (! empty($it['due_date']) && ! in_array($status, ['verified', 'cancelled', 'on_hold'], true)) {
                     try {
-                        if (Carbon::parse($it['due_date'])->lt($today)) $overdue++;
-                    } catch (\Throwable $e) {}
+                        if (Carbon::parse($it['due_date'])->lt($today)) {
+                            $overdue++;
+                        }
+                    } catch (\Throwable $e) {
+                    }
                 }
             }
         }
@@ -491,6 +515,7 @@ class PostureScoreService
             ->count();
 
         $score = (int) round(($healthy / $total) * 100);
+
         return [
             'score' => $score,
             'raw' => ['vendors_total' => $total, 'healthy' => $healthy],
@@ -519,6 +544,7 @@ class PostureScoreService
             ->count();
 
         $score = (int) round(($valid / $total) * 100);
+
         return [
             'score' => $score,
             'raw' => ['transfers' => $total, 'with_legal_basis' => $valid],
@@ -544,14 +570,20 @@ class PostureScoreService
             ->whereNotNull('detected_at')
             ->get(['detected_at', 'notified_komdigi_at', 'notified_subjects_at']);
 
-        $on_time = 0; $total = $recent->count();
+        $on_time = 0;
+        $total = $recent->count();
         foreach ($recent as $b) {
             $notified = $b->notified_komdigi_at ?? $b->notified_subjects_at ?? null;
-            if (!$notified) continue;
+            if (! $notified) {
+                continue;
+            }
             try {
                 $hours = Carbon::parse($b->detected_at)->diffInHours(Carbon::parse($notified));
-                if ($hours <= 72) $on_time++;
-            } catch (\Throwable $e) {}
+                if ($hours <= 72) {
+                    $on_time++;
+                }
+            } catch (\Throwable $e) {
+            }
         }
 
         $score = 100 - ($active * 20);
@@ -596,6 +628,7 @@ class PostureScoreService
 
         $on_time = $closed->filter(fn ($d) => $d->closed_at <= $d->deadline_at)->count();
         $score = (int) round(($on_time / $closed->count()) * 100);
+
         return [
             'score' => $score,
             'raw' => ['dsr_closed' => $closed->count(), 'on_time' => $on_time],
@@ -615,7 +648,7 @@ class PostureScoreService
             ->orderByDesc('submitted_at')
             ->first();
 
-        if (!$latest) {
+        if (! $latest) {
             return ['score' => 30, 'raw' => ['has_assessment' => false],
                 'reason' => 'Belum ada Maturity Assessment yang disubmit.'];
         }
@@ -641,13 +674,17 @@ class PostureScoreService
 
     private function aggregateLayer(array $pillars, string $layerKey): int
     {
-        $total = 0; $weightSum = 0;
+        $total = 0;
+        $weightSum = 0;
         foreach (self::PILLAR_WEIGHTS as $key => $meta) {
-            if ($meta['layer'] !== $layerKey) continue;
+            if ($meta['layer'] !== $layerKey) {
+                continue;
+            }
             $score = $pillars[$key]['score'] ?? 0;
             $total += $score * $meta['weight'];
             $weightSum += $meta['weight'];
         }
+
         return $weightSum > 0 ? (int) round($total / $weightSum) : 0;
     }
 
@@ -657,7 +694,7 @@ class PostureScoreService
             $score >= 80 => 'Excellent',
             $score >= 60 => 'Good',
             $score >= 40 => 'Fair',
-            default      => 'Critical',
+            default => 'Critical',
         };
     }
 
@@ -666,7 +703,7 @@ class PostureScoreService
         return match (true) {
             $score >= 75 => 'good',
             $score >= 50 => 'warning',
-            default      => 'critical',
+            default => 'critical',
         };
     }
 
@@ -677,6 +714,7 @@ class PostureScoreService
     public function calculatePosture($orgId): array
     {
         $result = $this->compute((string) $orgId);
+
         return [
             'overall_score' => $result['overall_score'],
             'status' => $result['status'],

@@ -86,7 +86,7 @@ class PlatformConfigController extends Controller
         'features.notifications_scheduler_enabled' => [
             'default' => 1, 'min' => 0, 'max' => 1, 'step' => 1,
             'unit' => 'bool', 'category' => 'features', 'label' => 'Notifikasi Scheduler',
-            'help' => 'Aktifkan daily cron untuk license-expiry, DSR H-24, ROPA review 90d, dll. Independen dari kill switch master.',
+            'help' => 'Aktifkan daily cron untuk license-expiry, DSR H-24, RoPA review 90d, dll. Independen dari kill switch master.',
         ],
     ];
 
@@ -129,7 +129,7 @@ class PlatformConfigController extends Controller
         $this->requireRoot($request);
 
         $data = $request->validate([
-            'key' => 'required|string|in:' . implode(',', array_keys(self::SETTINGS_SCHEMA)),
+            'key' => 'required|string|in:'.implode(',', array_keys(self::SETTINGS_SCHEMA)),
             'value' => 'required',
         ]);
 
@@ -151,7 +151,9 @@ class PlatformConfigController extends Controller
             AuditLog::log('platform_config', $data['key'], 'updated', [
                 'key' => $data['key'], 'before' => $before, 'after' => $value,
             ], 'platform_config');
-        } catch (\Throwable $e) { \Log::warning('audit failed: ' . $e->getMessage()); }
+        } catch (\Throwable $e) {
+            \Log::warning('audit failed: '.$e->getMessage());
+        }
 
         return response()->json(['message' => 'Saved', 'key' => $data['key'], 'value' => $value]);
     }
@@ -175,6 +177,7 @@ class PlatformConfigController extends Controller
         } catch (\Throwable $e) {
             $out['error'] = $e->getMessage();
         }
+
         return $out;
     }
 
@@ -214,17 +217,17 @@ class PlatformConfigController extends Controller
         $ALB_USD_HR = 0.0225 + (0.008 * max(1, ceil($reqPerSec / 25000))); // LCU grows with traffic
 
         $DB = [
-            'small'   => 0.210,  // db.r6g.large
-            'medium'  => 0.420,  // db.r6g.xlarge
-            'large'   => 0.840,  // db.r6g.2xlarge
-            'xlarge'  => 1.680,  // db.r6g.4xlarge
+            'small' => 0.210,  // db.r6g.large
+            'medium' => 0.420,  // db.r6g.xlarge
+            'large' => 0.840,  // db.r6g.2xlarge
+            'xlarge' => 1.680,  // db.r6g.4xlarge
         ][$dbClass];
 
         $REDIS = [
-            'none'   => 0.0,
-            'small'  => 0.252,   // cache.r6g.large
+            'none' => 0.0,
+            'small' => 0.252,   // cache.r6g.large
             'medium' => 0.504,   // cache.r6g.xlarge
-            'large'  => 1.008,   // cache.r6g.2xlarge
+            'large' => 1.008,   // cache.r6g.2xlarge
         ][$redisClass];
 
         // CloudFront: 85% of traffic if CDN on; average 2KB per consent response.
@@ -240,14 +243,14 @@ class PlatformConfigController extends Controller
             : 0.0;
 
         $componentsUsd = [
-            'ec2_web'      => $web * $WEB_USD_HR,
-            'ec2_workers'  => $workers * $WORKER_USD_HR,
-            'alb'          => $ALB_USD_HR,
+            'ec2_web' => $web * $WEB_USD_HR,
+            'ec2_workers' => $workers * $WORKER_USD_HR,
+            'alb' => $ALB_USD_HR,
             'rds_postgres' => $DB,
-            'elasticache'  => $REDIS,
-            'cloudfront'   => $CF_USD_HR,
-            'data_transfer'=> $DT_USD_HR,
-            'kinesis'      => $KINESIS_USD_HR,
+            'elasticache' => $REDIS,
+            'cloudfront' => $CF_USD_HR,
+            'data_transfer' => $DT_USD_HR,
+            'kinesis' => $KINESIS_USD_HR,
         ];
         $totalUsdHr = array_sum($componentsUsd);
 

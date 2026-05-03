@@ -278,15 +278,15 @@ Editing entry points:
 
 Documented in `PLATFORM_ARCHITECTURE.md` §3. The ones that affect day-to-day changes:
 
-- ROPA with `risk=HIGH` auto-creates a draft DPIA.
-- Sensitive categories in ROPA wizard §4 auto-set `risk=HIGH`.
+- RoPA with `risk=HIGH` auto-creates a draft DPIA.
+- Sensitive categories in RoPA wizard §4 auto-set `risk=HIGH`.
 - New Breach initializes `containment_checklist` + `timeline_log`.
 - New DSR sets `deadline_at = now + 72h`.
 - Auto-generated codes on create: `ROPA-YYYY-NNN`, `DPIA-YYYY-NNN`, `DSR-YYYY-NNN`, `BRC-YYYY-NNN`, `CNT-YYYY-NNN` (`ModuleCrudController::nextCode`).
 
 ### Wizard persistence
 
-ROPA and DPIA keep step-by-step wizard state in a `wizard_data` JSON column alongside normalized fields. Prefer extending that blob over new columns unless the field needs to be queryable/joined.
+RoPA and DPIA keep step-by-step wizard state in a `wizard_data` JSON column alongside normalized fields. Prefer extending that blob over new columns unless the field needs to be queryable/joined.
 
 ### AI Agent tool execution
 

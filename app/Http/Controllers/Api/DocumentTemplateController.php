@@ -6,8 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\DocumentTemplate;
 use App\Models\Organization;
 use App\Models\TenantTheme;
+use App\Services\DocxTemplateService;
 use App\Services\TenantStorageService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * CRUD for tenant document templates.
@@ -25,8 +28,8 @@ class DocumentTemplateController extends Controller
         $orgId = $user->org_id;
 
         $rows = DocumentTemplate::where(function ($q) use ($orgId) {
-                $q->whereNull('org_id')->orWhere('org_id', $orgId);
-            })
+            $q->whereNull('org_id')->orWhere('org_id', $orgId);
+        })
             ->orderByDesc('is_default')
             ->orderBy('name')
             ->get()
@@ -34,6 +37,7 @@ class DocumentTemplateController extends Controller
                 // Merge DEFAULT_CONFIG with stored partial so frontend always
                 // has every field populated — avoids UI crashes on undefined.
                 $t->config = $t->mergedConfig();
+
                 return $t;
             });
 
@@ -60,8 +64,8 @@ class DocumentTemplateController extends Controller
     {
         $user = $request->user();
         $tpl = DocumentTemplate::where(function ($q) use ($user) {
-                $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
-            })->findOrFail($id);
+            $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
+        })->findOrFail($id);
 
         return response()->json([
             'data' => $tpl,
@@ -75,14 +79,16 @@ class DocumentTemplateController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
-        if (!$this->canEdit($user)) return response()->json(['message' => 'Tidak diizinkan.'], 403);
+        if (! $this->canEdit($user)) {
+            return response()->json(['message' => 'Tidak diizinkan.'], 403);
+        }
 
         // Enforce per-tenant limit on custom templates.
         if ($user->org_id) {
             $count = DocumentTemplate::where('org_id', $user->org_id)->count();
             if ($count >= self::TENANT_TEMPLATE_LIMIT) {
                 return response()->json([
-                    'message' => "Batas maksimal " . self::TENANT_TEMPLATE_LIMIT . " template custom per tenant sudah tercapai. Hapus template yang tidak dipakai terlebih dahulu.",
+                    'message' => 'Batas maksimal '.self::TENANT_TEMPLATE_LIMIT.' template custom per tenant sudah tercapai. Hapus template yang tidak dipakai terlebih dahulu.',
                     'limit' => self::TENANT_TEMPLATE_LIMIT,
                     'current' => $count,
                 ], 422);
@@ -97,10 +103,10 @@ class DocumentTemplateController extends Controller
         ]);
 
         $config = $data['config'];
-        if (!empty($data['clone_from'])) {
+        if (! empty($data['clone_from'])) {
             $src = DocumentTemplate::where(function ($q) use ($user) {
-                    $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
-                })->find($data['clone_from']);
+                $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
+            })->find($data['clone_from']);
             if ($src) {
                 $config = array_merge($src->config ?? [], $config);
             }
@@ -122,7 +128,9 @@ class DocumentTemplateController extends Controller
     public function update(Request $request, string $id)
     {
         $user = $request->user();
-        if (!$this->canEdit($user)) return response()->json(['message' => 'Tidak diizinkan.'], 403);
+        if (! $this->canEdit($user)) {
+            return response()->json(['message' => 'Tidak diizinkan.'], 403);
+        }
 
         // Look up target. Tenant-owned → edit in place. System preset →
         // auto-fork silently to tenant copy (copy-on-write) so "Edit" UX
@@ -139,8 +147,9 @@ class DocumentTemplateController extends Controller
 
         if ($tpl->is_system) {
             // Root/superadmin at platform scope may edit system defaults directly.
-            if (in_array($user->role, ['root', 'superadmin'], true) && !$user->org_id) {
+            if (in_array($user->role, ['root', 'superadmin'], true) && ! $user->org_id) {
                 $tpl->update($data);
+
                 return response()->json(['data' => $tpl]);
             }
 
@@ -149,7 +158,7 @@ class DocumentTemplateController extends Controller
                 $count = DocumentTemplate::where('org_id', $user->org_id)->count();
                 if ($count >= self::TENANT_TEMPLATE_LIMIT) {
                     return response()->json([
-                        'message' => "Batas maksimal " . self::TENANT_TEMPLATE_LIMIT . " template custom per tenant sudah tercapai. Hapus template yang tidak dipakai terlebih dahulu.",
+                        'message' => 'Batas maksimal '.self::TENANT_TEMPLATE_LIMIT.' template custom per tenant sudah tercapai. Hapus template yang tidak dipakai terlebih dahulu.',
                         'limit' => self::TENANT_TEMPLATE_LIMIT,
                         'current' => $count,
                     ], 422);
@@ -165,17 +174,21 @@ class DocumentTemplateController extends Controller
                 'is_default' => false,
                 'created_by' => $user->id,
             ]);
+
             return response()->json(['data' => $fork, 'forked_from' => $tpl->id]);
         }
 
         $tpl->update($data);
+
         return response()->json(['data' => $tpl]);
     }
 
     public function destroy(Request $request, string $id)
     {
         $user = $request->user();
-        if (!$this->canEdit($user)) return response()->json(['message' => 'Tidak diizinkan.'], 403);
+        if (! $this->canEdit($user)) {
+            return response()->json(['message' => 'Tidak diizinkan.'], 403);
+        }
 
         $tpl = DocumentTemplate::where('org_id', $user->org_id)->findOrFail($id);
         if ($tpl->is_system) {
@@ -188,6 +201,7 @@ class DocumentTemplateController extends Controller
             ->update(['active_document_template_id' => null]);
 
         $tpl->delete();
+
         return response()->json(['message' => 'Template dihapus.']);
     }
 
@@ -195,11 +209,13 @@ class DocumentTemplateController extends Controller
     public function activate(Request $request, string $id)
     {
         $user = $request->user();
-        if (!$this->canEdit($user)) return response()->json(['message' => 'Tidak diizinkan.'], 403);
+        if (! $this->canEdit($user)) {
+            return response()->json(['message' => 'Tidak diizinkan.'], 403);
+        }
 
         $tpl = DocumentTemplate::where(function ($q) use ($user) {
-                $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
-            })->findOrFail($id);
+            $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
+        })->findOrFail($id);
 
         // Create a minimal TenantTheme row if this tenant doesn't have one
         // yet. palette/name are required NOT NULL — provide safe defaults.
@@ -232,14 +248,14 @@ class DocumentTemplateController extends Controller
 
     /** Phase H1 — document kinds the per-kind map supports. */
     public const DOCUMENT_KINDS = [
-        'default'         => 'Default — dipakai kalau kind tertentu tidak di-assign',
-        'ropa'            => 'ROPA Export',
-        'dpia'            => 'DPIA Export',
-        'gap_report'      => 'Gap Assessment Report',
-        'breach_report'   => 'Breach Full Report',
-        'breach_komdigi'  => 'Breach — Surat Notifikasi KOMDIGI',
-        'breach_subject'  => 'Breach — Surat Notifikasi Subjek Data',
-        'posture'         => 'Data Posture Score Report',
+        'default' => 'Default — dipakai kalau kind tertentu tidak di-assign',
+        'ropa' => 'RoPA Export',
+        'dpia' => 'DPIA Export',
+        'gap_report' => 'Gap Assessment Report',
+        'breach_report' => 'Breach Full Report',
+        'breach_komdigi' => 'Breach — Surat Notifikasi KOMDIGI',
+        'breach_subject' => 'Breach — Surat Notifikasi Subjek Data',
+        'posture' => 'Data Posture Score Report',
     ];
 
     /**
@@ -280,8 +296,12 @@ class DocumentTemplateController extends Controller
     public function updateActiveMap(Request $request)
     {
         $user = $request->user();
-        if (!$this->canEdit($user)) return response()->json(['message' => 'Tidak diizinkan.'], 403);
-        if (!$user->org_id) return response()->json(['message' => 'Butuh konteks tenant.'], 422);
+        if (! $this->canEdit($user)) {
+            return response()->json(['message' => 'Tidak diizinkan.'], 403);
+        }
+        if (! $user->org_id) {
+            return response()->json(['message' => 'Butuh konteks tenant.'], 422);
+        }
 
         $data = $request->validate([
             'map' => 'required|array',
@@ -291,14 +311,18 @@ class DocumentTemplateController extends Controller
         // Only accept known kinds.
         $clean = [];
         foreach ($data['map'] as $kind => $id) {
-            if (!array_key_exists($kind, self::DOCUMENT_KINDS)) continue;
+            if (! array_key_exists($kind, self::DOCUMENT_KINDS)) {
+                continue;
+            }
             if ($id) {
                 // Verify the template exists and is accessible to this tenant.
                 $tpl = DocumentTemplate::where('id', $id)
                     ->where(function ($q) use ($user) {
                         $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
                     })->first();
-                if (!$tpl) continue;
+                if (! $tpl) {
+                    continue;
+                }
                 $clean[$kind] = $id;
             }
         }
@@ -339,8 +363,12 @@ class DocumentTemplateController extends Controller
     public function uploadDocx(Request $request, string $id, TenantStorageService $storage)
     {
         $user = $request->user();
-        if (!$this->canEdit($user)) return response()->json(['message' => 'Tidak diizinkan.'], 403);
-        if (!$user->org_id) return response()->json(['message' => 'Upload DOCX memerlukan konteks tenant.'], 422);
+        if (! $this->canEdit($user)) {
+            return response()->json(['message' => 'Tidak diizinkan.'], 403);
+        }
+        if (! $user->org_id) {
+            return response()->json(['message' => 'Upload DOCX memerlukan konteks tenant.'], 422);
+        }
 
         $request->validate([
             'file' => 'required|file|mimes:docx|max:10240',
@@ -348,7 +376,7 @@ class DocumentTemplateController extends Controller
         ]);
 
         $tpl = DocumentTemplate::where('org_id', $user->org_id)->findOrFail($id);
-        $org = \App\Models\Organization::findOrFail($user->org_id);
+        $org = Organization::findOrFail($user->org_id);
 
         $stored = $storage->storeTenantPrivateFile(
             $org, $request->file('file'), 'docx-templates'
@@ -356,8 +384,11 @@ class DocumentTemplateController extends Controller
 
         $map = $tpl->docx_templates ?? [];
         // Clean up old file for this kind.
-        if (!empty($map[$request->kind]['path'])) {
-            try { $storage->getDisk($org)->delete($map[$request->kind]['path']); } catch (\Throwable $e) { /* best-effort */ }
+        if (! empty($map[$request->kind]['path'])) {
+            try {
+                $storage->getDisk($org)->delete($map[$request->kind]['path']);
+            } catch (\Throwable $e) { /* best-effort */
+            }
         }
         $map[$request->kind] = [
             'path' => $stored['path'],
@@ -382,8 +413,10 @@ class DocumentTemplateController extends Controller
     public function deleteDocx(Request $request, string $id, string $kind, TenantStorageService $storage)
     {
         $user = $request->user();
-        if (!$this->canEdit($user)) return response()->json(['message' => 'Tidak diizinkan.'], 403);
-        if (!in_array($kind, ['ropa', 'dpia', 'gap'], true)) {
+        if (! $this->canEdit($user)) {
+            return response()->json(['message' => 'Tidak diizinkan.'], 403);
+        }
+        if (! in_array($kind, ['ropa', 'dpia', 'gap'], true)) {
             return response()->json(['message' => 'Kind tidak valid.'], 422);
         }
 
@@ -392,8 +425,11 @@ class DocumentTemplateController extends Controller
         $path = $map[$kind]['path'] ?? null;
 
         if ($path) {
-            $org = \App\Models\Organization::findOrFail($user->org_id);
-            try { $storage->getDisk($org)->delete($path); } catch (\Throwable $e) { /* best-effort */ }
+            $org = Organization::findOrFail($user->org_id);
+            try {
+                $storage->getDisk($org)->delete($path);
+            } catch (\Throwable $e) { /* best-effort */
+            }
         }
 
         unset($map[$kind]);
@@ -410,10 +446,10 @@ class DocumentTemplateController extends Controller
     public function docxPlaceholders()
     {
         return response()->json([
-            'data' => \App\Services\DocxTemplateService::placeholderCatalog(),
+            'data' => DocxTemplateService::placeholderCatalog(),
             'notes' => [
                 'Gunakan sintaks ${field_name} di dalam file .docx.',
-                'Upload .docx Anda per kind (ROPA / DPIA / GAP) di tab Branding → Document → DOCX Templates.',
+                'Upload .docx Anda per kind (RoPA / DPIA / GAP) di tab Branding → Document → DOCX Templates.',
                 'Lists tampil sebagai teks dipisah koma. Untuk tabel, gunakan TemplateProcessor cloneRow manual.',
             ],
         ]);
@@ -431,8 +467,12 @@ class DocumentTemplateController extends Controller
     public function uploadAsset(Request $request, TenantStorageService $storage)
     {
         $user = $request->user();
-        if (!$this->canEdit($user)) return response()->json(['message' => 'Tidak diizinkan.'], 403);
-        if (!$user->org_id) return response()->json(['message' => 'Upload asset memerlukan konteks tenant.'], 422);
+        if (! $this->canEdit($user)) {
+            return response()->json(['message' => 'Tidak diizinkan.'], 403);
+        }
+        if (! $user->org_id) {
+            return response()->json(['message' => 'Upload asset memerlukan konteks tenant.'], 422);
+        }
 
         $request->validate([
             'file' => 'required|file|max:4096|mimes:png,jpg,jpeg,webp,svg',
@@ -460,7 +500,7 @@ class DocumentTemplateController extends Controller
         $config = $request->input('config', []);
         $merged = array_merge(DocumentTemplate::DEFAULT_CONFIG, $config);
 
-        $org = \App\Models\Organization::find($user->org_id);
+        $org = Organization::find($user->org_id);
 
         // Inline watermark/cover images as data URIs so dompdf renders them
         // regardless of storage driver (local /storage/, S3, etc).
@@ -478,7 +518,7 @@ class DocumentTemplateController extends Controller
             'generatedAt' => now()->locale('id')->isoFormat('D MMMM Y · HH:mm'),
         ];
 
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('reports.templates.preview', $payload)
+        $pdf = Pdf::loadView('reports.templates.preview', $payload)
             ->setPaper($merged['page_size'] ?? 'a4')
             ->setOption([
                 'isHtml5ParserEnabled' => true,
@@ -497,15 +537,19 @@ class DocumentTemplateController extends Controller
      *   - Remote http/https URL → file_get_contents
      * Returns the original value on any failure.
      */
-    private function assetUrlToDataUri(?string $urlOrPath, ?\App\Models\Organization $org): ?string
+    private function assetUrlToDataUri(?string $urlOrPath, ?Organization $org): ?string
     {
-        if (!$urlOrPath) return $urlOrPath;
+        if (! $urlOrPath) {
+            return $urlOrPath;
+        }
 
         // Already a data URI → pass through.
-        if (str_starts_with($urlOrPath, 'data:')) return $urlOrPath;
+        if (str_starts_with($urlOrPath, 'data:')) {
+            return $urlOrPath;
+        }
 
         $encode = function (string $bytes, string $mime): string {
-            return 'data:' . $mime . ';base64,' . base64_encode($bytes);
+            return 'data:'.$mime.';base64,'.base64_encode($bytes);
         };
 
         try {
@@ -514,9 +558,10 @@ class DocumentTemplateController extends Controller
             $path = $parsed['path'] ?? $urlOrPath;
             if (str_contains($path, '/storage/')) {
                 $rel = ltrim(preg_replace('#^.*/storage/#', '', $path), '/');
-                $disk = \Illuminate\Support\Facades\Storage::disk('public');
+                $disk = Storage::disk('public');
                 if ($disk->exists($rel)) {
                     $mime = $disk->mimeType($rel) ?: 'image/png';
+
                     return $encode($disk->get($rel), $mime);
                 }
             }
@@ -528,6 +573,7 @@ class DocumentTemplateController extends Controller
                 $disk = $ts->getPublicDisk($org);
                 if ($disk->exists($rel)) {
                     $mime = $disk->mimeType($rel) ?: 'image/png';
+
                     return $encode($disk->get($rel), $mime);
                 }
             }
@@ -537,12 +583,13 @@ class DocumentTemplateController extends Controller
                 $ctx = stream_context_create(['http' => ['timeout' => 4]]);
                 $bytes = @file_get_contents($urlOrPath, false, $ctx);
                 if ($bytes !== false) {
-                    $mime = 'image/' . (strtolower(pathinfo(parse_url($urlOrPath, PHP_URL_PATH) ?? '', PATHINFO_EXTENSION)) ?: 'png');
+                    $mime = 'image/'.(strtolower(pathinfo(parse_url($urlOrPath, PHP_URL_PATH) ?? '', PATHINFO_EXTENSION)) ?: 'png');
+
                     return $encode($bytes, $mime);
                 }
             }
         } catch (\Throwable $e) {
-            \Log::debug('assetUrlToDataUri failed: ' . $e->getMessage());
+            \Log::debug('assetUrlToDataUri failed: '.$e->getMessage());
         }
 
         return $urlOrPath;

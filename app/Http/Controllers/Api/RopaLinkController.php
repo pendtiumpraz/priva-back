@@ -11,9 +11,9 @@ use App\Models\Ropa;
 use Illuminate\Http\Request;
 
 /**
- * Cross-module ROPA linkage manager.
+ * Cross-module RoPA linkage manager.
  *
- *   GET   /api/data-discovery/{id}/ropas              — list linked ROPAs for an IS
+ *   GET   /api/data-discovery/{id}/ropas              — list linked RoPAs for an IS
  *   PUT   /api/data-discovery/{id}/ropas              — sync (replace) {ropa_ids: [...]}
  *   POST  /api/data-discovery/{id}/ropas              — attach single
  *   DELETE /api/data-discovery/{id}/ropas/{ropa_id}   — detach
@@ -22,17 +22,18 @@ use Illuminate\Http\Request;
  *
  *   GET   /api/dsr/{id}/affected-ropas
  *     Derived: walks DSR.scopes → information_system → ropas
- *     Returns dedup'd ROPA list with which IS triggered the link.
+ *     Returns dedup'd RoPA list with which IS triggered the link.
  */
 class RopaLinkController extends Controller
 {
     // =====================================================================
-    // INFORMATION SYSTEM ↔ ROPA
+    // INFORMATION SYSTEM ↔ RoPA
     // =====================================================================
     public function indexForInformationSystem(Request $request, string $id)
     {
         $user = $request->user();
         $is = InformationSystem::where('org_id', $user->org_id)->findOrFail($id);
+
         return response()->json(['data' => $is->ropas()->select('ropas.id', 'ropas.registration_number', 'ropas.processing_activity', 'ropas.risk_level')->get()]);
     }
 
@@ -46,12 +47,14 @@ class RopaLinkController extends Controller
             'ropa_ids.*' => 'uuid',
         ]);
 
-        // Verify all ROPAs belong to same org
+        // Verify all RoPAs belong to same org
         $valid = Ropa::whereIn('id', $data['ropa_ids'])->where('org_id', $user->org_id)->pluck('id')->all();
 
         // Sync with org_id pivot data
         $syncData = [];
-        foreach ($valid as $rid) $syncData[$rid] = ['org_id' => $user->org_id];
+        foreach ($valid as $rid) {
+            $syncData[$rid] = ['org_id' => $user->org_id];
+        }
         $is->ropas()->sync($syncData);
 
         AuditLog::create([
@@ -62,7 +65,7 @@ class RopaLinkController extends Controller
         ]);
 
         return response()->json([
-            'message' => count($valid) . ' ROPA tersinkron.',
+            'message' => count($valid).' RoPA tersinkron.',
             'data' => $is->ropas()->select('ropas.id', 'ropas.registration_number', 'ropas.processing_activity')->get(),
         ]);
     }
@@ -84,7 +87,8 @@ class RopaLinkController extends Controller
             'action' => 'is.ropa_attach',
             'details' => ['ropa_id' => $data['ropa_id']],
         ]);
-        return response()->json(['message' => 'ROPA ter-link.']);
+
+        return response()->json(['message' => 'RoPA ter-link.']);
     }
 
     public function detachFromInformationSystem(Request $request, string $id, string $ropaId)
@@ -98,16 +102,18 @@ class RopaLinkController extends Controller
             'action' => 'is.ropa_detach',
             'details' => ['ropa_id' => $ropaId],
         ]);
+
         return response()->json(['message' => 'Link dilepas.']);
     }
 
     // =====================================================================
-    // CONSENT COLLECTION ↔ ROPA
+    // CONSENT COLLECTION ↔ RoPA
     // =====================================================================
     public function indexForConsent(Request $request, string $id)
     {
         $user = $request->user();
         $cp = ConsentCollectionPoint::where('org_id', $user->org_id)->findOrFail($id);
+
         return response()->json(['data' => $cp->ropas()->select('ropas.id', 'ropas.registration_number', 'ropas.processing_activity', 'ropas.risk_level')->get()]);
     }
 
@@ -123,7 +129,9 @@ class RopaLinkController extends Controller
 
         $valid = Ropa::whereIn('id', $data['ropa_ids'])->where('org_id', $user->org_id)->pluck('id')->all();
         $syncData = [];
-        foreach ($valid as $rid) $syncData[$rid] = ['org_id' => $user->org_id];
+        foreach ($valid as $rid) {
+            $syncData[$rid] = ['org_id' => $user->org_id];
+        }
         $cp->ropas()->sync($syncData);
 
         AuditLog::create([
@@ -134,13 +142,13 @@ class RopaLinkController extends Controller
         ]);
 
         return response()->json([
-            'message' => count($valid) . ' ROPA tersinkron.',
+            'message' => count($valid).' RoPA tersinkron.',
             'data' => $cp->ropas()->select('ropas.id', 'ropas.registration_number', 'ropas.processing_activity')->get(),
         ]);
     }
 
     // =====================================================================
-    // DSR DERIVED ROPAs (via scope → information_system → ropas)
+    // DSR DERIVED RoPAs (via scope → information_system → ropas)
     // =====================================================================
     public function affectedRopasForDsr(Request $request, string $id)
     {
@@ -150,9 +158,11 @@ class RopaLinkController extends Controller
         $byRopa = [];
         foreach ($dsr->scopes as $scope) {
             $is = $scope->informationSystem;
-            if (!$is) continue;
+            if (! $is) {
+                continue;
+            }
             foreach ($is->ropas as $ropa) {
-                if (!isset($byRopa[$ropa->id])) {
+                if (! isset($byRopa[$ropa->id])) {
                     $byRopa[$ropa->id] = [
                         'ropa_id' => $ropa->id,
                         'registration_number' => $ropa->registration_number,
@@ -175,7 +185,7 @@ class RopaLinkController extends Controller
             'data' => array_values($byRopa),
             'count' => count($byRopa),
             'note' => count($byRopa) === 0
-                ? 'Belum ada ROPA yang ter-link ke Information Systems di scope ini. Link IS ke ROPA via Data Discovery untuk auto-discover.'
+                ? 'Belum ada RoPA yang ter-link ke Information Systems di scope ini. Link IS ke RoPA via Data Discovery untuk auto-discover.'
                 : null,
         ]);
     }

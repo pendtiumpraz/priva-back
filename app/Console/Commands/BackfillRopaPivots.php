@@ -8,7 +8,7 @@ use App\Models\Ropa;
 use Illuminate\Console\Command;
 
 /**
- * One-time backfill: walk existing ROPAs/DPIAs and materialize the pivot tables
+ * One-time backfill: walk existing RoPAs/DPIAs and materialize the pivot tables
  * from their wizard_data fields. Subsequent saves use the auto-sync hook in
  * ModuleCrudController.
  *
@@ -17,6 +17,7 @@ use Illuminate\Console\Command;
 class BackfillRopaPivots extends Command
 {
     protected $signature = 'ropa:backfill-pivots {--dry-run : Print intended writes without persisting}';
+
     protected $description = 'Backfill information_system_ropa + dpia_ropa pivots from existing wizard_data';
 
     public function handle(): int
@@ -34,25 +35,35 @@ class BackfillRopaPivots extends Command
                 $wizard = $ropa->wizard_data ?? [];
                 $section = $wizard['detail_pemrosesan'] ?? [];
                 $raw = $section['sistem_terkait'] ?? null;
-                if (!is_array($raw) || empty($raw)) { $ropaSkipped++; continue; }
+                if (! is_array($raw) || empty($raw)) {
+                    $ropaSkipped++;
+
+                    continue;
+                }
 
                 $ids = collect($raw)
-                    ->map(fn($v) => is_array($v) ? ($v['id'] ?? null) : (is_string($v) ? $v : null))
+                    ->map(fn ($v) => is_array($v) ? ($v['id'] ?? null) : (is_string($v) ? $v : null))
                     ->filter()
                     ->unique()
                     ->values()
                     ->all();
 
                 $valid = InformationSystem::whereIn('id', $ids)->where('org_id', $ropa->org_id)->pluck('id')->all();
-                if (empty($valid)) { $ropaSkipped++; continue; }
+                if (empty($valid)) {
+                    $ropaSkipped++;
 
-                if (!$dry) {
+                    continue;
+                }
+
+                if (! $dry) {
                     $sync = [];
-                    foreach ($valid as $id) $sync[$id] = ['org_id' => $ropa->org_id];
+                    foreach ($valid as $id) {
+                        $sync[$id] = ['org_id' => $ropa->org_id];
+                    }
                     $ropa->informationSystems()->syncWithoutDetaching($sync);
                 }
                 $ropaPivotInserts += count($valid);
-                $this->line("  ROPA {$ropa->registration_number}: " . count($valid) . " IS link" . ($dry ? ' [skipped]' : ''));
+                $this->line("  RoPA {$ropa->registration_number}: ".count($valid).' IS link'.($dry ? ' [skipped]' : ''));
             }
         });
 
@@ -62,26 +73,38 @@ class BackfillRopaPivots extends Command
                 $section = $wizard['koneksi_ropa'] ?? [];
                 $ids = array_filter(array_unique($section['connected_ropas'] ?? []));
                 // include legacy single ropa_id
-                if ($dpia->ropa_id && !in_array($dpia->ropa_id, $ids, true)) $ids[] = $dpia->ropa_id;
+                if ($dpia->ropa_id && ! in_array($dpia->ropa_id, $ids, true)) {
+                    $ids[] = $dpia->ropa_id;
+                }
 
-                if (empty($ids)) { $dpiaSkipped++; continue; }
+                if (empty($ids)) {
+                    $dpiaSkipped++;
+
+                    continue;
+                }
 
                 $valid = Ropa::whereIn('id', $ids)->where('org_id', $dpia->org_id)->pluck('id')->all();
-                if (empty($valid)) { $dpiaSkipped++; continue; }
+                if (empty($valid)) {
+                    $dpiaSkipped++;
 
-                if (!$dry) {
+                    continue;
+                }
+
+                if (! $dry) {
                     $sync = [];
-                    foreach ($valid as $id) $sync[$id] = ['org_id' => $dpia->org_id];
+                    foreach ($valid as $id) {
+                        $sync[$id] = ['org_id' => $dpia->org_id];
+                    }
                     $dpia->ropas()->syncWithoutDetaching($sync);
                 }
                 $dpiaPivotInserts += count($valid);
-                $this->line("  DPIA {$dpia->registration_number}: " . count($valid) . " ROPA link" . ($dry ? ' [skipped]' : ''));
+                $this->line("  DPIA {$dpia->registration_number}: ".count($valid).' RoPA link'.($dry ? ' [skipped]' : ''));
             }
         });
 
         $this->newLine();
-        $this->info("ROPA→IS: {$ropaPivotInserts} pivot rows ({$ropaSkipped} ROPAs skipped — no sistem_terkait)");
-        $this->info("DPIA→ROPA: {$dpiaPivotInserts} pivot rows ({$dpiaSkipped} DPIAs skipped)");
+        $this->info("RoPA→IS: {$ropaPivotInserts} pivot rows ({$ropaSkipped} RoPAs skipped — no sistem_terkait)");
+        $this->info("DPIA→RoPA: {$dpiaPivotInserts} pivot rows ({$dpiaSkipped} DPIAs skipped)");
         $this->info($dry ? 'DRY RUN complete. Re-run without --dry-run to persist.' : 'Backfill complete.');
 
         return self::SUCCESS;

@@ -1,17 +1,17 @@
 <?php
+
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToOrg;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
-use App\Models\User;
 
 class Dpia extends Model
 {
-    use HasUuids, SoftDeletes, BelongsToOrg;
+    use BelongsToOrg, HasUuids, SoftDeletes;
 
     protected $fillable = [
         'org_id', 'regulation_code', 'category_id', 'custom_number', 'registration_number',
@@ -41,7 +41,7 @@ class Dpia extends Model
      */
     public const WIZARD_SECTIONS = [
         1 => ['key' => 'informasi_dpia', 'label' => 'Informasi DPIA'],
-        2 => ['key' => 'koneksi_ropa', 'label' => 'Koneksi ROPA'],
+        2 => ['key' => 'koneksi_ropa', 'label' => 'Koneksi RoPA'],
         3 => ['key' => 'potensi_risiko', 'label' => 'Potensi Risiko'],
     ];
 
@@ -83,8 +83,8 @@ class Dpia extends Model
     }
 
     /**
-     * Many-to-many: 1 DPIA bisa cover banyak ROPA processing activities
-     * (e.g. DPIA "Marketing Stack" cover ROPA outreach + retargeting + lookalike).
+     * Many-to-many: 1 DPIA bisa cover banyak RoPA processing activities
+     * (e.g. DPIA "Marketing Stack" cover RoPA outreach + retargeting + lookalike).
      * Source: dpia.wizard_data.koneksi_ropa.connected_ropas → synced ke pivot via
      * ModuleCrudController::syncDpiaRopas().
      */
@@ -127,38 +127,45 @@ class Dpia extends Model
                 // Guard: kolom mitigation_tracking mungkin belum ada kalau migration
                 // belum run (dev env partial migration). Early return supaya save
                 // tidak gagal karena observer crash.
-                if (!Schema::hasColumn('dpias', 'mitigation_tracking')) return;
+                if (! Schema::hasColumn('dpias', 'mitigation_tracking')) {
+                    return;
+                }
 
                 $oldStatus = $dpia->getOriginal('status');
                 $newStatus = $dpia->status;
 
                 // Trigger hanya saat transition NON-approved → approved
-                if ($newStatus !== 'approved' || $oldStatus === 'approved') return;
+                if ($newStatus !== 'approved' || $oldStatus === 'approved') {
+                    return;
+                }
 
                 // Skip kalau sudah ada mitigation_tracking (jangan override manual edits)
                 $existing = $dpia->mitigation_tracking ?? [];
-                if (!empty($existing)) return;
+                if (! empty($existing)) {
+                    return;
+                }
 
                 $generated = self::buildRtpItemsFromDpia($dpia);
 
-                if (!empty($generated)) {
+                if (! empty($generated)) {
                     // saveQuietly supaya tidak trigger updated event lagi (infinite loop)
                     $dpia->mitigation_tracking = $generated;
                     $dpia->saveQuietly();
 
                     try {
-                        \App\Models\AuditLog::create([
-                            'org_id'    => $dpia->org_id,
-                            'user_id'   => $dpia->approver_id ?? $dpia->created_by,
-                            'module'    => 'dpia',
+                        AuditLog::create([
+                            'org_id' => $dpia->org_id,
+                            'user_id' => $dpia->approver_id ?? $dpia->created_by,
+                            'module' => 'dpia',
                             'record_id' => $dpia->id,
-                            'action'    => 'rtp.auto_generate_on_approve',
-                            'details'   => ['generated_count' => count($generated)],
+                            'action' => 'rtp.auto_generate_on_approve',
+                            'details' => ['generated_count' => count($generated)],
                         ]);
-                    } catch (\Throwable $e) { /* audit log non-critical */ }
+                    } catch (\Throwable $e) { /* audit log non-critical */
+                    }
                 }
             } catch (\Throwable $e) {
-                \Log::warning('RTP auto-generate on DPIA approve failed: ' . $e->getMessage(), [
+                \Log::warning('RTP auto-generate on DPIA approve failed: '.$e->getMessage(), [
                     'dpia_id' => $dpia->id ?? null,
                 ]);
             }
@@ -193,15 +200,16 @@ class Dpia extends Model
         $measures = $dpia->mitigation_measures ?? [];
         $risks = $dpia->risk_assessment ?? [];
 
-        if (!empty($measures)) {
+        if (! empty($measures)) {
             foreach ($measures as $idx => $measure) {
                 $actionText = is_array($measure) ? ($measure['action'] ?? json_encode($measure)) : (string) $measure;
-                $riskEvent = $risks[$idx]['risk_event'] ?? $risks[$idx]['event'] ?? ('Risk event #' . ($idx + 1));
+                $riskEvent = $risks[$idx]['risk_event'] ?? $risks[$idx]['event'] ?? ('Risk event #'.($idx + 1));
                 $category = $risks[$idx]['category'] ?? null;
                 $likelihood = $risks[$idx]['likelihood'] ?? null;
                 $impact = $risks[$idx]['impact'] ?? null;
                 $generated[] = self::buildRtpItem($actionText, $riskEvent, $category, $likelihood, $impact, $now, $actor, 'reduce', $defaultOwnerId);
             }
+
             return $generated;
         }
 
@@ -229,17 +237,19 @@ class Dpia extends Model
                 //   - terminate: hentikan pemrosesan — one-off decision, tidak ongoing
                 // Kalau masuk semua ke RTP, dashboard jadi misleading (overdue count, completion %)
                 $penanganan = $ev['penanganan'] ?? null;
-                if ($penanganan !== 'mitigate') continue;
+                if ($penanganan !== 'mitigate') {
+                    continue;
+                }
 
-                $actionText = trim((string)($ev['notes'] ?? '')) !== ''
+                $actionText = trim((string) ($ev['notes'] ?? '')) !== ''
                     ? $ev['notes']
-                    : 'Mitigasi untuk: ' . ($ev['risk_event'] ?? 'risk event');
+                    : 'Mitigasi untuk: '.($ev['risk_event'] ?? 'risk event');
                 $generated[] = self::buildRtpItem(
-                    actionText: (string)$actionText,
-                    riskEvent: (string)($ev['risk_event'] ?? 'Risk event'),
-                    category: (string)$categoryName,
-                    likelihood: isset($ev['probabilitas']) ? (int)$ev['probabilitas'] : null,
-                    impact: isset($ev['dampak']) ? (int)$ev['dampak'] : null,
+                    actionText: (string) $actionText,
+                    riskEvent: (string) ($ev['risk_event'] ?? 'Risk event'),
+                    category: (string) $categoryName,
+                    likelihood: isset($ev['probabilitas']) ? (int) $ev['probabilitas'] : null,
+                    impact: isset($ev['dampak']) ? (int) $ev['dampak'] : null,
                     now: $now,
                     actor: $actor,
                     treatmentType: 'reduce',  // mitigate → reduce (always, since we filter)
@@ -262,43 +272,44 @@ class Dpia extends Model
         string $treatmentType = 'reduce',
         ?string $ownerUserId = null
     ): array {
-        $score = ($likelihood && $impact) ? ((int)$likelihood * (int)$impact) : null;
+        $score = ($likelihood && $impact) ? ((int) $likelihood * (int) $impact) : null;
+
         return [
-            'id'                 => (string) Str::uuid(),
-            'risk_event'         => mb_substr($riskEvent, 0, 500),
-            'category'           => $category,
-            'treatment_type'     => $treatmentType,
-            'action'             => mb_substr($actionText, 0, 2000),
-            'rationale'          => 'Auto-generated dari DPIA wizard data. Owner default = first PIC (Process Owner). Reassign per action sesuai expertise (IT Sec / Legal / HR / dll).',
-            'owner_user_id'      => $ownerUserId,
-            'priority'           => $score !== null
+            'id' => (string) Str::uuid(),
+            'risk_event' => mb_substr($riskEvent, 0, 500),
+            'category' => $category,
+            'treatment_type' => $treatmentType,
+            'action' => mb_substr($actionText, 0, 2000),
+            'rationale' => 'Auto-generated dari DPIA wizard data. Owner default = first PIC (Process Owner). Reassign per action sesuai expertise (IT Sec / Legal / HR / dll).',
+            'owner_user_id' => $ownerUserId,
+            'priority' => $score !== null
                 ? ($score >= 15 ? 'critical' : ($score >= 10 ? 'high' : 'medium'))
                 : 'medium',
-            'due_date'           => null,
-            'status'             => 'planned',
-            'inherent_likelihood'=> $likelihood,
-            'inherent_impact'    => $impact,
-            'residual_likelihood'=> null,
-            'residual_impact'    => null,
-            'evidence_files'     => [],
-            'notes'              => '',
-            'started_at'         => null,
-            'completed_at'       => null,
-            'verified_at'        => null,
-            'verified_by'        => null,
-            'created_at'         => $now,
-            'updated_at'         => $now,
-            'created_by'         => $actor,
+            'due_date' => null,
+            'status' => 'planned',
+            'inherent_likelihood' => $likelihood,
+            'inherent_impact' => $impact,
+            'residual_likelihood' => null,
+            'residual_impact' => null,
+            'evidence_files' => [],
+            'notes' => '',
+            'started_at' => null,
+            'completed_at' => null,
+            'verified_at' => null,
+            'verified_by' => null,
+            'created_at' => $now,
+            'updated_at' => $now,
+            'created_by' => $actor,
         ];
     }
 
     private static function mapPenangananToTreatmentType(?string $penanganan): string
     {
         return match ($penanganan) {
-            'accept'    => 'accept',
-            'transfer'  => 'transfer',
+            'accept' => 'accept',
+            'transfer' => 'transfer',
             'terminate' => 'avoid',
-            default     => 'reduce',  // mitigate atau null → reduce
+            default => 'reduce',  // mitigate atau null → reduce
         };
     }
 
@@ -318,19 +329,25 @@ class Dpia extends Model
 
         // Try first PIC email
         foreach ($picList as $pic) {
-            $email = trim((string)($pic['email'] ?? ''));
-            if ($email === '') continue;
+            $email = trim((string) ($pic['email'] ?? ''));
+            if ($email === '') {
+                continue;
+            }
             $user = User::where('org_id', $dpia->org_id)
                 ->where('email', $email)
                 ->first();
-            if ($user) return (string) $user->id;
+            if ($user) {
+                return (string) $user->id;
+            }
         }
 
         // Fallback: legacy pic_email (single PIC)
-        $legacyEmail = trim((string)($info['pic_email'] ?? ''));
+        $legacyEmail = trim((string) ($info['pic_email'] ?? ''));
         if ($legacyEmail !== '') {
             $user = User::where('org_id', $dpia->org_id)->where('email', $legacyEmail)->first();
-            if ($user) return (string) $user->id;
+            if ($user) {
+                return (string) $user->id;
+            }
         }
 
         // Final fallback: null (user assigns manually di RTP page)

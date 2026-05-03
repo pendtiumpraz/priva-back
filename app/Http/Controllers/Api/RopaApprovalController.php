@@ -5,10 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Ropa;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 
 /**
- * ROPA DPO approval workflow endpoints.
+ * RoPA DPO approval workflow endpoints.
  *
  * State machine (status column):
  *   draft     → any user with ropa:write can submit()
@@ -19,15 +20,15 @@ use Illuminate\Http\Request;
 class RopaApprovalController extends Controller
 {
     /**
-     * Maker submits a draft ROPA for DPO review.
+     * Maker submits a draft RoPA for DPO review.
      */
     public function submit(Request $request, string $id)
     {
         $user = $request->user();
         $ropa = Ropa::where('org_id', $user->org_id)->findOrFail($id);
 
-        if (!in_array($ropa->status, ['draft', 'revision'], true)) {
-            return response()->json(['error' => "ROPA dengan status '{$ropa->status}' tidak dapat di-submit."], 422);
+        if (! in_array($ropa->status, ['draft', 'revision'], true)) {
+            return response()->json(['error' => "RoPA dengan status '{$ropa->status}' tidak dapat di-submit."], 422);
         }
 
         $ropa->update([
@@ -37,28 +38,28 @@ class RopaApprovalController extends Controller
             'review_notes' => null, // clear previous revision notes
         ]);
 
-        $this->log($ropa, 'submitted', $user, "ROPA di-submit untuk review DPO");
+        $this->log($ropa, 'submitted', $user, 'RoPA di-submit untuk review DPO');
 
         return response()->json([
-            'message' => 'ROPA berhasil di-submit untuk review DPO.',
+            'message' => 'RoPA berhasil di-submit untuk review DPO.',
             'data' => $ropa->fresh(),
         ]);
     }
 
     /**
-     * DPO approves a submitted ROPA.
+     * DPO approves a submitted RoPA.
      */
     public function approve(Request $request, string $id)
     {
         $user = $request->user();
-        if (!$this->isDPO($user)) {
+        if (! $this->isDPO($user)) {
             return response()->json(['error' => 'Hanya DPO yang dapat melakukan approve.'], 403);
         }
 
         $ropa = Ropa::where('org_id', $user->org_id)->findOrFail($id);
 
         if ($ropa->status !== 'waiting') {
-            return response()->json(['error' => "ROPA harus dalam status 'waiting' untuk di-approve, saat ini '{$ropa->status}'."], 422);
+            return response()->json(['error' => "RoPA harus dalam status 'waiting' untuk di-approve, saat ini '{$ropa->status}'."], 422);
         }
 
         $ropa->update([
@@ -68,32 +69,34 @@ class RopaApprovalController extends Controller
             'review_notes' => $request->input('notes'),
         ]);
 
-        $this->log($ropa, 'approved', $user, 'ROPA disetujui DPO' . ($request->input('notes') ? " — catatan: {$request->input('notes')}" : ''));
+        $this->log($ropa, 'approved', $user, 'RoPA disetujui DPO'.($request->input('notes') ? " — catatan: {$request->input('notes')}" : ''));
 
-        // Notify creator + assignees that the ROPA was approved.
+        // Notify creator + assignees that the RoPA was approved.
         try {
             $targets = array_filter(array_merge(
                 [$ropa->created_by],
                 is_array($ropa->assignees) ? $ropa->assignees : []
             ));
             foreach (array_unique($targets) as $uid) {
-                \App\Services\NotificationService::dispatch(
+                NotificationService::dispatch(
                     kind: 'info',
                     severity: 'low',
                     module: 'ropa',
                     type: 'ropa.approved',
-                    recipient: 'user:' . $uid,
+                    recipient: 'user:'.$uid,
                     orgId: $ropa->org_id,
-                    title: "✅ ROPA {$ropa->registration_number} disetujui",
-                    body: 'Disetujui DPO' . ($request->input('notes') ? " — catatan: {$request->input('notes')}" : ''),
+                    title: "✅ RoPA {$ropa->registration_number} disetujui",
+                    body: 'Disetujui DPO'.($request->input('notes') ? " — catatan: {$request->input('notes')}" : ''),
                     actionUrl: "/ropa/{$ropa->id}",
                     metadata: ['record_id' => $ropa->id]
                 );
             }
-        } catch (\Throwable $e) { \Log::warning('ROPA approved notif failed: ' . $e->getMessage()); }
+        } catch (\Throwable $e) {
+            \Log::warning('RoPA approved notif failed: '.$e->getMessage());
+        }
 
         return response()->json([
-            'message' => 'ROPA disetujui.',
+            'message' => 'RoPA disetujui.',
             'data' => $ropa->fresh(),
         ]);
     }
@@ -108,14 +111,14 @@ class RopaApprovalController extends Controller
         ]);
 
         $user = $request->user();
-        if (!$this->isDPO($user)) {
-            return response()->json(['error' => 'Hanya DPO yang dapat menolak ROPA.'], 403);
+        if (! $this->isDPO($user)) {
+            return response()->json(['error' => 'Hanya DPO yang dapat menolak RoPA.'], 403);
         }
 
         $ropa = Ropa::where('org_id', $user->org_id)->findOrFail($id);
 
-        if (!in_array($ropa->status, ['waiting', 'approved'], true)) {
-            return response()->json(['error' => "ROPA dengan status '{$ropa->status}' tidak bisa direject."], 422);
+        if (! in_array($ropa->status, ['waiting', 'approved'], true)) {
+            return response()->json(['error' => "RoPA dengan status '{$ropa->status}' tidak bisa direject."], 422);
         }
 
         $ropa->update([
@@ -125,40 +128,45 @@ class RopaApprovalController extends Controller
             'approved_by' => null,
         ]);
 
-        $this->log($ropa, 'rejected', $user, "ROPA di-reject dengan catatan: {$request->input('notes')}");
+        $this->log($ropa, 'rejected', $user, "RoPA di-reject dengan catatan: {$request->input('notes')}");
 
-        // Notify creator + assignees that the ROPA was rejected and needs revision.
+        // Notify creator + assignees that the RoPA was rejected and needs revision.
         try {
             $targets = array_filter(array_merge(
                 [$ropa->created_by],
                 is_array($ropa->assignees) ? $ropa->assignees : []
             ));
             foreach (array_unique($targets) as $uid) {
-                \App\Services\NotificationService::dispatch(
+                NotificationService::dispatch(
                     kind: 'warning',
                     severity: 'high',
                     module: 'ropa',
                     type: 'ropa.rejected',
-                    recipient: 'user:' . $uid,
+                    recipient: 'user:'.$uid,
                     orgId: $ropa->org_id,
-                    title: "❌ ROPA {$ropa->registration_number} perlu revisi",
+                    title: "❌ RoPA {$ropa->registration_number} perlu revisi",
                     body: "DPO reject dengan catatan: {$request->input('notes')}",
                     actionUrl: "/ropa/{$ropa->id}",
                     metadata: ['record_id' => $ropa->id, 'notes' => $request->input('notes')]
                 );
             }
-        } catch (\Throwable $e) { \Log::warning('ROPA rejected notif failed: ' . $e->getMessage()); }
+        } catch (\Throwable $e) {
+            \Log::warning('RoPA rejected notif failed: '.$e->getMessage());
+        }
 
         return response()->json([
-            'message' => 'ROPA di-reject; dikembalikan ke maker untuk revisi.',
+            'message' => 'RoPA di-reject; dikembalikan ke maker untuk revisi.',
             'data' => $ropa->fresh(),
         ]);
     }
 
     private function isDPO($user): bool
     {
-        if (in_array($user->role, ['root', 'superadmin', 'dpo'], true)) return true;
+        if (in_array($user->role, ['root', 'superadmin', 'dpo'], true)) {
+            return true;
+        }
         $tenantRoleName = optional($user->tenantRole)->name ?? '';
+
         return str_contains(strtolower($tenantRoleName), 'dpo');
     }
 
@@ -176,7 +184,7 @@ class RopaApprovalController extends Controller
                 'changes' => ['status' => $ropa->status, 'detail' => $detail],
             ]);
         } catch (\Throwable $e) {
-            \Log::warning('Ropa approval audit log failed: ' . $e->getMessage());
+            \Log::warning('Ropa approval audit log failed: '.$e->getMessage());
         }
     }
 }

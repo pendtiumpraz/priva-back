@@ -149,7 +149,7 @@ class ConsentCollectionPoint extends Model
     }
 
     /**
-     * Many-to-many: 1 collection point (banner) bisa terkait banyak ROPA
+     * Many-to-many: 1 collection point (banner) bisa terkait banyak RoPA
      * (cookie banner cover analytics + marketing + cross-border transfer activity).
      */
     public function ropas()

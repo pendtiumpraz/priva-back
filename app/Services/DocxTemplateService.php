@@ -3,11 +3,12 @@
 namespace App\Services;
 
 use App\Models\DocumentTemplate;
-use App\Models\Organization;
-use App\Models\Ropa;
 use App\Models\Dpia;
 use App\Models\GapAssessment;
+use App\Models\Organization;
+use App\Models\Ropa;
 use App\Models\User;
+use Carbon\Carbon;
 use PhpOffice\PhpWord\TemplateProcessor;
 
 /**
@@ -31,7 +32,7 @@ class DocxTemplateService
     public function __construct(private TenantStorageService $storage) {}
 
     // ================================================================
-    // ROPA
+    // RoPA
     // ================================================================
 
     public function renderRopa(Ropa $ropa, DocumentTemplate $tpl, Organization $org): string
@@ -43,12 +44,15 @@ class DocxTemplateService
         try {
             $proc = new TemplateProcessor($cleaned);
             $this->fillRopa($proc, $ropa, $org);
-            $out = tempnam(sys_get_temp_dir(), 'ropa_') . '.docx';
+            $out = tempnam(sys_get_temp_dir(), 'ropa_').'.docx';
             $proc->saveAs($out);
             $this->scrubResidualPlaceholders($out);
+
             return $out;
         } finally {
-            if ($cleaned !== $localTpl && is_file($cleaned)) @unlink($cleaned);
+            if ($cleaned !== $localTpl && is_file($cleaned)) {
+                @unlink($cleaned);
+            }
             $cleanup();
         }
     }
@@ -145,7 +149,7 @@ class DocxTemplateService
                 $proc->setValue($k, $this->safe($v));
             } catch (\Throwable $e) {
                 // Defensive: one bad placeholder shouldn't kill the whole export.
-                \Log::debug("setValue {$k} skipped: " . $e->getMessage());
+                \Log::debug("setValue {$k} skipped: ".$e->getMessage());
             }
         }
 
@@ -202,7 +206,7 @@ class DocxTemplateService
         ));
         $this->cloneBlockSafe($proc, 'profil', $this->blocksSimple(
             is_array($info['pemrofilan'] ?? null)
-                ? array_filter($info['pemrofilan'], fn($v) => strtolower(trim((string)$v)) !== 'not applicable')
+                ? array_filter($info['pemrofilan'], fn ($v) => strtolower(trim((string) $v)) !== 'not applicable')
                 : []
         ));
 
@@ -212,7 +216,7 @@ class DocxTemplateService
         $this->cloneBlockSafe($proc, 'jenis_spesifik', $this->blocksSimple($peng['jenis_data_spesifik'] ?? [], 'jenis_spesifik_name'));
         $this->cloneBlockSafe($proc, 'jenis_pii', $this->blocksSimple($peng['jenis_data_pii'] ?? [], 'jenis_pii_name'));
         $this->cloneBlockSafe($proc, 'sumber', $this->blocksSimple(
-            !empty($peng['sumber_data']) ? [$peng['sumber_data']] : [], 'sumber_name'
+            ! empty($peng['sumber_data']) ? [$peng['sumber_data']] : [], 'sumber_name'
         ));
 
         $this->cloneBlockSafe($proc, 'kategori_pihak', $this->blocksSimple($peny['kategori_pihak'] ?? [], 'kategori_pihak_name'));
@@ -242,8 +246,14 @@ class DocxTemplateService
         // that leaked outside a block (e.g. second occurrence of a block that
         // had unusual structure) gets blanked so the output never shows raw
         // placeholder text.
-        try { $proc->setValue('sub_question', ''); } catch (\Throwable $e) {}
-        try { $proc->setValue('answer_sub_question', ''); } catch (\Throwable $e) {}
+        try {
+            $proc->setValue('sub_question', '');
+        } catch (\Throwable $e) {
+        }
+        try {
+            $proc->setValue('answer_sub_question', '');
+        } catch (\Throwable $e) {
+        }
     }
 
     // ================================================================
@@ -259,12 +269,15 @@ class DocxTemplateService
         try {
             $proc = new TemplateProcessor($cleaned);
             $this->fillDpia($proc, $dpia, $org);
-            $out = tempnam(sys_get_temp_dir(), 'dpia_') . '.docx';
+            $out = tempnam(sys_get_temp_dir(), 'dpia_').'.docx';
             $proc->saveAs($out);
             $this->scrubResidualPlaceholders($out);
+
             return $out;
         } finally {
-            if ($cleaned !== $localTpl && is_file($cleaned)) @unlink($cleaned);
+            if ($cleaned !== $localTpl && is_file($cleaned)) {
+                @unlink($cleaned);
+            }
             $cleanup();
         }
     }
@@ -300,7 +313,7 @@ class DocxTemplateService
             try {
                 $proc->setValue($k, $this->safe($v));
             } catch (\Throwable $e) {
-                \Log::debug("setValue {$k} skipped: " . $e->getMessage());
+                \Log::debug("setValue {$k} skipped: ".$e->getMessage());
             }
         }
 
@@ -321,7 +334,7 @@ class DocxTemplateService
         for ($impact = 1; $impact <= 5; $impact++) {
             for ($prob = 1; $prob <= 5; $prob++) {
                 $count = $matrix[$prob][$impact] ?? 0;
-                $proc->setValue("{$impact}_{$prob}", $count > 0 ? (string)$count : '');
+                $proc->setValue("{$impact}_{$prob}", $count > 0 ? (string) $count : '');
             }
         }
 
@@ -347,10 +360,15 @@ class DocxTemplateService
         try {
             $proc = new TemplateProcessor($localTpl);
             $d = $this->gapPlaceholders($gap, $org);
-            foreach ($d['scalars'] as $k => $v) $proc->setValue($k, $this->safe($v));
-            foreach ($d['lists'] as $k => $items) $proc->setValue($k, implode(', ', array_map([$this, 'safe'], $items)));
-            $out = tempnam(sys_get_temp_dir(), 'gap_') . '.docx';
+            foreach ($d['scalars'] as $k => $v) {
+                $proc->setValue($k, $this->safe($v));
+            }
+            foreach ($d['lists'] as $k => $items) {
+                $proc->setValue($k, implode(', ', array_map([$this, 'safe'], $items)));
+            }
+            $out = tempnam(sys_get_temp_dir(), 'gap_').'.docx';
             $proc->saveAs($out);
+
             return $out;
         } finally {
             $cleanup();
@@ -368,7 +386,7 @@ class DocxTemplateService
                 'scalars' => [
                     'name' => 'Nama aktivitas pemrosesan',
                     'organization_name' => 'Nama organisasi',
-                    'ropa_number' => 'Nomor ROPA (ROPA-YYYY-NNN)',
+                    'ropa_number' => 'Nomor RoPA (ROPA-YYYY-NNN)',
                     'division' => 'Divisi', 'work_unit' => 'Unit kerja', 'entity' => 'Entitas',
                     'description' => 'Deskripsi singkat',
                     'category' => 'Kategori perusahaan (Pengendali/Pemroses/Joint)',
@@ -411,8 +429,8 @@ class DocxTemplateService
                     'registration_number' => 'Nomor DPIA',
                     'organization_name' => 'Nama organisasi',
                     'dpia_number' => 'Nomor DPIA',
-                    'count_ropa' => 'Jumlah ROPA terhubung',
-                    'ropa_connections' => 'Daftar ROPA terhubung (comma)',
+                    'count_ropa' => 'Jumlah RoPA terhubung',
+                    'ropa_connections' => 'Daftar RoPA terhubung (comma)',
                 ],
                 'rows' => [
                     'dpo_no' => 'Table DPO: ${dpo_no}, ${name}, ${email}, ${phone_number}',
@@ -433,18 +451,19 @@ class DocxTemplateService
     private function buildDpoRows(?Ropa $ropa, ?Dpia $dpia = null, ?Organization $org = null): array
     {
         $list = [];
-        if ($ropa) $list = $ropa->dpo_list ?? [];
-        elseif ($dpia && $org) {
+        if ($ropa) {
+            $list = $ropa->dpo_list ?? [];
+        } elseif ($dpia && $org) {
             // DPIA: pull DPO users from the org; wizard_data doesn't track DPOs directly
             $list = User::where('org_id', $org->id)->where('role', 'dpo')
                 ->get(['id', 'name', 'email', 'phone'])
-                ->map(fn($u) => ['name' => $u->name, 'email' => $u->email, 'phone' => $u->phone ?? ''])
+                ->map(fn ($u) => ['name' => $u->name, 'email' => $u->email, 'phone' => $u->phone ?? ''])
                 ->toArray();
         }
         $rows = [];
         foreach ($list as $i => $d) {
             $rows[] = [
-                'dpo_no' => (string)($i + 1),
+                'dpo_no' => (string) ($i + 1),
                 'dpo_Nama' => $this->safe($d['name'] ?? ''),
                 'dpo_Email' => $this->safe($d['email'] ?? ''),
                 'dpo_Phone' => $this->safe($d['phone'] ?? ''),
@@ -454,6 +473,7 @@ class DocxTemplateService
                 'phone_number' => $this->safe($d['phone'] ?? ''),
             ];
         }
+
         return $rows;
     }
 
@@ -462,7 +482,7 @@ class DocxTemplateService
         $rows = [];
         foreach ($ropa->pic_list ?? [] as $i => $p) {
             $rows[] = [
-                'pic_no' => (string)($i + 1),
+                'pic_no' => (string) ($i + 1),
                 'pic_Nama' => $this->safe($p['name'] ?? ''),
                 'pic_Jabatan' => $this->safe($p['jabatan'] ?? ''),
                 'pic_Nomor Induk Karyawan' => $this->safe($p['nik'] ?? $p['employee_id'] ?? ''),
@@ -470,20 +490,21 @@ class DocxTemplateService
                 'pic_Email' => $this->safe($p['email'] ?? ''),
             ];
         }
+
         return $rows;
     }
 
     private function buildDpiaPicRows(Dpia $dpia, Organization $org): array
     {
         // DPIA doesn't have a dedicated PIC list in wizard_data; fall back to
-        // the ROPA it connects to OR to admin users on the org.
+        // the RoPA it connects to OR to admin users on the org.
         $source = $dpia->ropa?->pic_list ?? [];
         if (empty($source)) {
             $source = User::where('org_id', $org->id)
                 ->whereIn('role', ['admin', 'dpo', 'maker'])
                 ->limit(3)
                 ->get(['name', 'email', 'phone', 'position'])
-                ->map(fn($u) => [
+                ->map(fn ($u) => [
                     'name' => $u->name, 'email' => $u->email,
                     'phone' => $u->phone ?? '', 'jabatan' => $u->position ?? '',
                 ])
@@ -493,7 +514,7 @@ class DocxTemplateService
         $rows = [];
         foreach ($source as $i => $p) {
             $rows[] = [
-                'pic_no' => (string)($i + 1),
+                'pic_no' => (string) ($i + 1),
                 'name' => $this->safe($p['name'] ?? ''),
                 'email' => $this->safe($p['email'] ?? ''),
                 'phone_number' => $this->safe($p['phone'] ?? ''),
@@ -501,6 +522,7 @@ class DocxTemplateService
                 'work_unit' => $this->safe($p['divisi'] ?? $p['unit_bisnis'] ?? ''),
             ];
         }
+
         return $rows;
     }
 
@@ -509,26 +531,27 @@ class DocxTemplateService
         $rows = [];
         foreach ($ropa->sistem_list ?? [] as $i => $s) {
             $rows[] = [
-                'sisfo_no' => (string)($i + 1),
+                'sisfo_no' => (string) ($i + 1),
                 'sisfo_Nama Sistem Informasi' => $this->safe($s['name'] ?? ''),
                 'sisfo_Lokasi data disimpan' => $this->safe($s['lokasi'] ?? 'Indonesia'),
                 'sisfo_Lokasi data pribadi digunakan' => $this->safe($s['lokasi'] ?? 'Indonesia'),
                 'sisfo_Sumber Data (DB)' => $this->safe($s['source_type'] ?? '-'),
             ];
         }
+
         return $rows;
     }
 
     private function buildThirdPartyRows(array $peny): array
     {
         $third = $peny['third_parties'] ?? [];
-        if (empty($third) && !empty($peny['nama_pihak_ketiga'])) {
+        if (empty($third) && ! empty($peny['nama_pihak_ketiga'])) {
             $third = [['nama' => $peny['nama_pihak_ketiga']]];
         }
         $rows = [];
         foreach ($third as $i => $t) {
             $rows[] = [
-                'third_no' => (string)($i + 1),
+                'third_no' => (string) ($i + 1),
                 'third_Nama Entitas' => $this->safe($t['nama'] ?? $t['name'] ?? ''),
                 'third_Alamat Kantor' => $this->safe($t['alamat'] ?? ''),
                 'third_Nama PIC' => $this->safe($t['pic_name'] ?? ''),
@@ -536,6 +559,7 @@ class DocxTemplateService
                 'third_Telp PIC' => $this->safe($t['pic_phone'] ?? ''),
             ];
         }
+
         return $rows;
     }
 
@@ -544,13 +568,14 @@ class DocxTemplateService
         $rows = [];
         foreach ($kirim['penerima_internal_list'] ?? [] as $i => $r) {
             $rows[] = [
-                'internal_no' => (string)($i + 1),
+                'internal_no' => (string) ($i + 1),
                 'internal_Nama Divisi' => $this->safe($r['divisi'] ?? ''),
                 'internal_Nama PIC' => $this->safe($r['pic_name'] ?? ''),
                 'internal_Email PIC' => $this->safe($r['pic_email'] ?? ''),
                 'internal_No Telpon PIC' => $this->safe($r['pic_phone'] ?? ''),
             ];
         }
+
         return $rows;
     }
 
@@ -559,7 +584,7 @@ class DocxTemplateService
         $rows = [];
         foreach ($kirim['penerima_eksternal_list'] ?? $kirim['penerima'] ?? [] as $i => $r) {
             $rows[] = [
-                'eksternal_no' => (string)($i + 1),
+                'eksternal_no' => (string) ($i + 1),
                 'eksternal_Nama Organisasi' => $this->safe($r['nama'] ?? $r['name'] ?? ''),
                 'eksternal_Alamat' => $this->safe($r['alamat'] ?? ''),
                 'eksternal_Nama PIC' => $this->safe($r['pic_name'] ?? ''),
@@ -568,6 +593,7 @@ class DocxTemplateService
                 'eksternal_Sistem Informasi yang digunakan' => $this->safe($r['sistem'] ?? ''),
             ];
         }
+
         return $rows;
     }
 
@@ -576,12 +602,17 @@ class DocxTemplateService
         // risk_assessment.potensi_risiko → bucket by dampak × probabilitas.
         $matrix = [];
         foreach ($risk as $cat => $row) {
-            if (!is_array($row)) continue;
+            if (! is_array($row)) {
+                continue;
+            }
             $d = (int) ($row['dampak'] ?? 0);
             $p = (int) ($row['probabilitas'] ?? 0);
-            if ($d < 1 || $d > 5 || $p < 1 || $p > 5) continue;
+            if ($d < 1 || $d > 5 || $p < 1 || $p > 5) {
+                continue;
+            }
             $matrix[$p][$d] = ($matrix[$p][$d] ?? 0) + 1;
         }
+
         return $matrix;
     }
 
@@ -589,9 +620,11 @@ class DocxTemplateService
     {
         $blocks = [];
         foreach ($risk as $cat => $row) {
-            if (!is_array($row)) continue;
-            $dampak = (int)($row['dampak'] ?? 0);
-            $prob = (int)($row['probabilitas'] ?? 0);
+            if (! is_array($row)) {
+                continue;
+            }
+            $dampak = (int) ($row['dampak'] ?? 0);
+            $prob = (int) ($row['probabilitas'] ?? 0);
             $inherent = $dampak * $prob;
             $blocks[] = [
                 'keyword' => $this->safe($cat),
@@ -600,16 +633,17 @@ class DocxTemplateService
                 'text' => $this->safe($row['description'] ?? ''),
                 'risk_number' => '1',
                 'risk_event' => $this->safe($row['risk_event'] ?? $cat),
-                'a' => (string)$dampak,
-                'b' => (string)$prob,
-                'c' => (string)$inherent,
+                'a' => (string) $dampak,
+                'b' => (string) $prob,
+                'c' => (string) $inherent,
                 'd' => $this->safe($row['kontrol'] ?? '-'),
-                'e' => (string)($row['residual'] ?? $inherent),
+                'e' => (string) ($row['residual'] ?? $inherent),
                 'f' => $this->safe($row['penanganan'] ?? '-'),
                 'description' => $this->safe($row['uraian_dampak'] ?? ''),
                 'recommendation' => $this->safe($row['mitigasi'] ?? $row['recommendation'] ?? ''),
             ];
         }
+
         return $blocks;
     }
 
@@ -619,34 +653,43 @@ class DocxTemplateService
 
     private function blocksSimple(array $items, ?string $nameField = null): array
     {
-        $items = array_values(array_filter($items, fn($v) => trim((string)$v) !== ''));
+        $items = array_values(array_filter($items, fn ($v) => trim((string) $v) !== ''));
         $blocks = [];
         foreach ($items as $item) {
             $block = ['sub_question' => '', 'answer_sub_question' => ''];
-            if ($nameField) $block[$nameField] = $this->safe($item);
+            if ($nameField) {
+                $block[$nameField] = $this->safe($item);
+            }
             $blocks[] = $block;
         }
+
         return $blocks;
     }
 
     private function blocksWithSub(array $items, ?string $nameField, ?string $subAnswer): array
     {
-        $items = array_values(array_filter($items, fn($v) => $v !== null && trim((string)$v) !== ''));
+        $items = array_values(array_filter($items, fn ($v) => $v !== null && trim((string) $v) !== ''));
         $blocks = [];
         foreach ($items as $item) {
             $block = [
                 'sub_question' => $subAnswer ? 'Keterangan' : '',
                 'answer_sub_question' => $this->safe($subAnswer ?? ''),
             ];
-            if ($nameField) $block[$nameField] = $this->safe($item);
+            if ($nameField) {
+                $block[$nameField] = $this->safe($item);
+            }
             $blocks[] = $block;
         }
+
         return $blocks;
     }
 
     private function blockSubQuestion(?string $label, ?string $answer): array
     {
-        if (!$label || !$answer) return [];
+        if (! $label || ! $answer) {
+            return [];
+        }
+
         return [[
             'sub_question' => $this->safe($label),
             'answer_sub_question' => $this->safe($answer),
@@ -674,12 +717,15 @@ class DocxTemplateService
             try {
                 $proc->cloneRowAndSetValues($marker, $rows);
             } catch (\Throwable $e) {
-                \Log::debug("cloneRow {$marker} pass {$pass} skipped: " . $e->getMessage());
+                \Log::debug("cloneRow {$marker} pass {$pass} skipped: ".$e->getMessage());
+
                 return;
             }
             // Stop when the placeholder is no longer present.
             $remaining = $proc->getVariables();
-            if (!in_array($marker, $remaining, true)) return;
+            if (! in_array($marker, $remaining, true)) {
+                return;
+            }
         }
     }
 
@@ -704,21 +750,27 @@ class DocxTemplateService
                     $proc->cloneBlock($block, count($rows), true, false, array_values($rows));
                 }
             } catch (\Throwable $e) {
-                \Log::debug("cloneBlock {$block} pass {$pass} error: " . $e->getMessage());
+                \Log::debug("cloneBlock {$block} pass {$pass} error: ".$e->getMessage());
             }
             $remaining = $proc->getVariables();
-            if (!in_array($block, $remaining, true)) break;
+            if (! in_array($block, $remaining, true)) {
+                break;
+            }
         }
 
         // If native cloneBlock didn't eat the fence, do flexible replacement
         // directly on the tempDocumentMainPart. Runs until no fence remains
         // (handles the duplicate-section case too).
         $remaining = $proc->getVariables();
-        if (in_array($block, $remaining, true) || in_array('/' . $block, $remaining, true)) {
+        if (in_array($block, $remaining, true) || in_array('/'.$block, $remaining, true)) {
             for ($pass = 0; $pass < 10; $pass++) {
-                if (!$this->flexibleCloneBlock($proc, $block, $rows)) break;
+                if (! $this->flexibleCloneBlock($proc, $block, $rows)) {
+                    break;
+                }
                 $remaining = $proc->getVariables();
-                if (!in_array($block, $remaining, true) && !in_array('/' . $block, $remaining, true)) break;
+                if (! in_array($block, $remaining, true) && ! in_array('/'.$block, $remaining, true)) {
+                    break;
+                }
             }
         }
     }
@@ -740,13 +792,17 @@ class DocxTemplateService
         $prop->setAccessible(true);
         $xml = $prop->getValue($proc);
 
-        $openStr = '${' . $block . '}';
-        $closeStr = '${/' . $block . '}';
+        $openStr = '${'.$block.'}';
+        $closeStr = '${/'.$block.'}';
 
         $openPos = strpos($xml, $openStr);
-        if ($openPos === false) return false;
+        if ($openPos === false) {
+            return false;
+        }
         $closePos = strpos($xml, $closeStr, $openPos + strlen($openStr));
-        if ($closePos === false) return false;
+        if ($closePos === false) {
+            return false;
+        }
 
         // Body text WITHOUT fences. We need to remove any `<w:t>` fragments
         // carrying just the fence and collapse surrounding whitespace-only
@@ -766,7 +822,7 @@ class DocxTemplateService
                 if (is_array($row)) {
                     foreach ($row as $field => $value) {
                         // Replace `${field}` with the value everywhere in the copy.
-                        $copy = str_replace('${' . $field . '}', $this->safe((string) $value), $copy);
+                        $copy = str_replace('${'.$field.'}', $this->safe((string) $value), $copy);
                     }
                 }
                 $copies[] = $copy;
@@ -775,8 +831,9 @@ class DocxTemplateService
         }
 
         // Swap `fence + body + fence` with the replacement.
-        $patched = substr($xml, 0, $openPos) . $replacement . substr($xml, $closePos + strlen($closeStr));
+        $patched = substr($xml, 0, $openPos).$replacement.substr($xml, $closePos + strlen($closeStr));
         $prop->setValue($proc, $patched);
+
         return true;
     }
 
@@ -790,24 +847,29 @@ class DocxTemplateService
         $compliant = $partial = $non = 0;
         foreach ($answers as $a) {
             $lvl = is_array($a) ? ($a['level'] ?? null) : null;
-            if ($lvl === 'compliant') $compliant++;
-            elseif ($lvl === 'partial') $partial++;
-            elseif ($lvl === 'non_compliant' || $lvl === 'noncompliant') $non++;
+            if ($lvl === 'compliant') {
+                $compliant++;
+            } elseif ($lvl === 'partial') {
+                $partial++;
+            } elseif ($lvl === 'non_compliant' || $lvl === 'noncompliant') {
+                $non++;
+            }
         }
+
         return [
             'scalars' => [
                 'version' => $g->version ?? '',
-                'overall_score' => (string)($g->overall_score ?? ''),
+                'overall_score' => (string) ($g->overall_score ?? ''),
                 'maturity_level' => $g->maturity_level ?? '',
                 'assessment_date' => optional($g->assessment_date)->isoFormat('D MMMM Y') ?? '',
                 'status' => $g->status ?? '',
                 'org_name' => $org->name ?? '',
                 'today' => now()->locale('id')->isoFormat('D MMMM Y'),
                 'assessor_name' => $g->assessor_name ?? optional($g->creator)->name ?? '',
-                'total_questions' => (string)count($answers),
-                'compliant_count' => (string)$compliant,
-                'partial_count' => (string)$partial,
-                'noncompliant_count' => (string)$non,
+                'total_questions' => (string) count($answers),
+                'compliant_count' => (string) $compliant,
+                'partial_count' => (string) $partial,
+                'noncompliant_count' => (string) $non,
             ],
             'lists' => [
                 'categories' => is_array($g->categories ?? null) ? $g->categories : [],
@@ -826,6 +888,7 @@ class DocxTemplateService
         if (empty($map[$kind]['path'])) {
             throw new \RuntimeException("Template DOCX untuk {$kind} belum di-upload.");
         }
+
         return $map[$kind]['path'];
     }
 
@@ -852,15 +915,19 @@ class DocxTemplateService
     private function scrubResidualPlaceholders(string $docxPath): void
     {
         try {
-            $zip = new \ZipArchive();
-            if ($zip->open($docxPath) !== true) return;
+            $zip = new \ZipArchive;
+            if ($zip->open($docxPath) !== true) {
+                return;
+            }
 
             $targets = ['word/document.xml', 'word/footer1.xml', 'word/footer2.xml',
-                        'word/footer3.xml', 'word/header1.xml', 'word/header2.xml',
-                        'word/header3.xml'];
+                'word/footer3.xml', 'word/header1.xml', 'word/header2.xml',
+                'word/header3.xml'];
             foreach ($targets as $part) {
                 $xml = $zip->getFromName($part);
-                if ($xml === false) continue;
+                if ($xml === false) {
+                    continue;
+                }
 
                 // Only operate on <w:t> text content so we never corrupt markup.
                 $patched = preg_replace_callback(
@@ -870,8 +937,11 @@ class DocxTemplateService
                         $text = $m[2];
                         // Drop every `${...}` surviving placeholder from the text.
                         $cleaned = preg_replace('/\$\{\/?[^${}]*\}/', '', $text);
-                        if ($cleaned === $text) return $m[0];
-                        return '<w:t' . $attrs . '>' . $cleaned . '</w:t>';
+                        if ($cleaned === $text) {
+                            return $m[0];
+                        }
+
+                        return '<w:t'.$attrs.'>'.$cleaned.'</w:t>';
                     },
                     $xml
                 );
@@ -881,37 +951,44 @@ class DocxTemplateService
             }
             $zip->close();
         } catch (\Throwable $e) {
-            \Log::warning('scrubResidualPlaceholders failed: ' . $e->getMessage());
+            \Log::warning('scrubResidualPlaceholders failed: '.$e->getMessage());
         }
     }
 
     private function stripSpellcheckFragments(string $sourcePath): string
     {
         try {
-            $cleaned = tempnam(sys_get_temp_dir(), 'docx_clean_') . '.docx';
-            if (!copy($sourcePath, $cleaned)) return $sourcePath;
+            $cleaned = tempnam(sys_get_temp_dir(), 'docx_clean_').'.docx';
+            if (! copy($sourcePath, $cleaned)) {
+                return $sourcePath;
+            }
 
-            $zip = new \ZipArchive();
+            $zip = new \ZipArchive;
             if ($zip->open($cleaned) !== true) {
                 @unlink($cleaned);
+
                 return $sourcePath;
             }
 
             $targets = ['word/document.xml', 'word/footer1.xml', 'word/footer2.xml',
-                        'word/footer3.xml', 'word/header1.xml', 'word/header2.xml',
-                        'word/header3.xml'];
+                'word/footer3.xml', 'word/header1.xml', 'word/header2.xml',
+                'word/header3.xml'];
             foreach ($targets as $part) {
                 $xml = $zip->getFromName($part);
-                if ($xml === false) continue;
+                if ($xml === false) {
+                    continue;
+                }
                 $patched = $this->cleanTemplateXml($xml);
                 if ($patched !== $xml) {
                     $zip->addFromString($part, $patched);
                 }
             }
             $zip->close();
+
             return $cleaned;
         } catch (\Throwable $e) {
-            \Log::warning('stripSpellcheckFragments failed, using original: ' . $e->getMessage());
+            \Log::warning('stripSpellcheckFragments failed, using original: '.$e->getMessage());
+
             return $sourcePath;
         }
     }
@@ -962,7 +1039,8 @@ class DocxTemplateService
                     // Unrecognizable — leave original fragment in place.
                     return $m[0];
                 }
-                return '<w:r>' . $rPr . '<w:t xml:space="preserve">${' . $placeholderName . '}</w:t></w:r>';
+
+                return '<w:r>'.$rPr.'<w:t xml:space="preserve">${'.$placeholderName.'}</w:t></w:r>';
             },
             $xml
         ) ?? $xml;
@@ -974,7 +1052,7 @@ class DocxTemplateService
         $xml = preg_replace_callback(
             '#<w:t(?![^>]*xml:space)([^>]*)>(\$\{[^${}]+\})</w:t>#',
             function ($m) {
-                return '<w:t xml:space="preserve"' . $m[1] . '>' . $m[2] . '</w:t>';
+                return '<w:t xml:space="preserve"'.$m[1].'>'.$m[2].'</w:t>';
             },
             $xml
         ) ?? $xml;
@@ -985,20 +1063,26 @@ class DocxTemplateService
     private function formatList($v, string $fallback = '-'): string
     {
         if (is_array($v)) {
-            $v = array_values(array_filter($v, fn($x) => trim((string)$x) !== ''));
+            $v = array_values(array_filter($v, fn ($x) => trim((string) $x) !== ''));
+
             return $v ? implode(', ', $v) : $fallback;
         }
-        if (is_string($v) && trim($v) !== '') return $v;
+        if (is_string($v) && trim($v) !== '') {
+            return $v;
+        }
+
         return $fallback;
     }
 
     private function formatDate($v): string
     {
-        if (!$v) return '-';
+        if (! $v) {
+            return '-';
+        }
         try {
-            return \Carbon\Carbon::parse($v)->locale('id')->isoFormat('D MMMM Y');
+            return Carbon::parse($v)->locale('id')->isoFormat('D MMMM Y');
         } catch (\Throwable $e) {
-            return (string)$v;
+            return (string) $v;
         }
     }
 

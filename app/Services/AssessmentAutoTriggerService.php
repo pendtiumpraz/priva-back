@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Http\Controllers\Api\LiaController;
 use App\Models\AuditLog;
 use App\Models\CrossBorderTransfer;
 use App\Models\LiaAssessment;
@@ -19,7 +20,7 @@ use Throwable;
  * and return null instead of throwing.
  *
  * Triggers:
- *   - ROPA dengan legal_basis = legitimate interest → draft LIA
+ *   - RoPA dengan legal_basis = legitimate interest → draft LIA
  *   - CrossBorderTransfer create → draft TIA (always — every transfer
  *     needs an impact assessment per UU PDP Pasal 56)
  *   - Vendor dengan risk_level high/critical → draft TIA (data
@@ -45,7 +46,9 @@ class AssessmentAutoTriggerService
         $isLegitimate = collect(self::LEGITIMATE_INTEREST_TOKENS)
             ->contains(fn ($token) => str_contains($basis, $token));
 
-        if (!$isLegitimate) return null;
+        if (! $isLegitimate) {
+            return null;
+        }
 
         // Don't double-trigger if a draft LIA already exists for this RoPA.
         $existing = LiaAssessment::query()
@@ -53,7 +56,9 @@ class AssessmentAutoTriggerService
             ->where('org_id', $ropa->org_id)
             ->where('linked_ropa_id', $ropa->id)
             ->first();
-        if ($existing) return null;
+        if ($existing) {
+            return null;
+        }
 
         try {
             $unit = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $ropa->division ?? $ropa->work_unit ?? 'GEN'), 0, 4));
@@ -65,14 +70,16 @@ class AssessmentAutoTriggerService
             $code = sprintf('LIA-%s-%s-%02d', $unit, $activity, $existingCount + 1);
 
             $snapshot = [];
-            foreach (\App\Http\Controllers\Api\LiaController::ROPA_AUTOFILL_FIELDS as $f) {
-                if (isset($ropa->$f)) $snapshot[$f] = $ropa->$f;
+            foreach (LiaController::RoPA_AUTOFILL_FIELDS as $f) {
+                if (isset($ropa->$f)) {
+                    $snapshot[$f] = $ropa->$f;
+                }
             }
 
             $lia = LiaAssessment::create([
                 'org_id' => $ropa->org_id,
                 'lia_code' => $code,
-                'title' => 'LIA — ' . ($ropa->processing_activity ?? 'Aktivitas Pemrosesan'),
+                'title' => 'LIA — '.($ropa->processing_activity ?? 'Aktivitas Pemrosesan'),
                 'processing_activity' => $ropa->processing_activity,
                 'linked_ropa_id' => $ropa->id,
                 'created_by' => $createdBy ?: $ropa->created_by,
@@ -82,7 +89,7 @@ class AssessmentAutoTriggerService
                     'ropa_id' => $ropa->id,
                     'snapshot_taken_at' => now()->toIso8601String(),
                     'auto_triggered' => true,
-                    'trigger_reason' => 'ROPA legal_basis = ' . ($ropa->legal_basis ?? 'unknown'),
+                    'trigger_reason' => 'RoPA legal_basis = '.($ropa->legal_basis ?? 'unknown'),
                 ],
             ]);
 
@@ -94,10 +101,11 @@ class AssessmentAutoTriggerService
 
             return $lia;
         } catch (Throwable $e) {
-            Log::warning('Auto-LIA from ROPA failed (non-fatal)', [
+            Log::warning('Auto-LIA from RoPA failed (non-fatal)', [
                 'ropa_id' => $ropa->id,
                 'error' => $e->getMessage(),
             ]);
+
             return null;
         }
     }
@@ -112,7 +120,9 @@ class AssessmentAutoTriggerService
             ->where('org_id', $cbt->org_id)
             ->where('linked_cross_border_id', $cbt->id)
             ->first();
-        if ($existing) return null;
+        if ($existing) {
+            return null;
+        }
 
         try {
             $existingCount = TiaAssessment::query()->withoutGlobalScope('org')
@@ -125,7 +135,7 @@ class AssessmentAutoTriggerService
 
             $tia = TiaAssessment::create(array_merge($prefill, [
                 'tia_code' => $code,
-                'title' => 'TIA — Transfer ke ' . ($cbt->destination_country ?? 'Unknown'),
+                'title' => 'TIA — Transfer ke '.($cbt->destination_country ?? 'Unknown'),
                 'status' => TiaAssessment::STATUS_DRAFT,
                 'created_by' => $createdBy ?: ($cbt->created_by ?? null),
                 'wizard_data' => array_merge($prefill['wizard_data'], [
@@ -147,6 +157,7 @@ class AssessmentAutoTriggerService
                 'cross_border_id' => $cbt->id,
                 'error' => $e->getMessage(),
             ]);
+
             return null;
         }
     }
@@ -158,16 +169,20 @@ class AssessmentAutoTriggerService
     {
         $riskLevel = strtolower((string) ($vendor->risk_level ?? ''));
         $isHighRisk = in_array($riskLevel, ['high', 'critical'], true);
-        $isOffshore = !empty($vendor->country) && strcasecmp((string) $vendor->country, 'Indonesia') !== 0;
+        $isOffshore = ! empty($vendor->country) && strcasecmp((string) $vendor->country, 'Indonesia') !== 0;
 
-        if (!$isHighRisk && !$isOffshore) return null;
+        if (! $isHighRisk && ! $isOffshore) {
+            return null;
+        }
 
         $existing = TiaAssessment::query()
             ->withoutGlobalScope('org')
             ->where('org_id', $vendor->org_id)
             ->where('linked_vendor_id', $vendor->id)
             ->first();
-        if ($existing) return null;
+        if ($existing) {
+            return null;
+        }
 
         try {
             $existingCount = TiaAssessment::query()->withoutGlobalScope('org')
@@ -181,7 +196,7 @@ class AssessmentAutoTriggerService
             $tia = TiaAssessment::create([
                 'org_id' => $vendor->org_id,
                 'tia_code' => $code,
-                'title' => 'TIA — Vendor ' . ($vendor->name ?? 'Unknown'),
+                'title' => 'TIA — Vendor '.($vendor->name ?? 'Unknown'),
                 'linked_vendor_id' => $vendor->id,
                 'destination_country' => $vendor->country ?? null,
                 'status' => TiaAssessment::STATUS_DRAFT,
@@ -207,6 +222,7 @@ class AssessmentAutoTriggerService
                 'vendor_id' => $vendor->id,
                 'error' => $e->getMessage(),
             ]);
+
             return null;
         }
     }

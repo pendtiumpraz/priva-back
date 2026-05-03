@@ -2,10 +2,14 @@
 
 namespace App\Services;
 
-use App\Models\SecurityAlert;
+use App\Mail\NotificationMail;
+use App\Models\AppSetting;
+use App\Models\BreachIncident;
 use App\Models\NotificationPreference;
+use App\Models\Organization;
+use App\Models\SecurityAlert;
 use App\Models\User;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Http;
 
 /**
  * Single entry point for all notification dispatches.
@@ -24,7 +28,7 @@ use Illuminate\Support\Str;
  *       type: 'ropa.assigned',
  *       recipient: 'user:' . $user->id,           // or 'role:dpo', 'org:' . $orgId
  *       orgId: $record->org_id,
- *       title: 'ROPA HR-001 di-assign ke Anda',
+ *       title: 'RoPA HR-001 di-assign ke Anda',
  *       body: 'Review aktivitas Rekrutmen Kandidat',
  *       actionUrl: '/ropa/' . $record->id,
  *       metadata: ['record_id' => $record->id]
@@ -33,19 +37,20 @@ use Illuminate\Support\Str;
 class NotificationService
 {
     public const KINDS = ['alert', 'warning', 'info'];
+
     public const SEVERITIES = ['low', 'medium', 'high', 'critical'];
 
     /**
-     * @param string $kind alert|warning|info
-     * @param string $severity critical|high|medium|low
-     * @param string $module ropa|dpia|dsr|breach|license|system|...
-     * @param string $type granular event code (e.g. 'ropa.assigned')
-     * @param string $recipient "user:<id>" | "role:<name>" | "org:<id>"
-     * @param string|null $orgId tenant scope (null for platform-wide root notifs)
-     * @param string $title short subject line
-     * @param string $body longer description
-     * @param string|null $actionUrl deep-link or wa.me URL
-     * @param array $metadata additional payload
+     * @param  string  $kind  alert|warning|info
+     * @param  string  $severity  critical|high|medium|low
+     * @param  string  $module  ropa|dpia|dsr|breach|license|system|...
+     * @param  string  $type  granular event code (e.g. 'ropa.assigned')
+     * @param  string  $recipient  "user:<id>" | "role:<name>" | "org:<id>"
+     * @param  string|null  $orgId  tenant scope (null for platform-wide root notifs)
+     * @param  string  $title  short subject line
+     * @param  string  $body  longer description
+     * @param  string|null  $actionUrl  deep-link or wa.me URL
+     * @param  array  $metadata  additional payload
      * @return array the created alert rows (one per recipient)
      */
     public static function dispatch(
@@ -65,14 +70,14 @@ class NotificationService
         // - Superadmin (Organization.settings.notifications_enabled) → off
         //   silences notifications scoped to that tenant.
         // Platform-level notifications (org_id=null) only pass the root check.
-        if (!self::isEnabled($orgId)) {
+        if (! self::isEnabled($orgId)) {
             return [];
         }
 
-        if (!in_array($kind, self::KINDS, true)) {
+        if (! in_array($kind, self::KINDS, true)) {
             $kind = 'info';
         }
-        if (!in_array($severity, self::SEVERITIES, true)) {
+        if (! in_array($severity, self::SEVERITIES, true)) {
             $severity = 'low';
         }
 
@@ -82,7 +87,7 @@ class NotificationService
         $created = [];
         foreach ($recipients as $user) {
             // Gate: if user has opted out of this kind/module for in-app channel, skip.
-            if ($user && !NotificationPreference::isEnabled($user->id, $kind, $module, 'in_app')) {
+            if ($user && ! NotificationPreference::isEnabled($user->id, $kind, $module, 'in_app')) {
                 continue;
             }
 
@@ -117,10 +122,10 @@ class NotificationService
                 if ($digest === 'instant' || $digest === null) {
                     try {
                         \Mail::to($user->email)->queue(
-                            new \App\Mail\NotificationMail($row, $user->name ?? 'there')
+                            new NotificationMail($row, $user->name ?? 'there')
                         );
                     } catch (\Throwable $e) {
-                        \Log::warning('NotificationMail queue failed: ' . $e->getMessage());
+                        \Log::warning('NotificationMail queue failed: '.$e->getMessage());
                     }
                 }
             }
@@ -132,16 +137,20 @@ class NotificationService
         $telegramOrgId = $orgId ?? (count($recipients) > 0 ? $recipients[0]?->org_id : null);
         if ($telegramOrgId) {
             try {
-                $emoji = match ($kind) { 'alert' => '🚨', 'warning' => '⚠️', 'info' => 'ℹ️', default => '🔔' };
-                $tgText = "{$emoji} *" . strtoupper($kind) . " · " . strtoupper($severity) . "*\n";
-                $tgText .= "*" . ($title ?: 'Notifikasi') . "*\n\n";
-                if ($body) $tgText .= $body . "\n\n";
-                if ($actionUrl && !str_starts_with($actionUrl, 'https://wa.me/')) {
+                $emoji = match ($kind) {
+                    'alert' => '🚨', 'warning' => '⚠️', 'info' => 'ℹ️', default => '🔔'
+                };
+                $tgText = "{$emoji} *".strtoupper($kind).' · '.strtoupper($severity)."*\n";
+                $tgText .= '*'.($title ?: 'Notifikasi')."*\n\n";
+                if ($body) {
+                    $tgText .= $body."\n\n";
+                }
+                if ($actionUrl && ! str_starts_with($actionUrl, 'https://wa.me/')) {
                     $tgText .= "_Detail:_ {$actionUrl}";
                 }
                 self::sendTelegram($telegramOrgId, $tgText);
             } catch (\Throwable $e) {
-                \Log::warning('Telegram dispatch failed: ' . $e->getMessage());
+                \Log::warning('Telegram dispatch failed: '.$e->getMessage());
             }
         }
 
@@ -161,12 +170,14 @@ class NotificationService
     public static function isEnabled(?string $orgId = null): bool
     {
         try {
-            $global = \App\Models\AppSetting::get('features.notifications_enabled');
+            $global = AppSetting::get('features.notifications_enabled');
             $globalOn = $global === null || (string) $global === '1' || (string) $global === 'true';
-            if (!$globalOn) return false;
+            if (! $globalOn) {
+                return false;
+            }
 
             if ($orgId) {
-                $org = \App\Models\Organization::find($orgId);
+                $org = Organization::find($orgId);
                 if ($org) {
                     $settings = $org->settings ?? [];
                     if (is_array($settings) && array_key_exists('notifications_enabled', $settings)) {
@@ -174,6 +185,7 @@ class NotificationService
                     }
                 }
             }
+
             return true;
         } catch (\Throwable $e) {
             return true;
@@ -183,7 +195,8 @@ class NotificationService
     public static function isSchedulerEnabled(): bool
     {
         try {
-            $val = \App\Models\AppSetting::get('features.notifications_scheduler_enabled');
+            $val = AppSetting::get('features.notifications_scheduler_enabled');
+
             return $val === null || (string) $val === '1' || (string) $val === 'true';
         } catch (\Throwable $e) {
             return true;
@@ -195,22 +208,23 @@ class NotificationService
      * Pulls via Eloquent so encryption casts are applied — never receives
      * ciphertext. Returns an empty string if the breach object is missing.
      */
-    public static function buildBreachTelegramMessage(\App\Models\BreachIncident $breach): string
+    public static function buildBreachTelegramMessage(BreachIncident $breach): string
     {
         $sev = strtoupper($breach->severity ?? '—');
         $status = strtoupper($breach->status ?? '—');
-        $msg  = "🚨 *INCIDENT ALERT: {$sev}* 🚨\n\n";
-        $msg .= "*Incident Code:* " . ($breach->incident_code ?? '—') . "\n";
-        $msg .= "*Title:* " . ($breach->title ?? '—') . "\n";
+        $msg = "🚨 *INCIDENT ALERT: {$sev}* 🚨\n\n";
+        $msg .= '*Incident Code:* '.($breach->incident_code ?? '—')."\n";
+        $msg .= '*Title:* '.($breach->title ?? '—')."\n";
         $msg .= "*Status:* {$status}\n";
-        $msg .= "*Detected At:* " . ($breach->detected_at?->toDateTimeString() ?? '—') . "\n\n";
-        if (!empty($breach->description)) {
-            $msg .= "*Description:*\n" . $breach->description . "\n\n";
+        $msg .= '*Detected At:* '.($breach->detected_at?->toDateTimeString() ?? '—')."\n\n";
+        if (! empty($breach->description)) {
+            $msg .= "*Description:*\n".$breach->description."\n\n";
         }
         if ($breach->affected_subjects_count) {
-            $msg .= "*Affected Subjects:* " . (int) $breach->affected_subjects_count . "\n";
+            $msg .= '*Affected Subjects:* '.(int) $breach->affected_subjects_count."\n";
         }
         $msg .= "\n🔒 _Check Privasimu Dashboard for full detail._";
+
         return $msg;
     }
 
@@ -223,18 +237,24 @@ class NotificationService
     public static function sendTelegram(string $orgId, string $text): bool
     {
         try {
-            $org = \App\Models\Organization::find($orgId);
-            if (!$org) return false;
+            $org = Organization::find($orgId);
+            if (! $org) {
+                return false;
+            }
             $cfg = $org->integration_config['telegram'] ?? [];
-            if (empty($cfg['bot_token']) || empty($cfg['chat_id'])) return false;
+            if (empty($cfg['bot_token']) || empty($cfg['chat_id'])) {
+                return false;
+            }
 
-            $resp = \Illuminate\Support\Facades\Http::post(
+            $resp = Http::post(
                 "https://api.telegram.org/bot{$cfg['bot_token']}/sendMessage",
                 ['chat_id' => $cfg['chat_id'], 'text' => $text, 'parse_mode' => 'Markdown']
             );
+
             return $resp->successful();
         } catch (\Throwable $e) {
-            \Log::warning('Telegram send failed: ' . $e->getMessage());
+            \Log::warning('Telegram send failed: '.$e->getMessage());
+
             return false;
         }
     }
@@ -245,13 +265,22 @@ class NotificationService
      */
     public static function buildWaUrl(?string $phone, string $message = ''): ?string
     {
-        if (!$phone) return null;
+        if (! $phone) {
+            return null;
+        }
         $digits = preg_replace('/\D+/', '', $phone);
-        if (!$digits) return null;
+        if (! $digits) {
+            return null;
+        }
         // Indonesian numbers often start with 0 — strip and prepend 62
-        if (str_starts_with($digits, '0')) $digits = '62' . substr($digits, 1);
-        $url = 'https://wa.me/' . $digits;
-        if ($message !== '') $url .= '?text=' . rawurlencode($message);
+        if (str_starts_with($digits, '0')) {
+            $digits = '62'.substr($digits, 1);
+        }
+        $url = 'https://wa.me/'.$digits;
+        if ($message !== '') {
+            $url .= '?text='.rawurlencode($message);
+        }
+
         return $url;
     }
 
@@ -264,18 +293,24 @@ class NotificationService
         if (str_starts_with($spec, 'user:')) {
             $id = substr($spec, 5);
             $user = User::find($id);
+
             return $user ? [$user] : [];
         }
         if (str_starts_with($spec, 'role:')) {
             $role = substr($spec, 5);
             $q = User::where('role', $role);
-            if ($orgId) $q->where('org_id', $orgId);
+            if ($orgId) {
+                $q->where('org_id', $orgId);
+            }
+
             return $q->get()->all();
         }
         if (str_starts_with($spec, 'org:')) {
             $id = substr($spec, 4);
+
             return User::where('org_id', $id)->get()->all();
         }
+
         // Unknown spec — return [null] so a broadcast row is still created
         // (recipient_id null = org-wide notification, visible to all in org).
         return [null];

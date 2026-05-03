@@ -1,34 +1,34 @@
 <?php
 
-require __DIR__ . '/vendor/autoload.php';
+require __DIR__.'/vendor/autoload.php';
 
 use PhpOffice\PhpWord\PhpWord;
 use PhpOffice\PhpWord\SimpleType\Jc;
 
 // ==========================================
-// ROPA TEMPLATE GENERATION
+// RoPA TEMPLATE GENERATION
 // ==========================================
-$phpWord = new PhpWord();
+$phpWord = new PhpWord;
 $section = $phpWord->addSection();
 
 $fontStyle = ['name' => 'Arial', 'size' => 11];
 $titleStyle = ['name' => 'Arial', 'size' => 16, 'bold' => true];
 $headerStyle = ['name' => 'Arial', 'size' => 12, 'bold' => true, 'color' => 'FFFFFF'];
 
-$section->addText('RECORD OF PROCESSING ACTIVITIES (ROPA)', $titleStyle, ['alignment' => Jc::CENTER]);
+$section->addText('RECORD OF PROCESSING ACTIVITIES (RoPA)', $titleStyle, ['alignment' => Jc::CENTER]);
 $section->addTextBreak(1);
 
 $tableStyle = [
     'borderSize' => 6,
     'borderColor' => '000000',
-    'cellMargin' => 80
+    'cellMargin' => 80,
 ];
 $phpWord->addTableStyle('RopaTable', $tableStyle);
 $table = $section->addTable('RopaTable');
 
 // Data rows
 $rows = [
-    ['No Registrasi / ROPA NO', '${registration_number}'],
+    ['No Registrasi / RoPA NO', '${registration_number}'],
     ['Nama Pemrosesan', '${nama_pemrosesan}'],
     ['Entitas', '${entitas}'],
     ['Divisi / Departemen', '${divisi}'],
@@ -49,7 +49,7 @@ $rows = [
     ['Negara Tujuan / Safeguards', '${negara_tujuan} / ${safeguards}'],
     ['Kontrol Keamanan', '${kontrol_keamanan}'],
     ['Masa Retensi', '${masa_retensi}'],
-    ['Status ROPA', '${status}']
+    ['Status RoPA', '${status}'],
 ];
 
 foreach ($rows as $row) {
@@ -58,15 +58,14 @@ foreach ($rows as $row) {
     $table->addCell(6000)->addText($row[1]);
 }
 
-$ropaPath = __DIR__ . '/storage/app/templates/ropa-template.docx';
+$ropaPath = __DIR__.'/storage/app/templates/ropa-template.docx';
 $phpWord->save($ropaPath, 'Word2007');
-echo "ROPA template generated!\n";
-
+echo "RoPA template generated!\n";
 
 // ==========================================
 // DPIA TEMPLATE GENERATION
 // ==========================================
-$phpWord2 = new PhpWord();
+$phpWord2 = new PhpWord;
 $section2 = $phpWord2->addSection();
 
 $section2->addText('DATA PROTECTION IMPACT ASSESSMENT (DPIA)', $titleStyle, ['alignment' => Jc::CENTER]);
@@ -77,7 +76,7 @@ $table2 = $section2->addTable('DpiaTable');
 
 $dpiaRows = [
     ['No DPIA', '${dpia_number}'],
-    ['No ROPA Terkait', '${ropa_number}'],
+    ['No RoPA Terkait', '${ropa_number}'],
     ['Judul/Aktivitas', '${title}'],
     ['Risk Level DPIA', '${risk_level}'],
     ['Evaluasi Keperluan Pemrosesan', '${evaluasi_keperluan}'],
@@ -86,7 +85,7 @@ $dpiaRows = [
     ['Mitigasi & Pengendalian', '${mitigasi}'],
     ['Sisa Risiko (Residual Risk)', '${residual_risk}'],
     ['Rekomendasi DPO', '${rekomendasi_dpo}'],
-    ['Status DPIA', '${status}']
+    ['Status DPIA', '${status}'],
 ];
 
 foreach ($dpiaRows as $row) {
@@ -95,6 +94,6 @@ foreach ($dpiaRows as $row) {
     $table2->addCell(6000)->addText($row[1]);
 }
 
-$dpiaPath = __DIR__ . '/storage/app/templates/dpia-template.docx';
+$dpiaPath = __DIR__.'/storage/app/templates/dpia-template.docx';
 $phpWord2->save($dpiaPath, 'Word2007');
 echo "DPIA template generated!\n";

@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Storage;
 
 /**
  * Seed "Nexus Canonical" as a system DocumentTemplate with two uploaded
- * .docx templates attached — the exact ROPA / DPIA exports from the live
+ * .docx templates attached — the exact RoPA / DPIA exports from the live
  * Nexus product, including cover page, header, footer with logo, watermark,
  * rounded alternating-row tables, and the 5×5 DPIA risk matrix.
  *
@@ -34,41 +34,43 @@ class NexusCanonicalDocxSeeder extends Seeder
 
         $files = [
             'ropa' => [
-                'source' => resource_path('document-templates/ROPA_DATA_EXPORT.docx'),
-                'dest'   => 'system-templates/nexus_canonical_ropa.docx',
-                'label'  => 'ROPA_DATA_EXPORT.docx',
+                'source' => resource_path('document-templates/RoPA_DATA_EXPORT.docx'),
+                'dest' => 'system-templates/nexus_canonical_ropa.docx',
+                'label' => 'RoPA_DATA_EXPORT.docx',
             ],
             'dpia' => [
                 'source' => resource_path('document-templates/DPIA_DATA_EXPORT.docx'),
-                'dest'   => 'system-templates/nexus_canonical_dpia.docx',
-                'label'  => 'DPIA_DATA_EXPORT.docx',
+                'dest' => 'system-templates/nexus_canonical_dpia.docx',
+                'label' => 'DPIA_DATA_EXPORT.docx',
             ],
         ];
 
         $docxMap = [];
         foreach ($files as $kind => $f) {
-            if (!is_file($f['source'])) {
+            if (! is_file($f['source'])) {
                 $this->command?->warn("Source missing: {$f['source']} — skipping {$kind}.");
+
                 continue;
             }
             $disk->put($f['dest'], file_get_contents($f['source']));
             $docxMap[$kind] = [
-                'path'        => $f['dest'],
-                'name'        => $f['label'],
+                'path' => $f['dest'],
+                'name' => $f['label'],
                 'uploaded_at' => now()->toIso8601String(),
-                'driver'      => 'local',
+                'driver' => 'local',
             ];
         }
 
         if (empty($docxMap)) {
             $this->command?->warn('No canonical DOCX files found — seeder skipped.');
+
             return;
         }
 
         DocumentTemplate::updateOrCreate(
             ['org_id' => null, 'name' => 'Nexus Canonical', 'is_system' => true],
             [
-                'description' => 'Template resmi Nexus — cover page, header/footer berlogo, watermark, tabel alternating dengan border rounded. Mengisi 74 placeholder ROPA + 27 placeholder DPIA + 5×5 risk matrix via PhpWord cloneRow/cloneBlock.',
+                'description' => 'Template resmi Nexus — cover page, header/footer berlogo, watermark, tabel alternating dengan border rounded. Mengisi 74 placeholder RoPA + 27 placeholder DPIA + 5×5 risk matrix via PhpWord cloneRow/cloneBlock.',
                 'preview_image' => null,
                 'config' => [
                     'primary_color' => '#16284C',
@@ -97,8 +99,8 @@ class NexusCanonicalDocxSeeder extends Seeder
                     'page_margin_right' => 56,
                 ],
                 'docx_templates' => $docxMap,
-                'is_default'  => true,
-                'is_system'   => true,
+                'is_default' => true,
+                'is_system' => true,
             ]
         );
 
@@ -108,6 +110,6 @@ class NexusCanonicalDocxSeeder extends Seeder
             ->where('name', '!=', 'Nexus Canonical')
             ->update(['is_default' => false]);
 
-        $this->command?->info('Nexus Canonical system DocumentTemplate seeded with ROPA + DPIA canonical DOCX.');
+        $this->command?->info('Nexus Canonical system DocumentTemplate seeded with RoPA + DPIA canonical DOCX.');
     }
 }

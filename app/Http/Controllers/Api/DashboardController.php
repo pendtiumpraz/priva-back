@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
 
 class DashboardController extends Controller
 {
@@ -30,49 +30,49 @@ class DashboardController extends Controller
             'gap_progress' => $latestGap->progress ?? 0,
 
             'total_ropa' => DB::table('ropas')
-            ->where('org_id', $orgId)->whereNull('deleted_at')->count(),
+                ->where('org_id', $orgId)->whereNull('deleted_at')->count(),
 
             'total_dpia' => DB::table('dpias')
-            ->where('org_id', $orgId)->whereNull('deleted_at')->count(),
+                ->where('org_id', $orgId)->whereNull('deleted_at')->count(),
 
             'total_users' => DB::table('users')
-            ->where('org_id', $orgId)->whereNull('deleted_at')->count(),
+                ->where('org_id', $orgId)->whereNull('deleted_at')->count(),
 
             'total_dsr' => DB::table('dsr_requests')
-            ->where('org_id', $orgId)->whereNull('deleted_at')->count(),
+                ->where('org_id', $orgId)->whereNull('deleted_at')->count(),
 
             'dsr_pending' => DB::table('dsr_requests')
-            ->where('org_id', $orgId)->whereNull('deleted_at')
-            ->whereIn('status', ['new', 'new_reply'])->count(),
+                ->where('org_id', $orgId)->whereNull('deleted_at')
+                ->whereIn('status', ['new', 'new_reply'])->count(),
 
             'dsr_overdue' => DB::table('dsr_requests')
-            ->where('org_id', $orgId)->whereNull('deleted_at')
-            ->whereIn('status', ['new', 'new_reply'])
-            ->where('deadline_at', '<', now())->count(),
+                ->where('org_id', $orgId)->whereNull('deleted_at')
+                ->whereIn('status', ['new', 'new_reply'])
+                ->where('deadline_at', '<', now())->count(),
 
             'active_breaches' => DB::table('breach_incidents')
-            ->where('org_id', $orgId)->where('is_simulation', false)
-            ->whereNotIn('status', ['closed'])->whereNull('deleted_at')->count(),
+                ->where('org_id', $orgId)->where('is_simulation', false)
+                ->whereNotIn('status', ['closed'])->whereNull('deleted_at')->count(),
 
             'total_breaches' => DB::table('breach_incidents')
-            ->where('org_id', $orgId)->where('is_simulation', false)
-            ->whereNull('deleted_at')->count(),
+                ->where('org_id', $orgId)->where('is_simulation', false)
+                ->whereNull('deleted_at')->count(),
 
             'consent_collection_points' => DB::table('consent_collection_points')
-            ->where('org_id', $orgId)->whereNull('deleted_at')->count(),
+                ->where('org_id', $orgId)->whereNull('deleted_at')->count(),
 
             'total_consent_records' => DB::table('consent_records as cr')
-            ->join('consent_collection_points as cp', 'cr.collection_point_id', '=', 'cp.id')
-            ->where('cp.org_id', $orgId)->count(),
+                ->join('consent_collection_points as cp', 'cr.collection_point_id', '=', 'cp.id')
+                ->where('cp.org_id', $orgId)->count(),
 
             'data_sources' => DB::table('information_systems')
-            ->where('org_id', $orgId)->whereNull('deleted_at')->count(),
+                ->where('org_id', $orgId)->whereNull('deleted_at')->count(),
 
             'total_simulations' => DB::table('breach_simulations')
-            ->where('org_id', $orgId)->count(),
+                ->where('org_id', $orgId)->count(),
 
             'feature_requests' => DB::table('feature_requests')
-            ->where('org_id', $orgId)->whereNull('deleted_at')->count(),
+                ->where('org_id', $orgId)->whereNull('deleted_at')->count(),
         ];
 
         return response()->json(['stats' => $stats]);
@@ -96,20 +96,20 @@ class DashboardController extends Controller
             $months[] = [
                 'month' => $label,
                 'ropa' => DB::table('ropas')->where('org_id', $orgId)
-                ->whereNull('deleted_at')
-                ->where('created_at', '<=', $end)->count(),
+                    ->whereNull('deleted_at')
+                    ->where('created_at', '<=', $end)->count(),
                 'dpia' => DB::table('dpias')->where('org_id', $orgId)
-                ->whereNull('deleted_at')
-                ->where('created_at', '<=', $end)->count(),
+                    ->whereNull('deleted_at')
+                    ->where('created_at', '<=', $end)->count(),
                 'dsr' => DB::table('dsr_requests')->where('org_id', $orgId)
-                ->whereNull('deleted_at')
-                ->whereBetween('created_at', [$start, $end])->count(),
+                    ->whereNull('deleted_at')
+                    ->whereBetween('created_at', [$start, $end])->count(),
                 'breach' => DB::table('breach_incidents')->where('org_id', $orgId)
-                ->where('is_simulation', false)->whereNull('deleted_at')
-                ->whereBetween('created_at', [$start, $end])->count(),
+                    ->where('is_simulation', false)->whereNull('deleted_at')
+                    ->whereBetween('created_at', [$start, $end])->count(),
                 'consent' => DB::table('consent_collection_points')->where('org_id', $orgId)
-                ->whereNull('deleted_at')
-                ->where('created_at', '<=', $end)->count(),
+                    ->whereNull('deleted_at')
+                    ->where('created_at', '<=', $end)->count(),
             ];
         }
 
@@ -121,7 +121,7 @@ class DashboardController extends Controller
             ->select('overall_score as score', 'compliance_level', 'created_at')
             ->limit(20)->get();
 
-        // ROPA status breakdown
+        // RoPA status breakdown
         $ropaByStatus = DB::table('ropas')
             ->where('org_id', $orgId)->whereNull('deleted_at')
             ->select('status', DB::raw('count(*) as count'))
@@ -162,13 +162,13 @@ class DashboardController extends Controller
     {
         $orgId = $request->user()->org_id;
 
-        // 1. ROPA by risk level
+        // 1. RoPA by risk level
         $ropaByRisk = DB::table('ropas')
             ->where('org_id', $orgId)->whereNull('deleted_at')
             ->select('risk_level', DB::raw('count(*) as count'))
             ->groupBy('risk_level')->get();
 
-        // 2. ROPA top 10 highest risk
+        // 2. RoPA top 10 highest risk
         $ropaTopRisks = DB::table('ropas')
             ->where('org_id', $orgId)->whereNull('deleted_at')
             ->orderByRaw("CASE risk_level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END")
@@ -177,6 +177,7 @@ class DashboardController extends Controller
             ->limit(10)->get()
             ->map(function ($row) {
                 $row->data_categories = json_decode($row->data_categories, true) ?? [];
+
                 return $row;
             });
 
@@ -192,7 +193,9 @@ class DashboardController extends Controller
 
         foreach ($dpias as $dpia) {
             $assessment = json_decode($dpia->risk_assessment, true);
-            if (!is_array($assessment)) continue;
+            if (! is_array($assessment)) {
+                continue;
+            }
 
             foreach ($assessment as $categoryKey => $riskData) {
                 $likelihood = $riskData['likelihood'] ?? 0;
@@ -200,7 +203,7 @@ class DashboardController extends Controller
 
                 if ($likelihood > 0 && $impact > 0) {
                     $key = "{$likelihood}-{$impact}";
-                    if (!isset($heatmapData[$key])) {
+                    if (! isset($heatmapData[$key])) {
                         $heatmapData[$key] = ['likelihood' => $likelihood, 'impact' => $impact, 'count' => 0];
                     }
                     $heatmapData[$key]['count']++;
@@ -223,7 +226,7 @@ class DashboardController extends Controller
         }
 
         // Sort unmitigated by risk score desc
-        usort($unmitigated, fn($a, $b) => $b['risk_score'] <=> $a['risk_score']);
+        usort($unmitigated, fn ($a, $b) => $b['risk_score'] <=> $a['risk_score']);
         $unmitigated = array_slice($unmitigated, 0, 10);
 
         // 4. DSR response times — average days per month
@@ -244,8 +247,8 @@ class DashboardController extends Controller
             $count = $record->count();
             foreach ($record as $row) {
                 // Carbon parse
-                $createDate = \Carbon\Carbon::parse($row->created_at);
-                $respDate = \Carbon\Carbon::parse($row->responded_at);
+                $createDate = Carbon::parse($row->created_at);
+                $respDate = Carbon::parse($row->responded_at);
                 $sumDays += $createDate->diffInDays($respDate);
             }
             $avg = $count > 0 ? ($sumDays / $count) : 0;
@@ -314,26 +317,26 @@ class DashboardController extends Controller
             'Content-Disposition' => 'attachment; filename="Template_DPIA_PIC.csv"',
             'Pragma' => 'no-cache',
             'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
-            'Expires' => '0'
+            'Expires' => '0',
         ];
 
         $columns = [
-            'NAMA_SISTEM', 'DESKRIPSI_SISTEM', 'TUJUAN_PEMROSESAN', 'KATEGORI_DATA', 
+            'NAMA_SISTEM', 'DESKRIPSI_SISTEM', 'TUJUAN_PEMROSESAN', 'KATEGORI_DATA',
             'SUBJEK_DATA_TERDAMPAK', 'RISIKO_AWAL_LIKELIHOOD(1-5)', 'RISIKO_AWAL_IMPACT(1-5)',
-            'MITIGASI_YANG_DILAKUKAN', 'PIC_NAMA', 'PIC_EMAIL'
+            'MITIGASI_YANG_DILAKUKAN', 'PIC_NAMA', 'PIC_EMAIL',
         ];
 
         $callback = function () use ($columns) {
             $file = fopen('php://output', 'w');
             fputcsv($file, $columns);
-            
+
             // Example Row
             fputcsv($file, [
                 'Sistem HRIS Terpadu', 'Sistem utama pencatatan presensi dan cuti pegawai',
                 'Mengelola data SDM dan penggajian', 'Nama, NIK, No Rekening, Gaji',
                 'Pegawai Internal', '3', '4',
                 'Enkripsi kolom spesifik (NIK, No Rekening) pada database',
-                'Budi Santoso', 'budi.it@perusahaan.com'
+                'Budi Santoso', 'budi.it@perusahaan.com',
             ]);
             fclose($file);
         };

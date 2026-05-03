@@ -6,8 +6,8 @@ use App\Models\RopaTemplate;
 use Illuminate\Database\Seeder;
 
 /**
- * Seed ROPA templates covering common processing activities per industry.
- * DPO/PIC can pick a template in the New ROPA wizard to skip the blank state.
+ * Seed RoPA templates covering common processing activities per industry.
+ * DPO/PIC can pick a template in the New RoPA wizard to skip the blank state.
  *
  * Idempotent — keyed on (industry, activity_code).
  */

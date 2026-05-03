@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('knowledge_base_sections', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('module_key')->unique(); // e.g. 'ropa', 'dpia', 'breach', 'general'
-            $table->string('title');                 // e.g. 'ROPA (Record of Processing Activities)'
+            $table->string('title');                 // e.g. 'RoPA (Record of Processing Activities)'
             $table->text('content');                  // Full markdown content for this module
             $table->text('keywords');                 // Comma-separated keywords for matching
             $table->integer('sort_order')->default(0);

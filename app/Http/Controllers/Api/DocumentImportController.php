@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\ImportDocumentJob;
+use App\Models\AuditLog;
 use App\Models\DocumentImport;
 use App\Models\DocumentImportBatch;
 use App\Models\Organization;
@@ -34,7 +35,7 @@ class DocumentImportController extends Controller
         $file = $request->file('file');
 
         // Store using tenant storage
-        $storagePath = $this->storageService->storeTenantFile($org, $file, 'imports/' . date('Y'));
+        $storagePath = $this->storageService->storeTenantFile($org, $file, 'imports/'.date('Y'));
 
         // Get extension
         $ext = strtolower($file->getClientOriginalExtension());
@@ -56,13 +57,14 @@ class DocumentImportController extends Controller
         ImportDocumentJob::dispatch($import->id);
 
         try {
-            \App\Models\AuditLog::log('document_import', $import->id, 'document_uploaded', [
+            AuditLog::log('document_import', $import->id, 'document_uploaded', [
                 'filename' => $import->original_filename,
                 'file_type' => $ext,
                 'file_size' => $file->getSize(),
                 'target_module' => $request->target_module,
             ], 'manual');
-        } catch (\Exception $e) {}
+        } catch (\Exception $e) {
+        }
 
         return response()->json([
             'message' => 'Dokumen berhasil diunggah dan masuk antrian proses.',
@@ -98,7 +100,7 @@ class DocumentImportController extends Controller
 
         $imports = [];
         foreach ($request->file('files') as $file) {
-            $storagePath = $this->storageService->storeTenantFile($org, $file, 'imports/' . date('Y'));
+            $storagePath = $this->storageService->storeTenantFile($org, $file, 'imports/'.date('Y'));
             $ext = strtolower($file->getClientOriginalExtension());
 
             $import = DocumentImport::create([
@@ -120,7 +122,7 @@ class DocumentImportController extends Controller
         }
 
         return response()->json([
-            'message' => count($imports) . ' dokumen berhasil diunggah ke batch.',
+            'message' => count($imports).' dokumen berhasil diunggah ke batch.',
             'data' => [
                 'batch' => $batch,
                 'imports' => $imports,
@@ -167,7 +169,7 @@ class DocumentImportController extends Controller
     }
 
     /**
-     * Approve AI mapping → create ROPA/DPIA record.
+     * Approve AI mapping → create RoPA/DPIA record.
      */
     public function approve(string $id, Request $request)
     {
@@ -185,7 +187,7 @@ class DocumentImportController extends Controller
 
         $recordId = ImportDocumentJob::createRecordFromMapping($import);
 
-        if (!$recordId) {
+        if (! $recordId) {
             return response()->json(['message' => 'Gagal membuat record.'], 500);
         }
 
@@ -210,7 +212,7 @@ class DocumentImportController extends Controller
         $import = DocumentImport::where('org_id', $request->user()->org_id)
             ->findOrFail($id);
 
-        if (!in_array($import->status, ['review', 'mapping'])) {
+        if (! in_array($import->status, ['review', 'mapping'])) {
             return response()->json(['message' => 'Mapping hanya bisa diedit saat status review.'], 400);
         }
 

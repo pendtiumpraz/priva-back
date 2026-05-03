@@ -1,24 +1,28 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
  * Retention master data (Sprint E3) — per-tenant reusable library.
  *
- * A single ROPA can reference multiple retention_policies via
+ * A single RoPA can reference multiple retention_policies via
  * `wizard_data.retensi_keamanan.retensi_list[].policy_id`. Lets compliance
  * teams standardize retention rules across many processing activities
  * instead of re-typing each time.
  *
  * Soft-deleted so in-use policies can be restored; hard delete is blocked
- * while any active ROPA still references the policy.
+ * while any active RoPA still references the policy.
  */
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
-        if (Schema::hasTable('retention_policies')) return;
+        if (Schema::hasTable('retention_policies')) {
+            return;
+        }
         try {
             Schema::create('retention_policies', function (Blueprint $table) {
                 $table->uuid('id')->primary();
@@ -36,10 +40,12 @@ return new class extends Migration {
 
                 $table->index(['org_id', 'deleted_at']);
             });
-        } catch (\Illuminate\Database\QueryException $e) {
+        } catch (QueryException $e) {
             $code = $e->errorInfo[1] ?? null;
             // MySQL 1050 / Postgres 42P07 = "table already exists".
-            if ($code === 1050 || in_array($e->getCode(), ['42P07', '42S01'], true)) return;
+            if ($code === 1050 || in_array($e->getCode(), ['42P07', '42S01'], true)) {
+                return;
+            }
             throw $e;
         }
     }

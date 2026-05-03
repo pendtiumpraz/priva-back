@@ -3,7 +3,7 @@
 namespace App\Services;
 
 /**
- * Computes ROPA risk_level from the 7-step wizard data.
+ * Computes RoPA risk_level from the 7-step wizard data.
  *
  * Rules come from 7_step_ropa_existing.md (Nexus canonical). Pure function:
  * no DB access, no side effects. Returns {level, triggers[], reasons[]} so
@@ -60,7 +60,7 @@ class RopaRiskCalculator
     ];
 
     /**
-     * @param array $wizardData ROPA wizard_data JSON.
+     * @param  array  $wizardData  RoPA wizard_data JSON.
      * @return array{level:string, triggers:array<string>, reasons:array<string>}
      */
     public function calculate(array $wizardData): array
@@ -88,7 +88,7 @@ class RopaRiskCalculator
         $pemrofilan = $info['pemrofilan'] ?? null;
         if ($this->isProfiling($pemrofilan)) {
             $triggers[] = 'profiling';
-            $reasons[] = 'Pemrosesan termasuk pemrofilan subjek data (' . (is_array($pemrofilan) ? implode(', ', $pemrofilan) : (string)$pemrofilan) . ').';
+            $reasons[] = 'Pemrosesan termasuk pemrofilan subjek data ('.(is_array($pemrofilan) ? implode(', ', $pemrofilan) : (string) $pemrofilan).').';
         }
 
         if ($this->isYes($info['teknologi_baru'] ?? null)) {
@@ -104,7 +104,7 @@ class RopaRiskCalculator
         $spesifik = $peng['jenis_data_spesifik'] ?? [];
         if ($this->hasSensitiveCategory($spesifik)) {
             $triggers[] = 'sensitive_data';
-            $reasons[] = 'Memproses kategori data spesifik/sensitif (' . $this->sensitiveLabel($spesifik) . ').';
+            $reasons[] = 'Memproses kategori data spesifik/sensitif ('.$this->sensitiveLabel($spesifik).').';
         }
 
         if ($this->isYes($kirim['transfer_luar'] ?? null)) {
@@ -117,7 +117,7 @@ class RopaRiskCalculator
             $reasons[] = 'Pemrosesan ini pernah mengalami insiden/pelanggaran data.';
         }
 
-        if (!empty($triggers)) {
+        if (! empty($triggers)) {
             return ['level' => 'high', 'triggers' => $triggers, 'reasons' => $reasons];
         }
 
@@ -137,7 +137,7 @@ class RopaRiskCalculator
             $reasons[] = 'Data diproses oleh pihak ketiga (processor agreement diperlukan).';
         }
 
-        if (!empty($triggers)) {
+        if (! empty($triggers)) {
             return ['level' => 'medium', 'triggers' => $triggers, 'reasons' => $reasons];
         }
 
@@ -153,35 +153,52 @@ class RopaRiskCalculator
 
     private function matches($value, array $candidates): bool
     {
-        if ($value === null) return false;
-        $str = is_array($value) ? implode('|', $value) : (string)$value;
+        if ($value === null) {
+            return false;
+        }
+        $str = is_array($value) ? implode('|', $value) : (string) $value;
         $str = strtolower(trim($str));
         foreach ($candidates as $c) {
-            if (str_contains($str, strtolower($c))) return true;
+            if (str_contains($str, strtolower($c))) {
+                return true;
+            }
         }
+
         return false;
     }
 
     private function isYes($v): bool
     {
-        if ($v === null) return false;
-        if (is_bool($v)) return $v;
-        $s = strtolower(trim((string)$v));
+        if ($v === null) {
+            return false;
+        }
+        if (is_bool($v)) {
+            return $v;
+        }
+        $s = strtolower(trim((string) $v));
+
         return in_array($s, ['ya', 'yes', 'true', '1'], true);
     }
 
     private function isProfiling($v): bool
     {
-        if (empty($v)) return false;
+        if (empty($v)) {
+            return false;
+        }
         if (is_string($v)) {
             $s = strtolower(trim($v));
-            if ($s === '' || in_array($s, ['not applicable', 'n/a', 'tidak', 'no'], true)) return false;
+            if ($s === '' || in_array($s, ['not applicable', 'n/a', 'tidak', 'no'], true)) {
+                return false;
+            }
+
             return true;
         }
         if (is_array($v)) {
-            $filtered = array_filter($v, fn($x) => strtolower(trim((string)$x)) !== 'not applicable' && trim((string)$x) !== '');
-            return !empty($filtered);
+            $filtered = array_filter($v, fn ($x) => strtolower(trim((string) $x)) !== 'not applicable' && trim((string) $x) !== '');
+
+            return ! empty($filtered);
         }
+
         return false;
     }
 
@@ -189,22 +206,32 @@ class RopaRiskCalculator
     {
         $list = is_array($spesifik) ? $spesifik : [$spesifik];
         foreach ($list as $item) {
-            $s = strtolower(trim((string)$item));
-            if ($s === '' || $s === 'not applicable') continue;
+            $s = strtolower(trim((string) $item));
+            if ($s === '' || $s === 'not applicable') {
+                continue;
+            }
             foreach (self::SENSITIVE_KEYWORDS as $kw) {
-                if (str_contains($s, $kw)) return true;
+                if (str_contains($s, $kw)) {
+                    return true;
+                }
             }
             // Data kombinasi yang mengidentifikasi seseorang juga dihitung sensitif.
-            if (str_contains($s, 'dikombinasikan') && str_contains($s, 'mengidentifikasi')) return true;
+            if (str_contains($s, 'dikombinasikan') && str_contains($s, 'mengidentifikasi')) {
+                return true;
+            }
         }
+
         return false;
     }
 
     private function sensitiveLabel($spesifik): string
     {
         $list = is_array($spesifik) ? $spesifik : [$spesifik];
-        $list = array_values(array_filter(array_map('strval', $list), fn($x) => $x !== '' && strtolower($x) !== 'not applicable'));
-        if (empty($list)) return '-';
-        return implode(', ', array_slice($list, 0, 3)) . (count($list) > 3 ? ', dst.' : '');
+        $list = array_values(array_filter(array_map('strval', $list), fn ($x) => $x !== '' && strtolower($x) !== 'not applicable'));
+        if (empty($list)) {
+            return '-';
+        }
+
+        return implode(', ', array_slice($list, 0, 3)).(count($list) > 3 ? ', dst.' : '');
     }
 }

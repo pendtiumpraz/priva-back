@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Sprint C1 Step 7: Per-tenant wizard templates for ROPA / DPIA.
+ * Sprint C1 Step 7: Per-tenant wizard templates for RoPA / DPIA.
  */
 return new class extends Migration
 {
@@ -31,8 +31,10 @@ return new class extends Migration
                 $table->foreign('org_id')->references('id')->on('organizations')->onDelete('cascade');
                 $table->index(['org_id', 'module', 'is_default'], 'module_templates_org_mod_idx');
             });
-        } catch (\Throwable $e) {
-            if (!$this->alreadyExists($e)) throw $e;
+        } catch (Throwable $e) {
+            if (! $this->alreadyExists($e)) {
+                throw $e;
+            }
         }
     }
 
@@ -41,9 +43,10 @@ return new class extends Migration
         Schema::dropIfExists('module_templates');
     }
 
-    private function alreadyExists(\Throwable $e): bool
+    private function alreadyExists(Throwable $e): bool
     {
         $msg = $e->getMessage();
+
         return str_contains($msg, 'already exists')
             || str_contains($msg, '1050')
             || str_contains($msg, '42S01')

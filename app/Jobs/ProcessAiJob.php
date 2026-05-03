@@ -117,7 +117,7 @@ class ProcessAiJob implements ShouldQueue
     }
 
     /**
-     * Autofill — used by ROPA / DPIA wizards to extract structured fields
+     * Autofill — used by RoPA / DPIA wizards to extract structured fields
      * from raw text or a document blob. Payload shape is owned by
      * AiFieldMappingService::map().
      */

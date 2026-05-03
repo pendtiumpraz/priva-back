@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Sprint C2: RACI matrix column on ROPA and DPIA.
+ * Sprint C2: RACI matrix column on RoPA and DPIA.
  */
 return new class extends Migration
 {
@@ -23,21 +23,23 @@ return new class extends Migration
 
     private function addJsonColumn(string $tableName, string $colName): void
     {
-        if (!Schema::hasTable($tableName) || Schema::hasColumn($tableName, $colName)) {
+        if (! Schema::hasTable($tableName) || Schema::hasColumn($tableName, $colName)) {
             return;
         }
         try {
             Schema::table($tableName, function (Blueprint $table) use ($colName) {
                 $table->json($colName)->nullable();
             });
-        } catch (\Throwable $e) {
-            if (!$this->columnAlreadyExists($e)) throw $e;
+        } catch (Throwable $e) {
+            if (! $this->columnAlreadyExists($e)) {
+                throw $e;
+            }
         }
     }
 
     private function dropColumn(string $tableName, string $colName): void
     {
-        if (!Schema::hasTable($tableName) || !Schema::hasColumn($tableName, $colName)) {
+        if (! Schema::hasTable($tableName) || ! Schema::hasColumn($tableName, $colName)) {
             return;
         }
         Schema::table($tableName, function (Blueprint $table) use ($colName) {
@@ -45,9 +47,10 @@ return new class extends Migration
         });
     }
 
-    private function columnAlreadyExists(\Throwable $e): bool
+    private function columnAlreadyExists(Throwable $e): bool
     {
         $msg = $e->getMessage();
+
         return str_contains($msg, 'Duplicate column')
             || str_contains($msg, '1060')    // MySQL duplicate column
             || str_contains($msg, '42701');  // PostgreSQL duplicate column

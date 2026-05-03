@@ -102,7 +102,7 @@ Hanya data yang benar-benar diperlukan yang boleh dikumpulkan. Over-collection =
 Ada langkah teknis (enkripsi, access control, backup) dan organisasional (policy, training, audit) untuk lindungi data.
 
 ## 6. Akuntabel (Accountability)
-Pengendali Data wajib bisa **membuktikan** kepatuhan terhadap 5 prinsip di atas. Ini kenapa ROPA, DPIA, Audit Log mandatory.
+Pengendali Data wajib bisa **membuktikan** kepatuhan terhadap 5 prinsip di atas. Ini kenapa RoPA, DPIA, Audit Log mandatory.
 
 ## Dampak Pelanggaran
 - Administratif: teguran, denda hingga 2% omzet tahunan
@@ -110,7 +110,7 @@ Pengendali Data wajib bisa **membuktikan** kepatuhan terhadap 5 prinsip di atas.
 - Reputasional: subjek bisa publikasikan + media coverage
 
 ## Kaitan ke Fitur Privasimu
-- **ROPA**: bukti akuntabilitas (Prinsip 6) untuk tujuan (Prinsip 1) + dasar hukum (Prinsip 2)
+- **RoPA**: bukti akuntabilitas (Prinsip 6) untuk tujuan (Prinsip 1) + dasar hukum (Prinsip 2)
 - **DPIA**: demonstrasi tujuan minimal (Prinsip 4) + keamanan (Prinsip 5)
 - **Consent Management**: implementasi transparansi (Prinsip 2)
 - **Audit Log**: bukti akuntabilitas (Prinsip 6)
@@ -178,7 +178,7 @@ KB,
                 'category' => 'regulation',
                 'feature_tags' => 'ropa_autofill,policy_review,chat,vendor_screening',
                 'keywords' => 'dasar hukum,legal basis,pasal 20,persetujuan,kontrak,kewajiban hukum,kepentingan vital,tugas publik,kepentingan sah,legitimate interest,lawful basis',
-                'summary' => 'Pasal 20 UU PDP: 6 dasar hukum pemrosesan data. (1) Persetujuan, (2) Pemenuhan kontrak, (3) Kewajiban hukum, (4) Kepentingan vital subjek, (5) Tugas publik, (6) Kepentingan sah (legitimate interest). Wajib pilih 1 untuk setiap aktivitas ROPA.',
+                'summary' => 'Pasal 20 UU PDP: 6 dasar hukum pemrosesan data. (1) Persetujuan, (2) Pemenuhan kontrak, (3) Kewajiban hukum, (4) Kepentingan vital subjek, (5) Tugas publik, (6) Kepentingan sah (legitimate interest). Wajib pilih 1 untuk setiap aktivitas RoPA.',
                 'content' => <<<'KB'
 # Dasar Pemrosesan Data (UU PDP Pasal 20)
 
@@ -270,21 +270,21 @@ KB,
 
             [
                 'module_key' => 'uu_pdp_pasal_31_ropa',
-                'title' => 'UU PDP — Kewajiban ROPA (Pasal 31)',
+                'title' => 'UU PDP — Kewajiban RoPA (Pasal 31)',
                 'category' => 'regulation',
                 'feature_tags' => 'ropa_autofill,chat,remediation,policy_review',
                 'keywords' => 'pasal 31,ropa,record processing,catatan pemrosesan,registry,wajib,accountability,kewajiban pengendali',
-                'summary' => 'Pasal 31 UU PDP mewajibkan Pengendali Data menyelenggarakan catatan (ROPA) atas setiap aktivitas pemrosesan data pribadi. Wajib berisi: nama+kontak pengendali, tujuan, kategori subjek+data, penerima, transfer, retensi, keamanan.',
+                'summary' => 'Pasal 31 UU PDP mewajibkan Pengendali Data menyelenggarakan catatan (RoPA) atas setiap aktivitas pemrosesan data pribadi. Wajib berisi: nama+kontak pengendali, tujuan, kategori subjek+data, penerima, transfer, retensi, keamanan.',
                 'content' => <<<'KB'
-# Kewajiban ROPA — UU PDP Pasal 31
+# Kewajiban RoPA — UU PDP Pasal 31
 
 ## Teks Pasal
 > "Pengendali Data Pribadi wajib menyelenggarakan catatan Pemrosesan Data Pribadi."
 
 ## Kenapa Wajib?
-Bukti akuntabilitas (Prinsip 6, Pasal 16). Tanpa ROPA, pengendali tidak bisa buktikan kepatuhan saat audit/pemeriksaan KOMDIGI.
+Bukti akuntabilitas (Prinsip 6, Pasal 16). Tanpa RoPA, pengendali tidak bisa buktikan kepatuhan saat audit/pemeriksaan KOMDIGI.
 
-## Isi Minimal ROPA (Penjelasan Pasal 31)
+## Isi Minimal RoPA (Penjelasan Pasal 31)
 1. Nama dan kontak Pengendali Data Pribadi
 2. Nama dan kontak Data Protection Officer (jika wajib — Pasal 53)
 3. Tujuan pemrosesan
@@ -296,7 +296,7 @@ Bukti akuntabilitas (Prinsip 6, Pasal 16). Tanpa ROPA, pengendali tidak bisa buk
 9. Deskripsi umum langkah keamanan teknis + organisasional
 
 ## Format Privasimu — 7 Section Wizard
-Privasimu ROPA wizard aligns dengan isi minimal + format KOMDIGI:
+Privasimu RoPA wizard aligns dengan isi minimal + format KOMDIGI:
 
 1. **Detail Pemrosesan** — nama aktivitas, divisi, unit kerja, entitas, deskripsi
 2. **DPO / PIC Team** — penanggung jawab DPO + PIC operasional
@@ -306,23 +306,23 @@ Privasimu ROPA wizard aligns dengan isi minimal + format KOMDIGI:
 6. **Pengiriman Data** — penerima, transfer lintas batas, safeguards
 7. **Retensi & Keamanan** — durasi, trigger pemusnahan, kontrol keamanan
 
-## Siapa yang Wajib Punya ROPA?
+## Siapa yang Wajib Punya RoPA?
 Semua **Pengendali Data** yang memproses data pribadi WNI. Tidak ada pengecualian berdasar ukuran — UMKM juga wajib, hanya format bisa lebih sederhana.
 
-## Update ROPA — Kapan?
-- Aktivitas pemrosesan baru → buat ROPA baru
+## Update RoPA — Kapan?
+- Aktivitas pemrosesan baru → buat RoPA baru
 - Perubahan tujuan, kategori data, penerima → update + version diff
 - Audit periodic minimal setahun sekali
-- Setelah breach → review apakah ROPA miss something
+- Setelah breach → review apakah RoPA miss something
 
-## Sanksi Tidak Punya ROPA
+## Sanksi Tidak Punya RoPA
 - Administratif: peringatan tertulis, denda hingga 2% omzet (Pasal 57)
 - Reputasional: fail audit ISO 27701, POJK, KOMDIGI
 - Operational: susah response DSR karena tidak tahu data tersimpan dimana
 
-## Privasimu ROPA — Fitur Utama
+## Privasimu RoPA — Fitur Utama
 - **AI Auto-Fill 7 section** dari deskripsi aktivitas
-- **Multi-DPO/PIC/System** — 1 ROPA banyak pejabat + sistem
+- **Multi-DPO/PIC/System** — 1 RoPA banyak pejabat + sistem
 - **Risk Level otomatis** dari 8 trigger wizard (data sensitif, transfer, profiling, dll)
 - **Auto-trigger DPIA** kalau risk HIGH
 - **Export PDF + DOCX** format KOMDIGI
@@ -405,7 +405,7 @@ KB,
                 'category' => 'regulation',
                 'feature_tags' => 'dpia_autofill,ropa_autofill,chat',
                 'keywords' => 'pasal 34,dpia,data protection impact assessment,penilaian dampak,risk,tinggi,high risk,profiling,biometrik,skala besar,sensitif',
-                'summary' => 'Pasal 34 UU PDP: DPIA WAJIB dilakukan sebelum pemrosesan berisiko tinggi — data sensitif, otomatisasi pengambilan keputusan, pemantauan sistematis skala besar, atau teknologi baru. ROPA risk=HIGH auto-trigger DPIA di Privasimu.',
+                'summary' => 'Pasal 34 UU PDP: DPIA WAJIB dilakukan sebelum pemrosesan berisiko tinggi — data sensitif, otomatisasi pengambilan keputusan, pemantauan sistematis skala besar, atau teknologi baru. RoPA risk=HIGH auto-trigger DPIA di Privasimu.',
                 'content' => <<<'KB'
 # Kewajiban DPIA — UU PDP Pasal 34
 
@@ -462,7 +462,7 @@ Tiap kategori diisi: Likelihood (1-5) × Impact (1-5) = Risk Score.
 Mitigasi WAJIB untuk skor ≥10.
 
 ## Privasimu Auto-Trigger
-ROPA dengan risk_level=HIGH **auto-create draft DPIA** dengan inherited wizard_data dari ROPA. Tim DPO tinggal lengkapi 21 kategori risk event.
+RoPA dengan risk_level=HIGH **auto-create draft DPIA** dengan inherited wizard_data dari RoPA. Tim DPO tinggal lengkapi 21 kategori risk event.
 
 ## DPIA Output
 - Risk Matrix 5×5 visual (color-coded PDF)
@@ -526,7 +526,7 @@ Wajib tertulis, via:
 2. **Containment Checklist adaptif** per kategori (isolation/forensics/legal/comm/remediation)
 3. **RACI Matrix editable per-breach** — siapa Responsible/Accountable/Consulted/Informed per step
 4. **72-jam KOMDIGI countdown** auto-escalation
-5. **Multi-ROPA linkage** — 1 breach bisa affect banyak ROPA
+5. **Multi-RoPA linkage** — 1 breach bisa affect banyak RoPA
 6. **Auto-generate PDF pack**:
    - Surat Notifikasi ke KOMDIGI
    - Surat Himbauan ke Subjek Terdampak (template anti-churn)
@@ -657,7 +657,7 @@ Belum ada daftar resmi adequacy KOMDIGI per April 2026. Best practice: asumsikan
 
 ## Dokumentasi Wajib
 Setiap transfer harus tercatat di:
-1. **ROPA Section 6 (Pengiriman Data)** — list penerima, negara, safeguards
+1. **RoPA Section 6 (Pengiriman Data)** — list penerima, negara, safeguards
 2. **TIA (Transfer Impact Assessment)** — analisis risiko spesifik negara tujuan
 3. **DPA (Data Processing Agreement)** — kontrak dengan penerima
 4. **Registry Cross-Border Transfer** di Privasimu
@@ -680,26 +680,26 @@ KB,
     }
 
     // ======================================================================
-    // 2. ROPA — Wizard Section Detail + Library
+    // 2. RoPA — Wizard Section Detail + Library
     // ======================================================================
     private function ropaSections(): array
     {
         return [
             [
                 'module_key' => 'ropa_wizard_overview',
-                'title' => 'ROPA Wizard — 7 Step Overview',
+                'title' => 'RoPA Wizard — 7 Step Overview',
                 'category' => 'wizard',
                 'feature_tags' => 'ropa_autofill,chat',
                 'keywords' => 'ropa wizard,7 step,section,pemrosesan,urutan,langkah,format komdigi',
-                'summary' => 'Privasimu ROPA wizard 7 step sinkron format KOMDIGI: (1) Detail Pemrosesan, (2) DPO/PIC, (3) Informasi Pemrosesan, (4) Pengumpulan Data, (5) Penggunaan & Penyimpanan, (6) Pengiriman Data, (7) Retensi & Keamanan.',
+                'summary' => 'Privasimu RoPA wizard 7 step sinkron format KOMDIGI: (1) Detail Pemrosesan, (2) DPO/PIC, (3) Informasi Pemrosesan, (4) Pengumpulan Data, (5) Penggunaan & Penyimpanan, (6) Pengiriman Data, (7) Retensi & Keamanan.',
                 'content' => <<<'KB'
-# ROPA Wizard 7-Step — Privasimu
+# RoPA Wizard 7-Step — Privasimu
 
 ## Section 1: Detail Pemrosesan
 **Tujuan**: identifikasi aktivitas. Input: nama, divisi, unit kerja, entitas, deskripsi singkat, kategori pemrosesan.
 
 ## Section 2: DPO / PIC Team
-**Tujuan**: tentukan penanggung jawab. Multi-DPO + multi-PIC bisa per 1 ROPA. Data: nama, email, jabatan, phone.
+**Tujuan**: tentukan penanggung jawab. Multi-DPO + multi-PIC bisa per 1 RoPA. Data: nama, email, jabatan, phone.
 
 ## Section 3: Informasi Pemrosesan
 **Tujuan**: tujuan + dasar hukum. Pilih dari 6 legal basis Pasal 20. Kategori subjek: karyawan, nasabah, pelamar, customer, dll.
@@ -708,7 +708,7 @@ KB,
 **Tujuan**: data apa, dari mana, berapa banyak. **Section paling sensitif** — trigger auto risk HIGH kalau data sensitif terdeteksi (biometrik, kesehatan, anak, dll). Kategori data: 15 jenis Indonesian PII.
 
 ## Section 5: Penggunaan & Penyimpanan
-**Tujuan**: sistem apa yang simpan, lokasi server, akses. Multi-system support — 1 ROPA bisa refer banyak Information System.
+**Tujuan**: sistem apa yang simpan, lokasi server, akses. Multi-system support — 1 RoPA bisa refer banyak Information System.
 
 ## Section 6: Pengiriman Data
 **Tujuan**: siapa penerima. Internal (divisi lain), eksternal (vendor, 3rd party), transfer lintas batas (Pasal 56).
@@ -738,13 +738,13 @@ KB,
 
             [
                 'module_key' => 'ropa_legal_basis_library',
-                'title' => 'ROPA Legal Basis Library — 6 Jenis + Contoh Industri',
+                'title' => 'RoPA Legal Basis Library — 6 Jenis + Contoh Industri',
                 'category' => 'library',
                 'feature_tags' => 'ropa_autofill,chat,remediation',
                 'keywords' => 'legal basis,dasar hukum,consent,persetujuan,kontrak,contract,kewajiban hukum,legal obligation,kepentingan vital,tugas publik,legitimate interest,kepentingan sah,industri contoh',
                 'summary' => 'Library 6 dasar hukum Pasal 20 UU PDP dengan contoh aktivitas industri banking, healthcare, fintech, e-commerce, HR. Dipakai AI Auto-Fill untuk pilih basis yang tepat.',
                 'content' => <<<'KB'
-# ROPA Legal Basis Library
+# RoPA Legal Basis Library
 
 ## 1. Persetujuan (Consent) — Pasal 20(1)(a)
 **Banking**: Consent untuk marketing produk investasi via email newsletter.
@@ -802,11 +802,11 @@ KB,
 
             [
                 'module_key' => 'ropa_data_category_library',
-                'title' => 'ROPA Data Category — 15 Jenis PII Indonesia',
+                'title' => 'RoPA Data Category — 15 Jenis PII Indonesia',
                 'category' => 'library',
                 'feature_tags' => 'ropa_autofill,dpia_autofill,pii_scan,data_discovery',
                 'keywords' => 'kategori data,data category,nik,npwp,ktp,email,telepon,alamat,rekening,biometrik,genetik,kesehatan,anak,agama,politik,orientasi seksual,pii indonesia',
-                'summary' => 'Library 15 kategori data pribadi spesifik Indonesia — NIK, NPWP, KTP, rekening, biometrik, kesehatan, anak, agama, dll. Dipakai auto-classify PII saat scanning + auto-fill ROPA Section 4.',
+                'summary' => 'Library 15 kategori data pribadi spesifik Indonesia — NIK, NPWP, KTP, rekening, biometrik, kesehatan, anak, agama, dll. Dipakai auto-classify PII saat scanning + auto-fill RoPA Section 4.',
                 'content' => <<<'KB'
 # Kategori Data Pribadi Indonesia — Library
 
@@ -849,7 +849,7 @@ KB,
 - Kolom `fingerprint_hash`, `biometric_*` → biometrik
 
 ## Auto-Risk Trigger
-Kalau ROPA Section 4 pilih salah satu dari **10-18 (data sensitif)** → ROPA.risk_level otomatis HIGH.
+Kalau RoPA Section 4 pilih salah satu dari **10-18 (data sensitif)** → RoPA.risk_level otomatis HIGH.
 
 ## Privasimu PII Scanner (ContentPiiScanner service)
 - Scan kolom DB + sample data (statistical confidence)
@@ -861,13 +861,13 @@ KB,
 
             [
                 'module_key' => 'ropa_golden_examples_banking',
-                'title' => 'ROPA Golden Examples — Banking Industry',
+                'title' => 'RoPA Golden Examples — Banking Industry',
                 'category' => 'example',
                 'feature_tags' => 'ropa_autofill',
                 'keywords' => 'contoh ropa bank,banking,kyc,rekening,pinjaman,credit scoring,nasabah,transaksi,atm',
-                'summary' => 'Golden examples ROPA untuk 5 aktivitas banking umum: e-KYC onboarding, pinjaman konsumer, kartu kredit, transaksi pembayaran, AI credit scoring. Dipakai AI Auto-Fill sebagai few-shot reference.',
+                'summary' => 'Golden examples RoPA untuk 5 aktivitas banking umum: e-KYC onboarding, pinjaman konsumer, kartu kredit, transaksi pembayaran, AI credit scoring. Dipakai AI Auto-Fill sebagai few-shot reference.',
                 'content' => <<<'KB'
-# ROPA Golden Examples — Banking
+# RoPA Golden Examples — Banking
 
 ## Example 1: Onboarding Nasabah (e-KYC)
 ```json
@@ -940,13 +940,13 @@ KB,
 
             [
                 'module_key' => 'ropa_golden_examples_healthcare',
-                'title' => 'ROPA Golden Examples — Healthcare',
+                'title' => 'RoPA Golden Examples — Healthcare',
                 'category' => 'example',
                 'feature_tags' => 'ropa_autofill',
                 'keywords' => 'contoh ropa healthcare,rumah sakit,rs,rekam medis,pasien,klinik,lab,apotek,telemedicine',
-                'summary' => 'Golden examples ROPA untuk healthcare: rekam medis, pendaftaran pasien, telemedicine, lab results sharing, farmasi. Wajib pertimbangkan UU Praktik Kedokteran + data kesehatan sensitif.',
+                'summary' => 'Golden examples RoPA untuk healthcare: rekam medis, pendaftaran pasien, telemedicine, lab results sharing, farmasi. Wajib pertimbangkan UU Praktik Kedokteran + data kesehatan sensitif.',
                 'content' => <<<'KB'
-# ROPA Golden Examples — Healthcare
+# RoPA Golden Examples — Healthcare
 
 ## Example 1: Rekam Medis Pasien
 ```json
@@ -1256,8 +1256,8 @@ KB,
 8. Apakah ada kontrak Joint Controller / Controller-Processor formal?
 9. Apakah pernah dilakukan audit internal PDP?
 10. Apakah hasil audit di-tindaklanjuti?
-11. Apakah ada Records of Processing Activities (ROPA) lengkap?
-12. Apakah ROPA di-update setiap aktivitas baru?
+11. Apakah ada Records of Processing Activities (RoPA) lengkap?
+12. Apakah RoPA di-update setiap aktivitas baru?
 13. Apakah ada budget compliance yang ring-fenced?
 14. Apakah Direksi aware dan mendukung program PDP?
 
@@ -1280,7 +1280,7 @@ KB,
 24. Apakah backup encrypted dan di-test?
 
 ### Pengiriman (Transfer) — 3
-25. Apakah transfer internal tercatat di ROPA?
+25. Apakah transfer internal tercatat di RoPA?
 26. Apakah transfer ke 3rd party ada DPA?
 27. Apakah cross-border transfer ada SCC/BCR?
 
@@ -1556,7 +1556,7 @@ KB,
 ## 7. Information Request — Pasal 10
 **Workflow**:
 1. Subjek tanya: siapa data saya, untuk apa, berapa lama
-2. Privasimu generate report dari ROPA + consent log
+2. Privasimu generate report dari RoPA + consent log
 3. Output: PDF ringkasan per-subjek
 4. Tidak butuh SQL ke production DB — hanya metadata lookup
 **Deadline**: 72 jam
@@ -1949,7 +1949,7 @@ KB,
 17. GDPR compliant? (for EU customers)
 18. UU PDP Indonesia compliant?
 19. DPO appointed? (name + contact)
-20. ROPA maintained for vendor's own processing?
+20. RoPA maintained for vendor's own processing?
 21. Sub-processor list disclosed?
 22. Cross-border transfer safeguard (SCC/BCR/adequacy)?
 23. Data retention policy documented?
@@ -2380,11 +2380,11 @@ Setiap scan bikin snapshot schema. Antar scan, platform detect:
 - Type change (mis. `VARCHAR(50)` → `TEXT`)
 - PII classification change (previously not-PII, now detected as NIK)
 
-Alert ke DPO kalau drift signifikan — potensi ROPA perlu di-update.
+Alert ke DPO kalau drift signifikan — potensi RoPA perlu di-update.
 
 ## Integration Output
 Hasil Data Discovery auto-sync ke:
-- **ROPA Section 4 & 5**: "jenis data dikumpulkan" + "sistem informasi" otomatis populate
+- **RoPA Section 4 & 5**: "jenis data dikumpulkan" + "sistem informasi" otomatis populate
 - **DPIA Category 2 (Minimisasi)**: list kolom redundant untuk remediation
 - **DSR Scope Picker**: subjek request scope-able per Information System
 - **Posture Score**: contribute ke overall compliance metric
@@ -2397,7 +2397,7 @@ KB,
                 'category' => 'example',
                 'feature_tags' => 'chat,sales_faq,data_discovery',
                 'keywords' => 'keunggulan,advantage,competitor,kompetitor,bedanya,unggul,onetrust,bigid,varonis,microsoft purview,benefit,value proposition,usp,differensiasi',
-                'summary' => 'Keunggulan Data Discovery Privasimu: (1) dua mode live/generate-only khusus bank, (2) sharded DB support, (3) AI classification dengan konteks UU PDP, (4) native integration ROPA/DPIA/DSR, (5) on-prem deployment, (6) value proposition khusus konteks Indonesia vs OneTrust/BigID.',
+                'summary' => 'Keunggulan Data Discovery Privasimu: (1) dua mode live/generate-only khusus bank, (2) sharded DB support, (3) AI classification dengan konteks UU PDP, (4) native integration RoPA/DPIA/DSR, (5) on-prem deployment, (6) value proposition khusus konteks Indonesia vs OneTrust/BigID.',
                 'content' => <<<'KB'
 # Keunggulan Data Discovery Privasimu
 
@@ -2424,11 +2424,11 @@ Kompetitor generic (GDPR-focused). Privasimu trained ke:
 - PII Indonesia patterns (NIK 16 digit, NPWP format, BPJS, rekening per-bank)
 - Industry-specific patterns (banking CIF, healthcare BPJS, fintech loan ID)
 
-### 4. Native Integration ROPA/DPIA/DSR
+### 4. Native Integration RoPA/DPIA/DSR
 Kompetitor modular — data discovery jual terpisah dari GRC platform. Integrasi butuh kustom.
 
 **Privasimu one-platform**:
-- Data Discovery → auto-fill ROPA Section 4-5
+- Data Discovery → auto-fill RoPA Section 4-5
 - Data Discovery → feed DPIA Category "Minimisasi Data"
 - Data Discovery → DSR scope picker native
 - Cross-linkage otomatis, no integration project
@@ -2453,7 +2453,7 @@ Bank / BUMN yang mau rebrand ke "ABC Privacy Manager" bisa. Template dokumen, pa
 Struktur induk-anak perusahaan dengan cross-tenant aggregated dashboard. Kompetitor asing treat setiap subsidiary independent — butuh multi-license.
 
 ### 10. AI Agent Compliance Assistant
-Chat bot dengan function calling — langsung create ROPA, update DPIA, trigger breach workflow dari natural language. Kompetitor masih stuck di manual click-based.
+Chat bot dengan function calling — langsung create RoPA, update DPIA, trigger breach workflow dari natural language. Kompetitor masih stuck di manual click-based.
 KB,
             ],
 
@@ -2507,7 +2507,7 @@ KB,
 - Kategori (termasuk kategori non-regex: agama, orientasi, politik)
 - Confidence
 - **Explanation**: "Kolom `rel_code` berisi value A/B/C/D — dari sample context (kolom sebelah 'religion_name' = Islam/Kristen/Hindu/Budha), ini kemungkinan data agama dengan kode"
-- Risk assessment UU PDP: flag sebagai data sensitif → trigger ROPA HIGH risk
+- Risk assessment UU PDP: flag sebagai data sensitif → trigger RoPA HIGH risk
 
 ### Keunggulan
 - 🧠 **Semantic understanding** — tahu `cust_ref` mungkin customer ID → PII
@@ -2750,7 +2750,7 @@ KB,
                 'category' => 'example',
                 'feature_tags' => 'chat,sales_faq',
                 'keywords' => 'privasimu,nexus,platform,sales,jual,demo,fitur,keunggulan,kompetitor,tier,lisensi,deployment,on premise,saas,cloud',
-                'summary' => 'Sales FAQ Privasimu Nexus: platform compliance UU PDP end-to-end untuk bank/fintech/healthcare/BUMN. 13 modul (ROPA/DPIA/GAP/DSR/Breach/Consent/Vendor/Data Discovery/AI/Docs/Admin/Holding/Docs Import). Deployment SaaS atau on-prem (Docker). Untuk detail pricing hubungi tim sales.',
+                'summary' => 'Sales FAQ Privasimu Nexus: platform compliance UU PDP end-to-end untuk bank/fintech/healthcare/BUMN. 13 modul (RoPA/DPIA/GAP/DSR/Breach/Consent/Vendor/Data Discovery/AI/Docs/Admin/Holding/Docs Import). Deployment SaaS atau on-prem (Docker). Untuk detail pricing hubungi tim sales.',
                 'content' => <<<'KB'
 # Sales FAQ — Privasimu Nexus
 
@@ -2769,7 +2769,7 @@ Platform manajemen kepatuhan UU PDP (UU 27/2022) end-to-end untuk Data Protectio
 
 ## Q: Apa saja modulnya?
 13 modul utama:
-1. **ROPA** — Records of Processing Activities (wizard 7 step)
+1. **RoPA** — Records of Processing Activities (wizard 7 step)
 2. **DPIA** — Data Protection Impact Assessment (21 kategori + 5×5 matrix)
 3. **GAP Assessment** — 33 pertanyaan UU PDP + multi-regulation (GDPR, PDPA, ISO 27701)
 4. **DSR** — Data Subject Rights (7 tipe, 72h SLA, SQL Generator)
@@ -2781,10 +2781,10 @@ Platform manajemen kepatuhan UU PDP (UU 27/2022) end-to-end untuk Data Protectio
 10. **Document Templates** — white-label PDF + DOCX, 10 preset styling
 11. **Admin** — User, SSO, Notifications, Audit, Branding, License, Menu, Custom Fields
 12. **Holding Dashboard** — cross-tenant aggregated (enterprise tier)
-13. **Document Import** — bulk migrate legacy ROPA/DPIA
+13. **Document Import** — bulk migrate legacy RoPA/DPIA
 
 ## Q: Apa keunggulan vs OneTrust / BigID / TrustArc?
-1. **End-to-end UU PDP** — satu-satunya di Indonesia yang lengkap ROPA → DPIA → DSR → Breach → Consent dalam satu panel
+1. **End-to-end UU PDP** — satu-satunya di Indonesia yang lengkap RoPA → DPIA → DSR → Breach → Consent dalam satu panel
 2. **Indonesian-native** — UI + dokumen + AI response 100% Bahasa Indonesia
 3. **Generate-only SQL** untuk bank — kompetitor butuh live connect ke DB klien
 4. **Value proposition** cocok konteks Indonesia (POJK, KOMDIGI, sharded bank DB)
@@ -2853,20 +2853,20 @@ KB,
             ],
 
             // -------------------------------------------------------------
-            // ROPA Flow end-to-end
+            // RoPA Flow end-to-end
             // -------------------------------------------------------------
             [
                 'module_key' => 'ropa_flow_end_to_end',
-                'title' => 'ROPA — Flow End-to-End Platform Privasimu',
+                'title' => 'RoPA — Flow End-to-End Platform Privasimu',
                 'category' => 'workflow',
                 'feature_tags' => 'chat,ropa_autofill,sales_faq',
                 'keywords' => 'ropa flow,ropa workflow,create ropa,bagaimana,cara buat,step by step,urutan,approval,submit,review',
-                'summary' => 'ROPA flow Privasimu: (1) intent modal pilih manual/AI/batal, (2) wizard 7 step, (3) auto-risk dari 8 trigger, (4) kalau HIGH auto-draft DPIA, (5) approval multi-level, (6) publish + export PDF/DOCX. Waktu: manual 30-60 menit, AI Auto-Fill 2-5 menit.',
+                'summary' => 'RoPA flow Privasimu: (1) intent modal pilih manual/AI/batal, (2) wizard 7 step, (3) auto-risk dari 8 trigger, (4) kalau HIGH auto-draft DPIA, (5) approval multi-level, (6) publish + export PDF/DOCX. Waktu: manual 30-60 menit, AI Auto-Fill 2-5 menit.',
                 'content' => <<<'KB'
-# ROPA — Flow End-to-End
+# RoPA — Flow End-to-End
 
-## Step 1: Inisiasi ROPA (30 detik)
-Klik "+ ROPA Baru" → Intent Modal muncul dengan 3 pilihan:
+## Step 1: Inisiasi RoPA (30 detik)
+Klik "+ RoPA Baru" → Intent Modal muncul dengan 3 pilihan:
 - 🖋️ **Isi Manual** — buka wizard blank
 - 🤖 **Auto Fill AI** — ketik deskripsi aktivitas, AI generate 7 section
 - ❌ **Batal** — tutup modal
@@ -2937,11 +2937,11 @@ User klik Submit → status `pending_review` → ke DPO queue.
 - **Level 3**: Direksi approve (final sign-off untuk HIGH risk)
 
 Reject → kembali ke maker dengan notes.
-Approve semua level → status `approved` + auto-generate ROPA Number (ROPA-YYYY-NNN).
+Approve semua level → status `approved` + auto-generate RoPA Number (RoPA-YYYY-NNN).
 
 ## Step 6: Publish + Export
-Approved ROPA:
-- Public dalam ROPA List (searchable, filterable)
+Approved RoPA:
+- Public dalam RoPA List (searchable, filterable)
 - Export PDF / DOCX dengan template canonical atau custom
 - AI Continuous Monitoring mulai track
 - Jadi input untuk Compliance Posture Score
@@ -2962,12 +2962,12 @@ Approved ROPA:
 | Approval cycle (DPO+Legal+Direksi) | 2-5 hari kerja |
 
 ## Integrasi Ke Modul Lain
-- ROPA HIGH → auto-draft DPIA
-- ROPA reference Information System → link ke Data Discovery
-- ROPA reference vendor eksternal → link ke TPRM
-- ROPA data category → feed ke DSR scope picker
-- ROPA audit log → Audit module
-- ROPA approval flow → Approval Workflow module
+- RoPA HIGH → auto-draft DPIA
+- RoPA reference Information System → link ke Data Discovery
+- RoPA reference vendor eksternal → link ke TPRM
+- RoPA data category → feed ke DSR scope picker
+- RoPA audit log → Audit module
+- RoPA approval flow → Approval Workflow module
 KB,
             ],
 
@@ -3026,9 +3026,9 @@ Countdown visible di dashboard. Multi-level alert:
 - T+60h: critical alert Direksi
 - T+72h: **KOMDIGI deadline** — trigger notification wajib
 
-## Step 5: ROPA Linkage
-1 breach → affect multiple ROPA. Klik "Link ROPA":
-- Search ROPA by name / number
+## Step 5: RoPA Linkage
+1 breach → affect multiple RoPA. Klik "Link RoPA":
+- Search RoPA by name / number
 - Multi-select
 - Auto-calculate subject count affected
 
@@ -3064,7 +3064,7 @@ Setelah containment stabilize:
 - Attack vector identification
 - Control gap analysis
 - Remediation action plan
-- Update ROPA / DPIA / Breach SOP based on findings
+- Update RoPA / DPIA / Breach SOP based on findings
 
 ## Step 9: Full Breach Report (final)
 Auto-generate comprehensive PDF:
@@ -3180,20 +3180,20 @@ KB,
                 'content' => <<<'KB'
 # Sales Q&A — Common Objection Library
 
-## Objection 1: "Kami sudah pakai Excel/Google Sheets untuk ROPA"
+## Objection 1: "Kami sudah pakai Excel/Google Sheets untuk RoPA"
 **Response pattern**:
 "Memang Excel bisa dipakai awal. Tapi challenge muncul saat:
 1. Multiple DPO edit sekaligus — konflik version
 2. Approval workflow manual (email back-and-forth)
 3. Audit trail — Excel tidak track siapa ubah apa kapan
-4. DSR request masuk — tidak bisa link ROPA ke sistem mana yang kena impact
-5. Breach terjadi — tidak bisa cepat identify ROPA affected
+4. DSR request masuk — tidak bisa link RoPA ke sistem mana yang kena impact
+5. Breach terjadi — tidak bisa cepat identify RoPA affected
 
 Privasimu automate semua ini + native integrasi ke DSR/Breach/DPIA. Klien kami yang migrasi dari Excel biasanya save 60% waktu compliance team."
 
 **Bukti**:
-- Case study: Bank X migrasi dari Excel, waktu approval ROPA turun dari 14 hari ke 3 hari
-- Time-saving calculator: input jumlah ROPA + frekuensi update → dapat estimasi jam saved/bulan
+- Case study: Bank X migrasi dari Excel, waktu approval RoPA turun dari 14 hari ke 3 hari
+- Time-saving calculator: input jumlah RoPA + frekuensi update → dapat estimasi jam saved/bulan
 
 ## Objection 2: "Lisensi Privasimu mahal" / "Berapa pricing-nya?"
 **Response pattern**:
@@ -3209,7 +3209,7 @@ Tim sales akan:
 - Opsi pilot program 30 hari untuk qualified prospect
 
 Secara umum yang bisa saya sampaikan: Privasimu design untuk deliver value proposition yang cocok dengan konteks regulasi dan operational nuance Indonesia — bukan one-size-fits-all solution global. ROI biasanya terlihat dari:
-- Reduksi waktu compliance cycle (ROPA approval, DSR response, breach notification)
+- Reduksi waktu compliance cycle (RoPA approval, DSR response, breach notification)
 - Avoid administrative penalty UU PDP (hingga 2% omzet tahunan)
 - Breach prevention value
 - Audit readiness (ISO 27701, POJK, KOMDIGI)
@@ -3266,7 +3266,7 @@ Plus saya include 5-day onboarding training gratis untuk semua tier di atas Basi
 **Response pattern**:
 "Privasimu design for non-technical users. Typical onboarding:
 - **DPO**: 2 hari training = fully productive
-- **Maker (staff compliance)**: 1 hari = can start inputting ROPA
+- **Maker (staff compliance)**: 1 hari = can start inputting RoPA
 - **Direksi/reviewer**: 2 jam = approve workflow
 - **Subject data**: zero training — embed form + preference center self-service
 
@@ -3276,7 +3276,7 @@ Total tim 25 orang onboard dalam 1 minggu. Kami juga kasih 'training the trainer
 **Response pattern**:
 "Good question — concern sahih. Privasimu mitigate dengan:
 1. **RAG grounding** — 50+ section knowledge base UU PDP + industry, auto-inject ke AI context
-2. **Tool calling validation** — AI bilang mau create ROPA, user review + approve SEBELUM execute
+2. **Tool calling validation** — AI bilang mau create RoPA, user review + approve SEBELUM execute
 3. **Internal benchmark**: halu rate <2% untuk Qwen3-32B + grounding
 4. **Audit log** per AI action — traceable kalau error
 5. **Fallback mode** — AI down? Manual flow tetap jalan
@@ -3287,7 +3287,7 @@ Dan kami kasih opsi: pake AI boleh full, atau hanya untuk suggestion, atau turn 
 **Response pattern**:
 "Privasimu terbuka untuk integrate via:
 - **REST API** — full CRUD all module via Developer API Hub
-- **Webhook** — push event ke sistem Anda (ROPA created, breach detected, etc)
+- **Webhook** — push event ke sistem Anda (RoPA created, breach detected, etc)
 - **SIEM Integration** — send log ke Splunk/QRadar/Elastic
 - **SSO** — SAML + OIDC
 - **IMAP** — DSR intake dari email
@@ -3562,7 +3562,7 @@ Review kuartal. Setelah real incident (update lesson learned). Setelah drill yan
 Review saat DSR volume spike. Saat ada regulator inquiry. Saat platform tooling change.
 
 ### SOP Retensi
-Review saat regulasi baru rilis (misal perubahan UU retention). Saat coverage ROPA berubah.
+Review saat regulasi baru rilis (misal perubahan UU retention). Saat coverage RoPA berubah.
 KB,
             ],
         ];
@@ -3954,7 +3954,7 @@ Returns top-N (default 3).
 | Feature | Feature Tag |
 |---|---|
 | AI Chat | chat |
-| AI Auto-Fill ROPA | ropa_autofill |
+| AI Auto-Fill RoPA | ropa_autofill |
 | AI Auto-Fill DPIA | dpia_autofill |
 | AI Contract Review | contract_review |
 | AI Policy Review | policy_review |
@@ -4165,7 +4165,7 @@ Per-key config:
 
 ## Core Endpoints (sample)
 
-### ROPA (Universal CRUD pattern)
+### RoPA (Universal CRUD pattern)
 ```
 GET    /api/m/ropa              # list
 GET    /api/m/ropa/{id}         # detail
@@ -4259,7 +4259,7 @@ Tenant inbox `dsr@company.com`. Privasimu fetch via IMAP (credential encrypted):
 Slack Incoming Webhook per tenant. Events:
 - Breach detected → action buttons (Ack, View, Escalate)
 - DSR deadline alert
-- ROPA approval request
+- RoPA approval request
 
 Teams: Adaptive Card equivalent.
 
@@ -4298,7 +4298,7 @@ KB,
                 'category' => 'library',
                 'feature_tags' => 'chat,sales_faq',
                 'keywords' => 'pdf,docx,word,template,placeholder,generate,export,dompdf,phpword,watermark,logo,cover,cloneRow,cloneBlock',
-                'summary' => 'Document generation: PDF via dompdf 3.x, DOCX via PhpOffice PhpWord 1.x dengan TemplateProcessor. Placeholder library 74 ROPA, 50+ DPIA, 30+ Breach. cloneRow untuk table repeater, cloneBlock untuk section. 10 preset styling + custom upload. Branding white-label per tenant.',
+                'summary' => 'Document generation: PDF via dompdf 3.x, DOCX via PhpOffice PhpWord 1.x dengan TemplateProcessor. Placeholder library 74 RoPA, 50+ DPIA, 30+ Breach. cloneRow untuk table repeater, cloneBlock untuk section. 10 preset styling + custom upload. Branding white-label per tenant.',
                 'content' => <<<'KB'
 # Document Generation — PDF + DOCX
 
@@ -4317,7 +4317,7 @@ KB,
 
 ## Placeholder Library
 
-- **ROPA**: 74 placeholder (number, activity, DPO, legal basis, data cat, retention, security, dll)
+- **RoPA**: 74 placeholder (number, activity, DPO, legal basis, data cat, retention, security, dll)
 - **DPIA**: 50+ placeholder (risk score matrix, residual, mitigation, 21 category × 4 field)
 - **Breach Report**: 30+ placeholder (timeline, RACI, RCA, notification status)
 
@@ -4355,7 +4355,7 @@ Data → load .docx template → TemplateProcessor replace:
 2. Upload UI `/document-templates`
 3. Validator parse + list placeholder found vs expected
 4. Preview dengan sample data
-5. Assign per-kind (ROPA / DPIA / Breach)
+5. Assign per-kind (RoPA / DPIA / Breach)
 6. Active
 
 ## Digital Signature
@@ -4368,9 +4368,9 @@ MS Word digital signature metadata embed.
 
 ## Performance
 
-- PDF 10-page ROPA: 1-2 detik
+- PDF 10-page RoPA: 1-2 detik
 - DOCX generation: <1 detik
-- Bulk export 100 ROPA ZIP: 30-60 detik (queued)
+- Bulk export 100 RoPA ZIP: 30-60 detik (queued)
 
 ## Troubleshooting
 
@@ -4413,7 +4413,7 @@ KB,
 ### AI Features
 - AI Chat (streaming start): <2s (800ms)
 - AI Chat full short response: 3-5s (3s)
-- AI Auto-Fill ROPA: <30s (12s)
+- AI Auto-Fill RoPA: <30s (12s)
 - AI Auto-Fill DPIA: <60s (25s)
 - AI Contract Review 10p: <90s (40s)
 - AI Policy Review: <60s (30s)
@@ -4427,7 +4427,7 @@ KB,
 
 ## DB Capacity Per-Table
 
-- ROPA: 100k per tenant
+- RoPA: 100k per tenant
 - DPIA: 100k per tenant
 - DSR requests: 10 juta (5-year retention)
 - Audit logs: 100 juta (partitioned per bulan)
@@ -4803,7 +4803,7 @@ Changes detected (2026-04-25 02:00 WIB):
 
 Action required:
 → Review classification changes
-→ Update ROPA kalau new column PII-bearing
+→ Update RoPA kalau new column PII-bearing
 → Investigate volume anomaly
 ```
 
@@ -4813,11 +4813,11 @@ Tab `Changelog` di Data Discovery menunjukkan timeline:
 - Kapan scan run
 - Apa yang berubah
 - Siapa acknowledge (DPO mark reviewed)
-- Link ke affected ROPA yang mungkin perlu update
+- Link ke affected RoPA yang mungkin perlu update
 
 ## Integration
 
-- **ROPA**: auto-suggest update ROPA kalau new PII column detected di sistem yang link ROPA
+- **RoPA**: auto-suggest update RoPA kalau new PII column detected di sistem yang link RoPA
 - **DPIA**: alert kalau data spesifik (biometrik, health, child) muncul baru
 - **Posture Score**: drift signifikan menurunkan score
 - **Audit Log**: patrol run + detection tercatat
@@ -4859,12 +4859,12 @@ KB,
                 'category' => 'workflow',
                 'feature_tags' => 'chat,sales_faq,data_discovery,pii_scan',
                 'keywords' => 'shadow data,bayangan,hidden data,undocumented,belum tercatat,ropa coverage,shadow detection,protection,encryption keys,unregistered',
-                'summary' => 'Shadow Data = PII yang ada di DB tapi TIDAK tercatat di ROPA (no legal basis, no retention policy, no safeguards documented). Privasimu auto-detect saat scan: kolom PII-bearing tapi tidak ada ROPA link. Flag sebagai compliance risk. Protection tab kasih recommendation: register ke ROPA atau delete/anonymize.',
+                'summary' => 'Shadow Data = PII yang ada di DB tapi TIDAK tercatat di RoPA (no legal basis, no retention policy, no safeguards documented). Privasimu auto-detect saat scan: kolom PII-bearing tapi tidak ada RoPA link. Flag sebagai compliance risk. Protection tab kasih recommendation: register ke RoPA atau delete/anonymize.',
                 'content' => <<<'KB'
 # Shadow Data Detection
 
 ## Apa Itu?
-**Shadow Data** = data pribadi yang benar-benar ada di sistem tapi **tidak tercatat / tidak terdokumentasi** di ROPA organisasi. Risk besar karena:
+**Shadow Data** = data pribadi yang benar-benar ada di sistem tapi **tidak tercatat / tidak terdokumentasi** di RoPA organisasi. Risk besar karena:
 - Tidak ada legal basis documented
 - Tidak ada retention policy → mungkin over-retention
 - Tidak ada safeguards formal
@@ -4877,31 +4877,31 @@ Platform cross-reference:
 ```
 Schema Registry hasil scan (actual PII in DB)
   VS
-ROPA records (documented processing activity)
+RoPA records (documented processing activity)
 
 Delta = Shadow Data
 ```
 
 Contoh:
 - Data Discovery scan tabel `user_demographics` → detect kolom `salary`, `medical_conditions` classified sebagai sensitive PII
-- ROPA inventory cek: tidak ada ROPA yang mention pemrosesan `user_demographics`
-- **Flag: Shadow Data** — kolom sensitive ada tapi tidak ada ROPA
+- RoPA inventory cek: tidak ada RoPA yang mention pemrosesan `user_demographics`
+- **Flag: Shadow Data** — kolom sensitive ada tapi tidak ada RoPA
 
 ## Severity Classification
 
 | Shadow Data Type | Severity |
 |---|---|
-| Data sensitif (biometrik/kesehatan/anak) tanpa ROPA | 🔴 Critical |
-| Data umum (nama, email) tanpa ROPA | 🟠 High |
-| Data sensitif dengan ROPA partial (kolom belum listed) | 🟡 Medium |
+| Data sensitif (biometrik/kesehatan/anak) tanpa RoPA | 🔴 Critical |
+| Data umum (nama, email) tanpa RoPA | 🟠 High |
+| Data sensitif dengan RoPA partial (kolom belum listed) | 🟡 Medium |
 | Kolom test/staging yang tidak dihapus | 🟡 Medium |
 
 ## UI Flag
 
 Di Data Discovery per-column:
 ```
-✅ Documented in ROPA: ROPA-042 "Customer Registration"
-⚠️ Shadow Data: No ROPA coverage
+✅ Documented in RoPA: RoPA-042 "Customer Registration"
+⚠️ Shadow Data: No RoPA coverage
 ```
 
 Shadow Data counter di dashboard (overall compliance health metric).
@@ -4909,7 +4909,7 @@ Shadow Data counter di dashboard (overall compliance health metric).
 ## Protection Tab
 
 Recommendation engine per shadow data:
-1. **Register to ROPA** — create ROPA baru atau update existing
+1. **Register to RoPA** — create RoPA baru atau update existing
 2. **Delete** — kalau data seharusnya tidak ada (dev leak, old migration)
 3. **Anonymize** — keep data tapi remove PII (untuk analytics)
 4. **Encrypt** — enhanced protection selama investigasi
@@ -4930,7 +4930,7 @@ Use case:
 
 ## Integration
 
-- **ROPA wizard**: "Add from Shadow Data" shortcut auto-populate dari detected
+- **RoPA wizard**: "Add from Shadow Data" shortcut auto-populate dari detected
 - **DPIA**: shadow data sensitive → auto-suggest DPIA
 - **Remediation Plan**: shadow data included di priority action
 - **Posture Score**: shadow data count negatif contribute
@@ -4952,7 +4952,7 @@ KB,
                 'category' => 'example',
                 'feature_tags' => 'chat,sales_faq',
                 'keywords' => 'fitur,feature,modul,module,inventory,daftar,list,apa saja,semua,complete,lengkap,tersedia,available',
-                'summary' => 'Complete list semua fitur Privasimu Nexus: ROPA, DPIA, GAP, LIA, TIA, Maturity, DSR, Consent, Cross-Border, Breach, Simulation, Vendor TPRM, Data Discovery (+ Leak Detection, AI Patrol, Shadow Data, Encryption Keys), AI Agent, Auto-Fill, Contract Review, Policy Review, Remediation Plan, Document Templates, RACI Templates, Retention Master, Knowledge Base, dan 12+ admin feature.',
+                'summary' => 'Complete list semua fitur Privasimu Nexus: RoPA, DPIA, GAP, LIA, TIA, Maturity, DSR, Consent, Cross-Border, Breach, Simulation, Vendor TPRM, Data Discovery (+ Leak Detection, AI Patrol, Shadow Data, Encryption Keys), AI Agent, Auto-Fill, Contract Review, Policy Review, Remediation Plan, Document Templates, RACI Templates, Retention Master, Knowledge Base, dan 12+ admin feature.',
                 'content' => <<<'KB'
 # Privasimu Nexus — Complete Feature Inventory
 
@@ -4962,7 +4962,7 @@ Kalau user tanya fitur yang tidak terlihat langsung, **cek list ini dulu**. Feat
 
 ## 1. Assessment Engine (Compliance Evaluation)
 
-- **ROPA** — Records of Processing Activities (wizard 7-step)
+- **RoPA** — Records of Processing Activities (wizard 7-step)
 - **DPIA** — Data Protection Impact Assessment (21 kategori, matrix 5×5)
 - **GAP Assessment** — 33 pertanyaan UU PDP + multi-regulation (GDPR, PDPA, ISO 27701)
 - **LIA** — Legitimate Interest Assessment (3-step balancing test)
@@ -4983,7 +4983,7 @@ Kalau user tanya fitur yang tidak terlihat langsung, **cek list ini dulu**. Feat
 - **Breach Management** — 15 SOP containment templates, 72h countdown
 - **RACI Matrix editor per-breach** — R/A/C/I per step editable
 - **Containment Checklist** adaptive per SOP type
-- **Multi-ROPA linkage** — 1 breach ↔ banyak ROPA
+- **Multi-RoPA linkage** — 1 breach ↔ banyak RoPA
 - **KOMDIGI + Subject Notification** auto-generate PDF/email
 - **Breach Simulation (Drill)** — tabletop + full drill + scoring
 
@@ -5004,7 +5004,7 @@ Kalau user tanya fitur yang tidak terlihat langsung, **cek list ini dulu**. Feat
 - **Sharded DB Support** — 1 logical system, N physical shards
 - **Leak Detection** — verify PII value existence in DB
 - **AI Patrol** — scheduled auto-scan dengan drift detection
-- **Shadow Data Detection** — PII without ROPA coverage
+- **Shadow Data Detection** — PII without RoPA coverage
 - **Encryption Keys Management** — per-column key + rotation
 - **Protection Tab** — recommendation engine per kolom
 - **Changelog** — schema drift history
@@ -5013,23 +5013,23 @@ Kalau user tanya fitur yang tidak terlihat langsung, **cek list ini dulu**. Feat
 ## 6. AI Features
 
 - **AI Agent** — Conversational Compliance Assistant dengan function calling
-- **AI Auto-Fill ROPA** — generate 7-section dari deskripsi
+- **AI Auto-Fill RoPA** — generate 7-section dari deskripsi
 - **AI Auto-Fill DPIA** — generate 21 kategori + matrix
 - **AI Contract Review** — DPA klausul analyzer
 - **AI Policy Review** — Privacy Policy/SOP UU PDP checker
 - **AI Remediation Plan** — dari GAP Assessment ke action plan
-- **AI Document Import** — bulk parse legacy ROPA/DPIA
+- **AI Document Import** — bulk parse legacy RoPA/DPIA
 - **AI OCR Scanner** — KTP, form fisik, kontrak scan
 - **AI Search di Data Discovery** — natural query → SQL
 
 ## 7. Documentation & Templates
 
 - **Document Templates** — 10 preset styling + custom upload
-- **Per-Kind Assignment** — template A untuk ROPA, B untuk DPIA, dll
+- **Per-Kind Assignment** — template A untuk RoPA, B untuk DPIA, dll
 - **Nexus Canonical DOCX** — default system template
 - **PhpWord TemplateProcessor** — cloneRow + cloneBlock + placeholder
 - **RACI Templates Library** — reusable preset (DPO-led, IT-led, dll)
-- **Retention Policies Master Data** — reusable across ROPA
+- **Retention Policies Master Data** — reusable across RoPA
 - **Knowledge Base CMS** — markdown editor untuk internal docs
 
 ## 8. Admin / Platform
@@ -5056,7 +5056,7 @@ Kalau user tanya fitur yang tidak terlihat langsung, **cek list ini dulu**. Feat
 ## 9. Enterprise Specific
 
 - **Holding Dashboard** — cross-tenant aggregated (parent-child structure)
-- **Document Import Bulk** — legacy ROPA/DPIA migration
+- **Document Import Bulk** — legacy RoPA/DPIA migration
 - **Enterprise Roadmap** — priority feature request backlog
 - **Dedicated TAM** — technical account manager
 - **Premium SLA** — 4-hour response mission-critical

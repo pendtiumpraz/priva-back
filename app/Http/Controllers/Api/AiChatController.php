@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
@@ -9,8 +10,6 @@ use App\Models\KnowledgeBaseSection;
 use App\Services\CreditService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Cache;
-use App\Http\Controllers\Api\AiProviderController;
 
 class AiChatController extends Controller
 {
@@ -28,8 +27,8 @@ class AiChatController extends Controller
         // Get active provider config (chat mode), fallback to legacy DeepSeek
         $orgId = $request->user()->org_id;
         $providerConfig = AiProviderController::getActiveConfig($orgId, 'chat');
-        
-        if (!$providerConfig || empty($providerConfig['api_key'])) {
+
+        if (! $providerConfig || empty($providerConfig['api_key'])) {
             return response()->json(['message' => 'API key belum dikonfigurasi. Silakan set AI Provider terlebih dahulu.'], 503);
         }
 
@@ -37,13 +36,13 @@ class AiChatController extends Controller
         $chatModel = $providerConfig['model']->model_id;
         $chatBaseUrl = rtrim($providerConfig['base_url'], '/');
         $chatAuthHeader = $providerConfig['auth_header'] ?: 'Authorization';
-        $chatAuthPrefix = ($providerConfig['auth_header'] && !($providerConfig['auth_prefix'] ?? '')) ? '' : ($providerConfig['auth_prefix'] ?: 'Bearer');
+        $chatAuthPrefix = ($providerConfig['auth_header'] && ! ($providerConfig['auth_prefix'] ?? '')) ? '' : ($providerConfig['auth_prefix'] ?: 'Bearer');
 
         // Credit check (skip for SuperAdmin — no org to bill)
         $orgId = $request->user()->org_id;
         if ($orgId) {
             CreditService::resetIfNeeded($orgId);
-            if (!CreditService::hasCredit($orgId, 'chat')) {
+            if (! CreditService::hasCredit($orgId, 'chat')) {
                 return response()->json([
                     'message' => 'Quota AI chat Anda habis bulan ini.',
                     'credits_exhausted' => true,
@@ -61,7 +60,7 @@ class AiChatController extends Controller
         if ($request->conversation_id) {
             $conversation = ChatConversation::find($request->conversation_id);
         }
-        if (!$conversation) {
+        if (! $conversation) {
             $conversation = ChatConversation::create([
                 'user_id' => $user->id,
                 'org_id' => $user->org_id,
@@ -90,6 +89,7 @@ class AiChatController extends Controller
         // If admin is actively chatting, don't call AI
         if ($conversation->status === 'admin_active' && $adminMessages) {
             $conversation->update(['last_message_at' => now()]);
+
             return response()->json([
                 'reply' => null,
                 'conversation_id' => $conversation->id,
@@ -165,7 +165,7 @@ PROMPT;
         try {
             $headers = ['Content-Type' => 'application/json'];
             if ($chatAuthPrefix) {
-                $headers[$chatAuthHeader] = $chatAuthPrefix . ' ' . $apiKey;
+                $headers[$chatAuthHeader] = $chatAuthPrefix.' '.$apiKey;
             } else {
                 $headers[$chatAuthHeader] = $apiKey;
             }
@@ -176,7 +176,7 @@ PROMPT;
             ])
                 ->withoutVerifying()
                 ->withHeaders($headers)
-                ->post($chatBaseUrl . '/chat/completions', [
+                ->post($chatBaseUrl.'/chat/completions', [
                     'model' => $chatModel,
                     'messages' => $messages,
                     'temperature' => 0.3,
@@ -184,8 +184,9 @@ PROMPT;
                 ]);
 
             if ($response->failed()) {
-                \Log::error('AI Provider API error [' . $chatModel . ']: ' . $response->body());
-                return response()->json(['message' => 'AI API Error [' . $chatModel . ']: ' . substr($response->body(), 0, 500), 'conversation_id' => $conversation->id], 502);
+                \Log::error('AI Provider API error ['.$chatModel.']: '.$response->body());
+
+                return response()->json(['message' => 'AI API Error ['.$chatModel.']: '.substr($response->body(), 0, 500), 'conversation_id' => $conversation->id], 502);
             }
 
             $data = $response->json();
@@ -212,7 +213,8 @@ PROMPT;
                 'usage' => $data['usage'] ?? null,
             ]);
         } catch (\Exception $e) {
-            \Log::error('AI Chat error: ' . $e->getMessage());
+            \Log::error('AI Chat error: '.$e->getMessage());
+
             return response()->json(['message' => 'Terjadi kesalahan. Coba lagi nanti.', 'conversation_id' => $conversation->id], 500);
         }
     }
@@ -233,6 +235,7 @@ PROMPT;
                 foreach ($sections as $section) {
                     $kb .= "# {$section->title}\n{$section->content}\n\n---\n\n";
                 }
+
                 return response()->json([
                     'data' => trim($kb),
                     'sections' => $sections,
@@ -242,12 +245,13 @@ PROMPT;
 
             // Fallback to app_settings
             $kb = AppSetting::get('knowledge_base', $this->getDefaultKnowledgeBase());
+
             return response()->json(['data' => $kb, 'source' => 'app_settings']);
         }
 
         // PUT — update
         $user = $request->user();
-        if (! in_array($user->role, ['root','superadmin'], true)) {
+        if (! in_array($user->role, ['root', 'superadmin'], true)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -263,15 +267,16 @@ PROMPT;
     public function apiSettings(Request $request)
     {
         $user = $request->user();
-        if (! in_array($user->role, ['root','superadmin'], true)) {
+        if (! in_array($user->role, ['root', 'superadmin'], true)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
         if ($request->isMethod('GET')) {
             $key = AppSetting::get('deepseek_api_key', '');
+
             return response()->json([
-                'has_key' => !empty($key),
-                'key_preview' => $key ? substr($key, 0, 8) . '...' . substr($key, -4) : null,
+                'has_key' => ! empty($key),
+                'key_preview' => $key ? substr($key, 0, 8).'...'.substr($key, -4) : null,
             ]);
         }
 
@@ -288,12 +293,12 @@ PROMPT;
     public function testConnection(Request $request)
     {
         $user = $request->user();
-        if (! in_array($user->role, ['root','superadmin'], true)) {
+        if (! in_array($user->role, ['root', 'superadmin'], true)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
         $apiKey = AppSetting::get('deepseek_api_key');
-        if (!$apiKey) {
+        if (! $apiKey) {
             return response()->json(['success' => false, 'message' => 'API key belum dikonfigurasi'], 400);
         }
 
@@ -301,7 +306,7 @@ PROMPT;
             $response = Http::timeout(10)
                 ->withoutVerifying()
                 ->withHeaders([
-                    'Authorization' => 'Bearer ' . $apiKey,
+                    'Authorization' => 'Bearer '.$apiKey,
                     'Content-Type' => 'application/json',
                 ])
                 ->post('https://api.deepseek.com/chat/completions', [
@@ -312,6 +317,7 @@ PROMPT;
 
             if ($response->ok()) {
                 $data = $response->json();
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Koneksi berhasil! DeepSeek API aktif.',
@@ -320,13 +326,13 @@ PROMPT;
             } else {
                 return response()->json([
                     'success' => false,
-                    'message' => 'API Error: ' . ($response->json()['error']['message'] ?? $response->body()),
+                    'message' => 'API Error: '.($response->json()['error']['message'] ?? $response->body()),
                 ], 400);
             }
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Connection failed: ' . $e->getMessage(),
+                'message' => 'Connection failed: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -340,11 +346,12 @@ PROMPT;
 
         if ($sections > 0) {
             $relevant = KnowledgeBaseSection::findRelevant($query, $orgId);
-            if (!empty($relevant)) {
-                $kb = "";
+            if (! empty($relevant)) {
+                $kb = '';
                 foreach ($relevant as $section) {
                     $kb .= "\n---\n# {$section->title}\n{$section->content}\n";
                 }
+
                 return $kb;
             }
         }
@@ -355,10 +362,10 @@ PROMPT;
 
     private function getDefaultKnowledgeBase(): string
     {
-        return <<<KB
+        return <<<'KB'
 # PRIVASIMU — Platform Kepatuhan UU PDP
 PRIVASIMU adalah platform SaaS untuk membantu organisasi mematuhi UU PDP (UU No. 27 Tahun 2022).
-Modul: Dashboard, Gap Assessment, ROPA, DPIA, Breach, DSR, Consent, Fire Drill, Data Discovery, Docs.
+Modul: Dashboard, Gap Assessment, RoPA, DPIA, Breach, DSR, Consent, Fire Drill, Data Discovery, Docs.
 Role: SuperAdmin, Admin, DPO, Maker, Viewer.
 Kontak: PT Sainskerta Solusi Nusantara — 081319504441 (Galih)
 KB;
@@ -376,7 +383,7 @@ KB;
         $user = $request->user();
         $query = ChatConversation::query()->withCount('messages');
 
-        if (! in_array($user->role, ['root','superadmin'], true)) {
+        if (! in_array($user->role, ['root', 'superadmin'], true)) {
             $query->where('user_id', $user->id);
         }
 
@@ -384,11 +391,12 @@ KB;
             $s = $request->search;
             $query->where(function ($q) use ($s) {
                 $q->where('user_name', 'like', "%{$s}%")
-                  ->orWhere('user_email', 'like', "%{$s}%");
+                    ->orWhere('user_email', 'like', "%{$s}%");
             });
         }
 
         $conversations = $query->orderBy('last_message_at', 'desc')->paginate(20);
+
         return response()->json($conversations);
     }
 
@@ -401,7 +409,7 @@ KB;
         $conversation = ChatConversation::with('messages')->findOrFail($id);
 
         // Only owner or superadmin can view
-        if (! in_array($user->role, ['root','superadmin'], true) && $conversation->user_id !== $user->id) {
+        if (! in_array($user->role, ['root', 'superadmin'], true) && $conversation->user_id !== $user->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -414,7 +422,7 @@ KB;
     public function adminReply(Request $request, string $id)
     {
         $user = $request->user();
-        if (! in_array($user->role, ['root','superadmin'], true)) {
+        if (! in_array($user->role, ['root', 'superadmin'], true)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -427,7 +435,7 @@ KB;
             'conversation_id' => $conversation->id,
             'role' => 'admin',
             'content' => $request->message,
-            'sender_name' => $user->name . ' (Admin)',
+            'sender_name' => $user->name.' (Admin)',
         ]);
 
         return response()->json(['message' => 'Sent', 'data' => $msg]);
@@ -441,7 +449,7 @@ KB;
         $user = $request->user();
         $conversation = ChatConversation::findOrFail($id);
 
-        if (! in_array($user->role, ['root','superadmin'], true) && $conversation->user_id !== $user->id) {
+        if (! in_array($user->role, ['root', 'superadmin'], true) && $conversation->user_id !== $user->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -452,6 +460,7 @@ KB;
         }
 
         $messages = $query->orderBy('created_at')->get();
+
         return response()->json(['data' => $messages]);
     }
 }

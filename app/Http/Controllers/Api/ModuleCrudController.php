@@ -3,9 +3,25 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Ropa, Dpia, DsrRequest, ConsentCollectionPoint, BreachIncident, InformationSystem, AuditLog, ProcessingCategory};
+use App\Models\ApprovalWorkflow;
+use App\Models\AuditLog;
+use App\Models\BreachIncident;
+use App\Models\ConsentCollectionPoint;
+use App\Models\ContainmentTemplate;
+use App\Models\Dpia;
+use App\Models\DsrApp;
+use App\Models\DsrRequest;
+use App\Models\DsrRequestScope;
+use App\Models\InformationSystem;
+use App\Models\ModuleCustomField;
+use App\Models\Organization;
+use App\Models\ProcessingCategory;
+use App\Models\Ropa;
+use App\Services\AssessmentAutoTriggerService;
 use App\Services\NotificationService;
+use App\Services\RopaRiskCalculator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 class ModuleCrudController extends Controller
 {
@@ -27,30 +43,38 @@ class ModuleCrudController extends Controller
     private function checkPermission(Request $request, string $module, string $action = 'read')
     {
         $user = $request->user();
-        if (!$user) return response()->json(['message' => 'Unauthenticated.'], 401);
-        if (in_array($user->role, ['root','superadmin'], true)) return null;
+        if (! $user) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+        if (in_array($user->role, ['root', 'superadmin'], true)) {
+            return null;
+        }
 
-        if (!$user->relationLoaded('tenantRole')) {
+        if (! $user->relationLoaded('tenantRole')) {
             $user->load('tenantRole');
         }
 
         $permissions = $user->tenantRole?->permissions ?? null;
         $moduleId = $this->permissionModuleId($module);
 
-        if (!is_array($permissions)) {
+        if (! is_array($permissions)) {
             // Legacy fallback
-            if ($action === 'write' && !in_array($user->role, ['admin', 'dpo', 'maker'])) {
+            if ($action === 'write' && ! in_array($user->role, ['admin', 'dpo', 'maker'])) {
                 return response()->json(['message' => 'Akses ditolak — role Anda tidak memiliki izin write untuk modul ini.'], 403);
             }
+
             return null;
         }
 
-        if (in_array('*', $permissions)) return null;
+        if (in_array('*', $permissions)) {
+            return null;
+        }
 
         if ($action === 'write') {
-            if (!in_array("{$moduleId}:write", $permissions)) {
+            if (! in_array("{$moduleId}:write", $permissions)) {
                 return response()->json(['message' => 'Akses ditolak — role Anda tidak memiliki izin write untuk modul ini.'], 403);
             }
+
             return null;
         }
 
@@ -65,14 +89,14 @@ class ModuleCrudController extends Controller
     private function getModel(string $module)
     {
         return match ($module) {
-                'ropa' => new Ropa,
-                'dpia' => new Dpia,
-                'dsr' => new DsrRequest,
-                'consent' => new ConsentCollectionPoint,
-                'breach' => new BreachIncident,
-                'data-discovery' => new InformationSystem,
-                default => abort(404, 'Module not found'),
-            };
+            'ropa' => new Ropa,
+            'dpia' => new Dpia,
+            'dsr' => new DsrRequest,
+            'consent' => new ConsentCollectionPoint,
+            'breach' => new BreachIncident,
+            'data-discovery' => new InformationSystem,
+            default => abort(404, 'Module not found'),
+        };
     }
 
     /**
@@ -99,12 +123,13 @@ class ModuleCrudController extends Controller
                     $segments[] = preg_replace('/[^A-Za-z0-9]/', '', strtoupper($customNumber));
                 }
                 $segments[] = str_pad((string) $counter, 3, '0', STR_PAD_LEFT);
-                return implode('-', array_filter($segments, fn($s) => $s !== ''));
+
+                return implode('-', array_filter($segments, fn ($s) => $s !== ''));
             }
         }
 
         // Legacy fallback — no category selected
-        $pattern = $prefix . '-' . $year . '-%';
+        $pattern = $prefix.'-'.$year.'-%';
 
         $codeColumn = match ($prefix) {
             'ROPA', 'DPIA' => 'registration_number',
@@ -122,10 +147,12 @@ class ModuleCrudController extends Controller
         $maxNum = 0;
         foreach ($codes as $code) {
             $num = (int) substr($code, strrpos($code, '-') + 1);
-            if ($num > $maxNum) $maxNum = $num;
+            if ($num > $maxNum) {
+                $maxNum = $num;
+            }
         }
 
-        return $prefix . '-' . $year . '-' . str_pad($maxNum + 1, 3, '0', STR_PAD_LEFT);
+        return $prefix.'-'.$year.'-'.str_pad($maxNum + 1, 3, '0', STR_PAD_LEFT);
     }
 
     private function getQuery(Request $request, string $module)
@@ -143,7 +170,7 @@ class ModuleCrudController extends Controller
     }
 
     /**
-     * Recompute ROPA risk_level from 7-step wizard triggers (Sprint E1).
+     * Recompute RoPA risk_level from 7-step wizard triggers (Sprint E1).
      * Writes `wizard_data.risk_triggers` for audit trail and returns the
      * patched data array (caller reassigns).
      *
@@ -154,9 +181,11 @@ class ModuleCrudController extends Controller
     {
         try {
             $wizard = $data['wizard_data'] ?? [];
-            if (!is_array($wizard)) $wizard = [];
+            if (! is_array($wizard)) {
+                $wizard = [];
+            }
 
-            $result = app(\App\Services\RopaRiskCalculator::class)->calculate($wizard);
+            $result = app(RopaRiskCalculator::class)->calculate($wizard);
 
             $wizard['risk_triggers'] = [
                 'level' => $result['level'],
@@ -167,13 +196,13 @@ class ModuleCrudController extends Controller
             $data['wizard_data'] = $wizard;
 
             $locked = filter_var($data['risk_level_locked'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            if (!$locked) {
+            if (! $locked) {
                 $data['risk_level'] = $result['level'];
             }
         } catch (\Throwable $e) {
             // Calculator failure must never block the save — keep whatever
             // risk_level the caller submitted (or leave unchanged).
-            \Log::warning('applyRopaAutoRisk failed, leaving risk_level untouched: ' . $e->getMessage());
+            \Log::warning('applyRopaAutoRisk failed, leaving risk_level untouched: '.$e->getMessage());
         }
 
         // Defensive: drop risk_level_locked if the column doesn't exist yet
@@ -182,7 +211,7 @@ class ModuleCrudController extends Controller
         // "save ropa gagal".
         if (array_key_exists('risk_level_locked', $data)) {
             try {
-                if (!\Illuminate\Support\Facades\Schema::hasColumn('ropas', 'risk_level_locked')) {
+                if (! Schema::hasColumn('ropas', 'risk_level_locked')) {
                     unset($data['risk_level_locked']);
                 }
             } catch (\Throwable $e) {
@@ -207,32 +236,38 @@ class ModuleCrudController extends Controller
      */
     /**
      * Sync DPIA's dpia_ropa pivot from wizard_data.koneksi_ropa.connected_ropas.
-     * Idempotent — replaces (any ROPA removed from wizard is detached too).
+     * Idempotent — replaces (any RoPA removed from wizard is detached too).
      */
     private function syncDpiaRopas($dpia): void
     {
         $wizard = $dpia->wizard_data ?? [];
         $section = $wizard['koneksi_ropa'] ?? [];
         $ids = array_filter(array_unique($section['connected_ropas'] ?? []));
-        if (!is_array($ids)) return;
+        if (! is_array($ids)) {
+            return;
+        }
 
-        $valid = \App\Models\Ropa::whereIn('id', $ids)
+        $valid = Ropa::whereIn('id', $ids)
             ->where('org_id', $dpia->org_id)
             ->pluck('id')->all();
 
         // Include legacy single ropa_id if set, so it appears in pivot too
-        if ($dpia->ropa_id && !in_array($dpia->ropa_id, $valid, true)) {
-            $exists = \App\Models\Ropa::where('id', $dpia->ropa_id)->where('org_id', $dpia->org_id)->exists();
-            if ($exists) $valid[] = $dpia->ropa_id;
+        if ($dpia->ropa_id && ! in_array($dpia->ropa_id, $valid, true)) {
+            $exists = Ropa::where('id', $dpia->ropa_id)->where('org_id', $dpia->org_id)->exists();
+            if ($exists) {
+                $valid[] = $dpia->ropa_id;
+            }
         }
 
         $syncData = [];
-        foreach ($valid as $id) $syncData[$id] = ['org_id' => $dpia->org_id];
+        foreach ($valid as $id) {
+            $syncData[$id] = ['org_id' => $dpia->org_id];
+        }
         $dpia->ropas()->sync($syncData);
     }
 
     /**
-     * Sync ROPA's information_system_ropa pivot from wizard_data.detail_pemrosesan.sistem_terkait.
+     * Sync RoPA's information_system_ropa pivot from wizard_data.detail_pemrosesan.sistem_terkait.
      * Idempotent — sync REPLACES (any system removed from wizard is detached too).
      * No-op if no sistem_terkait array provided.
      */
@@ -241,24 +276,28 @@ class ModuleCrudController extends Controller
         $wizard = $ropa->wizard_data ?? [];
         $section = $wizard['detail_pemrosesan'] ?? [];
         $raw = $section['sistem_terkait'] ?? null;
-        if ($raw === null) return;
+        if ($raw === null) {
+            return;
+        }
 
         // Normalize: array of UUIDs OR array of objects {id: ...}
         $ids = collect(is_array($raw) ? $raw : [])
-            ->map(fn($v) => is_array($v) ? ($v['id'] ?? null) : (is_string($v) ? $v : null))
+            ->map(fn ($v) => is_array($v) ? ($v['id'] ?? null) : (is_string($v) ? $v : null))
             ->filter()
             ->unique()
             ->values()
             ->all();
 
         // Verify all belong to same org
-        $valid = \App\Models\InformationSystem::whereIn('id', $ids)
+        $valid = InformationSystem::whereIn('id', $ids)
             ->where('org_id', $ropa->org_id)
             ->pluck('id')
             ->all();
 
         $syncData = [];
-        foreach ($valid as $id) $syncData[$id] = ['org_id' => $ropa->org_id];
+        foreach ($valid as $id) {
+            $syncData[$id] = ['org_id' => $ropa->org_id];
+        }
         $ropa->informationSystems()->sync($syncData);
     }
 
@@ -270,7 +309,7 @@ class ModuleCrudController extends Controller
                 $decoded = json_decode($ids, true);
                 $ids = is_array($decoded) ? $decoded : [];
             }
-            $ids = is_array($ids) ? array_values(array_filter(array_map('strval', $ids), fn($v) => $v !== '')) : [];
+            $ids = is_array($ids) ? array_values(array_filter(array_map('strval', $ids), fn ($v) => $v !== '')) : [];
             $data['linked_ropa_ids'] = $ids ?: null;
             $data['linked_ropa_id'] = $ids[0] ?? null;
         } elseif (array_key_exists('linked_ropa_id', $data)) {
@@ -278,6 +317,7 @@ class ModuleCrudController extends Controller
             $data['linked_ropa_id'] = $id;
             $data['linked_ropa_ids'] = $id ? [$id] : null;
         }
+
         return $data;
     }
 
@@ -286,14 +326,18 @@ class ModuleCrudController extends Controller
      */
     public function index(Request $request, string $module)
     {
-        if ($denied = $this->checkPermission($request, $module, 'read')) return $denied;
+        if ($denied = $this->checkPermission($request, $module, 'read')) {
+            return $denied;
+        }
         $query = $this->getQuery($request, $module);
 
-        if ($request->get('trash'))
+        if ($request->get('trash')) {
             $query->onlyTrashed();
-        if ($request->get('status'))
+        }
+        if ($request->get('status')) {
             $query->where('status', $request->get('status'));
-            
+        }
+
         // Basic search if 'q' is provided
         if ($request->filled('q')) {
             $q = $request->get('q');
@@ -306,9 +350,9 @@ class ModuleCrudController extends Controller
                 'data-discovery' => ['name', 'connection_type', 'host'],
                 default => [],
             };
-            
-            if (!empty($searchColumns)) {
-                $query->where(function($sub) use ($searchColumns, $q) {
+
+            if (! empty($searchColumns)) {
+                $query->where(function ($sub) use ($searchColumns, $q) {
                     foreach ($searchColumns as $col) {
                         $sub->orWhere($col, 'like', "%{$q}%");
                     }
@@ -332,6 +376,7 @@ class ModuleCrudController extends Controller
         if ($request->filled('per_page')) {
             $perPage = (int) $request->get('per_page', 25);
             $paginated = $query->cursorPaginate($perPage);
+
             return response()->json($paginated);
         }
 
@@ -343,11 +388,13 @@ class ModuleCrudController extends Controller
      */
     public function store(Request $request, string $module)
     {
-        if ($denied = $this->checkPermission($request, $module, 'write')) return $denied;
+        if ($denied = $this->checkPermission($request, $module, 'write')) {
+            return $denied;
+        }
         try {
             $model = $this->getModel($module);
             $data = $request->all();
-            
+
             // Allow superadmin to set org_id, otherwise force current user's org_id
             if ($request->user()->role === 'superadmin' && $request->filled('org_id')) {
                 $data['org_id'] = $request->org_id;
@@ -366,7 +413,7 @@ class ModuleCrudController extends Controller
                 $data['notification_required'] = filter_var($data['notification_required'] ?? false, FILTER_VALIDATE_BOOLEAN);
                 $data['is_simulation'] = filter_var($data['is_simulation'] ?? false, FILTER_VALIDATE_BOOLEAN);
                 $data['affected_subjects_count'] = (int) ($data['affected_subjects_count'] ?? 0);
-                // Multi-ROPA linkage: normalize linked_ropa_ids + sync legacy linked_ropa_id.
+                // Multi-RoPA linkage: normalize linked_ropa_ids + sync legacy linked_ropa_id.
                 $data = $this->normalizeBreachRopaLinks($data);
             }
 
@@ -395,13 +442,15 @@ class ModuleCrudController extends Controller
                 case 'consent':
                     $data['collection_id'] = $data['collection_id'] ?? $this->nextCode('CNT', $model, $data['org_id']);
                     // Apply per-kind preset for fields klien tidak isi (audience/display_mode/frequency)
-                    $kind = $data['kind'] ?? \App\Models\ConsentCollectionPoint::KIND_COOKIE;
-                    if (!in_array($kind, \App\Models\ConsentCollectionPoint::KINDS, true)) {
-                        $kind = \App\Models\ConsentCollectionPoint::KIND_COOKIE;
+                    $kind = $data['kind'] ?? ConsentCollectionPoint::KIND_COOKIE;
+                    if (! in_array($kind, ConsentCollectionPoint::KINDS, true)) {
+                        $kind = ConsentCollectionPoint::KIND_COOKIE;
                     }
                     $data['kind'] = $kind;
-                    foreach (\App\Models\ConsentCollectionPoint::presetForKind($kind) as $k => $v) {
-                        if (empty($data[$k])) $data[$k] = $v;
+                    foreach (ConsentCollectionPoint::presetForKind($kind) as $k => $v) {
+                        if (empty($data[$k])) {
+                            $data[$k] = $v;
+                        }
                     }
                     break;
                 case 'breach':
@@ -414,9 +463,9 @@ class ModuleCrudController extends Controller
                     // Falls back to "other" generic template if case_type not set.
                     if (empty($data['containment_checklist'])) {
                         $caseType = $data['case_type'] ?? 'other';
-                        $tpl = \App\Models\ContainmentTemplate::forCase($data['org_id'], $caseType);
+                        $tpl = ContainmentTemplate::forCase($data['org_id'], $caseType);
                         if ($tpl) {
-                            $org = \App\Models\Organization::find($data['org_id']);
+                            $org = Organization::find($data['org_id']);
                             $tenantRaci = is_array($org?->settings['raci_matrix'] ?? null) ? $org->settings['raci_matrix'] : null;
                             $data['containment_checklist'] = $tpl->buildChecklistState($tenantRaci);
                             $data['containment_template_id'] = $tpl->id;
@@ -429,7 +478,7 @@ class ModuleCrudController extends Controller
                     // Auto-init timeline
                     if (empty($data['timeline_log'])) {
                         $data['timeline_log'] = [
-                            ['time' => now()->format('d/m/Y H:i'), 'event' => '🔴 Insiden terdeteksi — ' . ($data['source'] ?? 'manual')],
+                            ['time' => now()->format('d/m/Y H:i'), 'event' => '🔴 Insiden terdeteksi — '.($data['source'] ?? 'manual')],
                         ];
                     }
                     break;
@@ -437,16 +486,20 @@ class ModuleCrudController extends Controller
 
             $record = $model->create($data);
 
-            // Sync ROPA ↔ Information System pivot on create
+            // Sync RoPA ↔ Information System pivot on create
             if ($module === 'ropa') {
-                try { $this->syncRopaInformationSystems($record); } catch (\Throwable $e) {
-                    \Log::warning("syncRopaInformationSystems on create failed: " . $e->getMessage());
+                try {
+                    $this->syncRopaInformationSystems($record);
+                } catch (\Throwable $e) {
+                    \Log::warning('syncRopaInformationSystems on create failed: '.$e->getMessage());
                 }
             }
-            // Sync DPIA ↔ ROPA pivot on create (from wizard.koneksi_ropa.connected_ropas)
+            // Sync DPIA ↔ RoPA pivot on create (from wizard.koneksi_ropa.connected_ropas)
             if ($module === 'dpia') {
-                try { $this->syncDpiaRopas($record); } catch (\Throwable $e) {
-                    \Log::warning("syncDpiaRopas on create failed: " . $e->getMessage());
+                try {
+                    $this->syncDpiaRopas($record);
+                } catch (\Throwable $e) {
+                    \Log::warning('syncDpiaRopas on create failed: '.$e->getMessage());
                 }
             }
 
@@ -457,7 +510,7 @@ class ModuleCrudController extends Controller
                 ], 'system');
             } catch (\Exception $e) {
                 // Don't fail the main operation if audit logging fails
-                \Log::warning('Audit log failed: ' . $e->getMessage());
+                \Log::warning('Audit log failed: '.$e->getMessage());
             }
 
             // ===== Notification hooks on create =====
@@ -472,22 +525,22 @@ class ModuleCrudController extends Controller
                         recipient: 'role:dpo',
                         orgId: $record->org_id,
                         title: "🚨 Insiden baru: {$record->incident_code}",
-                        body: ($record->description ?? 'Data breach detected') . ' — 72 jam untuk notifikasi.',
+                        body: ($record->description ?? 'Data breach detected').' — 72 jam untuk notifikasi.',
                         actionUrl: "/breach/{$record->id}",
                         metadata: ['record_id' => $record->id, 'incident_code' => $record->incident_code]
                     );
                 }
-                // ROPA with assignees → per-user info notification.
-                if ($module === 'ropa' && !empty($data['assignees']) && is_array($data['assignees'])) {
+                // RoPA with assignees → per-user info notification.
+                if ($module === 'ropa' && ! empty($data['assignees']) && is_array($data['assignees'])) {
                     foreach ($data['assignees'] as $uid) {
                         NotificationService::dispatch(
                             kind: 'info',
                             severity: 'low',
                             module: 'ropa',
                             type: 'ropa.assigned',
-                            recipient: 'user:' . $uid,
+                            recipient: 'user:'.$uid,
                             orgId: $record->org_id,
-                            title: "ROPA {$record->registration_number} di-assign ke Anda",
+                            title: "RoPA {$record->registration_number} di-assign ke Anda",
                             body: $record->processing_activity ?? '',
                             actionUrl: "/ropa/{$record->id}",
                             metadata: ['record_id' => $record->id]
@@ -495,105 +548,105 @@ class ModuleCrudController extends Controller
                     }
                 }
             } catch (\Exception $e) {
-                \Log::warning('Notification dispatch failed on create: ' . $e->getMessage());
+                \Log::warning('Notification dispatch failed on create: '.$e->getMessage());
             }
 
-            // Auto-trigger: if ROPA risk=high → create draft DPIA with inherited wizard_data.
-            // Wrapped in try/catch so DPIA-side failures don't roll back ROPA create.
+            // Auto-trigger: if RoPA risk=high → create draft DPIA with inherited wizard_data.
+            // Wrapped in try/catch so DPIA-side failures don't roll back RoPA create.
             $autoDpiaId = null;
             if ($module === 'ropa' && ($data['risk_level'] ?? '') === 'high') {
                 try {
-                $dpiaModel = $this->getModel('dpia');
-                $existingDpia = $dpiaModel->where('ropa_id', $record->id)->first();
-                if (!$existingDpia) {
-                    // Build DPIA wizard_data from ROPA's wizard_data
-                    $ropaWiz = $data['wizard_data'] ?? [];
-                    $dpoTeam = $ropaWiz['dpo_team'] ?? [];
-                    $dpiaWizardData = [
-                        'informasi_dpia' => [
-                            'description' => $data['processing_activity'] ?? '',
-                            'pic_name' => $dpoTeam['pic_name'] ?? '',
-                            'dpo_name' => $dpoTeam['dpo_name'] ?? '',
-                            'dpo_email' => $dpoTeam['dpo_email'] ?? '',
-                            'dpo_phone' => $dpoTeam['dpo_phone'] ?? '',
-                        ],
-                        'koneksi_ropa' => [
-                            'connected_ropas' => [$record->id],
-                        ],
-                        'potensi_risiko' => [],
-                    ];
+                    $dpiaModel = $this->getModel('dpia');
+                    $existingDpia = $dpiaModel->where('ropa_id', $record->id)->first();
+                    if (! $existingDpia) {
+                        // Build DPIA wizard_data from RoPA's wizard_data
+                        $ropaWiz = $data['wizard_data'] ?? [];
+                        $dpoTeam = $ropaWiz['dpo_team'] ?? [];
+                        $dpiaWizardData = [
+                            'informasi_dpia' => [
+                                'description' => $data['processing_activity'] ?? '',
+                                'pic_name' => $dpoTeam['pic_name'] ?? '',
+                                'dpo_name' => $dpoTeam['dpo_name'] ?? '',
+                                'dpo_email' => $dpoTeam['dpo_email'] ?? '',
+                                'dpo_phone' => $dpoTeam['dpo_phone'] ?? '',
+                            ],
+                            'koneksi_ropa' => [
+                                'connected_ropas' => [$record->id],
+                            ],
+                            'potensi_risiko' => [],
+                        ];
 
-                    $autoDpia = $dpiaModel->create([
-                        'org_id' => $data['org_id'],
-                        'category_id' => $data['category_id'] ?? null,
-                        'registration_number' => $this->nextCode('DPIA', $dpiaModel, $data['org_id'], $data['category_id'] ?? null),
-                        'ropa_id' => $record->id,
-                        'risk_level' => 'high',
-                        'status' => 'draft',
-                        'description' => 'Auto-generated dari ROPA high-risk: ' . ($data['processing_activity'] ?? ''),
-                        'wizard_data' => $dpiaWizardData,
-                        'risk_assessment' => ['likelihood' => 0, 'impact' => 0, 'risks' => []],
-                        'mitigation_measures' => [],
-                        'created_by' => $data['created_by'],
-                    ]);
-                    $autoDpiaId = $autoDpia->id;
+                        $autoDpia = $dpiaModel->create([
+                            'org_id' => $data['org_id'],
+                            'category_id' => $data['category_id'] ?? null,
+                            'registration_number' => $this->nextCode('DPIA', $dpiaModel, $data['org_id'], $data['category_id'] ?? null),
+                            'ropa_id' => $record->id,
+                            'risk_level' => 'high',
+                            'status' => 'draft',
+                            'description' => 'Auto-generated dari RoPA high-risk: '.($data['processing_activity'] ?? ''),
+                            'wizard_data' => $dpiaWizardData,
+                            'risk_assessment' => ['likelihood' => 0, 'impact' => 0, 'risks' => []],
+                            'mitigation_measures' => [],
+                            'created_by' => $data['created_by'],
+                        ]);
+                        $autoDpiaId = $autoDpia->id;
 
-                    // Notify DPO: high-risk ROPA spawned an auto-DPIA.
-                    try {
-                        NotificationService::dispatch(
-                            kind: 'warning',
-                            severity: 'high',
-                            module: 'dpia',
-                            type: 'dpia.auto_created',
-                            recipient: 'role:dpo',
-                            orgId: $record->org_id,
-                            title: "⚠️ DPIA otomatis: {$autoDpia->registration_number}",
-                            body: "Dibuat dari ROPA high-risk {$record->registration_number} — review diperlukan.",
-                            actionUrl: "/dpia/{$autoDpia->id}",
-                            metadata: ['record_id' => $autoDpia->id, 'ropa_id' => $record->id]
-                        );
-                    } catch (\Exception $e) {
-                        \Log::warning('DPIA auto-create notification failed: ' . $e->getMessage());
+                        // Notify DPO: high-risk RoPA spawned an auto-DPIA.
+                        try {
+                            NotificationService::dispatch(
+                                kind: 'warning',
+                                severity: 'high',
+                                module: 'dpia',
+                                type: 'dpia.auto_created',
+                                recipient: 'role:dpo',
+                                orgId: $record->org_id,
+                                title: "⚠️ DPIA otomatis: {$autoDpia->registration_number}",
+                                body: "Dibuat dari RoPA high-risk {$record->registration_number} — review diperlukan.",
+                                actionUrl: "/dpia/{$autoDpia->id}",
+                                metadata: ['record_id' => $autoDpia->id, 'ropa_id' => $record->id]
+                            );
+                        } catch (\Exception $e) {
+                            \Log::warning('DPIA auto-create notification failed: '.$e->getMessage());
+                        }
                     }
-                }
                 } catch (\Throwable $e) {
-                    \Log::warning('Auto-DPIA on ROPA store failed (non-fatal): ' . $e->getMessage());
+                    \Log::warning('Auto-DPIA on RoPA store failed (non-fatal): '.$e->getMessage());
                 }
             }
 
-            // Auto-trigger: ROPA with legal_basis = legitimate interest → draft LIA.
-            // Sprint X4 — wraps in try/catch via the service so failure can't roll back ROPA.
+            // Auto-trigger: RoPA with legal_basis = legitimate interest → draft LIA.
+            // Sprint X4 — wraps in try/catch via the service so failure can't roll back RoPA.
             $autoLiaId = null;
             if ($module === 'ropa') {
                 try {
-                    $lia = app(\App\Services\AssessmentAutoTriggerService::class)
+                    $lia = app(AssessmentAutoTriggerService::class)
                         ->fromRopa($record, $data['created_by'] ?? null);
                     $autoLiaId = $lia?->id;
                 } catch (\Throwable $e) {
-                    \Log::warning('Auto-LIA on ROPA store failed (non-fatal): ' . $e->getMessage());
+                    \Log::warning('Auto-LIA on RoPA store failed (non-fatal): '.$e->getMessage());
                 }
             }
 
             // Auto-trigger: DSR with app_id → seed scopes from app.default_information_system_ids
             // so DPO doesn't need to manually pick. Tab Scope page langsung pre-populated.
             $autoScopeCount = 0;
-            if ($module === 'dsr' && !empty($record->app_id)) {
+            if ($module === 'dsr' && ! empty($record->app_id)) {
                 try {
-                    $app = \App\Models\DsrApp::where('id', $record->app_id)
+                    $app = DsrApp::where('id', $record->app_id)
                         ->where('org_id', $record->org_id)->first();
                     $defaultIds = $app?->default_information_system_ids ?? [];
-                    if (!empty($defaultIds)) {
+                    if (! empty($defaultIds)) {
                         // Validate IS belong to same org (defensive)
-                        $validIs = \App\Models\InformationSystem::whereIn('id', $defaultIds)
+                        $validIs = InformationSystem::whereIn('id', $defaultIds)
                             ->where('org_id', $record->org_id)
                             ->get(['id', 'is_sharded', 'shards']);
                         foreach ($validIs as $is) {
-                            \App\Models\DsrRequestScope::create([
+                            DsrRequestScope::create([
                                 'dsr_request_id' => $record->id,
                                 'information_system_id' => $is->id,
                                 'request_types' => [$record->request_type],
                                 'shards_affected' => $is->is_sharded
-                                    ? collect($is->shards ?? [])->map(fn($s) => is_array($s) ? ($s['name'] ?? null) : $s)->filter()->values()->all()
+                                    ? collect($is->shards ?? [])->map(fn ($s) => is_array($s) ? ($s['name'] ?? null) : $s)->filter()->values()->all()
                                     : [],
                                 'sql_pack_status' => 'pending',
                             ]);
@@ -605,7 +658,7 @@ class ModuleCrudController extends Controller
                         }
                     }
                 } catch (\Throwable $e) {
-                    \Log::warning('Auto-scope on DSR store failed (non-fatal): ' . $e->getMessage());
+                    \Log::warning('Auto-scope on DSR store failed (non-fatal): '.$e->getMessage());
                 }
             }
 
@@ -617,11 +670,12 @@ class ModuleCrudController extends Controller
                 'auto_scope_count' => $autoScopeCount,
             ], 201);
         } catch (\Exception $e) {
-            \Log::error('ModuleCrud store error: ' . $e->getMessage(), [
+            \Log::error('ModuleCrud store error: '.$e->getMessage(), [
                 'module' => $module,
                 'trace' => $e->getTraceAsString(),
             ]);
-            return response()->json(['message' => 'Error: ' . $e->getMessage()], 500);
+
+            return response()->json(['message' => 'Error: '.$e->getMessage()], 500);
         }
     }
 
@@ -630,7 +684,9 @@ class ModuleCrudController extends Controller
      */
     public function show(Request $request, string $module, string $id)
     {
-        if ($denied = $this->checkPermission($request, $module, 'read')) return $denied;
+        if ($denied = $this->checkPermission($request, $module, 'read')) {
+            return $denied;
+        }
         $query = $this->getQuery($request, $module)->withTrashed();
 
         if ($module === 'consent') {
@@ -642,10 +698,10 @@ class ModuleCrudController extends Controller
 
         $record = $query->findOrFail($id);
 
-        // Sprint C1: attach tenant custom field definitions for ROPA / DPIA
+        // Sprint C1: attach tenant custom field definitions for RoPA / DPIA
         $customFields = [];
         if (in_array($module, ['ropa', 'dpia'], true)) {
-            $customFields = \App\Models\ModuleCustomField::where('org_id', $request->user()->org_id)
+            $customFields = ModuleCustomField::where('org_id', $request->user()->org_id)
                 ->forModule($module)
                 ->active()
                 ->orderBy('sort_order')
@@ -663,7 +719,9 @@ class ModuleCrudController extends Controller
      */
     public function update(Request $request, string $module, string $id)
     {
-        if ($denied = $this->checkPermission($request, $module, 'write')) return $denied;
+        if ($denied = $this->checkPermission($request, $module, 'write')) {
+            return $denied;
+        }
         $record = $this->getQuery($request, $module)->findOrFail($id);
 
         // Auto-append timeline + fire notifications for breach status changes.
@@ -690,7 +748,7 @@ class ModuleCrudController extends Controller
                 $kind = $newStatus === 'notification' ? 'alert' : ($newStatus === 'closed' ? 'info' : 'warning');
                 $severity = $newStatus === 'notification' ? 'critical' : ($newStatus === 'closed' ? 'low' : 'high');
                 $body = ($statusLabels[$newStatus] ?? "Status → {$newStatus}")
-                    . ($newStatus === 'notification' ? ' · 72 jam untuk notifikasi KOMDIGI + subjek data.' : '');
+                    .($newStatus === 'notification' ? ' · 72 jam untuk notifikasi KOMDIGI + subjek data.' : '');
                 NotificationService::dispatch(
                     kind: $kind,
                     severity: $severity,
@@ -709,18 +767,18 @@ class ModuleCrudController extends Controller
                     ]
                 );
             } catch (\Throwable $e) {
-                \Log::warning('Breach status notif failed: ' . $e->getMessage());
+                \Log::warning('Breach status notif failed: '.$e->getMessage());
             }
         }
 
-        // Assign-group lock: for ROPA/DPIA, assignees/assign_group can only
+        // Assign-group lock: for RoPA/DPIA, assignees/assign_group can only
         // change while the record is still in_progress. Waiting/revision/
         // approved records require re-opening (status flip) before reassign.
         if (in_array($module, ['ropa', 'dpia'], true)) {
             $assignFieldsTouched = $request->hasAny(['assignees', 'assign_group']);
             $currentStatus = $record->status ?? 'in_progress';
             $assignEditable = in_array($currentStatus, ['in_progress', 'draft'], true);
-            if ($assignFieldsTouched && !$assignEditable) {
+            if ($assignFieldsTouched && ! $assignEditable) {
                 return response()->json([
                     'message' => 'Assign group terkunci karena status bukan in_progress.',
                     'status' => $currentStatus,
@@ -750,24 +808,24 @@ class ModuleCrudController extends Controller
         }
         $record->update($payload);
 
-        // Sync ROPA ↔ Information System pivot (many-to-many).
+        // Sync RoPA ↔ Information System pivot (many-to-many).
         if ($module === 'ropa') {
             try {
                 $this->syncRopaInformationSystems($record);
             } catch (\Throwable $e) {
-                \Log::warning("syncRopaInformationSystems failed for ROPA {$record->id}: " . $e->getMessage());
+                \Log::warning("syncRopaInformationSystems failed for RoPA {$record->id}: ".$e->getMessage());
             }
         }
-        // Sync DPIA ↔ ROPA pivot
+        // Sync DPIA ↔ RoPA pivot
         if ($module === 'dpia') {
             try {
                 $this->syncDpiaRopas($record);
             } catch (\Throwable $e) {
-                \Log::warning("syncDpiaRopas failed for DPIA {$record->id}: " . $e->getMessage());
+                \Log::warning("syncDpiaRopas failed for DPIA {$record->id}: ".$e->getMessage());
             }
         }
 
-        // Notify new assignees added on this update (ROPA/DPIA).
+        // Notify new assignees added on this update (RoPA/DPIA).
         try {
             if (in_array($module, ['ropa', 'dpia'], true) && $request->has('assignees')) {
                 $newAssignees = $request->input('assignees', []);
@@ -781,9 +839,9 @@ class ModuleCrudController extends Controller
                             severity: 'low',
                             module: $module,
                             type: "{$module}.assigned",
-                            recipient: 'user:' . $uid,
+                            recipient: 'user:'.$uid,
                             orgId: $record->org_id,
-                            title: strtoupper($module) . " {$regNum} di-assign ke Anda",
+                            title: strtoupper($module)." {$regNum} di-assign ke Anda",
                             body: $activity,
                             actionUrl: "/{$module}/{$record->id}",
                             metadata: ['record_id' => $record->id]
@@ -792,7 +850,7 @@ class ModuleCrudController extends Controller
                 }
             }
         } catch (\Exception $e) {
-            \Log::warning('Assignee notification failed: ' . $e->getMessage());
+            \Log::warning('Assignee notification failed: '.$e->getMessage());
         }
 
         // Approval Workflow trigger if status changes to 'waiting'
@@ -803,12 +861,12 @@ class ModuleCrudController extends Controller
                 // Simplified multi-level DPO -> CEO
                 $steps = [
                     ['role' => 'dpo', 'status' => 'pending', 'name' => 'Review DPO'],
-                    ['role' => 'admin', 'status' => 'pending', 'name' => 'Final Approval (Management)']
+                    ['role' => 'admin', 'status' => 'pending', 'name' => 'Final Approval (Management)'],
                 ];
-                
+
                 // For GDPR/PDPA, maybe require an external auditor step. For now standard 2 step.
-                
-                \App\Models\ApprovalWorkflow::updateOrCreate(
+
+                ApprovalWorkflow::updateOrCreate(
                     ['module' => $module, 'record_id' => $record->id, 'status' => 'pending'],
                     ['org_id' => $record->org_id, 'steps' => $steps, 'current_step' => 0]
                 );
@@ -822,19 +880,19 @@ class ModuleCrudController extends Controller
                         type: 'approval.pending',
                         recipient: 'role:dpo',
                         orgId: $record->org_id,
-                        title: "✋ Approval pending: " . strtoupper($module) . " {$record->registration_number}",
-                        body: "Menunggu review DPO untuk " . ($record->processing_activity ?? $record->description ?? ''),
+                        title: '✋ Approval pending: '.strtoupper($module)." {$record->registration_number}",
+                        body: 'Menunggu review DPO untuk '.($record->processing_activity ?? $record->description ?? ''),
                         actionUrl: "/{$module}/{$record->id}",
                         metadata: ['record_id' => $record->id, 'workflow_module' => $module]
                     );
                 } catch (\Exception $e) {
-                    \Log::warning('Approval pending notification failed: ' . $e->getMessage());
+                    \Log::warning('Approval pending notification failed: '.$e->getMessage());
                 }
             }
         }
 
         // Audit log: detect section-level changes in wizard_data
-        if (!empty($newWizard) && is_array($newWizard)) {
+        if (! empty($newWizard) && is_array($newWizard)) {
             foreach ($newWizard as $sectionKey => $sectionData) {
                 $oldSection = $oldWizard[$sectionKey] ?? [];
                 if (json_encode($oldSection) !== json_encode($sectionData)) {
@@ -848,22 +906,22 @@ class ModuleCrudController extends Controller
                             }
                         }
                     }
-                    if (!empty($changedFields)) {
+                    if (! empty($changedFields)) {
                         AuditLog::log($module, $record->id, 'answer_added', $changedFields, $sectionKey);
                     }
                 }
             }
         }
 
-        // Auto-trigger DPIA when ROPA risk changes to high. Wrapped in
+        // Auto-trigger DPIA when RoPA risk changes to high. Wrapped in
         // try/catch — DPIA schema quirks (unique collisions, missing optional
         // columns, soft-deleted twin row, etc.) shouldn't roll back a
-        // successful ROPA update and look like "save ropa gagal" to the user.
+        // successful RoPA update and look like "save ropa gagal" to the user.
         if ($module === 'ropa' && ($record->risk_level ?? null) === 'high') {
             try {
                 $dpiaModel = $this->getModel('dpia');
                 $existingDpia = $dpiaModel->where('ropa_id', $record->id)->first();
-                if (!$existingDpia) {
+                if (! $existingDpia) {
                     $dpiaModel->create([
                         'org_id' => $record->org_id,
                         'category_id' => $record->category_id,
@@ -871,14 +929,14 @@ class ModuleCrudController extends Controller
                         'ropa_id' => $record->id,
                         'risk_level' => 'high',
                         'status' => 'draft',
-                        'description' => 'Auto-generated dari ROPA high-risk: ' . $record->processing_activity,
+                        'description' => 'Auto-generated dari RoPA high-risk: '.$record->processing_activity,
                         'risk_assessment' => ['likelihood' => 0, 'impact' => 0, 'risks' => []],
                         'mitigation_measures' => [],
                         'created_by' => $request->user()->id,
                     ]);
                 }
             } catch (\Throwable $e) {
-                \Log::warning('Auto-DPIA creation for ROPA ' . $record->id . ' failed: ' . $e->getMessage());
+                \Log::warning('Auto-DPIA creation for RoPA '.$record->id.' failed: '.$e->getMessage());
             }
         }
 
@@ -890,8 +948,11 @@ class ModuleCrudController extends Controller
      */
     public function destroy(Request $request, string $module, string $id)
     {
-        if ($denied = $this->checkPermission($request, $module, 'write')) return $denied;
+        if ($denied = $this->checkPermission($request, $module, 'write')) {
+            return $denied;
+        }
         $this->getQuery($request, $module)->findOrFail($id)->delete();
+
         return response()->json(['message' => 'Moved to trash']);
     }
 
@@ -900,9 +961,12 @@ class ModuleCrudController extends Controller
      */
     public function restore(Request $request, string $module, string $id)
     {
-        if ($denied = $this->checkPermission($request, $module, 'write')) return $denied;
+        if ($denied = $this->checkPermission($request, $module, 'write')) {
+            return $denied;
+        }
         $record = $this->getQuery($request, $module)->onlyTrashed()->findOrFail($id);
         $record->restore();
+
         return response()->json(['message' => 'Restored', 'data' => $record]);
     }
 
@@ -911,8 +975,11 @@ class ModuleCrudController extends Controller
      */
     public function forceDelete(Request $request, string $module, string $id)
     {
-        if ($denied = $this->checkPermission($request, $module, 'write')) return $denied;
+        if ($denied = $this->checkPermission($request, $module, 'write')) {
+            return $denied;
+        }
         $this->getQuery($request, $module)->onlyTrashed()->findOrFail($id)->forceDelete();
+
         return response()->json(['message' => 'Permanently deleted']);
     }
 
@@ -921,7 +988,9 @@ class ModuleCrudController extends Controller
      */
     public function history(Request $request, string $module, string $id)
     {
-        if ($denied = $this->checkPermission($request, $module, 'read')) return $denied;
+        if ($denied = $this->checkPermission($request, $module, 'read')) {
+            return $denied;
+        }
         // First ensure record belongs to user's org
         $this->getQuery($request, $module)->withTrashed()->findOrFail($id);
 

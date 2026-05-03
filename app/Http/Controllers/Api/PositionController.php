@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Position;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -75,13 +76,13 @@ class PositionController extends Controller
     }
 
     /**
-     * Get DPO users for auto-fill in ROPA/DPIA wizards.
+     * Get DPO users for auto-fill in RoPA/DPIA wizards.
      */
     public function dpoUsers(Request $request): JsonResponse
     {
         $orgId = $request->user()->org_id;
 
-        $users = \App\Models\User::where('org_id', $orgId)
+        $users = User::where('org_id', $orgId)
             ->where('is_active', true)
             ->whereNull('deleted_at')
             ->select('id', 'name', 'email', 'phone', 'position', 'role', 'department_id', 'position_id')

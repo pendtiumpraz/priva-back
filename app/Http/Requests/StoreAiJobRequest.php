@@ -9,7 +9,7 @@ use Illuminate\Foundation\Http\FormRequest;
  *
  * - `type` — must be a known supported MVP type. `deep_scan` is intentionally
  *   excluded; ProcessAiJob throws NotImplemented for it so we reject earlier.
- * - `subject_id` — string ID of the record we're acting on (e.g. ROPA UUID).
+ * - `subject_id` — string ID of the record we're acting on (e.g. RoPA UUID).
  *   Used by the dedup check to prevent two concurrent jobs on the same row.
  * - `payload` — opaque to the controller; ProcessAiJob owns the shape.
  */

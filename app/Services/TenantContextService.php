@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\GapAssessment;
 use App\Models\Organization;
 use App\Models\Ropa;
-use Illuminate\Support\Facades\DB;
 
 class TenantContextService
 {
@@ -16,29 +15,42 @@ class TenantContextService
     public static function buildContext(string $orgId): string
     {
         $org = Organization::find($orgId);
-        if (!$org) return 'Tidak ada data organisasi.';
+        if (! $org) {
+            return 'Tidak ada data organisasi.';
+        }
 
         $parts = [];
 
         // ── 1. Organization Profile ──
-        $parts[] = "=== PROFIL ORGANISASI ===";
+        $parts[] = '=== PROFIL ORGANISASI ===';
         $parts[] = "Nama: {$org->name}";
-        if ($org->industry) $parts[] = "Sektor Industri: {$org->industry}";
-        if ($org->business_model) $parts[] = "Model Bisnis: {$org->business_model}";
-        if ($org->company_size) $parts[] = "Ukuran Perusahaan: {$org->company_size} karyawan";
-        if ($org->website) $parts[] = "Website: {$org->website}";
-        if ($org->has_dpo) $parts[] = "Status DPO: Sudah memiliki Data Protection Officer";
-        else $parts[] = "Status DPO: Belum memiliki DPO";
+        if ($org->industry) {
+            $parts[] = "Sektor Industri: {$org->industry}";
+        }
+        if ($org->business_model) {
+            $parts[] = "Model Bisnis: {$org->business_model}";
+        }
+        if ($org->company_size) {
+            $parts[] = "Ukuran Perusahaan: {$org->company_size} karyawan";
+        }
+        if ($org->website) {
+            $parts[] = "Website: {$org->website}";
+        }
+        if ($org->has_dpo) {
+            $parts[] = 'Status DPO: Sudah memiliki Data Protection Officer';
+        } else {
+            $parts[] = 'Status DPO: Belum memiliki DPO';
+        }
 
         // ── 2. Data Subjects & Systems ──
         $subjects = $org->data_subjects_type ?? [];
-        if (!empty($subjects)) {
+        if (! empty($subjects)) {
             $parts[] = "\n=== SUBJEK DATA UTAMA ===";
             $parts[] = implode(', ', $subjects);
         }
 
         $systems = $org->core_systems ?? [];
-        if (!empty($systems)) {
+        if (! empty($systems)) {
             $parts[] = "\n=== SISTEM INTI YANG DIGUNAKAN ===";
             $parts[] = implode(', ', $systems);
         }
@@ -51,8 +63,8 @@ class TenantContextService
 
         if ($latestGap) {
             $parts[] = "\n=== SKOR GAP ASSESSMENT TERAKHIR ===";
-            $parts[] = "Skor Kepatuhan: " . ($latestGap->overall_score ?? $latestGap->score ?? 0) . "%";
-            $parts[] = "Level: " . ($latestGap->compliance_level ?? 'unknown');
+            $parts[] = 'Skor Kepatuhan: '.($latestGap->overall_score ?? $latestGap->score ?? 0).'%';
+            $parts[] = 'Level: '.($latestGap->compliance_level ?? 'unknown');
 
             // Extract weak areas from answers
             $answers = $latestGap->answers ?? [];
@@ -67,12 +79,12 @@ class TenantContextService
                     }
                 }
             }
-            if (!empty($weakAreas)) {
-                $parts[] = "Area Lemah: " . implode('; ', array_slice($weakAreas, 0, 5));
+            if (! empty($weakAreas)) {
+                $parts[] = 'Area Lemah: '.implode('; ', array_slice($weakAreas, 0, 5));
             }
         }
 
-        // ── 4. Existing ROPA summary (to avoid duplicate suggestions) ──
+        // ── 4. Existing RoPA summary (to avoid duplicate suggestions) ──
         $ropaCount = Ropa::where('org_id', $orgId)->whereNull('deleted_at')->count();
         if ($ropaCount > 0) {
             $existingActivities = Ropa::where('org_id', $orgId)
@@ -81,9 +93,9 @@ class TenantContextService
                 ->take(10)
                 ->toArray();
 
-            $parts[] = "\n=== ROPA YANG SUDAH ADA ({$ropaCount} record) ===";
+            $parts[] = "\n=== RoPA YANG SUDAH ADA ({$ropaCount} record) ===";
             $parts[] = implode(', ', $existingActivities);
-            $parts[] = "(Jangan menyarankan aktivitas yang sudah tercatat di atas)";
+            $parts[] = '(Jangan menyarankan aktivitas yang sudah tercatat di atas)';
         }
 
         return implode("\n", $parts);
@@ -95,16 +107,28 @@ class TenantContextService
     public static function buildCompactContext(string $orgId): string
     {
         $org = Organization::find($orgId);
-        if (!$org) return '';
+        if (! $org) {
+            return '';
+        }
 
         $info = [];
-        if ($org->name) $info[] = $org->name;
-        if ($org->industry) $info[] = "Industri: {$org->industry}";
-        if ($org->business_model) $info[] = "Model: {$org->business_model}";
-        if ($org->company_size) $info[] = "Size: {$org->company_size}";
+        if ($org->name) {
+            $info[] = $org->name;
+        }
+        if ($org->industry) {
+            $info[] = "Industri: {$org->industry}";
+        }
+        if ($org->business_model) {
+            $info[] = "Model: {$org->business_model}";
+        }
+        if ($org->company_size) {
+            $info[] = "Size: {$org->company_size}";
+        }
 
         $subjects = $org->data_subjects_type ?? [];
-        if (!empty($subjects)) $info[] = "Subjek Data: " . implode(', ', $subjects);
+        if (! empty($subjects)) {
+            $info[] = 'Subjek Data: '.implode(', ', $subjects);
+        }
 
         return implode(' | ', $info);
     }

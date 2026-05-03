@@ -8,13 +8,14 @@ use Illuminate\Support\Facades\Schema;
  * Phase D — Document template customization.
  *
  * `document_templates` — preset library (system + tenant-custom).
- * Config JSON drives every PDF export's look. Applies to ROPA, DPIA,
+ * Config JSON drives every PDF export's look. Applies to RoPA, DPIA,
  * GAP, Breach reports, Compliance Dashboard.
  *
  * `tenant_themes.active_document_template_id` points to the current
  * preset. If null, fall back to the default system template.
  */
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         Schema::create('document_templates', function (Blueprint $table) {

@@ -3,13 +3,13 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToOrg;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class GapAssessment extends Model
 {
-    use HasUuids, SoftDeletes, BelongsToOrg;
+    use BelongsToOrg, HasUuids, SoftDeletes;
 
     protected $fillable = [
         'org_id', 'regulation_code', 'version', 'overall_score', 'compliance_level',
@@ -40,24 +40,23 @@ class GapAssessment extends Model
             $weight = $q['weight'];
             $totalWeight += $weight;
 
-            if (!isset($categoryScores[$q['category']])) {
+            if (! isset($categoryScores[$q['category']])) {
                 $categoryScores[$q['category']] = ['total' => 0, 'earned' => 0];
             }
             $categoryScores[$q['category']]['total'] += $weight;
 
             $score = match ($answer) {
-                    'yes' => $weight,
-                    'partial' => $weight * 0.5,
-                    'no' => 0,
-                    'na' => 0, // N/A doesn't count
-                    default => 0,
-                };
+                'yes' => $weight,
+                'partial' => $weight * 0.5,
+                'no' => 0,
+                'na' => 0, // N/A doesn't count
+                default => 0,
+            };
 
             if ($answer === 'na') {
                 $totalWeight -= $weight; // Don't count N/A
                 $categoryScores[$q['category']]['total'] -= $weight;
-            }
-            else {
+            } else {
                 $earnedWeight += $score;
                 $categoryScores[$q['category']]['earned'] += $score;
             }
@@ -89,6 +88,7 @@ class GapAssessment extends Model
         // Sort recommendations by priority
         usort($recommendations, function ($a, $b) {
             $order = ['critical' => 0, 'high' => 1, 'medium' => 2];
+
             return ($order[$a['priority']] ?? 3) - ($order[$b['priority']] ?? 3);
         });
 
@@ -98,7 +98,7 @@ class GapAssessment extends Model
             'category_breakdown' => $breakdown,
             'recommendations' => $recommendations,
             'total_questions' => count($questions),
-            'answered' => count(array_filter($answers, fn($a) => $a !== null)),
+            'answered' => count(array_filter($answers, fn ($a) => $a !== null)),
         ];
     }
 
@@ -107,7 +107,7 @@ class GapAssessment extends Model
      */
     public static function getQuestionBank(string $code = 'uupdp'): array
     {
-        $framework = \App\Models\RegulationFramework::where('code', $code)->first();
+        $framework = RegulationFramework::where('code', $code)->first();
         if ($framework && $framework->articles) {
             $articles = is_string($framework->articles) ? json_decode($framework->articles, true) : $framework->articles;
             $mapped = [];
@@ -121,7 +121,7 @@ class GapAssessment extends Model
                         'weight' => $a['score_weight'] ?? 5,
                         'question' => $a['question'] ?? '',
                         'explanation' => '-',
-                        'recommendation' => 'Review ' . ($a['topic'] ?? '') . ' compliance based on ' . ($a['article'] ?? ''),
+                        'recommendation' => 'Review '.($a['topic'] ?? '').' compliance based on '.($a['article'] ?? ''),
                     ];
                 } else {
                     $mapped[] = $a;
@@ -252,13 +252,13 @@ class GapAssessment extends Model
                 'recommendation' => 'Buat dan kelola Data Asset Inventory yang mencakup: jenis data, sumber data, lokasi penyimpanan, format, volume, data owner, dan masa retensi.',
             ],
 
-            // --- ROPA ---
+            // --- RoPA ---
             [
                 'id' => 'SP-AS-RO-01', 'category' => 'Siklus Proses PDP', 'subcategory' => 'Assess',
                 'article' => 'Pasal 31', 'weight' => 5,
-                'question' => 'Apakah Organisasi telah memiliki Catatan Aktivitas Pemrosesan (Records of Processing Activities/ROPA)?',
-                'explanation' => 'ROPA adalah catatan sistematis dari seluruh aktivitas pemrosesan data pribadi yang dilakukan oleh organisasi. Wajib dimiliki sesuai Pasal 31 UU PDP.',
-                'recommendation' => 'Buat ROPA yang mencakup: tujuan pemrosesan, kategori subjek data, kategori data, penerima data, transfer ke luar negeri, masa retensi, dan deskripsi langkah keamanan.',
+                'question' => 'Apakah Organisasi telah memiliki Catatan Aktivitas Pemrosesan (Records of Processing Activities/RoPA)?',
+                'explanation' => 'RoPA adalah catatan sistematis dari seluruh aktivitas pemrosesan data pribadi yang dilakukan oleh organisasi. Wajib dimiliki sesuai Pasal 31 UU PDP.',
+                'recommendation' => 'Buat RoPA yang mencakup: tujuan pemrosesan, kategori subjek data, kategori data, penerima data, transfer ke luar negeri, masa retensi, dan deskripsi langkah keamanan.',
             ],
 
             // --- Flow of Information ---
@@ -455,6 +455,6 @@ class GapAssessment extends Model
 
     public function organization()
     {
-        return $this->belongsTo(Organization::class , 'org_id');
+        return $this->belongsTo(Organization::class, 'org_id');
     }
 }

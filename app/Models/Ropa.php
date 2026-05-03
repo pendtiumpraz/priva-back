@@ -1,14 +1,15 @@
 <?php
+
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToOrg;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Ropa extends Model
 {
-    use HasUuids, SoftDeletes, BelongsToOrg;
+    use BelongsToOrg, HasUuids, SoftDeletes;
 
     protected $fillable = [
         'org_id', 'regulation_code', 'category_id', 'custom_number', 'registration_number',
@@ -62,7 +63,7 @@ class Ropa extends Model
                 // Check in wizard_data first, then in direct model fields
                 $sectionData = $wizardData[$section['key']] ?? [];
                 $value = $sectionData[$field] ?? $this->getAttribute($field);
-                if (!empty($value)) {
+                if (! empty($value)) {
                     $filledFields++;
                 }
             }
@@ -86,7 +87,9 @@ class Ropa extends Model
 
             foreach ($section['fields'] as $field) {
                 $value = $sectionData[$field] ?? $this->getAttribute($field);
-                if (!empty($value)) $filled++;
+                if (! empty($value)) {
+                    $filled++;
+                }
             }
 
             $statuses[$idx] = [
@@ -114,8 +117,8 @@ class Ropa extends Model
         $dpoTeam = $wiz['dpo_team'] ?? [];
         $list = $dpoTeam['dpo_list'] ?? null;
 
-        if (is_array($list) && !empty($list)) {
-            return array_values(array_map(fn($d) => [
+        if (is_array($list) && ! empty($list)) {
+            return array_values(array_map(fn ($d) => [
                 'user_id' => $d['user_id'] ?? null,
                 'name' => $d['name'] ?? '',
                 'email' => $d['email'] ?? '',
@@ -125,7 +128,7 @@ class Ropa extends Model
         }
 
         // Legacy fallback — single DPO stored in flat fields.
-        if (!empty($dpoTeam['dpo_name']) || !empty($dpoTeam['dpo_email'])) {
+        if (! empty($dpoTeam['dpo_name']) || ! empty($dpoTeam['dpo_email'])) {
             return [[
                 'user_id' => null,
                 'name' => $dpoTeam['dpo_name'] ?? '',
@@ -134,6 +137,7 @@ class Ropa extends Model
                 'jabatan' => $dpoTeam['dpo_jabatan'] ?? '',
             ]];
         }
+
         return [];
     }
 
@@ -144,8 +148,8 @@ class Ropa extends Model
         $dpoTeam = $wiz['dpo_team'] ?? [];
         $list = $dpoTeam['pic_list'] ?? null;
 
-        if (is_array($list) && !empty($list)) {
-            return array_values(array_map(fn($p) => [
+        if (is_array($list) && ! empty($list)) {
+            return array_values(array_map(fn ($p) => [
                 'user_id' => $p['user_id'] ?? null,
                 'name' => $p['name'] ?? '',
                 'email' => $p['email'] ?? '',
@@ -154,7 +158,7 @@ class Ropa extends Model
             ], $list));
         }
 
-        if (!empty($dpoTeam['pic_name'])) {
+        if (! empty($dpoTeam['pic_name'])) {
             return [[
                 'user_id' => null,
                 'name' => $dpoTeam['pic_name'] ?? '',
@@ -163,6 +167,7 @@ class Ropa extends Model
                 'divisi' => $dpoTeam['pic_divisi'] ?? '',
             ]];
         }
+
         return [];
     }
 
@@ -176,7 +181,7 @@ class Ropa extends Model
         $info = $wiz['informasi_pemrosesan'] ?? [];
         $raw = $info['sistem_terkait'] ?? null;
 
-        if (is_array($raw) && !empty($raw)) {
+        if (is_array($raw) && ! empty($raw)) {
             return array_values(array_map(function ($s) {
                 if (is_array($s)) {
                     return [
@@ -185,14 +190,16 @@ class Ropa extends Model
                         'lokasi' => $s['lokasi'] ?? '',
                     ];
                 }
+
                 // Legacy: array of plain strings.
-                return ['system_id' => null, 'name' => (string)$s, 'lokasi' => ''];
+                return ['system_id' => null, 'name' => (string) $s, 'lokasi' => ''];
             }, $raw));
         }
 
         if (is_string($raw) && $raw !== '') {
             return [['system_id' => null, 'name' => $raw, 'lokasi' => '']];
         }
+
         return [];
     }
 
@@ -208,10 +215,10 @@ class Ropa extends Model
         $ret = $wiz['retensi_keamanan'] ?? [];
         $list = $ret['retensi_list'] ?? null;
 
-        if (!is_array($list) || empty($list)) {
+        if (! is_array($list) || empty($list)) {
             // Legacy: single masa_retensi string fallback.
             $legacy = $ret['masa_retensi'] ?? $this->retention_period;
-            if (!empty($legacy)) {
+            if (! empty($legacy)) {
                 return [[
                     'policy_id' => null,
                     'name' => $legacy,
@@ -223,25 +230,27 @@ class Ropa extends Model
                     'catatan' => null,
                 ]];
             }
+
             return [];
         }
 
-        $policyIds = array_values(array_filter(array_map(fn($r) => $r['policy_id'] ?? null, $list)));
+        $policyIds = array_values(array_filter(array_map(fn ($r) => $r['policy_id'] ?? null, $list)));
         // Guard against a missing retention_policies table: environments where
         // migration 2026_04_22_000006 hasn't run yet must still be able to
-        // export ROPA docs. Falls back to an empty policy map so row fields
+        // export RoPA docs. Falls back to an empty policy map so row fields
         // default to the inline values from wizard_data.
         try {
             $policies = $policyIds
                 ? RetentionPolicy::whereIn('id', $policyIds)->get()->keyBy('id')
                 : collect();
         } catch (\Throwable $e) {
-            \Log::warning('RetentionPolicy lookup failed (missing table?): ' . $e->getMessage());
+            \Log::warning('RetentionPolicy lookup failed (missing table?): '.$e->getMessage());
             $policies = collect();
         }
 
         return array_values(array_map(function ($row) use ($policies) {
             $p = $policies->get($row['policy_id'] ?? null);
+
             return [
                 'policy_id' => $row['policy_id'] ?? null,
                 'name' => $p?->name ?? ($row['name'] ?? ''),
@@ -273,8 +282,8 @@ class Ropa extends Model
 
     /**
      * Many-to-many DPIAs (beyond the legacy single ropa_id parent FK).
-     * 1 ROPA bisa di-cover banyak DPIA dari sudut pandang berbeda
-     * (e.g. ROPA "Customer Onboarding" → DPIA Privacy + DPIA Security).
+     * 1 RoPA bisa di-cover banyak DPIA dari sudut pandang berbeda
+     * (e.g. RoPA "Customer Onboarding" → DPIA Privacy + DPIA Security).
      */
     public function dpiaCoverages()
     {
@@ -284,7 +293,7 @@ class Ropa extends Model
     }
 
     /**
-     * Many-to-many: ROPA processing activity bisa pakai banyak Information Systems
+     * Many-to-many: RoPA processing activity bisa pakai banyak Information Systems
      * (1 activity might query customer DB + log DB + analytics warehouse).
      */
     public function informationSystems()
@@ -295,7 +304,7 @@ class Ropa extends Model
     }
 
     /**
-     * Many-to-many: ROPA bisa terkait banyak collection point consent
+     * Many-to-many: RoPA bisa terkait banyak collection point consent
      * (e.g. activity "marketing campaign" link ke cookie banner + email signup form).
      */
     public function consentPoints()

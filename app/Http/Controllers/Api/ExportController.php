@@ -61,7 +61,7 @@ class ExportController extends Controller
     }
 
     // =============================================
-    // ROPA Export — Full 7-section wizard + metadata
+    // RoPA Export — Full 7-section wizard + metadata
     // =============================================
     public function ropa(Request $request)
     {
@@ -147,7 +147,7 @@ class ExportController extends Controller
 
         $headers = [
             'No. Registrasi', 'Deskripsi', 'Level Risiko', 'Status',
-            'ROPA Terkait', 'ROPA Aktivitas',
+            'RoPA Terkait', 'RoPA Aktivitas',
             'Likelihood (1-5)', 'Impact (1-5)', 'Risk Score',
             'Risiko #1', 'Risiko #2', 'Risiko #3',
             'Mitigasi #1', 'Mitigasi #2', 'Mitigasi #3',

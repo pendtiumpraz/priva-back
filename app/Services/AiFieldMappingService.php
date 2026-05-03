@@ -24,7 +24,7 @@ class AiFieldMappingService
     private array $riskLibraryAllowlist = [];
 
     /**
-     * Map extracted document data to ROPA fields using AI.
+     * Map extracted document data to RoPA fields using AI.
      *
      * @param  array  $extractedData  Output from DocumentParserService
      * @param  string  $targetModule  'ropa' or 'dpia'

@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Sprint C1: Per-tenant custom fields for ROPA / DPIA wizards.
+ * Sprint C1: Per-tenant custom fields for RoPA / DPIA wizards.
  * Rendered dynamically after the last wizard section. Values stored at
  * wizard_data.custom_fields[{field_name}] on the record.
  */
@@ -38,8 +38,10 @@ return new class extends Migration
                 $table->unique(['org_id', 'module', 'field_name'], 'module_custom_fields_unique');
                 $table->index(['org_id', 'module', 'is_active'], 'module_custom_fields_org_mod_idx');
             });
-        } catch (\Throwable $e) {
-            if (!$this->alreadyExists($e)) throw $e;
+        } catch (Throwable $e) {
+            if (! $this->alreadyExists($e)) {
+                throw $e;
+            }
         }
     }
 
@@ -48,9 +50,10 @@ return new class extends Migration
         Schema::dropIfExists('module_custom_fields');
     }
 
-    private function alreadyExists(\Throwable $e): bool
+    private function alreadyExists(Throwable $e): bool
     {
         $msg = $e->getMessage();
+
         return str_contains($msg, 'already exists')
             || str_contains($msg, '1050')   // MySQL
             || str_contains($msg, '42S01')  // MySQL SQLSTATE

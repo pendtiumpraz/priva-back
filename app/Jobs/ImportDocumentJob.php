@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\AiCreditLog;
 use App\Models\DocumentImport;
 use App\Models\Organization;
 use App\Models\Ropa;
@@ -19,6 +20,7 @@ class ImportDocumentJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
+
     public int $backoff = 30; // seconds between retries
 
     public function __construct(
@@ -43,12 +45,12 @@ class ImportDocumentJob implements ShouldQueue
             $disk = $storageService->getDisk($org);
             $fileContents = $disk->get($import->storage_path);
 
-            if (!$fileContents) {
+            if (! $fileContents) {
                 throw new \RuntimeException("File tidak ditemukan di storage: {$import->storage_path}");
             }
 
             $tempPath = storage_path("app/temp/{$import->id}.{$import->file_type}");
-            if (!is_dir(dirname($tempPath))) {
+            if (! is_dir(dirname($tempPath))) {
                 mkdir(dirname($tempPath), 0755, true);
             }
             file_put_contents($tempPath, $fileContents);
@@ -83,7 +85,7 @@ class ImportDocumentJob implements ShouldQueue
             try {
                 if ($org->ai_credits_remaining !== null) {
                     $org->decrement('ai_credits_remaining', 2); // 2 credits per document analysis
-                    \App\Models\AiCreditLog::create([
+                    AiCreditLog::create([
                         'org_id' => $org->id,
                         'user_id' => $import->uploaded_by,
                         'action_type' => 'document_analysis',
@@ -101,7 +103,7 @@ class ImportDocumentJob implements ShouldQueue
                 'status' => 'failed',
                 'error_message' => $e->getMessage(),
                 'retry_count' => $import->retry_count + 1,
-                'status_message' => 'Gagal: ' . $e->getMessage(),
+                'status_message' => 'Gagal: '.$e->getMessage(),
             ]);
 
             // Recalculate batch if part of one
@@ -119,12 +121,12 @@ class ImportDocumentJob implements ShouldQueue
     }
 
     /**
-     * Create ROPA record from approved mapping.
+     * Create RoPA record from approved mapping.
      * Called externally after user approves the mapping.
      */
     public static function createRecordFromMapping(DocumentImport $import): ?string
     {
-        if (!$import->mapped_fields || $import->status !== 'review') {
+        if (! $import->mapped_fields || $import->status !== 'review') {
             return null;
         }
 
@@ -138,10 +140,10 @@ class ImportDocumentJob implements ShouldQueue
                 $wizardData[$sectionKey] = $fields;
             }
 
-            // Extract top-level ROPA fields from wizard data
+            // Extract top-level RoPA fields from wizard data
             $ropa = Ropa::create([
                 'org_id' => $org->id,
-                'registration_number' => 'ROPA-' . date('Y') . '-' . str_pad(
+                'registration_number' => 'ROPA-'.date('Y').'-'.str_pad(
                     Ropa::where('org_id', $org->id)->count() + 1, 4, '0', STR_PAD_LEFT
                 ),
                 'processing_activity' => $wizardData['detail_pemrosesan']['processing_activity'] ?? 'Imported from document',
@@ -171,7 +173,7 @@ class ImportDocumentJob implements ShouldQueue
                 'status' => 'completed',
                 'progress' => 100,
                 'created_record_id' => $ropa->id,
-                'status_message' => "ROPA {$ropa->registration_number} berhasil dibuat.",
+                'status_message' => "RoPA {$ropa->registration_number} berhasil dibuat.",
             ]);
 
             // Recalculate batch
@@ -202,7 +204,7 @@ class ImportDocumentJob implements ShouldQueue
             $import->update([
                 'status' => 'failed',
                 'error_message' => $exception->getMessage(),
-                'status_message' => 'Gagal setelah semua percobaan: ' . $exception->getMessage(),
+                'status_message' => 'Gagal setelah semua percobaan: '.$exception->getMessage(),
             ]);
 
             if ($import->batch_id) {

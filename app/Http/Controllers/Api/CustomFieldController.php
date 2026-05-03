@@ -9,11 +9,12 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 /**
- * Sprint C1: Per-tenant custom fields and templates for ROPA / DPIA.
+ * Sprint C1: Per-tenant custom fields and templates for RoPA / DPIA.
  */
 class CustomFieldController extends Controller
 {
     private const ALLOWED_MODULES = ['ropa', 'dpia'];
+
     private const ALLOWED_TYPES = ['text', 'textarea', 'select', 'multiselect', 'date', 'number', 'boolean'];
 
     // ---------------------------------------------------------------------
@@ -23,7 +24,7 @@ class CustomFieldController extends Controller
     public function index(Request $request)
     {
         $module = $request->query('module');
-        if (!in_array($module, self::ALLOWED_MODULES, true)) {
+        if (! in_array($module, self::ALLOWED_MODULES, true)) {
             return response()->json(['message' => 'Invalid module'], 422);
         }
 
@@ -93,6 +94,7 @@ class CustomFieldController extends Controller
     {
         $field = ModuleCustomField::where('org_id', $request->user()->org_id)->findOrFail($id);
         $field->delete();
+
         return response()->json(['message' => 'Custom field dihapus']);
     }
 
@@ -103,7 +105,7 @@ class CustomFieldController extends Controller
     public function templates(Request $request)
     {
         $module = $request->query('module');
-        if (!in_array($module, self::ALLOWED_MODULES, true)) {
+        if (! in_array($module, self::ALLOWED_MODULES, true)) {
             return response()->json(['message' => 'Invalid module'], 422);
         }
 
@@ -128,7 +130,7 @@ class CustomFieldController extends Controller
 
         $orgId = $request->user()->org_id;
 
-        if (!empty($data['is_default'])) {
+        if (! empty($data['is_default'])) {
             ModuleTemplate::where('org_id', $orgId)
                 ->forModule($data['module'])
                 ->update(['is_default' => false]);
@@ -153,7 +155,7 @@ class CustomFieldController extends Controller
             'is_default' => 'nullable|boolean',
         ]);
 
-        if (!empty($data['is_default'])) {
+        if (! empty($data['is_default'])) {
             ModuleTemplate::where('org_id', $template->org_id)
                 ->forModule($template->module)
                 ->where('id', '!=', $template->id)
@@ -161,6 +163,7 @@ class CustomFieldController extends Controller
         }
 
         $template->update($data);
+
         return response()->json(['message' => 'Template diperbarui', 'data' => $template->fresh()]);
     }
 
@@ -168,6 +171,7 @@ class CustomFieldController extends Controller
     {
         $template = ModuleTemplate::where('org_id', $request->user()->org_id)->findOrFail($id);
         $template->delete();
+
         return response()->json(['message' => 'Template dihapus']);
     }
 }

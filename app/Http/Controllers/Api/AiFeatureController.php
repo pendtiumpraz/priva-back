@@ -3,13 +3,32 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\BatchAiReviewJob;
+use App\Models\AiResult;
+use App\Models\BreachIncident;
+use App\Models\BreachSimulation;
+use App\Models\ConsentCollectionPoint;
+use App\Models\Dpia;
+use App\Models\DsrRequest;
+use App\Models\GapAssessment;
+use App\Models\GapComparison;
+use App\Models\LiaAssessment;
+use App\Models\License;
+use App\Models\MaturityAssessment;
+use App\Models\Organization;
+use App\Models\Ropa;
+use App\Models\TiaAssessment;
+use App\Models\User;
 use App\Services\AiService;
 use App\Services\CreditService;
+use App\Services\DocumentParserService;
 use App\Services\TenantContextService;
 use App\Services\TenantStorageService;
-use App\Models\{AiResult, AiCreditLog, GapAssessment, Ropa, Dpia, BreachIncident, DsrRequest, BreachSimulation, License, Organization};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use PhpOffice\PhpWord\IOFactory;
+use Smalot\PdfParser\Parser;
 
 class AiFeatureController extends Controller
 {
@@ -20,9 +39,10 @@ class AiFeatureController extends Controller
             ->where('status', 'active')
             ->first();
 
-        if (!$license || $license->package_type === 'basic') {
+        if (! $license || $license->package_type === 'basic') {
             return null;
         }
+
         return $license;
     }
 
@@ -43,12 +63,15 @@ class AiFeatureController extends Controller
     private function checkCredit(Request $request, string $actionType)
     {
         $orgId = $request->user()->org_id;
-        if (!$orgId) return null; // superadmin bypass
+        if (! $orgId) {
+            return null;
+        } // superadmin bypass
 
         CreditService::resetIfNeeded($orgId);
 
-        if (!CreditService::hasCredit($orgId, $actionType)) {
+        if (! CreditService::hasCredit($orgId, $actionType)) {
             $cost = CreditService::getCost($actionType);
+
             return response()->json([
                 'message' => "Quota AI Anda habis bulan ini. Dibutuhkan {$cost} credit untuk fitur ini.",
                 'credits_exhausted' => true,
@@ -67,11 +90,12 @@ class AiFeatureController extends Controller
         $orgId = $request->user()->org_id;
         $userId = $request->user()->id;
 
-        if (!$response) {
+        if (! $response) {
             // Log failed attempt (NO credit deducted)
             if ($orgId) {
                 CreditService::logFailed($orgId, $userId, $featureType, 'AI response null/unavailable');
             }
+
             return response()->json(['message' => 'AI sedang tidak tersedia', 'credits_used' => 0], 502);
         }
 
@@ -139,13 +163,18 @@ class AiFeatureController extends Controller
         $sanitized = $results->filter(function ($item) {
             $data = $item->result_data;
             // result_data must be a non-null array/object
-            if (is_null($data)) return false;
+            if (is_null($data)) {
+                return false;
+            }
             if (is_string($data)) {
                 // Try to decode if stored as string
                 $decoded = json_decode($data, true);
-                if ($decoded === null) return false;
+                if ($decoded === null) {
+                    return false;
+                }
                 $item->result_data = $decoded;
             }
+
             return true;
         })->values();
 
@@ -157,15 +186,19 @@ class AiFeatureController extends Controller
     // =============================================
     public function gapRemediation(Request $request, string $id)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'gap_remediation');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $assessment = GapAssessment::findOrFail($id);
         $result = GapAssessment::calculateScore($assessment->answers ?? []);
 
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) {
+        if (! $ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
@@ -189,24 +222,26 @@ class AiFeatureController extends Controller
     // =============================================
     public function gapComparisonGenerate(Request $request, string $id)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
-        
-        $comparison = \App\Models\GapComparison::findOrFail($id);
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
+
+        $comparison = GapComparison::findOrFail($id);
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) {
+        if (! $ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
         $systemPrompt = "Kamu adalah Data Protection Officer ahli UU PDP Indonesia. Output WAJIB berupa JSON valid.\n"
-            . "Format: {\"ai_score_mapping\":[{\"version\":\"...\",\"category\":\"...\",\"ai_score\":85}], \"sections\":[{\"type\":\"text\",\"title\":\"...\",\"content\":\"...\"}], \"closing\":\"...\"}";
+            .'Format: {"ai_score_mapping":[{"version":"...","category":"...","ai_score":85}], "sections":[{"type":"text","title":"...","content":"..."}], "closing":"..."}';
 
         $userPrompt = "Lakukan asesmen ulang (AI Scoring) dan analisis untuk perbandingan Gap Assessment ini:\n"
-            . "Chart Data Historis: " . json_encode($comparison->chart_data) . "\n"
-            . "Sistem Score Asal: " . json_encode($comparison->chart_data) . "\n\n"
-            . "Berikan:\n"
-            . "1. Tinjauan ulang probabilitas kepatuhan di dunia nyata untuk setiap kategori (AI Score vs System Score). Tentukan skor realistik versi AI di 'ai_score_mapping'.\n"
-            . "2. Analisis DPO tentang tren (Sections)\n"
-            . "Jawab HANYA dalam JSON format yang diminta.";
+            .'Chart Data Historis: '.json_encode($comparison->chart_data)."\n"
+            .'Sistem Score Asal: '.json_encode($comparison->chart_data)."\n\n"
+            ."Berikan:\n"
+            ."1. Tinjauan ulang probabilitas kepatuhan di dunia nyata untuk setiap kategori (AI Score vs System Score). Tentukan skor realistik versi AI di 'ai_score_mapping'.\n"
+            ."2. Analisis DPO tentang tren (Sections)\n"
+            .'Jawab HANYA dalam JSON format yang diminta.';
 
         $response = $ai->ask($systemPrompt, $userPrompt, 3000);
 
@@ -214,17 +249,21 @@ class AiFeatureController extends Controller
     }
 
     // =============================================
-    // ROPA — AI Analysis
+    // RoPA — AI Analysis
     // =============================================
     public function ropaAnalysis(Request $request, string $id)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'analysis_ropa');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $ropa = Ropa::findOrFail($id);
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) {
+        if (! $ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
@@ -252,13 +291,17 @@ class AiFeatureController extends Controller
     // =============================================
     public function dpiaRiskScoring(Request $request, string $id)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'analysis_dpia');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $dpia = Dpia::findOrFail($id);
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) {
+        if (! $ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
@@ -286,13 +329,17 @@ class AiFeatureController extends Controller
     // =============================================
     public function breachAdvisor(Request $request, string $id)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'analysis_breach');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $breach = BreachIncident::findOrFail($id);
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) {
+        if (! $ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
@@ -319,13 +366,17 @@ class AiFeatureController extends Controller
     // =============================================
     public function dsrDraft(Request $request, string $id)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'analysis_dsr');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $dsr = DsrRequest::findOrFail($id);
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) {
+        if (! $ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
@@ -348,9 +399,13 @@ class AiFeatureController extends Controller
     // =============================================
     public function consentGenerator(Request $request)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'analysis_consent');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $request->validate([
             'purpose' => 'required|string',
@@ -359,7 +414,7 @@ class AiFeatureController extends Controller
         ]);
 
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) {
+        if (! $ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
@@ -383,9 +438,13 @@ class AiFeatureController extends Controller
     // =============================================
     public function dashboardSummary(Request $request)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'dashboard_summary');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $orgId = $request->user()->org_id;
 
@@ -407,7 +466,7 @@ class AiFeatureController extends Controller
         ];
 
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) {
+        if (! $ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
@@ -425,7 +484,9 @@ class AiFeatureController extends Controller
     public function drillScenario(Request $request)
     {
         $license = $this->checkAiLicense($request);
-        if (!$license) return $this->denyBasic();
+        if (! $license) {
+            return $this->denyBasic();
+        }
 
         // Enterprise-only feature
         if ($license->package_type !== 'ai_agent') {
@@ -442,7 +503,7 @@ class AiFeatureController extends Controller
         ]);
 
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) {
+        if (! $ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
@@ -467,14 +528,20 @@ class AiFeatureController extends Controller
 
     public function autofillRopa(Request $request)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'autofill_ropa');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $request->validate(['activity_name' => 'required|string|max:500']);
 
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        if (! $ai->isAvailable()) {
+            return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        }
 
         $context = TenantContextService::buildContext($request->user()->org_id);
         $response = $ai->ropaAutoFill($request->activity_name, $context);
@@ -484,14 +551,20 @@ class AiFeatureController extends Controller
 
     public function autofillDpia(Request $request)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'autofill_dpia');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $request->validate(['description' => 'required|string|max:500']);
 
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        if (! $ai->isAvailable()) {
+            return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        }
 
         $context = TenantContextService::buildContext($request->user()->org_id);
         $response = $ai->dpiaAutoFill($request->description, $context);
@@ -504,27 +577,37 @@ class AiFeatureController extends Controller
      */
     public function assessmentAnalysis(Request $request, string $kind)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $feature = "assessment_{$kind}";
         $creditErr = $this->checkCredit($request, $feature);
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $data = $request->validate(['id' => 'required|uuid']);
         $orgId = $request->user()->org_id;
 
         $model = match ($kind) {
-            'lia' => \App\Models\LiaAssessment::class,
-            'tia' => \App\Models\TiaAssessment::class,
-            'maturity' => \App\Models\MaturityAssessment::class,
+            'lia' => LiaAssessment::class,
+            'tia' => TiaAssessment::class,
+            'maturity' => MaturityAssessment::class,
             default => null,
         };
-        if (!$model) return response()->json(['message' => 'Unknown assessment kind'], 422);
+        if (! $model) {
+            return response()->json(['message' => 'Unknown assessment kind'], 422);
+        }
 
         $record = $model::where('org_id', $orgId)->find($data['id']);
-        if (!$record) return response()->json(['message' => 'Assessment tidak ditemukan'], 404);
+        if (! $record) {
+            return response()->json(['message' => 'Assessment tidak ditemukan'], 404);
+        }
 
         $ai = (new AiService($orgId))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        if (! $ai->isAvailable()) {
+            return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        }
 
         $response = match ($kind) {
             'lia' => $ai->liaAnalysis($record->toArray()),
@@ -536,16 +619,30 @@ class AiFeatureController extends Controller
         if ($response) {
             $updates = [];
             if ($kind === 'lia') {
-                if (isset($response['overall_score'])) $updates['overall_score'] = $response['overall_score'];
-                if (isset($response['assessment_result'])) $updates['assessment_result'] = $response['assessment_result'];
+                if (isset($response['overall_score'])) {
+                    $updates['overall_score'] = $response['overall_score'];
+                }
+                if (isset($response['assessment_result'])) {
+                    $updates['assessment_result'] = $response['assessment_result'];
+                }
             } elseif ($kind === 'tia') {
-                if (isset($response['overall_risk_level'])) $updates['overall_risk_level'] = $response['overall_risk_level'];
+                if (isset($response['overall_risk_level'])) {
+                    $updates['overall_risk_level'] = $response['overall_risk_level'];
+                }
             } elseif ($kind === 'maturity') {
-                if (isset($response['overall_level'])) $updates['overall_level'] = $response['overall_level'];
-                if (isset($response['overall_score'])) $updates['overall_score'] = $response['overall_score'];
-                if (isset($response['roadmap'])) $updates['recommendations'] = $response['roadmap'];
+                if (isset($response['overall_level'])) {
+                    $updates['overall_level'] = $response['overall_level'];
+                }
+                if (isset($response['overall_score'])) {
+                    $updates['overall_score'] = $response['overall_score'];
+                }
+                if (isset($response['roadmap'])) {
+                    $updates['recommendations'] = $response['roadmap'];
+                }
             }
-            if (!empty($updates)) $record->update($updates);
+            if (! empty($updates)) {
+                $record->update($updates);
+            }
         }
 
         return $this->saveAndRespond($request, $feature, $response, ['id' => $data['id']]);
@@ -561,10 +658,14 @@ class AiFeatureController extends Controller
      */
     public function assessmentAskAi(Request $request, string $kind)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $feature = "assessment_ask_{$kind}";
         $creditErr = $this->checkCredit($request, $feature);
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $data = $request->validate([
             'id' => 'required|uuid',
@@ -573,15 +674,19 @@ class AiFeatureController extends Controller
 
         $orgId = $request->user()->org_id;
         $model = match ($kind) {
-            'lia' => \App\Models\LiaAssessment::class,
-            'tia' => \App\Models\TiaAssessment::class,
-            'maturity' => \App\Models\MaturityAssessment::class,
+            'lia' => LiaAssessment::class,
+            'tia' => TiaAssessment::class,
+            'maturity' => MaturityAssessment::class,
             default => null,
         };
-        if (!$model) return response()->json(['message' => 'Unknown assessment kind'], 422);
+        if (! $model) {
+            return response()->json(['message' => 'Unknown assessment kind'], 422);
+        }
 
         $record = $model::where('org_id', $orgId)->find($data['id']);
-        if (!$record) return response()->json(['message' => 'Assessment tidak ditemukan'], 404);
+        if (! $record) {
+            return response()->json(['message' => 'Assessment tidak ditemukan'], 404);
+        }
 
         // For maturity, attach question responses so the AI can reason about
         // specific sub-question scores (e.g. "kenapa C12 enkripsi cuma 4?")
@@ -591,7 +696,9 @@ class AiFeatureController extends Controller
         }
 
         $ai = (new AiService($orgId))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        if (! $ai->isAvailable()) {
+            return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        }
 
         $response = $ai->assessmentAskAi($kind, $payload, $data['question']);
 
@@ -606,17 +713,25 @@ class AiFeatureController extends Controller
      */
     public function breachContainmentSteps(Request $request)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'breach_containment');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $data = $request->validate(['breach_id' => 'required|uuid']);
 
         $breach = BreachIncident::where('org_id', $request->user()->org_id)->find($data['breach_id']);
-        if (!$breach) return response()->json(['message' => 'Breach tidak ditemukan'], 404);
+        if (! $breach) {
+            return response()->json(['message' => 'Breach tidak ditemukan'], 404);
+        }
 
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        if (! $ai->isAvailable()) {
+            return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        }
 
         $response = $ai->breachContainmentSteps([
             'title' => $breach->title,
@@ -628,7 +743,7 @@ class AiFeatureController extends Controller
             'root_cause' => $breach->root_cause,
         ]);
 
-        if ($response && !empty($response['containment_steps'])) {
+        if ($response && ! empty($response['containment_steps'])) {
             $breach->update(['containment_steps' => $response['containment_steps']]);
         }
 
@@ -642,9 +757,13 @@ class AiFeatureController extends Controller
      */
     public function contractAnalyze(Request $request)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'contract_review');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $request->validate([
             'file' => 'required|file|mimes:pdf,docx|max:10240',
@@ -660,11 +779,12 @@ class AiFeatureController extends Controller
         [$fullPath, $cleanup] = $ts->getLocalPathForProcessing($org, $storedPath);
 
         try {
-            $parser = new \App\Services\DocumentParserService();
+            $parser = new DocumentParserService;
             $parsed = $parser->parse($fullPath, $ext);
         } catch (\Exception $e) {
             $cleanup();
-            return response()->json(['message' => 'Gagal parse dokumen: ' . $e->getMessage()], 422);
+
+            return response()->json(['message' => 'Gagal parse dokumen: '.$e->getMessage()], 422);
         }
         $cleanup();
 
@@ -677,13 +797,15 @@ class AiFeatureController extends Controller
         }
 
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        if (! $ai->isAvailable()) {
+            return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        }
 
         $response = $ai->contractComplianceAnalyzer($pages, $request->contract_type ?? 'other');
 
         try {
             DB::table('contract_reviews')->insert([
-                'id' => (string) \Illuminate\Support\Str::uuid(),
+                'id' => (string) Str::uuid(),
                 'org_id' => $request->user()->org_id,
                 'title' => $file->getClientOriginalName(),
                 'contract_type' => $request->contract_type ?? 'other',
@@ -697,7 +819,7 @@ class AiFeatureController extends Controller
                 'updated_at' => now(),
             ]);
         } catch (\Exception $e) {
-            \Log::warning('contract_reviews save failed: ' . $e->getMessage());
+            \Log::warning('contract_reviews save failed: '.$e->getMessage());
         }
 
         return $this->saveAndRespond($request, 'contract_review', $response, [
@@ -711,9 +833,13 @@ class AiFeatureController extends Controller
      */
     public function policyAnalyze(Request $request)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'policy_review');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $request->validate([
             'file' => 'required|file|mimes:pdf,docx|max:10240',
@@ -729,11 +855,12 @@ class AiFeatureController extends Controller
         [$fullPath, $cleanup] = $ts->getLocalPathForProcessing($org, $storedPath);
 
         try {
-            $parser = new \App\Services\DocumentParserService();
+            $parser = new DocumentParserService;
             $parsed = $parser->parse($fullPath, $ext);
         } catch (\Exception $e) {
             $cleanup();
-            return response()->json(['message' => 'Gagal parse dokumen: ' . $e->getMessage()], 422);
+
+            return response()->json(['message' => 'Gagal parse dokumen: '.$e->getMessage()], 422);
         }
         $cleanup();
 
@@ -746,13 +873,15 @@ class AiFeatureController extends Controller
         }
 
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        if (! $ai->isAvailable()) {
+            return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        }
 
         $response = $ai->policyComplianceAnalyzer($pages, $request->policy_type ?? 'sop');
 
         try {
             DB::table('policy_reviews')->insert([
-                'id' => (string) \Illuminate\Support\Str::uuid(),
+                'id' => (string) Str::uuid(),
                 'org_id' => $request->user()->org_id,
                 'title' => $file->getClientOriginalName(),
                 'policy_type' => $request->policy_type ?? 'sop',
@@ -766,7 +895,7 @@ class AiFeatureController extends Controller
                 'updated_at' => now(),
             ]);
         } catch (\Exception $e) {
-            \Log::warning('policy_reviews save failed: ' . $e->getMessage());
+            \Log::warning('policy_reviews save failed: '.$e->getMessage());
         }
 
         return $this->saveAndRespond($request, 'policy_review', $response, [
@@ -781,7 +910,9 @@ class AiFeatureController extends Controller
      */
     public function batchReview(Request $request)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
 
         $data = $request->validate([
             'module' => 'required|in:ropa,dpia',
@@ -804,10 +935,10 @@ class AiFeatureController extends Controller
             }
         }
 
-        $batchId = (string) \Illuminate\Support\Str::uuid();
+        $batchId = (string) Str::uuid();
 
         foreach ($data['ids'] as $recordId) {
-            \App\Jobs\BatchAiReviewJob::dispatch(
+            BatchAiReviewJob::dispatch(
                 $orgId,
                 $request->user()->id,
                 $data['module'],
@@ -832,7 +963,7 @@ class AiFeatureController extends Controller
         $orgId = $request->user()->org_id;
         $results = AiResult::where('org_id', $orgId)
             ->whereIn('feature', ['analysis_ropa', 'analysis_dpia'])
-            ->where('input_summary', 'like', '%"batch_id":"' . $batchId . '"%')
+            ->where('input_summary', 'like', '%"batch_id":"'.$batchId.'"%')
             ->orderByDesc('created_at')
             ->get();
 
@@ -844,13 +975,17 @@ class AiFeatureController extends Controller
     }
 
     /**
-     * Sprint C2: AI-generated RACI matrix for ROPA / DPIA.
+     * Sprint C2: AI-generated RACI matrix for RoPA / DPIA.
      */
     public function generateRaci(Request $request)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'generate_raci');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $data = $request->validate([
             'module' => 'required|in:ropa,dpia',
@@ -862,12 +997,14 @@ class AiFeatureController extends Controller
             ? Ropa::where('org_id', $orgId)->find($data['record_id'])
             : Dpia::where('org_id', $orgId)->find($data['record_id']);
 
-        if (!$record) return response()->json(['message' => 'Record tidak ditemukan'], 404);
+        if (! $record) {
+            return response()->json(['message' => 'Record tidak ditemukan'], 404);
+        }
 
-        $users = \App\Models\User::where('org_id', $orgId)
+        $users = User::where('org_id', $orgId)
             ->select('id', 'name', 'role')
             ->get()
-            ->map(fn($u) => ['name' => $u->name, 'role' => $u->role])
+            ->map(fn ($u) => ['name' => $u->name, 'role' => $u->role])
             ->toArray();
 
         if (count($users) < 2) {
@@ -882,7 +1019,9 @@ class AiFeatureController extends Controller
         ];
 
         $ai = (new AiService($orgId))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        if (! $ai->isAvailable()) {
+            return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        }
 
         $response = $ai->raciSuggestion($data['module'], $recordData, $users);
 
@@ -894,14 +1033,20 @@ class AiFeatureController extends Controller
 
     public function autofillBreach(Request $request)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'autofill_breach');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $request->validate(['incident_title' => 'required|string|max:500']);
 
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        if (! $ai->isAvailable()) {
+            return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        }
 
         $context = TenantContextService::buildContext($request->user()->org_id);
         $response = $ai->breachAutoFill($request->incident_title, $context);
@@ -911,9 +1056,13 @@ class AiFeatureController extends Controller
 
     public function autofillDsr(Request $request)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'autofill_dsr');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $request->validate([
             'request_type' => 'required|string',
@@ -921,7 +1070,9 @@ class AiFeatureController extends Controller
         ]);
 
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        if (! $ai->isAvailable()) {
+            return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        }
 
         $context = TenantContextService::buildContext($request->user()->org_id);
         $response = $ai->dsrAutoFill($request->request_type, $request->requester_name, $context);
@@ -934,17 +1085,25 @@ class AiFeatureController extends Controller
 
     public function autofillConsentItems(Request $request, string $id)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'autofill_consent');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $point = DB::table('consent_collection_points')->where('id', $id)->first();
-        if (!$point) return response()->json(['message' => 'Collection point not found'], 404);
+        if (! $point) {
+            return response()->json(['message' => 'Collection point not found'], 404);
+        }
 
         $existingItems = DB::table('consent_items')->where('collection_point_id', $id)->pluck('title')->toArray();
 
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        if (! $ai->isAvailable()) {
+            return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        }
 
         $context = TenantContextService::buildContext($request->user()->org_id);
         $response = $ai->consentItemsGenerator($context, $point->name, $point->domain, $existingItems);
@@ -954,16 +1113,22 @@ class AiFeatureController extends Controller
 
     public function consentAudit(Request $request, $id)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
-        
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
+
         $creditErr = $this->checkCredit($request, 'consent_audit');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
-        $point = \App\Models\ConsentCollectionPoint::where('org_id', $request->user()->org_id)->with('items')->find($id);
-        if (!$point) return response()->json(['message' => 'Collection point not found'], 404);
+        $point = ConsentCollectionPoint::where('org_id', $request->user()->org_id)->with('items')->find($id);
+        if (! $point) {
+            return response()->json(['message' => 'Collection point not found'], 404);
+        }
 
-        $items = $point->items->map(function ($i) { 
-            return "ID: {$i->id} | Title: {$i->title} | Required: " . ($i->is_required ? 'Yes' : 'No') . " | Text: {$i->description} {$i->full_text}"; 
+        $items = $point->items->map(function ($i) {
+            return "ID: {$i->id} | Title: {$i->title} | Required: ".($i->is_required ? 'Yes' : 'No')." | Text: {$i->description} {$i->full_text}";
         })->implode("\n");
 
         if (empty($items)) {
@@ -971,24 +1136,26 @@ class AiFeatureController extends Controller
         }
 
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        if (! $ai->isAvailable()) {
+            return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
+        }
 
         $context = TenantContextService::buildContext($request->user()->org_id);
-        
+
         $systemPrompt = "Kamu adalah auditor kepatuhan UU PDP (No. 27/2022). Jabaran tugas:\n"
-            . "Audit item persetujuan (consent items) untuk titik pengumpulan data. Berikan evaluasi komprehensif terkait transparansi, spesifikitas, dan kepatuhan.\n"
-            . "Konteks Tenant:\n$context\n\n"
-            . "Output WAJIB JSON valid.\n"
-            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info|table|code\",\"title\":\"...\",\"content\":\"...\",\"items\":[],\"table_data\":[{\"col1\":\"v1\",\"col2\":\"v2\"}],\"headers\":[\"col1\",\"col2\"]}],\"closing\":\"...\"}";
+            ."Audit item persetujuan (consent items) untuk titik pengumpulan data. Berikan evaluasi komprehensif terkait transparansi, spesifikitas, dan kepatuhan.\n"
+            ."Konteks Tenant:\n$context\n\n"
+            ."Output WAJIB JSON valid.\n"
+            .'Format: {"greeting":"...","sections":[{"type":"text|steps|list|tip|warning|info|table|code","title":"...","content":"...","items":[],"table_data":[{"col1":"v1","col2":"v2"}],"headers":["col1","col2"]}],"closing":"..."}';
 
         $userPrompt = "Audit consent items berikut untuk domain {$point->domain} (Tujuan: {$point->name}):\n\n$items\n\n"
-            . "Berikan:\n"
-            . "1. Risk assessment keseluruhan (overall risk: High/Medium/Low) dan skor 0-100\n"
-            . "2. Evaluasi per-item: apakah sudah transparan, spesifik, dan comply UU PDP\n"
-            . "3. Temuan masalah beserta dampak dan rekomendasi perbaikan\n"
-            . "4. Elemen krusial yang hilang atau perlu ditambahkan\n"
-            . "5. Warning jika ada potensi pelanggaran UU PDP\n"
-            . "Jawab HANYA dalam JSON format yang diminta.";
+            ."Berikan:\n"
+            ."1. Risk assessment keseluruhan (overall risk: High/Medium/Low) dan skor 0-100\n"
+            ."2. Evaluasi per-item: apakah sudah transparan, spesifik, dan comply UU PDP\n"
+            ."3. Temuan masalah beserta dampak dan rekomendasi perbaikan\n"
+            ."4. Elemen krusial yang hilang atau perlu ditambahkan\n"
+            ."5. Warning jika ada potensi pelanggaran UU PDP\n"
+            .'Jawab HANYA dalam JSON format yang diminta.';
 
         $response = $ai->ask($systemPrompt, $userPrompt, 2500);
 
@@ -1000,9 +1167,13 @@ class AiFeatureController extends Controller
     // =============================================
     public function drillScenarioGenerator(Request $request)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'drill_scenario');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $mode = $request->input('mode', 'quiz'); // quiz | tabletop | walkthrough
         $industry = $request->input('industry', 'Teknologi');
@@ -1010,7 +1181,7 @@ class AiFeatureController extends Controller
         $questionCount = min((int) $request->input('question_count', 5), 10);
 
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) {
+        if (! $ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
@@ -1018,47 +1189,47 @@ class AiFeatureController extends Controller
             $result = $ai->customDrillScenario($industry, $riskProfile, $questionCount);
         } elseif ($mode === 'tabletop') {
             $systemPrompt = "Kamu adalah cybersecurity incident response trainer. Output WAJIB JSON valid.\n"
-                . "Format KHUSUS tabletop exercise:\n"
-                . "{\"title\":\"...\",\"emoji\":\"...\",\"description\":\"...\","
-                . "\"steps\":[{\"phase\":\"...\",\"situation\":\"...\",\"prompt\":\"...\",\"time_limit\":300,"
-                . "\"guidance\":\"...\",\"ideal_response\":\"...\"}]}";
+                ."Format KHUSUS tabletop exercise:\n"
+                .'{"title":"...","emoji":"...","description":"...",'
+                .'"steps":[{"phase":"...","situation":"...","prompt":"...","time_limit":300,'
+                .'"guidance":"...","ideal_response":"..."}]}';
 
             $userPrompt = "Generate skenario tabletop exercise kustom:\n"
-                . "- Industri: {$industry}\n- Risk profile: {$riskProfile}\n- Jumlah tahap: {$questionCount}\n\n"
-                . "Buat skenario realistis dengan:\n"
-                . "1. Setiap step berupa situasi naratif yang harus direspon secara tertulis\n"
-                . "2. Phase: Detection, Assessment, Containment, Notification, Recovery\n"
-                . "3. time_limit dalam detik (300-600)\n"
-                . "4. guidance: petunjuk pemikiran (tampil opsional)\n"
-                . "5. ideal_response: jawaban ideal untuk evaluasi\n"
-                . "6. Bahasa Indonesia\n"
-                . "Output JSON mentah saja.";
+                ."- Industri: {$industry}\n- Risk profile: {$riskProfile}\n- Jumlah tahap: {$questionCount}\n\n"
+                ."Buat skenario realistis dengan:\n"
+                ."1. Setiap step berupa situasi naratif yang harus direspon secara tertulis\n"
+                ."2. Phase: Detection, Assessment, Containment, Notification, Recovery\n"
+                ."3. time_limit dalam detik (300-600)\n"
+                ."4. guidance: petunjuk pemikiran (tampil opsional)\n"
+                ."5. ideal_response: jawaban ideal untuk evaluasi\n"
+                ."6. Bahasa Indonesia\n"
+                .'Output JSON mentah saja.';
 
             $result = $ai->ask($systemPrompt, $userPrompt, 4000);
         } else { // walkthrough
             $systemPrompt = "Kamu adalah cybersecurity SOP trainer. Output WAJIB JSON valid.\n"
-                . "Format KHUSUS walkthrough exercise:\n"
-                . "{\"title\":\"...\",\"emoji\":\"...\",\"description\":\"...\","
-                . "\"steps\":[{\"phase\":\"...\",\"title\":\"...\",\"description\":\"...\",\"time_limit\":300,"
-                . "\"checklist\":[{\"id\":\"...\",\"label\":\"...\",\"critical\":true/false}],"
-                . "\"success_criteria\":\"...\"}]}";
+                ."Format KHUSUS walkthrough exercise:\n"
+                .'{"title":"...","emoji":"...","description":"...",'
+                .'"steps":[{"phase":"...","title":"...","description":"...","time_limit":300,'
+                .'"checklist":[{"id":"...","label":"...","critical":true/false}],'
+                .'"success_criteria":"..."}]}';
 
             $userPrompt = "Generate skenario SOP walkthrough kustom:\n"
-                . "- Industri: {$industry}\n- Risk profile: {$riskProfile}\n- Jumlah fase: {$questionCount}\n\n"
-                . "Buat SOP walkthrough realistis dengan:\n"
-                . "1. Setiap step = fase SOP dengan checklist items\n"
-                . "2. Phase: Detection, Assessment, Containment, Notification, Recovery\n"
-                . "3. 3-5 checklist items per step\n"
-                . "4. critical: true untuk item yang HARUS dicentang\n"
-                . "5. success_criteria: kondisi keberhasilan fase\n"
-                . "6. time_limit dalam detik (300-600)\n"
-                . "7. Bahasa Indonesia\n"
-                . "Output JSON mentah saja.";
+                ."- Industri: {$industry}\n- Risk profile: {$riskProfile}\n- Jumlah fase: {$questionCount}\n\n"
+                ."Buat SOP walkthrough realistis dengan:\n"
+                ."1. Setiap step = fase SOP dengan checklist items\n"
+                ."2. Phase: Detection, Assessment, Containment, Notification, Recovery\n"
+                ."3. 3-5 checklist items per step\n"
+                ."4. critical: true untuk item yang HARUS dicentang\n"
+                ."5. success_criteria: kondisi keberhasilan fase\n"
+                ."6. time_limit dalam detik (300-600)\n"
+                ."7. Bahasa Indonesia\n"
+                .'Output JSON mentah saja.';
 
             $result = $ai->ask($systemPrompt, $userPrompt, 4000);
         }
 
-        if (!$result) {
+        if (! $result) {
             return response()->json(['message' => 'AI gagal generate skenario'], 500);
         }
 
@@ -1070,13 +1241,17 @@ class AiFeatureController extends Controller
     // =============================================
     public function simulationAnalysis(Request $request, string $id)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'simulation_analysis');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $sim = BreachSimulation::findOrFail($id);
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) {
+        if (! $ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
@@ -1091,16 +1266,16 @@ class AiFeatureController extends Controller
         ];
 
         $systemPrompt = "Kamu adalah cybersecurity trainer dan DPO senior. Output WAJIB JSON valid.\n"
-            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info|table|code\",\"title\":\"...\",\"content\":\"...\",\"items\":[],\"table_data\":[{\"col1\":\"v1\",\"col2\":\"v2\"}],\"headers\":[\"col1\",\"col2\"]}],\"closing\":\"...\"}";
+            .'Format: {"greeting":"...","sections":[{"type":"text|steps|list|tip|warning|info|table|code","title":"...","content":"...","items":[],"table_data":[{"col1":"v1","col2":"v2"}],"headers":["col1","col2"]}],"closing":"..."}';
 
-        $userPrompt = "Analisis performa drill simulasi berikut:\n" . json_encode($inputData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . "\n\n"
-            . "Berikan:\n"
-            . "1. Evaluasi kinerja overall (skor, rating, area kuat)\n"
-            . "2. Kelemahan dan blind spots yang terdeteksi\n"
-            . "3. Rekomendasi pelatihan spesifik per kelemahan\n"
-            . "4. Comparison dengan standar UU PDP\n"
-            . "5. Tips untuk drill berikutnya\n"
-            . "Jawab HANYA dalam JSON format yang diminta.";
+        $userPrompt = "Analisis performa drill simulasi berikut:\n".json_encode($inputData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)."\n\n"
+            ."Berikan:\n"
+            ."1. Evaluasi kinerja overall (skor, rating, area kuat)\n"
+            ."2. Kelemahan dan blind spots yang terdeteksi\n"
+            ."3. Rekomendasi pelatihan spesifik per kelemahan\n"
+            ."4. Comparison dengan standar UU PDP\n"
+            ."5. Tips untuk drill berikutnya\n"
+            .'Jawab HANYA dalam JSON format yang diminta.';
 
         $response = $ai->ask($systemPrompt, $userPrompt, 2500);
 
@@ -1112,15 +1287,21 @@ class AiFeatureController extends Controller
     // =============================================
     public function dataDiscoveryClassification(Request $request, string $id)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'discovery_classification');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $system = DB::table('information_systems')->where('id', $id)->where('org_id', $request->user()->org_id)->first();
-        if (!$system) return response()->json(['message' => 'System not found'], 404);
+        if (! $system) {
+            return response()->json(['message' => 'System not found'], 404);
+        }
 
-        $ai = (new AiService())->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) {
+        $ai = (new AiService)->setLocale($request->user()->locale ?? 'id');
+        if (! $ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
@@ -1142,19 +1323,19 @@ class AiFeatureController extends Controller
         }
 
         $systemPrompt = "Kamu adalah ahli data governance dan perlindungan data pribadi UU PDP. Output WAJIB JSON valid.\n"
-            . "Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info|table|code\",\"title\":\"...\",\"content\":\"...\",\"items\":[],\"table_data\":[{\"col1\":\"v1\",\"col2\":\"v2\"}],\"headers\":[\"col1\",\"col2\"]}],\"closing\":\"...\"}\n"
-            . "Konteks Tenant:\n$context";
+            ."Format: {\"greeting\":\"...\",\"sections\":[{\"type\":\"text|steps|list|tip|warning|info|table|code\",\"title\":\"...\",\"content\":\"...\",\"items\":[],\"table_data\":[{\"col1\":\"v1\",\"col2\":\"v2\"}],\"headers\":[\"col1\",\"col2\"]}],\"closing\":\"...\"}\n"
+            ."Konteks Tenant:\n$context";
 
         $userPrompt = "Klasifikasikan kolom-kolom database berikut berdasarkan UU PDP Indonesia:\n\n"
-            . "Sistem: {$system->name} ({$system->source_type})\n\n"
-            . $columnSummary . "\n"
-            . "Berikan:\n"
-            . "1. Klasifikasi setiap kolom yang terdeteksi sebagai PII (Data Pribadi Umum / Spesifik)\n"
-            . "2. Rekomendasi enkripsi untuk kolom sensitif\n"
-            . "3. Rekomendasi masa retensi per kategori data\n"
-            . "4. Warning untuk kolom yang mungkin melanggar prinsip minimisasi data\n"
-            . "5. Saran tindakan perbaikan\n"
-            . "Jawab HANYA dalam JSON format yang diminta.";
+            ."Sistem: {$system->name} ({$system->source_type})\n\n"
+            .$columnSummary."\n"
+            ."Berikan:\n"
+            ."1. Klasifikasi setiap kolom yang terdeteksi sebagai PII (Data Pribadi Umum / Spesifik)\n"
+            ."2. Rekomendasi enkripsi untuk kolom sensitif\n"
+            ."3. Rekomendasi masa retensi per kategori data\n"
+            ."4. Warning untuk kolom yang mungkin melanggar prinsip minimisasi data\n"
+            ."5. Saran tindakan perbaikan\n"
+            .'Jawab HANYA dalam JSON format yang diminta.';
 
         $response = $ai->ask($systemPrompt, $userPrompt, 8000);
 
@@ -1193,6 +1374,7 @@ class AiFeatureController extends Controller
         }
 
         CreditService::resetIfNeeded($orgId);
+
         return response()->json(['data' => CreditService::getUsage($orgId)]);
     }
 
@@ -1231,9 +1413,13 @@ class AiFeatureController extends Controller
     // =============================================
     public function contractReview(Request $request)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'contract_review');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $request->validate([
             'contract_text' => 'required|string|min:50',
@@ -1241,16 +1427,16 @@ class AiFeatureController extends Controller
         ]);
 
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) {
+        if (! $ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
         $contractType = $request->contract_type ?? 'vendor';
 
-        $systemPrompt = "Kamu adalah Data Protection Officer ahli UU PDP Indonesia (UU No. 27/2022). "
-            . "Output WAJIB berupa JSON valid. JANGAN tambahkan teks apapun di luar JSON.\n\n"
-            . "Format output:\n"
-            . json_encode([
+        $systemPrompt = 'Kamu adalah Data Protection Officer ahli UU PDP Indonesia (UU No. 27/2022). '
+            ."Output WAJIB berupa JSON valid. JANGAN tambahkan teks apapun di luar JSON.\n\n"
+            ."Format output:\n"
+            .json_encode([
                 'overall_rating' => 'baik/perlu_perbaikan/buruk',
                 'risk_score' => '0-100 (integer)',
                 'findings' => [['clause' => '...', 'issue' => '...', 'risk_level' => 'high/medium/low', 'recommendation' => '...', 'uu_pdp_reference' => 'Pasal X']],
@@ -1269,13 +1455,13 @@ class AiFeatureController extends Controller
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
         $userPrompt = "Analisis kontrak/perjanjian berikut dari perspektif perlindungan data pribadi UU PDP.\n\n"
-            . "Tipe Kontrak: {$contractType}\n\n"
-            . "=== ISI KONTRAK ===\n"
-            . mb_substr($request->contract_text, 0, 8000)
-            . "\n=== END ===\n\n"
-            . "Berikan analisis LENGKAP dalam format JSON yang diminta. "
-            . "Identifikasi semua temuan, klausul yang hilang, dan skor risiko 0-100. "
-            . "Jawab HANYA JSON valid.";
+            ."Tipe Kontrak: {$contractType}\n\n"
+            ."=== ISI KONTRAK ===\n"
+            .mb_substr($request->contract_text, 0, 8000)
+            ."\n=== END ===\n\n"
+            .'Berikan analisis LENGKAP dalam format JSON yang diminta. '
+            .'Identifikasi semua temuan, klausul yang hilang, dan skor risiko 0-100. '
+            .'Jawab HANYA JSON valid.';
 
         $response = $ai->ask($systemPrompt, $userPrompt, 4000);
 
@@ -1287,9 +1473,9 @@ class AiFeatureController extends Controller
         // Persist to contract_reviews table
         try {
             DB::table('contract_reviews')->insert([
-                'id' => \Illuminate\Support\Str::uuid(),
+                'id' => Str::uuid(),
                 'org_id' => $request->user()->org_id,
-                'title' => 'Contract Review — ' . ucfirst($contractType),
+                'title' => 'Contract Review — '.ucfirst($contractType),
                 'contract_type' => $contractType,
                 'contract_text' => mb_substr($request->contract_text, 0, 20000),
                 'review_result' => json_encode($response),
@@ -1301,7 +1487,7 @@ class AiFeatureController extends Controller
                 'updated_at' => now(),
             ]);
         } catch (\Exception $e) {
-            \Log::warning('contract_reviews save failed: ' . $e->getMessage());
+            \Log::warning('contract_reviews save failed: '.$e->getMessage());
         }
 
         return $this->saveAndRespond($request, 'contract_review', $response, $inputData);
@@ -1312,9 +1498,13 @@ class AiFeatureController extends Controller
     // =============================================
     public function contractUpload(Request $request)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'contract_review');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         $request->validate([
             'file' => 'required|file|mimes:pdf,docx,doc|max:10240', // max 10MB
@@ -1336,20 +1526,20 @@ class AiFeatureController extends Controller
 
         try {
             if ($ext === 'pdf') {
-                $parser = new \Smalot\PdfParser\Parser();
+                $parser = new Parser;
                 $pdf = $parser->parseFile($fullPath);
                 $extractedText = $pdf->getText();
             } elseif (in_array($ext, ['docx', 'doc'])) {
-                $phpWord = \PhpOffice\PhpWord\IOFactory::load($fullPath);
+                $phpWord = IOFactory::load($fullPath);
                 $text = '';
                 foreach ($phpWord->getSections() as $section) {
                     foreach ($section->getElements() as $element) {
                         if (method_exists($element, 'getText')) {
-                            $text .= $element->getText() . "\n";
+                            $text .= $element->getText()."\n";
                         } elseif (method_exists($element, 'getElements')) {
                             foreach ($element->getElements() as $child) {
                                 if (method_exists($child, 'getText')) {
-                                    $text .= $child->getText() . "\n";
+                                    $text .= $child->getText()."\n";
                                 }
                             }
                         }
@@ -1359,8 +1549,9 @@ class AiFeatureController extends Controller
             }
         } catch (\Exception $e) {
             $cleanup();
+
             return response()->json([
-                'message' => 'Gagal mengekstrak teks dari file: ' . $e->getMessage(),
+                'message' => 'Gagal mengekstrak teks dari file: '.$e->getMessage(),
             ], 422);
         }
         $cleanup();
@@ -1375,16 +1566,16 @@ class AiFeatureController extends Controller
 
         // Run AI review using the same logic as contractReview
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) {
+        if (! $ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
         $contractType = $request->contract_type ?? 'other';
 
-        $systemPrompt = "Kamu adalah Data Protection Officer ahli UU PDP Indonesia (UU No. 27/2022). "
-            . "Output WAJIB berupa JSON valid. JANGAN tambahkan teks apapun di luar JSON.\n\n"
-            . "Format output:\n"
-            . json_encode([
+        $systemPrompt = 'Kamu adalah Data Protection Officer ahli UU PDP Indonesia (UU No. 27/2022). '
+            ."Output WAJIB berupa JSON valid. JANGAN tambahkan teks apapun di luar JSON.\n\n"
+            ."Format output:\n"
+            .json_encode([
                 'overall_rating' => 'baik/perlu_perbaikan/buruk',
                 'risk_score' => '0-100 (integer)',
                 'findings' => [['clause' => '...', 'issue' => '...', 'risk_level' => 'high/medium/low', 'recommendation' => '...', 'uu_pdp_reference' => 'Pasal X']],
@@ -1403,14 +1594,14 @@ class AiFeatureController extends Controller
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
         $userPrompt = "Analisis kontrak/perjanjian berikut dari perspektif perlindungan data pribadi UU PDP.\n\n"
-            . "Tipe Kontrak: {$contractType}\n"
-            . "Nama File: {$file->getClientOriginalName()}\n\n"
-            . "=== ISI KONTRAK ===\n"
-            . mb_substr($extractedText, 0, 8000)
-            . "\n=== END ===\n\n"
-            . "Berikan analisis LENGKAP dalam format JSON yang diminta. "
-            . "Identifikasi semua temuan, klausul yang hilang, dan skor risiko 0-100. "
-            . "Jawab HANYA JSON valid.";
+            ."Tipe Kontrak: {$contractType}\n"
+            ."Nama File: {$file->getClientOriginalName()}\n\n"
+            ."=== ISI KONTRAK ===\n"
+            .mb_substr($extractedText, 0, 8000)
+            ."\n=== END ===\n\n"
+            .'Berikan analisis LENGKAP dalam format JSON yang diminta. '
+            .'Identifikasi semua temuan, klausul yang hilang, dan skor risiko 0-100. '
+            .'Jawab HANYA JSON valid.';
 
         $response = $ai->ask($systemPrompt, $userPrompt, 4000);
 
@@ -1424,7 +1615,7 @@ class AiFeatureController extends Controller
         // Persist to contract_reviews table
         try {
             DB::table('contract_reviews')->insert([
-                'id' => \Illuminate\Support\Str::uuid(),
+                'id' => Str::uuid(),
                 'org_id' => $request->user()->org_id,
                 'title' => $file->getClientOriginalName(),
                 'contract_type' => $contractType,
@@ -1439,7 +1630,7 @@ class AiFeatureController extends Controller
                 'updated_at' => now(),
             ]);
         } catch (\Exception $e) {
-            \Log::warning('contract_reviews save failed: ' . $e->getMessage());
+            \Log::warning('contract_reviews save failed: '.$e->getMessage());
         }
 
         return $this->saveAndRespond($request, 'contract_review', $response, $inputData);
@@ -1450,9 +1641,13 @@ class AiFeatureController extends Controller
     // =============================================
     public function policyReview(Request $request)
     {
-        if (!$this->checkAiLicense($request)) return $this->denyBasic();
+        if (! $this->checkAiLicense($request)) {
+            return $this->denyBasic();
+        }
         $creditErr = $this->checkCredit($request, 'policy_review');
-        if ($creditErr) return $creditErr;
+        if ($creditErr) {
+            return $creditErr;
+        }
 
         // Accept either text or file
         $policyText = $request->input('policy_text', '');
@@ -1478,20 +1673,20 @@ class AiFeatureController extends Controller
 
             try {
                 if ($ext === 'pdf') {
-                    $parser = new \Smalot\PdfParser\Parser();
+                    $parser = new Parser;
                     $pdf = $parser->parseFile($fullPath);
                     $policyText = $pdf->getText();
                 } elseif (in_array($ext, ['docx', 'doc'])) {
-                    $phpWord = \PhpOffice\PhpWord\IOFactory::load($fullPath);
+                    $phpWord = IOFactory::load($fullPath);
                     $text = '';
                     foreach ($phpWord->getSections() as $section) {
                         foreach ($section->getElements() as $element) {
                             if (method_exists($element, 'getText')) {
-                                $text .= $element->getText() . "\n";
+                                $text .= $element->getText()."\n";
                             } elseif (method_exists($element, 'getElements')) {
                                 foreach ($element->getElements() as $child) {
                                     if (method_exists($child, 'getText')) {
-                                        $text .= $child->getText() . "\n";
+                                        $text .= $child->getText()."\n";
                                     }
                                 }
                             }
@@ -1501,7 +1696,8 @@ class AiFeatureController extends Controller
                 }
             } catch (\Exception $e) {
                 $cleanup();
-                return response()->json(['message' => 'Gagal mengekstrak teks: ' . $e->getMessage()], 422);
+
+                return response()->json(['message' => 'Gagal mengekstrak teks: '.$e->getMessage()], 422);
             }
             $cleanup();
         }
@@ -1512,7 +1708,7 @@ class AiFeatureController extends Controller
         }
 
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
-        if (!$ai->isAvailable()) {
+        if (! $ai->isAvailable()) {
             return response()->json(['message' => 'API key belum dikonfigurasi'], 503);
         }
 
@@ -1529,11 +1725,11 @@ class AiFeatureController extends Controller
         ];
         $docLabel = $docTypeLabels[$docType] ?? $docType;
 
-        $systemPrompt = "Kamu adalah auditor kepatuhan senior UU PDP Indonesia (UU No. 27/2022). "
-            . "Tugasmu mengaudit kebijakan/SOP internal perusahaan terhadap kepatuhan UU PDP.\n"
-            . "Konteks Tenant:\n$context\n\n"
-            . "Output WAJIB berupa JSON valid. Format:\n"
-            . json_encode([
+        $systemPrompt = 'Kamu adalah auditor kepatuhan senior UU PDP Indonesia (UU No. 27/2022). '
+            ."Tugasmu mengaudit kebijakan/SOP internal perusahaan terhadap kepatuhan UU PDP.\n"
+            ."Konteks Tenant:\n$context\n\n"
+            ."Output WAJIB berupa JSON valid. Format:\n"
+            .json_encode([
                 'overall_score' => '0-100 (integer)',
                 'compliance_level' => 'compliant/partial/non_compliant',
                 'summary' => 'ringkasan keseluruhan 2-3 kalimat',
@@ -1551,15 +1747,15 @@ class AiFeatureController extends Controller
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
         $userPrompt = "Audit dokumen internal berikut terhadap kepatuhan UU PDP Indonesia:\n\n"
-            . "Judul: {$title}\n"
-            . "Tipe Dokumen: {$docLabel}\n"
-            . ($fileName ? "File: {$fileName}\n" : "")
-            . "\n=== ISI DOKUMEN ===\n"
-            . mb_substr($policyText, 0, 8000)
-            . "\n=== END ===\n\n"
-            . "Berikan analisis LENGKAP per-section: status comply/partial/non_comply, gap, rekomendasi. "
-            . "Sertakan skor keseluruhan 0-100 dan list elemen yang hilang. "
-            . "Jawab HANYA JSON valid.";
+            ."Judul: {$title}\n"
+            ."Tipe Dokumen: {$docLabel}\n"
+            .($fileName ? "File: {$fileName}\n" : '')
+            ."\n=== ISI DOKUMEN ===\n"
+            .mb_substr($policyText, 0, 8000)
+            ."\n=== END ===\n\n"
+            .'Berikan analisis LENGKAP per-section: status comply/partial/non_comply, gap, rekomendasi. '
+            .'Sertakan skor keseluruhan 0-100 dan list elemen yang hilang. '
+            .'Jawab HANYA JSON valid.';
 
         $response = $ai->ask($systemPrompt, $userPrompt, 5000);
 
@@ -1574,7 +1770,7 @@ class AiFeatureController extends Controller
         // Save to policy_reviews table if it exists
         try {
             DB::table('policy_reviews')->insert([
-                'id' => \Illuminate\Support\Str::uuid(),
+                'id' => Str::uuid(),
                 'org_id' => $request->user()->org_id,
                 'title' => $title,
                 'doc_type' => $docType,
@@ -1588,7 +1784,7 @@ class AiFeatureController extends Controller
             ]);
         } catch (\Exception $e) {
             // Table may not exist yet, proceed anyway
-            \Log::warning('policy_reviews table not available: ' . $e->getMessage());
+            \Log::warning('policy_reviews table not available: '.$e->getMessage());
         }
 
         return $this->saveAndRespond($request, 'policy_review', $response, $inputData);

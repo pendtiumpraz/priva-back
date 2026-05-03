@@ -3,8 +3,8 @@
 namespace App\Services;
 
 use App\Models\AutomationRule;
-use App\Models\Ropa;
 use App\Models\Dpia;
+use App\Models\Ropa;
 use Illuminate\Support\Facades\Log;
 
 class AutomationEngineService
@@ -35,20 +35,20 @@ class AutomationEngineService
                 ->where('ropa_id', $ropa->id)
                 ->exists();
 
-            if (!$hasDpia) {
+            if (! $hasDpia) {
                 // Automatically spawn a new DPIA record
                 $dpia = Dpia::create([
                     'org_id' => $orgId,
                     'ropa_id' => $ropa->id,
-                    'reference_number' => 'DPIA-AUTO-' . date('Ymd-His') . '-' . substr(uniqid(), -4),
-                    'project_name' => "DPIA for " . $ropa->processing_activity_name,
+                    'reference_number' => 'DPIA-AUTO-'.date('Ymd-His').'-'.substr(uniqid(), -4),
+                    'project_name' => 'DPIA for '.$ropa->processing_activity_name,
                     'status' => 'draft',
                     'overall_risk' => 'High',
-                    'business_process' => "Automatically generated because ROPA risk level is HIGH.",
+                    'business_process' => 'Automatically generated because RoPA risk level is HIGH.',
                     'created_by' => null, // System generated
                 ]);
 
-                Log::info("Auto-triggered DPIA [{$dpia->id}] for High-Risk ROPA [{$ropa->id}] in Org [{$orgId}]");
+                Log::info("Auto-triggered DPIA [{$dpia->id}] for High-Risk RoPA [{$ropa->id}] in Org [{$orgId}]");
             }
         }
     }

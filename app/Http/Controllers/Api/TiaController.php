@@ -22,7 +22,7 @@ use Illuminate\Validation\Rule;
  *                             rejected             rejected
  *
  * Sources (any one or combination):
- *   - ROPA           (data flow that triggers cross-border concern)
+ *   - RoPA           (data flow that triggers cross-border concern)
  *   - CrossBorder    (a registered cross-border transfer)
  *   - Vendor (TPRM)  (the foreign processor / recipient)
  *
@@ -33,10 +33,10 @@ use Illuminate\Validation\Rule;
 class TiaController extends Controller
 {
     /**
-     * Auto-fill snapshot fields drawn from ROPA. Smaller than LIA's set
+     * Auto-fill snapshot fields drawn from RoPA. Smaller than LIA's set
      * because TIA's transfer focus differs from LIA's purpose focus.
      */
-    public const ROPA_AUTOFILL_FIELDS = [
+    public const RoPA_AUTOFILL_FIELDS = [
         'processing_activity',
         'entity',
         'division',
@@ -53,9 +53,12 @@ class TiaController extends Controller
     public function index(Request $request)
     {
         $query = TiaAssessment::query();
-        if ($request->boolean('trash')) $query->onlyTrashed();
+        if ($request->boolean('trash')) {
+            $query->onlyTrashed();
+        }
         $this->applyFilters($query, $request);
         $records = $query->orderByDesc('created_at')->paginate($request->integer('per_page', 25));
+
         return response()->json(['data' => $records]);
     }
 
@@ -70,6 +73,7 @@ class TiaController extends Controller
             ])
             ->withTrashed()
             ->findOrFail($id);
+
         return response()->json(['data' => $this->presentRecord($record)]);
     }
 
@@ -88,20 +92,24 @@ class TiaController extends Controller
     }
 
     /**
-     * Quick-create from a ROPA. Snapshots transfer-relevant fields and
-     * suggests a tia_code based on the ROPA's division + activity.
+     * Quick-create from a RoPA. Snapshots transfer-relevant fields and
+     * suggests a tia_code based on the RoPA's division + activity.
      */
     public function fromRopa(Request $request, string $ropaId)
     {
         $ropa = Ropa::query()->findOrFail($ropaId);
         $orgId = $request->user()->org_id;
-        if ($ropa->org_id !== $orgId) abort(403, 'RoPA belongs to another org.');
+        if ($ropa->org_id !== $orgId) {
+            abort(403, 'RoPA belongs to another org.');
+        }
 
         $code = $this->suggestCode($orgId, $ropa->division ?? 'GEN', $ropa->processing_activity ?? 'ACT');
 
         $snapshot = [];
-        foreach (self::ROPA_AUTOFILL_FIELDS as $f) {
-            if (isset($ropa->$f)) $snapshot[$f] = $ropa->$f;
+        foreach (self::RoPA_AUTOFILL_FIELDS as $f) {
+            if (isset($ropa->$f)) {
+                $snapshot[$f] = $ropa->$f;
+            }
         }
 
         $record = TiaAssessment::create([
@@ -125,7 +133,7 @@ class TiaController extends Controller
         ], 'manual');
 
         return response()->json([
-            'message' => "TIA draft '{$record->tia_code}' created from ROPA.",
+            'message' => "TIA draft '{$record->tia_code}' created from RoPA.",
             'data' => $record,
         ], 201);
     }
@@ -141,7 +149,9 @@ class TiaController extends Controller
     {
         $cbt = CrossBorderTransfer::query()->with('ropa:id,registration_number,division,processing_activity')->findOrFail($cbtId);
         $orgId = $request->user()->org_id;
-        if ($cbt->org_id !== $orgId) abort(403, 'Cross-border transfer belongs to another org.');
+        if ($cbt->org_id !== $orgId) {
+            abort(403, 'Cross-border transfer belongs to another org.');
+        }
 
         $unit = $cbt->ropa?->division ?? 'CBDT';
         $activity = $cbt->ropa?->processing_activity ?? $cbt->destination_country ?? 'TRANSFER';
@@ -181,7 +191,9 @@ class TiaController extends Controller
     {
         $vendor = Vendor::query()->findOrFail($vendorId);
         $orgId = $request->user()->org_id;
-        if ($vendor->org_id !== $orgId) abort(403, 'Vendor belongs to another org.');
+        if ($vendor->org_id !== $orgId) {
+            abort(403, 'Vendor belongs to another org.');
+        }
 
         $unit = strtoupper(substr(preg_replace('/[^a-zA-Z0-9]/', '', $vendor->vendor_name ?? 'VND'), 0, 4));
         $code = $this->suggestCode($orgId, $unit, 'TIA');
@@ -221,9 +233,9 @@ class TiaController extends Controller
     public function update(Request $request, string $id)
     {
         $record = TiaAssessment::query()->findOrFail($id);
-        if (!$record->isEditableBy($request->user())) {
+        if (! $record->isEditableBy($request->user())) {
             return response()->json([
-                'message' => 'TIA is locked (status=' . $record->status . '). Use the reject flow or root unlock to edit.',
+                'message' => 'TIA is locked (status='.$record->status.'). Use the reject flow or root unlock to edit.',
             ], 423);
         }
 
@@ -245,12 +257,12 @@ class TiaController extends Controller
         if ($record->is_locked || $record->status !== TiaAssessment::STATUS_DRAFT) {
             return response()->json(['message' => "Cannot submit from state '{$record->status}'."], 409);
         }
-        if (!$request->boolean('confirm')) {
+        if (! $request->boolean('confirm')) {
             return response()->json(['message' => 'Submission requires confirmation. Set confirm=true.'], 400);
         }
 
         $issues = $this->validateForSubmission($record);
-        if (!empty($issues) && !$request->boolean('force')) {
+        if (! empty($issues) && ! $request->boolean('force')) {
             return response()->json([
                 'message' => 'TIA has missing required fields. Use force=true to submit anyway.',
                 'issues' => $issues,
@@ -287,7 +299,7 @@ class TiaController extends Controller
         ]);
 
         $record = TiaAssessment::query()->findOrFail($id);
-        if (!in_array($record->status, [TiaAssessment::STATUS_SUBMITTED], true)) {
+        if (! in_array($record->status, [TiaAssessment::STATUS_SUBMITTED], true)) {
             return response()->json(['message' => "Cannot check from state '{$record->status}'."], 409);
         }
 
@@ -306,7 +318,7 @@ class TiaController extends Controller
             $record->save();
         });
 
-        AuditLog::log('tia', $record->id, 'checked_' . $data['action'], [
+        AuditLog::log('tia', $record->id, 'checked_'.$data['action'], [
             'tia_code' => $record->tia_code,
             'notes' => $data['notes'] ?? null,
         ], 'manual');
@@ -329,7 +341,7 @@ class TiaController extends Controller
         ]);
 
         $record = TiaAssessment::query()->findOrFail($id);
-        if (!in_array($record->status, [TiaAssessment::STATUS_SUBMITTED, TiaAssessment::STATUS_CHECKED], true)) {
+        if (! in_array($record->status, [TiaAssessment::STATUS_SUBMITTED, TiaAssessment::STATUS_CHECKED], true)) {
             return response()->json(['message' => "Cannot approve from state '{$record->status}'."], 409);
         }
 
@@ -348,7 +360,7 @@ class TiaController extends Controller
         ], 'manual');
 
         return response()->json([
-            'message' => 'TIA approved with verdict: ' . $record->conclusion_verdict,
+            'message' => 'TIA approved with verdict: '.$record->conclusion_verdict,
             'data' => $record->fresh(),
         ]);
     }
@@ -360,7 +372,7 @@ class TiaController extends Controller
         ]);
 
         $record = TiaAssessment::query()->findOrFail($id);
-        if (!in_array($record->status, [TiaAssessment::STATUS_SUBMITTED, TiaAssessment::STATUS_CHECKED], true)) {
+        if (! in_array($record->status, [TiaAssessment::STATUS_SUBMITTED, TiaAssessment::STATUS_CHECKED], true)) {
             return response()->json(['message' => "Cannot reject from state '{$record->status}'."], 409);
         }
 
@@ -388,7 +400,7 @@ class TiaController extends Controller
         }
 
         $record = TiaAssessment::query()->findOrFail($id);
-        if (!$record->is_locked) {
+        if (! $record->is_locked) {
             return response()->json(['message' => 'TIA is not locked.'], 200);
         }
 
@@ -413,6 +425,7 @@ class TiaController extends Controller
         $record = TiaAssessment::query()->findOrFail($id);
         $record->delete();
         AuditLog::log('tia', $record->id, 'soft_deleted', [], 'manual');
+
         return response()->json(['message' => 'Moved to trash.']);
     }
 
@@ -421,6 +434,7 @@ class TiaController extends Controller
         $record = TiaAssessment::onlyTrashed()->findOrFail($id);
         $record->restore();
         AuditLog::log('tia', $record->id, 'restored', [], 'manual');
+
         return response()->json(['message' => 'Restored.']);
     }
 
@@ -429,6 +443,7 @@ class TiaController extends Controller
         $record = TiaAssessment::withTrashed()->findOrFail($id);
         $record->forceDelete();
         AuditLog::log('tia', $id, 'hard_deleted', [], 'manual');
+
         return response()->json(['message' => 'Permanently deleted.']);
     }
 
@@ -452,14 +467,24 @@ class TiaController extends Controller
 
     private function applyFilters($query, Request $request): void
     {
-        if ($s = $request->get('status')) $query->where('status', $s);
-        if ($v = $request->get('verdict')) $query->where('conclusion_verdict', $v);
-        if ($c = $request->get('country')) $query->where('destination_country', $c);
+        if ($s = $request->get('status')) {
+            $query->where('status', $s);
+        }
+        if ($v = $request->get('verdict')) {
+            $query->where('conclusion_verdict', $v);
+        }
+        if ($c = $request->get('country')) {
+            $query->where('destination_country', $c);
+        }
         if ($r = $request->get('risk_level')) {
             $query->where(function ($q) use ($r) {
-                if ($r === 'high') $q->where('overall_risk_score', '>=', 7);
-                elseif ($r === 'medium') $q->whereBetween('overall_risk_score', [4, 6.99]);
-                elseif ($r === 'low') $q->where('overall_risk_score', '<', 4);
+                if ($r === 'high') {
+                    $q->where('overall_risk_score', '>=', 7);
+                } elseif ($r === 'medium') {
+                    $q->whereBetween('overall_risk_score', [4, 6.99]);
+                } elseif ($r === 'low') {
+                    $q->where('overall_risk_score', '<', 4);
+                }
             });
         }
         if ($s = $request->get('q')) {
@@ -519,12 +544,21 @@ class TiaController extends Controller
     private function validateForSubmission(TiaAssessment $r): array
     {
         $issues = [];
-        if (empty($r->tia_code)) $issues[] = 'tia_code is required';
-        if (empty($r->destination_country)) $issues[] = 'destination_country is required';
-        if (empty($r->transfer_basis)) $issues[] = 'transfer_basis is required';
-        foreach (TiaAssessment::RISK_METRIC_KEYS as $k) {
-            if ($r->$k === null) $issues[] = "Risk metric '{$k}' must be scored 1-10";
+        if (empty($r->tia_code)) {
+            $issues[] = 'tia_code is required';
         }
+        if (empty($r->destination_country)) {
+            $issues[] = 'destination_country is required';
+        }
+        if (empty($r->transfer_basis)) {
+            $issues[] = 'transfer_basis is required';
+        }
+        foreach (TiaAssessment::RISK_METRIC_KEYS as $k) {
+            if ($r->$k === null) {
+                $issues[] = "Risk metric '{$k}' must be scored 1-10";
+            }
+        }
+
         return $issues;
     }
 
@@ -536,6 +570,7 @@ class TiaController extends Controller
             ->where('org_id', $orgId)
             ->where('tia_code', 'like', "TIA-{$unit}-{$activity}-%")
             ->count();
+
         return sprintf('TIA-%s-%s-%02d', $unit, $activity, $count + 1);
     }
 
@@ -544,6 +579,7 @@ class TiaController extends Controller
         $arr = $r->toArray();
         $arr['risk_level'] = $r->riskLevel();
         $arr['is_editable'] = $r->isEditableBy(request()->user());
+
         return $arr;
     }
 }

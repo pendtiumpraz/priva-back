@@ -3,14 +3,23 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\InformationSystem;
 use App\Models\AuditLog;
+use App\Models\InformationSystem;
+use App\Models\LeakDetection;
 use App\Models\Organization;
+use App\Models\OrganizationApp;
+use App\Models\Ropa;
+use App\Services\AiService;
 use App\Services\DatabaseScanner;
-use App\Services\PiiDetector;
+use App\Services\NotificationService;
+use App\Services\OcrScannerService;
+use App\Services\PostureFindingService;
 use App\Services\TenantStorageService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class DataDiscoveryController extends Controller
 {
@@ -36,39 +45,39 @@ class DataDiscoveryController extends Controller
         ]);
 
         // Auto-register to Master Data if successful
-        if (isset($results['success']) && $results['success'] === true && !empty($config['host'])) {
+        if (isset($results['success']) && $results['success'] === true && ! empty($config['host'])) {
             $host = $config['host'];
             $username = $config['username'] ?? '';
             $database = $config['database'] ?? '';
-            
+
             // Check if it already exists in OrganizationApp by matching host, username, and database
-            $exists = \App\Models\OrganizationApp::where('org_id', $request->user()->org_id)
+            $exists = OrganizationApp::where('org_id', $request->user()->org_id)
                 ->where(function ($q) use ($host, $username, $database) {
                     $q->where(function ($q2) use ($host, $username, $database) {
                         $q2->where('prod_db_host', $host)
-                           ->where('prod_db_username', $username)
-                           ->where('prod_db_database', $database);
+                            ->where('prod_db_username', $username)
+                            ->where('prod_db_database', $database);
                     })->orWhere(function ($q2) use ($host, $username, $database) {
                         $q2->where('staging_db_host', $host)
-                           ->where('staging_db_username', $username)
-                           ->where('staging_db_database', $database);
+                            ->where('staging_db_username', $username)
+                            ->where('staging_db_database', $database);
                     });
                 })
                 ->exists();
 
-            if (!$exists) {
+            if (! $exists) {
                 // Map the sourceType driver to standard if necessary (e.g. postgresql -> pgsql / postgresql)
-                \App\Models\OrganizationApp::create([
-                    'org_id'           => $request->user()->org_id,
-                    'name'             => $system->name . ' (Discovery)',
-                    'description'      => 'Auto-registered from Data Discovery connection test',
-                    'prod_db_driver'   => $sourceType,
-                    'prod_db_host'     => $config['host'] ?? null,
-                    'prod_db_port'     => $config['port'] ?? null,
+                OrganizationApp::create([
+                    'org_id' => $request->user()->org_id,
+                    'name' => $system->name.' (Discovery)',
+                    'description' => 'Auto-registered from Data Discovery connection test',
+                    'prod_db_driver' => $sourceType,
+                    'prod_db_host' => $config['host'] ?? null,
+                    'prod_db_port' => $config['port'] ?? null,
                     'prod_db_database' => $config['database'] ?? null,
                     'prod_db_username' => $config['username'] ?? null,
                     'prod_db_password' => $config['password'] ?? null,
-                    'is_active'        => true,
+                    'is_active' => true,
                 ]);
             }
         }
@@ -92,14 +101,14 @@ class DataDiscoveryController extends Controller
         $scanResult = DatabaseScanner::scanSchema($sourceType, $config);
 
         // If real scan fails or returns empty, fallback to simulation
-        if (empty($scanResult['tables']) && !isset($scanResult['error'])) {
+        if (empty($scanResult['tables']) && ! isset($scanResult['error'])) {
             $scanResult = DatabaseScanner::simulateScan($sourceType);
         }
 
         // Sprint E2: selective scan via ?selected_tables / ?selected_columns
         $selectedTables = $request->input('selected_tables', []);
         $selectedColumns = $request->input('selected_columns', []);
-        if (!empty($selectedTables) || !empty($selectedColumns)) {
+        if (! empty($selectedTables) || ! empty($selectedColumns)) {
             $scanResult = DatabaseScanner::filterSchema($scanResult, (array) $selectedTables, (array) $selectedColumns);
         }
 
@@ -110,8 +119,12 @@ class DataDiscoveryController extends Controller
         $pdpCount = 0;
         foreach ($tables as $table) {
             foreach ($table['columns'] as $col) {
-                if ($col['pii_detected']) $piiCount++;
-                if ($col['pdp_category']) $pdpCount++;
+                if ($col['pii_detected']) {
+                    $piiCount++;
+                }
+                if ($col['pdp_category']) {
+                    $pdpCount++;
+                }
             }
         }
 
@@ -122,29 +135,30 @@ class DataDiscoveryController extends Controller
         $oldTables = $oldScan['tables'] ?? [];
         $diffAlerts = [];
 
-        if (!empty($oldTables)) {
+        if (! empty($oldTables)) {
             $oldTableMap = collect($oldTables)->keyBy('name');
             foreach ($tables as $newTable) {
                 $tableName = $newTable['name'];
-                if (!$oldTableMap->has($tableName)) {
+                if (! $oldTableMap->has($tableName)) {
                     $diffAlerts[] = "Found new table: {$tableName}";
+
                     continue;
                 }
-                
+
                 $oldColMap = collect($oldTableMap->get($tableName)['columns'])->keyBy('name');
                 foreach ($newTable['columns'] as $newCol) {
                     $colName = $newCol['name'];
-                    if (!$oldColMap->has($colName)) {
+                    if (! $oldColMap->has($colName)) {
                         $diffAlerts[] = "New column '{$colName}' added to table '{$tableName}'";
                         if ($newCol['pii_detected']) {
                             $diffAlerts[] = "WARNING: New PII detected in {$tableName}.{$colName}";
                         }
-                    } elseif (!$oldColMap->get($colName)['pii_detected'] && $newCol['pii_detected']) {
+                    } elseif (! $oldColMap->get($colName)['pii_detected'] && $newCol['pii_detected']) {
                         $diffAlerts[] = "WARNING: Column {$tableName}.{$colName} is now classified as PII";
                     }
                 }
             }
-            if (!empty($diffAlerts)) {
+            if (! empty($diffAlerts)) {
                 AuditLog::log('data-discovery', $system->id, 'schema_diff_detected', ['alerts' => $diffAlerts], 'system');
             }
         }
@@ -157,60 +171,60 @@ class DataDiscoveryController extends Controller
         try {
             $accessPaths = DatabaseScanner::scanAccessPaths($sourceType, $config);
         } catch (\Throwable $e) {
-            \Log::info("Access path scan skipped: " . $e->getMessage());
+            \Log::info('Access path scan skipped: '.$e->getMessage());
         }
         try {
             $encryption = DatabaseScanner::scanEncryption($sourceType, $config);
         } catch (\Throwable $e) {
-            \Log::info("Encryption scan skipped: " . $e->getMessage());
+            \Log::info('Encryption scan skipped: '.$e->getMessage());
         }
 
         $system->update([
-            'scanning_status'   => isset($scanResult['error']) ? 'failed' : 'done',
+            'scanning_status' => isset($scanResult['error']) ? 'failed' : 'done',
             'scanning_progress' => 100,
-            'pdp_alert_count'   => $pdpCount,
-            'pii_alert_count'   => $piiCount,
-            'scan_results'      => [
-                'tables'             => $tables,
-                'scan_duration_ms'   => rand(800, 8000),
-                'scanned_at'         => now()->toISOString(),
+            'pdp_alert_count' => $pdpCount,
+            'pii_alert_count' => $piiCount,
+            'scan_results' => [
+                'tables' => $tables,
+                'scan_duration_ms' => rand(800, 8000),
+                'scanned_at' => now()->toISOString(),
                 'total_rows_scanned' => array_sum(array_column($tables, 'row_count')),
-                'engine_version'     => 'PRIVASIMU Scanner v3.0 (' . $engine . ')',
-                'engine'             => $engine,
-                'error'              => $scanResult['error'] ?? null,
-                'diff_alerts'        => $diffAlerts,
-                'access_paths'       => $accessPaths,    // Phase 3c
-                'encryption'         => $encryption,     // Phase 3c
+                'engine_version' => 'PRIVASIMU Scanner v3.0 ('.$engine.')',
+                'engine' => $engine,
+                'error' => $scanResult['error'] ?? null,
+                'diff_alerts' => $diffAlerts,
+                'access_paths' => $accessPaths,    // Phase 3c
+                'encryption' => $encryption,     // Phase 3c
             ],
             'last_scanned_at' => now(),
         ]);
 
         AuditLog::log('data-discovery', $system->id, 'scan_completed', [
-            'pii_found'      => $piiCount,
-            'pdp_alerts'     => $pdpCount,
+            'pii_found' => $piiCount,
+            'pdp_alerts' => $pdpCount,
             'tables_scanned' => count($tables),
-            'engine'         => $engine,
+            'engine' => $engine,
         ], 'system');
 
         // Phase 3b — re-materialize posture findings now that scan changed.
         // Wrapped so a finding-side bug can't fail the scan response.
         $findingsResult = null;
         try {
-            $findingsResult = app(\App\Services\PostureFindingService::class)
+            $findingsResult = app(PostureFindingService::class)
                 ->materialize($request->user()->org_id);
         } catch (\Throwable $e) {
-            \Log::warning('Posture findings rematerialize failed (non-fatal): ' . $e->getMessage());
+            \Log::warning('Posture findings rematerialize failed (non-fatal): '.$e->getMessage());
         }
 
         return response()->json([
-            'data'         => $system->fresh(),
+            'data' => $system->fresh(),
             'scan_summary' => [
                 'tables_scanned' => count($tables),
-                'pii_columns'    => $piiCount,
-                'pdp_alerts'     => $pdpCount,
-                'engine'         => $engine,
+                'pii_columns' => $piiCount,
+                'pdp_alerts' => $pdpCount,
+                'engine' => $engine,
             ],
-            'findings'     => $findingsResult,
+            'findings' => $findingsResult,
         ]);
     }
 
@@ -220,6 +234,7 @@ class DataDiscoveryController extends Controller
     public function scanDetails(Request $request, string $id)
     {
         $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+
         return response()->json(['data' => $system->scan_results ?? []]);
     }
 
@@ -230,23 +245,23 @@ class DataDiscoveryController extends Controller
     {
         $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
 
-        $tableName          = $request->input('table_name');
-        $columnName         = $request->input('column_name');
-        $classification     = $request->input('classification');
-        $pdpCategory        = $request->input('pdp_category');
-        $retentionDays      = $request->input('retention_days');
+        $tableName = $request->input('table_name');
+        $columnName = $request->input('column_name');
+        $classification = $request->input('classification');
+        $pdpCategory = $request->input('pdp_category');
+        $retentionDays = $request->input('retention_days');
         $encryptionRequired = $request->input('encryption_required', false);
 
         $results = $system->scan_results ?? ['tables' => []];
-        $tables  = $results['tables'] ?? [];
+        $tables = $results['tables'] ?? [];
 
         foreach ($tables as &$table) {
             if ($table['name'] === $tableName) {
                 foreach ($table['columns'] as &$col) {
                     if ($col['name'] === $columnName) {
-                        $col['classification']      = $classification;
-                        $col['pdp_category']        = $pdpCategory;
-                        $col['retention_days']      = $retentionDays;
+                        $col['classification'] = $classification;
+                        $col['pdp_category'] = $pdpCategory;
+                        $col['retention_days'] = $retentionDays;
                         $col['encryption_required'] = $encryptionRequired;
                         $col['manually_classified'] = true;
                         break;
@@ -260,50 +275,50 @@ class DataDiscoveryController extends Controller
         $system->update(['scan_results' => $results]);
 
         AuditLog::log('data-discovery', $system->id, 'column_classified', [
-            'table'          => $tableName,
-            'column'         => $columnName,
+            'table' => $tableName,
+            'column' => $columnName,
             'classification' => $classification,
-            'pdp_category'   => $pdpCategory,
+            'pdp_category' => $pdpCategory,
         ], 'manual');
 
         return response()->json(['message' => 'Column classification updated']);
     }
 
     /**
-     * Get ROPA linkage map for a system
+     * Get RoPA linkage map for a system
      */
     public function ropaLinks(Request $request, string $id)
     {
         $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
         $orgId = $request->user()->org_id;
 
-        // PRIMARY: pivot (source of truth — synced by ROPA wizard hook).
+        // PRIMARY: pivot (source of truth — synced by RoPA wizard hook).
         $pivotRopas = $system->ropas()
             ->select('ropas.id', 'ropas.registration_number', 'ropas.processing_activity', 'ropas.risk_level', 'ropas.status')
             ->get();
         $pivotIds = $pivotRopas->pluck('id')->all();
 
-        // FALLBACK: string-match legacy ROPAs yg belum di-resave via wizard.
+        // FALLBACK: string-match legacy RoPAs yg belum di-resave via wizard.
         // Legacy seed data + pre-pivot records tetap muncul biar count ≠ 0.
-        // Frontend bisa flag '_source=inferred' utk hint "buka ROPA wizard untuk persist link".
-        $inferredRopas = \App\Models\Ropa::where('org_id', $orgId)
+        // Frontend bisa flag '_source=inferred' utk hint "buka RoPA wizard untuk persist link".
+        $inferredRopas = Ropa::where('org_id', $orgId)
             ->whereNotIn('id', $pivotIds)
             ->where(function ($q) use ($system) {
-                $q->where('processing_activity', 'like', '%' . $system->name . '%')
-                  ->orWhere('wizard_data->section_1->data_source', 'like', '%' . $system->name . '%');
+                $q->where('processing_activity', 'like', '%'.$system->name.'%')
+                    ->orWhere('wizard_data->section_1->data_source', 'like', '%'.$system->name.'%');
             })
             ->select('id', 'registration_number', 'processing_activity', 'risk_level', 'status')
             ->get()
-            ->map(fn($r) => array_merge($r->toArray(), ['_source' => 'inferred']));
+            ->map(fn ($r) => array_merge($r->toArray(), ['_source' => 'inferred']));
 
-        $linked = $pivotRopas->map(fn($r) => array_merge($r->toArray(), ['_source' => 'pivot']))
+        $linked = $pivotRopas->map(fn ($r) => array_merge($r->toArray(), ['_source' => 'pivot']))
             ->concat($inferredRopas);
 
         return response()->json(['data' => [
-            'system'         => ['id' => $system->id, 'name' => $system->name, 'source_type' => $system->source_type],
-            'linked_ropas'   => $linked->values(),
-            'total_links'    => $linked->count(),
-            'pivot_count'    => $pivotRopas->count(),
+            'system' => ['id' => $system->id, 'name' => $system->name, 'source_type' => $system->source_type],
+            'linked_ropas' => $linked->values(),
+            'total_links' => $linked->count(),
+            'pivot_count' => $pivotRopas->count(),
             'inferred_count' => $inferredRopas->count(),
         ]]);
     }
@@ -332,40 +347,40 @@ class DataDiscoveryController extends Controller
             $tables = $system->scan_results['tables'] ?? [];
             $piiTables = [];
             foreach ($tables as $table) {
-                $piiCols = array_filter($table['columns'], fn($c) => $c['pii_detected'] ?? false);
-                if (!empty($piiCols)) {
+                $piiCols = array_filter($table['columns'], fn ($c) => $c['pii_detected'] ?? false);
+                if (! empty($piiCols)) {
                     $piiTables[] = [
-                        'table'       => $table['name'],
-                        'pii_columns' => array_values(array_map(fn($c) => $c['name'], $piiCols)),
+                        'table' => $table['name'],
+                        'pii_columns' => array_values(array_map(fn ($c) => $c['name'], $piiCols)),
                     ];
                 }
             }
 
-            if (!empty($piiTables)) {
+            if (! empty($piiTables)) {
                 // Now execute the actual Data Scan Query!
                 $config = $system->connection_config ?? [];
-                $searchResult = \App\Services\DatabaseScanner::searchSubject($system->source_type, $config, $piiTables, $identifier);
+                $searchResult = DatabaseScanner::searchSubject($system->source_type, $config, $piiTables, $identifier);
 
                 if ($searchResult['found_data']) {
                     $totalMatches += count($searchResult['matches']);
                     $results[] = [
-                        'system_id'    => $system->id,
-                        'system_name'  => $system->name,
-                        'source_type'  => $system->source_type,
-                        'matches'      => $searchResult['matches'],
-                        'search_time'  => $searchResult['search_time_ms'] . 'ms',
+                        'system_id' => $system->id,
+                        'system_name' => $system->name,
+                        'source_type' => $system->source_type,
+                        'matches' => $searchResult['matches'],
+                        'search_time' => $searchResult['search_time_ms'].'ms',
                     ];
                 }
             }
         }
 
         return response()->json([
-            'user_identifier'  => $identifier,
+            'user_identifier' => $identifier,
             'systems_searched' => count($systems),
             'systems_with_pii' => count($results),
             'total_table_matches' => $totalMatches,
-            'results'          => $results,
-            'note'             => 'Actual row findings based on direct schema query.',
+            'results' => $results,
+            'note' => 'Actual row findings based on direct schema query.',
         ]);
     }
 
@@ -379,14 +394,14 @@ class DataDiscoveryController extends Controller
     public function scanAi(Request $request, string $id)
     {
         $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
-        
+
         $schema = $system->scan_results ?? null;
-        if (!$schema || empty($schema['tables'])) {
+        if (! $schema || empty($schema['tables'])) {
             return response()->json(['error' => 'Please perform a standard scan first before using AI Deep Scan.'], 400);
         }
 
-        $aiService = new \App\Services\AiService();
-        if (!$aiService->isAvailable()) {
+        $aiService = new AiService;
+        if (! $aiService->isAvailable()) {
             return response()->json(['error' => 'AI Provider is not configured for this server.'], 400);
         }
 
@@ -394,15 +409,17 @@ class DataDiscoveryController extends Controller
         // This drops the payload from e.g., 400 columns to 50 columns, preventing cURL API timeout
         $compactSchema = collect($schema['tables'])->map(function ($table) {
             $piiCols = collect($table['columns'])->filter(function ($c) {
-                return !empty($c['pii_detected']);
+                return ! empty($c['pii_detected']);
             })->map(function ($c) {
                 return [
-                    'name' => $c['name'], 
-                    'type' => $c['type'] ?? ''
+                    'name' => $c['name'],
+                    'type' => $c['type'] ?? '',
                 ];
             })->values()->toArray();
 
-            if (empty($piiCols)) return null;
+            if (empty($piiCols)) {
+                return null;
+            }
 
             return [
                 'name' => $table['name'],
@@ -416,7 +433,7 @@ class DataDiscoveryController extends Controller
         }
 
         $aiResult = $aiService->dataDiscoveryAiDeepScan($compactSchema);
-        if (!$aiResult || !isset($aiResult['tables'])) {
+        if (! $aiResult || ! isset($aiResult['tables'])) {
             return response()->json(['error' => 'AI analysis failed to return valid JSON. Please try again.'], 500);
         }
 
@@ -466,7 +483,7 @@ class DataDiscoveryController extends Controller
 
         return response()->json([
             'message' => 'AI Deep Scan completed successfully.',
-            'ai_scan_results' => $aiResult
+            'ai_scan_results' => $aiResult,
         ]);
     }
 
@@ -490,19 +507,19 @@ class DataDiscoveryController extends Controller
         $sourceType = $system->source_type;
 
         $schema = $system->scan_results ?? null;
-        if (!$schema || empty($schema['tables'])) {
+        if (! $schema || empty($schema['tables'])) {
             return response()->json(['error' => 'Please perform a standard scan first.'], 400);
         }
 
-        $aiService = new \App\Services\AiService();
-        if (!$aiService->isAvailable()) {
+        $aiService = new AiService;
+        if (! $aiService->isAvailable()) {
             return response()->json(['error' => 'AI Provider is not configured.'], 400);
         }
 
         $compactSchema = collect($schema['tables'])->map(function ($table) {
             return [
                 'name' => $table['name'],
-                'columns' => collect($table['columns'])->map(fn($c) => $c['name'])->toArray(),
+                'columns' => collect($table['columns'])->map(fn ($c) => $c['name'])->toArray(),
             ];
         })->toArray();
 
@@ -510,8 +527,8 @@ class DataDiscoveryController extends Controller
         $queries = $aiSqlResult['sql_queries'] ?? [];
         $explanation = $aiSqlResult['explanation'] ?? null;
 
-        $searchId = (string) \Illuminate\Support\Str::uuid();
-        \Illuminate\Support\Facades\DB::table('ai_specific_searches')->insert([
+        $searchId = (string) Str::uuid();
+        DB::table('ai_specific_searches')->insert([
             'id' => $searchId,
             'system_id' => $system->id,
             'user_prompt' => $prompt,
@@ -556,7 +573,7 @@ class DataDiscoveryController extends Controller
 
         $execResults = DatabaseScanner::executeRawReadQueries($sourceType, $config, $queries);
         if (isset($execResults['error'])) {
-            return response()->json(['error' => 'Database execution failed: ' . $execResults['error']], 500);
+            return response()->json(['error' => 'Database execution failed: '.$execResults['error']], 500);
         }
 
         $totalRows = 0;
@@ -568,7 +585,7 @@ class DataDiscoveryController extends Controller
         $maskedDataSample = array_map([self::class, 'maskSensitiveRow'], $rawDataSample);
 
         if ($searchId = $request->input('search_id')) {
-            \Illuminate\Support\Facades\DB::table('ai_specific_searches')
+            DB::table('ai_specific_searches')
                 ->where('id', $searchId)
                 ->where('system_id', $system->id)
                 ->update([
@@ -609,19 +626,19 @@ class DataDiscoveryController extends Controller
 
         $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
         $schema = $system->scan_results ?? null;
-        if (!$schema || empty($schema['tables'])) {
+        if (! $schema || empty($schema['tables'])) {
             return response()->json(['error' => 'Please perform a standard scan first.'], 400);
         }
 
-        $aiService = new \App\Services\AiService();
-        if (!$aiService->isAvailable()) {
+        $aiService = new AiService;
+        if (! $aiService->isAvailable()) {
             return response()->json(['error' => 'AI Provider is not configured.'], 400);
         }
 
         $compactSchema = collect($schema['tables'])->map(function ($table) {
             return [
                 'name' => $table['name'],
-                'columns' => collect($table['columns'])->map(fn($c) => $c['name'])->toArray(),
+                'columns' => collect($table['columns'])->map(fn ($c) => $c['name'])->toArray(),
             ];
         })->toArray();
 
@@ -659,7 +676,7 @@ class DataDiscoveryController extends Controller
         $config = $system->connection_config ?? [];
         $sourceType = $system->source_type;
 
-        if (!$schema || empty($schema['tables'])) {
+        if (! $schema || empty($schema['tables'])) {
             return response()->json(['error' => 'Schema belum di-scan.'], 400);
         }
 
@@ -672,7 +689,7 @@ class DataDiscoveryController extends Controller
         $tableMeta = collect($schema['tables'])->first(function ($t) use ($tableName) {
             return ($t['name'] ?? $t['table_name'] ?? null) === $tableName;
         });
-        if (!$tableMeta) {
+        if (! $tableMeta) {
             return response()->json(['error' => "Tabel '{$tableName}' tidak ditemukan di schema hasil scan."], 400);
         }
         $validColumns = collect($tableMeta['columns'] ?? [])
@@ -687,23 +704,23 @@ class DataDiscoveryController extends Controller
         // to prevent identifier injection even though we also check against
         // the scanned schema list.
         $quote = $sourceType === 'postgresql' ? '"' : '`';
-        $cleanIdent = fn(string $v) => $quote . str_replace([$quote, "\0", "\n", "\r"], '', $v) . $quote;
+        $cleanIdent = fn (string $v) => $quote.str_replace([$quote, "\0", "\n", "\r"], '', $v).$quote;
 
         $wheres = [];
         $params = [];
         foreach ($values as $idx => $pair) {
-            if (!is_array($pair) || !isset($pair['column']) || !array_key_exists('value', $pair)) {
+            if (! is_array($pair) || ! isset($pair['column']) || ! array_key_exists('value', $pair)) {
                 return response()->json(['error' => "Format `values[{$idx}]` harus {column, value}."], 422);
             }
             $col = (string) $pair['column'];
-            if (!in_array($col, $validColumns, true)) {
+            if (! in_array($col, $validColumns, true)) {
                 return response()->json(['error' => "Kolom '{$col}' tidak ada di tabel '{$tableName}'."], 400);
             }
             $quotedCol = $cleanIdent($col);
             if ($mode === 'contains' && is_string($pair['value'])) {
                 $op = $sourceType === 'postgresql' ? 'ILIKE' : 'LIKE';
                 $wheres[] = "{$quotedCol} {$op} ?";
-                $params[] = '%' . $pair['value'] . '%';
+                $params[] = '%'.$pair['value'].'%';
             } else {
                 $wheres[] = "{$quotedCol} = ?";
                 $params[] = $pair['value'];
@@ -714,7 +731,7 @@ class DataDiscoveryController extends Controller
             return response()->json(['error' => 'Minimal satu pasangan (column, value) dibutuhkan.'], 422);
         }
 
-        if (!in_array($sourceType, ['mysql', 'postgresql'], true)) {
+        if (! in_array($sourceType, ['mysql', 'postgresql'], true)) {
             return response()->json(['error' => "Leak Detection belum support source_type '{$sourceType}'. Pakai MySQL / PostgreSQL."], 400);
         }
         if (empty($config) || empty($config['host'] ?? null)) {
@@ -722,9 +739,9 @@ class DataDiscoveryController extends Controller
         }
 
         $quotedTable = $cleanIdent($tableName);
-        $query = "SELECT * FROM {$quotedTable} WHERE " . implode(' AND ', $wheres) . " LIMIT 20";
+        $query = "SELECT * FROM {$quotedTable} WHERE ".implode(' AND ', $wheres).' LIMIT 20';
 
-        \Illuminate\Support\Facades\Log::info('Leak verify query built', [
+        Log::info('Leak verify query built', [
             'system_id' => $id,
             'source_type' => $sourceType,
             'table' => $tableName,
@@ -738,7 +755,8 @@ class DataDiscoveryController extends Controller
             $status = self::classifyDbError($result['error']) === 'user'
                 ? 400
                 : 500;
-            return response()->json(['error' => 'Verifikasi gagal: ' . self::humanizeDbError($result['error'])], $status);
+
+            return response()->json(['error' => 'Verifikasi gagal: '.self::humanizeDbError($result['error'])], $status);
         }
 
         $rows = $result['rows'] ?? [];
@@ -747,7 +765,7 @@ class DataDiscoveryController extends Controller
         // Persist history — metadata + masked sample only, no raw user-provided
         // values (those are bound at PDO level and never serialized here).
         try {
-            $leak = \App\Models\LeakDetection::create([
+            $leak = LeakDetection::create([
                 'system_id' => $system->id,
                 'org_id' => $request->user()->org_id,
                 'user_id' => $request->user()->id,
@@ -763,22 +781,24 @@ class DataDiscoveryController extends Controller
             // Notify DPO when a leak hit is confirmed.
             if (count($rows) > 0) {
                 try {
-                    \App\Services\NotificationService::dispatch(
+                    NotificationService::dispatch(
                         kind: 'alert',
                         severity: count($rows) > 100 ? 'critical' : 'high',
                         module: 'data_discovery',
                         type: 'data_discovery.leak_detected',
                         recipient: 'role:dpo',
                         orgId: $request->user()->org_id,
-                        title: "🔍 PII leak: " . count($rows) . " row di {$tableName}",
-                        body: "Scan menemukan " . count($rows) . " row yang cocok dengan value PII pada tabel {$tableName} (sistem: {$system->name}).",
+                        title: '🔍 PII leak: '.count($rows)." row di {$tableName}",
+                        body: 'Scan menemukan '.count($rows)." row yang cocok dengan value PII pada tabel {$tableName} (sistem: {$system->name}).",
                         actionUrl: "/data-discovery/{$system->id}",
                         metadata: ['record_id' => $leak->id, 'system_id' => $system->id, 'found_count' => count($rows)]
                     );
-                } catch (\Throwable $e) { \Log::warning('Leak notif failed: ' . $e->getMessage()); }
+                } catch (\Throwable $e) {
+                    \Log::warning('Leak notif failed: '.$e->getMessage());
+                }
             }
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('Leak history save failed: ' . $e->getMessage());
+            Log::warning('Leak history save failed: '.$e->getMessage());
         }
 
         return response()->json([
@@ -806,8 +826,11 @@ class DataDiscoveryController extends Controller
             'Unknown column', 'Unknown table',
         ];
         foreach ($userPatterns as $p) {
-            if (stripos($msg, $p) !== false) return 'user';
+            if (stripos($msg, $p) !== false) {
+                return 'user';
+            }
         }
+
         return 'system';
     }
 
@@ -830,6 +853,7 @@ class DataDiscoveryController extends Controller
         if (stripos($msg, 'Unknown column') !== false || stripos($msg, 'Unknown table') !== false) {
             return 'Kolom/tabel tidak ditemukan di database. Jalankan ulang Standard Scan agar schema up-to-date.';
         }
+
         // System-level / unexpected — return raw text for debug visibility.
         return $msg;
     }
@@ -840,11 +864,12 @@ class DataDiscoveryController extends Controller
     public function leakHistory(Request $request, string $id)
     {
         $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
-        $rows = \App\Models\LeakDetection::where('system_id', $system->id)
+        $rows = LeakDetection::where('system_id', $system->id)
             ->where('org_id', $request->user()->org_id)
             ->orderBy('created_at', 'desc')
             ->limit(30)
             ->get();
+
         return response()->json(['data' => $rows]);
     }
 
@@ -854,10 +879,11 @@ class DataDiscoveryController extends Controller
     public function deleteLeakHistory(Request $request, string $id, string $historyId)
     {
         $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
-        $deleted = \App\Models\LeakDetection::where('system_id', $system->id)
+        $deleted = LeakDetection::where('system_id', $system->id)
             ->where('org_id', $request->user()->org_id)
             ->where('id', $historyId)
             ->delete();
+
         return response()->json(['deleted' => $deleted]);
     }
 
@@ -867,9 +893,10 @@ class DataDiscoveryController extends Controller
     public function clearLeakHistory(Request $request, string $id)
     {
         $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
-        $deleted = \App\Models\LeakDetection::where('system_id', $system->id)
+        $deleted = LeakDetection::where('system_id', $system->id)
             ->where('org_id', $request->user()->org_id)
             ->delete();
+
         return response()->json(['deleted' => $deleted]);
     }
 
@@ -877,35 +904,38 @@ class DataDiscoveryController extends Controller
     {
         $masked = [];
         foreach ($row as $key => $value) {
-            if (!is_string($value)) {
+            if (! is_string($value)) {
                 $masked[$key] = $value;
+
                 continue;
             }
             if (preg_match('/(nik|ktp|email|phone|password|secret|token|credit_card|rekening)/i', $key)) {
                 if (str_contains($value, '@')) {
                     $parts = explode('@', $value);
-                    $masked[$key] = substr($parts[0], 0, 2) . '***@' . $parts[1];
+                    $masked[$key] = substr($parts[0], 0, 2).'***@'.$parts[1];
                 } else {
                     $len = strlen($value);
-                    $masked[$key] = $len > 4 ? substr($value, 0, 2) . str_repeat('*', $len - 4) . substr($value, -2) : str_repeat('*', $len);
+                    $masked[$key] = $len > 4 ? substr($value, 0, 2).str_repeat('*', $len - 4).substr($value, -2) : str_repeat('*', $len);
                 }
             } elseif (preg_match('/(name|nama|alamat|address)/i', $key) && strlen($value) > 3) {
-                $masked[$key] = substr($value, 0, 3) . str_repeat('*', strlen($value) - 3);
+                $masked[$key] = substr($value, 0, 3).str_repeat('*', strlen($value) - 3);
             } else {
                 $masked[$key] = $value;
             }
         }
+
         return $masked;
     }
+
     public function getSearchAiHistory(Request $request, string $id)
     {
         $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
-        $history = \Illuminate\Support\Facades\DB::table('ai_specific_searches')
+        $history = DB::table('ai_specific_searches')
             ->where('system_id', $system->id)
             ->orderBy('created_at', 'desc')
             ->limit(20)
             ->get();
-            
+
         $formatted = $history->map(function ($item) {
             $insight = json_decode($item->ai_analysis_insight, true);
             $rawSample = [];
@@ -916,6 +946,7 @@ class DataDiscoveryController extends Controller
                 $rawSample = $insight['_raw_sample'];
                 unset($insight['_raw_sample'], $insight['_executed_at']);
             }
+
             return [
                 'id' => $item->id,
                 'prompt' => $item->user_prompt,
@@ -925,31 +956,31 @@ class DataDiscoveryController extends Controller
                     'raw_data_sample' => $rawSample,
                     'executed' => $executed,
                 ],
-                'timestamp' => \Carbon\Carbon::parse($item->created_at)->timezone('Asia/Jakarta')->format('d/m/Y, H:i:s')
+                'timestamp' => Carbon::parse($item->created_at)->timezone('Asia/Jakarta')->format('d/m/Y, H:i:s'),
             ];
         });
-        
+
         return response()->json(['data' => $formatted]);
     }
 
     public function clearSearchAiHistory(Request $request, string $id)
     {
         $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
-        \Illuminate\Support\Facades\DB::table('ai_specific_searches')
+        DB::table('ai_specific_searches')
             ->where('system_id', $system->id)
             ->delete();
-            
+
         return response()->json(['message' => 'History cleared']);
     }
 
     public function deleteSearchAiHistory(Request $request, string $id, string $historyId)
     {
         $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
-        \Illuminate\Support\Facades\DB::table('ai_specific_searches')
+        DB::table('ai_specific_searches')
             ->where('system_id', $system->id)
             ->where('id', $historyId)
             ->delete();
-            
+
         return response()->json(['message' => 'History item deleted']);
     }
 
@@ -963,6 +994,7 @@ class DataDiscoveryController extends Controller
     public function getProtectionAssessment(Request $request, string $id)
     {
         $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+
         return response()->json(['data' => $system->protection_assessments ?? []]);
     }
 
@@ -1010,12 +1042,12 @@ class DataDiscoveryController extends Controller
         $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
 
         $schema = $system->scan_results ?? null;
-        if (!$schema || empty($schema['tables'])) {
+        if (! $schema || empty($schema['tables'])) {
             return response()->json(['error' => 'Please perform a standard scan first.'], 400);
         }
 
-        $aiService = new \App\Services\AiService($request->user()->org_id);
-        if (!$aiService->isAvailable()) {
+        $aiService = new AiService($request->user()->org_id);
+        if (! $aiService->isAvailable()) {
             return response()->json(['error' => 'AI Provider is not configured.'], 400);
         }
 
@@ -1023,9 +1055,9 @@ class DataDiscoveryController extends Controller
         $piiColumns = [];
         foreach ($schema['tables'] as $table) {
             foreach ($table['columns'] as $col) {
-                if (!empty($col['pii_detected'])) {
+                if (! empty($col['pii_detected'])) {
                     $piiColumns[] = [
-                        'key' => $table['name'] . '.' . $col['name'],
+                        'key' => $table['name'].'.'.$col['name'],
                         'table' => $table['name'],
                         'column' => $col['name'],
                         'type' => $col['type'] ?? 'unknown',
@@ -1052,10 +1084,10 @@ class DataDiscoveryController extends Controller
             }
 
             $systemPrompt = "Kamu adalah pakar keamanan data (Data Security Expert) dan DPO ahli UU PDP Indonesia.\n"
-                . "Tugasmu menganalisis kolom-kolom PII dan merekomendasikan proteksi yang diperlukan.\n"
-                . "Output WAJIB berupa JSON valid. JANGAN tambahkan teks apapun di luar JSON.\n\n"
-                . "FORMAT OUTPUT JSON (key = \"table.column\", value = object):\n"
-                . json_encode([
+                ."Tugasmu menganalisis kolom-kolom PII dan merekomendasikan proteksi yang diperlukan.\n"
+                ."Output WAJIB berupa JSON valid. JANGAN tambahkan teks apapun di luar JSON.\n\n"
+                ."FORMAT OUTPUT JSON (key = \"table.column\", value = object):\n"
+                .json_encode([
                     'users.email' => [
                         'is_masked_frontend' => true,
                         'is_encrypted_db' => false,
@@ -1064,23 +1096,23 @@ class DataDiscoveryController extends Controller
                         'has_audit_log' => true,
                         'has_retention_policy' => false,
                         'recommendation' => 'Penjelasan singkat dalam Bahasa Indonesia',
-                    ]
+                    ],
                 ], JSON_PRETTY_PRINT);
 
             $userPrompt = "Analisis kolom PII dari database \"{$system->name}\":\n{$colList}\n"
-                . "Untuk SETIAP kolom di atas, rekomendasikan proteksi:\n"
-                . "- is_masked_frontend: Harus dimasking di UI?\n"
-                . "- is_encrypted_db: Harus dienkripsi di database?\n"
-                . "- has_access_control: Akses dibatasi per role?\n"
-                . "- is_redacted_api: API response harus diredaksi?\n"
-                . "- has_audit_log: Akses dicatat di audit log?\n"
-                . "- has_retention_policy: Perlu auto-delete setelah retensi?\n"
-                . "- recommendation: Alasan spesifik dalam Bahasa Indonesia\n\n"
-                . "Jawab HANYA JSON valid.";
+                ."Untuk SETIAP kolom di atas, rekomendasikan proteksi:\n"
+                ."- is_masked_frontend: Harus dimasking di UI?\n"
+                ."- is_encrypted_db: Harus dienkripsi di database?\n"
+                ."- has_access_control: Akses dibatasi per role?\n"
+                ."- is_redacted_api: API response harus diredaksi?\n"
+                ."- has_audit_log: Akses dicatat di audit log?\n"
+                ."- has_retention_policy: Perlu auto-delete setelah retensi?\n"
+                ."- recommendation: Alasan spesifik dalam Bahasa Indonesia\n\n"
+                .'Jawab HANYA JSON valid.';
 
             $parsed = $aiService->ask($systemPrompt, $userPrompt, 4000);
 
-            if (!$parsed || isset($parsed['raw'])) {
+            if (! $parsed || isset($parsed['raw'])) {
                 $rawText = $parsed['raw'] ?? '';
                 if (preg_match('/```(?:json)?\s*({[\s\S]*?})\s*```/is', $rawText, $matches)) {
                     $parsed = json_decode($matches[1], true);
@@ -1091,14 +1123,15 @@ class DataDiscoveryController extends Controller
                         $parsed = json_decode(substr($rawText, $start, $end - $start + 1), true);
                     }
                 }
-                
+
                 // If it still fails, gracefully skip this chunk instead of fully failing
-                if (!is_array($parsed) || isset($parsed['raw'])) {
+                if (! is_array($parsed) || isset($parsed['raw'])) {
                     $hasError = true;
+
                     continue;
                 }
             }
-            
+
             // Merge valid chunk results
             foreach ($parsed as $key => $val) {
                 if (is_array($val)) {
@@ -1128,7 +1161,7 @@ class DataDiscoveryController extends Controller
 
         AuditLog::log('data-discovery', $system->id, 'ai_protection_assessed', [
             'columns_assessed' => count($allAssessments),
-            'has_partial_errors' => $hasError
+            'has_partial_errors' => $hasError,
         ], 'system');
 
         return response()->json([
@@ -1155,7 +1188,7 @@ class DataDiscoveryController extends Controller
         [$fullPath, $cleanup] = $ts->getLocalPathForProcessing($org, $path);
 
         try {
-            $ocr = new \App\Services\OcrScannerService();
+            $ocr = new OcrScannerService;
             $result = $ocr->extractText($fullPath, $request->user()->org_id);
         } finally {
             $cleanup();
@@ -1210,6 +1243,7 @@ class DataDiscoveryController extends Controller
         }
 
         $matches = DatabaseScanner::compareMetadata($schema, $data['columns']);
+
         return response()->json(['data' => $matches]);
     }
 
@@ -1229,8 +1263,10 @@ class DataDiscoveryController extends Controller
             return response()->json(['message' => 'System belum pernah di-scan. Jalankan scan dulu.'], 422);
         }
 
-        $ai = new \App\Services\AiService($request->user()->org_id);
-        if (!$ai->isAvailable()) return response()->json(['message' => 'AI belum dikonfigurasi'], 503);
+        $ai = new AiService($request->user()->org_id);
+        if (! $ai->isAvailable()) {
+            return response()->json(['message' => 'AI belum dikonfigurasi'], 503);
+        }
 
         $dialect = match ($system->source_type) {
             'postgresql' => 'postgresql',
