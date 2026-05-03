@@ -487,7 +487,13 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
             ->where('kind', 'policy|contract');
         Route::get('/{id}', [DocumentMakerController::class, 'show'])
             ->where('id', '[0-9a-fA-F-]{36}');
+        Route::put('/{id}', [DocumentMakerController::class, 'update'])
+            ->where('id', '[0-9a-fA-F-]{36}');
         Route::delete('/{id}', [DocumentMakerController::class, 'destroy'])
+            ->where('id', '[0-9a-fA-F-]{36}');
+        Route::post('/{id}/restore', [DocumentMakerController::class, 'restore'])
+            ->where('id', '[0-9a-fA-F-]{36}');
+        Route::delete('/{id}/force', [DocumentMakerController::class, 'forceDelete'])
             ->where('id', '[0-9a-fA-F-]{36}');
         Route::get('/{id}/download.docx', [DocumentMakerController::class, 'downloadDocx'])
             ->where('id', '[0-9a-fA-F-]{36}');
