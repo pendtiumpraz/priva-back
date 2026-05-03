@@ -24,6 +24,7 @@ use App\Services\CreditService;
 use App\Services\DocumentParserService;
 use App\Services\TenantContextService;
 use App\Services\TenantStorageService;
+use App\Services\UuPdpClauseRelevanceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -125,6 +126,80 @@ class AiFeatureController extends Controller
             'credits_used' => $creditLog?->credits_used ?? 0,
             'credits_remaining' => $org ? ($org->ai_credits_remaining + $org->ai_credits_purchased) : null,
         ]);
+    }
+
+    /**
+     * Insert ke contract_reviews dengan dedup window 2 menit.
+     * Tujuan: cegah baris ganda saat (1) frontend retry karena proxy timeout
+     * pada AI call panjang, (2) user buka 2 tab review dengan source yg sama,
+     * (3) StrictMode dev double-render. Match key = (org_id, title,
+     * contract_type) dalam 2 menit terakhir.
+     *
+     * @return string uuid baris yg di-insert ATAU baris existing yg cocok
+     */
+    private function insertContractReviewDeduped(string $orgId, array $row): string
+    {
+        $existing = DB::table('contract_reviews')
+            ->where('org_id', $orgId)
+            ->where('title', $row['title'] ?? '')
+            ->where('contract_type', $row['contract_type'] ?? '')
+            ->where('created_at', '>=', now()->subMinutes(2))
+            ->whereNull('deleted_at')
+            ->orderByDesc('created_at')
+            ->first();
+        if ($existing) {
+            \Log::info('contract_reviews dedup: skipped duplicate insert', [
+                'org_id' => $orgId, 'title' => $row['title'] ?? null, 'existing_id' => $existing->id,
+            ]);
+
+            return $existing->id;
+        }
+
+        $id = (string) Str::uuid();
+        DB::table('contract_reviews')->insert(array_merge($row, [
+            'id' => $id,
+            'org_id' => $orgId,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]));
+
+        return $id;
+    }
+
+    /**
+     * Insert ke policy_reviews dengan dedup window 2 menit. Sama dengan
+     * contract version — match key = (org_id, title, doc_type).
+     */
+    private function insertPolicyReviewDeduped(string $orgId, array $row): string
+    {
+        $docTypeKey = $row['doc_type'] ?? $row['policy_type'] ?? '';
+        $docTypeColumn = array_key_exists('doc_type', $row) ? 'doc_type' : 'policy_type';
+
+        $existing = DB::table('policy_reviews')
+            ->where('org_id', $orgId)
+            ->where('title', $row['title'] ?? '')
+            ->where($docTypeColumn, $docTypeKey)
+            ->where('created_at', '>=', now()->subMinutes(2))
+            ->whereNull('deleted_at')
+            ->orderByDesc('created_at')
+            ->first();
+        if ($existing) {
+            \Log::info('policy_reviews dedup: skipped duplicate insert', [
+                'org_id' => $orgId, 'title' => $row['title'] ?? null, 'existing_id' => $existing->id,
+            ]);
+
+            return $existing->id;
+        }
+
+        $id = (string) Str::uuid();
+        DB::table('policy_reviews')->insert(array_merge($row, [
+            'id' => $id,
+            'org_id' => $orgId,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]));
+
+        return $id;
     }
 
     private function featureToModule(string $featureType): ?string
@@ -804,9 +879,7 @@ class AiFeatureController extends Controller
         $response = $ai->contractComplianceAnalyzer($pages, $request->contract_type ?? 'other');
 
         try {
-            DB::table('contract_reviews')->insert([
-                'id' => (string) Str::uuid(),
-                'org_id' => $request->user()->org_id,
+            $this->insertContractReviewDeduped($request->user()->org_id, [
                 'title' => $file->getClientOriginalName(),
                 'contract_type' => $request->contract_type ?? 'other',
                 'file_path' => $storedPath,
@@ -815,8 +888,6 @@ class AiFeatureController extends Controller
                 'risk_score' => $response['risk_score'] ?? 0,
                 'status' => 'completed',
                 'created_by' => $request->user()->id,
-                'created_at' => now(),
-                'updated_at' => now(),
             ]);
         } catch (\Exception $e) {
             \Log::warning('contract_reviews save failed: '.$e->getMessage());
@@ -880,9 +951,7 @@ class AiFeatureController extends Controller
         $response = $ai->policyComplianceAnalyzer($pages, $request->policy_type ?? 'sop');
 
         try {
-            DB::table('policy_reviews')->insert([
-                'id' => (string) Str::uuid(),
-                'org_id' => $request->user()->org_id,
+            $this->insertPolicyReviewDeduped($request->user()->org_id, [
                 'title' => $file->getClientOriginalName(),
                 'policy_type' => $request->policy_type ?? 'sop',
                 'file_path' => $storedPath,
@@ -891,8 +960,6 @@ class AiFeatureController extends Controller
                 'risk_score' => $response['risk_score'] ?? 0,
                 'status' => 'completed',
                 'created_by' => $request->user()->id,
-                'created_at' => now(),
-                'updated_at' => now(),
             ]);
         } catch (\Exception $e) {
             \Log::warning('policy_reviews save failed: '.$e->getMessage());
@@ -1437,7 +1504,7 @@ class AiFeatureController extends Controller
         // klausul UU PDP. NDA tidak butuh klausul hak subjek data, dst.
         // Source of truth: UuPdpClauseRelevanceService (shared dengan DocumentMaker
         // generator supaya generator + reviewer pakai mapping yang sama).
-        $typeRelevance = \App\Services\UuPdpClauseRelevanceService::getRelevance($contractType);
+        $typeRelevance = UuPdpClauseRelevanceService::getRelevance($contractType);
 
         $systemPrompt = 'Kamu adalah Data Protection Officer ahli UU PDP Indonesia (UU No. 27/2022). '
             ."Output WAJIB berupa JSON valid. JANGAN tambahkan teks apapun di luar JSON.\n\n"
@@ -1492,9 +1559,7 @@ class AiFeatureController extends Controller
 
         // Persist to contract_reviews table
         try {
-            DB::table('contract_reviews')->insert([
-                'id' => Str::uuid(),
-                'org_id' => $request->user()->org_id,
+            $this->insertContractReviewDeduped($request->user()->org_id, [
                 'title' => 'Contract Review — '.ucfirst($contractType),
                 'contract_type' => $contractType,
                 'contract_text' => mb_substr($request->contract_text, 0, 20000),
@@ -1503,8 +1568,6 @@ class AiFeatureController extends Controller
                 'overall_rating' => $response['overall_rating'] ?? null,
                 'status' => 'completed',
                 'created_by' => $request->user()->id,
-                'created_at' => now(),
-                'updated_at' => now(),
             ]);
         } catch (\Exception $e) {
             \Log::warning('contract_reviews save failed: '.$e->getMessage());
@@ -1634,9 +1697,7 @@ class AiFeatureController extends Controller
 
         // Persist to contract_reviews table
         try {
-            DB::table('contract_reviews')->insert([
-                'id' => Str::uuid(),
-                'org_id' => $request->user()->org_id,
+            $this->insertContractReviewDeduped($request->user()->org_id, [
                 'title' => $file->getClientOriginalName(),
                 'contract_type' => $contractType,
                 'file_path' => $storedPath,
@@ -1646,8 +1707,6 @@ class AiFeatureController extends Controller
                 'overall_rating' => $response['overall_rating'] ?? null,
                 'status' => 'completed',
                 'created_by' => $request->user()->id,
-                'created_at' => now(),
-                'updated_at' => now(),
             ]);
         } catch (\Exception $e) {
             \Log::warning('contract_reviews save failed: '.$e->getMessage());
@@ -1737,10 +1796,10 @@ class AiFeatureController extends Controller
         // Per-doc-type label + scope hint — single source of truth shared
         // dengan DocumentMaker generator (UuPdpClauseRelevanceService) supaya
         // generator + reviewer pakai dimensi yang sama.
-        $reviewType = \App\Services\UuPdpClauseRelevanceService::mapPolicyDocumentTypeToReviewType($docType);
-        $docTypeLabels = \App\Services\UuPdpClauseRelevanceService::getPolicyTypeLabels();
+        $reviewType = UuPdpClauseRelevanceService::mapPolicyDocumentTypeToReviewType($docType);
+        $docTypeLabels = UuPdpClauseRelevanceService::getPolicyTypeLabels();
         $docLabel = $docTypeLabels[$reviewType] ?? $docType;
-        $scopeHint = \App\Services\UuPdpClauseRelevanceService::getPolicyScopeHint($docType);
+        $scopeHint = UuPdpClauseRelevanceService::getPolicyScopeHint($docType);
 
         $systemPrompt = 'Kamu adalah auditor kepatuhan senior UU PDP Indonesia (UU No. 27/2022). '
             .'Tugasmu mengaudit kebijakan/SOP internal terhadap kepatuhan UU PDP, '
@@ -1793,9 +1852,7 @@ class AiFeatureController extends Controller
 
         // Save to policy_reviews table if it exists
         try {
-            DB::table('policy_reviews')->insert([
-                'id' => Str::uuid(),
-                'org_id' => $request->user()->org_id,
+            $this->insertPolicyReviewDeduped($request->user()->org_id, [
                 'title' => $title,
                 'doc_type' => $docType,
                 'file_path' => $storedPath,
@@ -1803,8 +1860,6 @@ class AiFeatureController extends Controller
                 'risk_score' => $response['overall_score'] ?? 0,
                 'status' => 'completed',
                 'created_by' => $request->user()->id,
-                'created_at' => now(),
-                'updated_at' => now(),
             ]);
         } catch (\Exception $e) {
             // Table may not exist yet, proceed anyway
