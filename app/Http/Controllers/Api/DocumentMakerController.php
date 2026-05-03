@@ -253,6 +253,76 @@ class DocumentMakerController extends Controller
         ])->deleteFileAfterSend(true);
     }
 
+    /**
+     * Re-prompt AI to add missing UU PDP clauses (from metadata.compliance.missing_clauses).
+     * Returns the updated document with refreshed self-check.
+     */
+    public function fixCompliance(Request $request, string $id): JsonResponse
+    {
+        $doc = GeneratedDocument::where('id', $id)
+            ->where('org_id', $request->user()->org_id)
+            ->first();
+        if (! $doc) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+
+        try {
+            $service = new DocumentMakerService(new AiService($doc->org_id, 'chat'));
+            $doc = $service->fixCompliance($doc);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 502);
+        } catch (\Throwable $e) {
+            \Log::error('DocumentMaker.fixCompliance failed: '.$e->getMessage(), ['trace' => $e->getTraceAsString()]);
+
+            return response()->json(['message' => 'Failed to fix compliance gaps.'], 500);
+        }
+
+        AuditLog::log('document_maker', $doc->id, 'fix_compliance', [
+            'document_type' => $doc->document_type,
+            'compliance_score_after' => $doc->ai_output['metadata']['compliance']['score'] ?? null,
+        ]);
+
+        return response()->json(['data' => $doc]);
+    }
+
+    /**
+     * Re-run the compliance self-check on an existing document without
+     * regenerating sections. Useful after manual edits.
+     */
+    public function recheckCompliance(Request $request, string $id): JsonResponse
+    {
+        $doc = GeneratedDocument::where('id', $id)
+            ->where('org_id', $request->user()->org_id)
+            ->first();
+        if (! $doc) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+
+        try {
+            $service = new DocumentMakerService(new AiService($doc->org_id, 'chat'));
+            $sections = is_array($doc->ai_output['sections'] ?? null) ? $doc->ai_output['sections'] : [];
+            $compliance = $service->selfCheck(
+                $doc->kind,
+                $doc->document_type,
+                $sections,
+                is_array($doc->wizard_inputs) ? $doc->wizard_inputs : []
+            );
+            $aiOutput = is_array($doc->ai_output) ? $doc->ai_output : [];
+            $aiOutput['metadata'] = is_array($aiOutput['metadata'] ?? null) ? $aiOutput['metadata'] : [];
+            $aiOutput['metadata']['compliance'] = $compliance;
+            $doc->ai_output = $aiOutput;
+            $doc->save();
+        } catch (\Throwable $e) {
+            \Log::error('DocumentMaker.recheckCompliance failed: '.$e->getMessage());
+
+            return response()->json(['message' => 'Failed to re-check compliance.'], 500);
+        }
+
+        AuditLog::log('document_maker', $doc->id, 'recheck_compliance');
+
+        return response()->json(['data' => $doc]);
+    }
+
     public function downloadPdf(Request $request, string $id)
     {
         $doc = GeneratedDocument::where('id', $id)

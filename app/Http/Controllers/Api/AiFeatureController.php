@@ -1435,39 +1435,9 @@ class AiFeatureController extends Controller
 
         // Per-type relevance map — bukan semua kontrak harus punya semua 8
         // klausul UU PDP. NDA tidak butuh klausul hak subjek data, dst.
-        // AI akan diberi mapping ini supaya tidak flag yang tidak applicable.
-        $relevance = [
-            'nda' => [
-                'core' => ['klausul_kerahasiaan'],
-                'conditional_pii' => ['masa_retensi', 'mekanisme_pemusnahan', 'klausul_pelanggaran_data'],
-                'not_applicable' => ['hak_subjek_data', 'kewajiban_pengendali', 'transfer_lintas_negara', 'klausul_tujuan_pemrosesan'],
-            ],
-            'dpa' => [
-                'core' => ['klausul_tujuan_pemrosesan', 'hak_subjek_data', 'kewajiban_pengendali', 'klausul_pelanggaran_data', 'masa_retensi', 'mekanisme_pemusnahan', 'klausul_kerahasiaan'],
-                'conditional_pii' => ['transfer_lintas_negara'],
-                'not_applicable' => [],
-            ],
-            'vendor' => [
-                'core' => ['klausul_kerahasiaan', 'klausul_pelanggaran_data'],
-                'conditional_pii' => ['hak_subjek_data', 'kewajiban_pengendali', 'masa_retensi', 'mekanisme_pemusnahan', 'klausul_tujuan_pemrosesan', 'transfer_lintas_negara'],
-                'not_applicable' => [],
-            ],
-            'employment' => [
-                'core' => ['klausul_kerahasiaan', 'masa_retensi'],
-                'conditional_pii' => ['hak_subjek_data', 'mekanisme_pemusnahan'],
-                'not_applicable' => ['transfer_lintas_negara', 'kewajiban_pengendali', 'klausul_tujuan_pemrosesan'],
-            ],
-            'customer' => [
-                'core' => ['klausul_kerahasiaan', 'hak_subjek_data', 'klausul_tujuan_pemrosesan'],
-                'conditional_pii' => ['masa_retensi', 'mekanisme_pemusnahan', 'klausul_pelanggaran_data', 'transfer_lintas_negara'],
-                'not_applicable' => ['kewajiban_pengendali'],
-            ],
-        ];
-        $typeRelevance = $relevance[strtolower($contractType)] ?? [
-            'core' => [],
-            'conditional_pii' => ['klausul_kerahasiaan', 'klausul_pelanggaran_data', 'masa_retensi', 'mekanisme_pemusnahan'],
-            'not_applicable' => [],
-        ];
+        // Source of truth: UuPdpClauseRelevanceService (shared dengan DocumentMaker
+        // generator supaya generator + reviewer pakai mapping yang sama).
+        $typeRelevance = \App\Services\UuPdpClauseRelevanceService::getRelevance($contractType);
 
         $systemPrompt = 'Kamu adalah Data Protection Officer ahli UU PDP Indonesia (UU No. 27/2022). '
             ."Output WAJIB berupa JSON valid. JANGAN tambahkan teks apapun di luar JSON.\n\n"
@@ -1764,30 +1734,13 @@ class AiFeatureController extends Controller
 
         $context = TenantContextService::buildContext($request->user()->org_id);
 
-        $docTypeLabels = [
-            'kebijakan_privasi' => 'Kebijakan Privasi (Privacy Policy)',
-            'sop_data_handling' => 'SOP Penanganan Data Pribadi',
-            'sop_breach_response' => 'SOP Respon Pelanggaran Data',
-            'peraturan_perusahaan' => 'Peraturan Perusahaan',
-            'sop_dsr' => 'SOP Pemenuhan Hak Subjek Data',
-            'sop_retensi' => 'SOP Retensi & Pemusnahan Data',
-            'other' => 'Dokumen Lainnya',
-        ];
-        $docLabel = $docTypeLabels[$docType] ?? $docType;
-
-        // Per-doc-type scope hint — supaya AI fokus dimensi yang relevan,
-        // bukan paksa semua dimensi UU PDP ke setiap dokumen. SOP Breach
-        // Response gak butuh dimensi consent management, dst.
-        $scopeHints = [
-            'kebijakan_privasi' => 'fokus: tujuan pemrosesan, dasar hukum, hak subjek data, retensi, transfer, kontak DPO, persetujuan',
-            'sop_data_handling' => 'fokus: prosedur pemrosesan, klasifikasi data, akses kontrol, enkripsi, log audit',
-            'sop_breach_response' => 'fokus: deteksi insiden, eskalasi, pelaporan 3x24 jam, notifikasi subjek data, post-mortem',
-            'peraturan_perusahaan' => 'fokus: kewajiban karyawan, sanksi, kerahasiaan, pelatihan PDP — TIDAK perlu hak subjek data eksternal',
-            'sop_dsr' => 'fokus: penerimaan permintaan, verifikasi identitas, deadline 72 jam, dokumentasi',
-            'sop_retensi' => 'fokus: jadwal retensi per kategori data, prosedur pemusnahan, sertifikat pemusnahan',
-            'other' => 'fokus: dimensi UU PDP yang RELEVAN dengan konten dokumen — JANGAN paksa dimensi yang tidak applicable',
-        ];
-        $scopeHint = $scopeHints[$docType] ?? $scopeHints['other'];
+        // Per-doc-type label + scope hint — single source of truth shared
+        // dengan DocumentMaker generator (UuPdpClauseRelevanceService) supaya
+        // generator + reviewer pakai dimensi yang sama.
+        $reviewType = \App\Services\UuPdpClauseRelevanceService::mapPolicyDocumentTypeToReviewType($docType);
+        $docTypeLabels = \App\Services\UuPdpClauseRelevanceService::getPolicyTypeLabels();
+        $docLabel = $docTypeLabels[$reviewType] ?? $docType;
+        $scopeHint = \App\Services\UuPdpClauseRelevanceService::getPolicyScopeHint($docType);
 
         $systemPrompt = 'Kamu adalah auditor kepatuhan senior UU PDP Indonesia (UU No. 27/2022). '
             .'Tugasmu mengaudit kebijakan/SOP internal terhadap kepatuhan UU PDP, '

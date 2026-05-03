@@ -501,6 +501,10 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
             ->where('id', '[0-9a-fA-F-]{36}');
         Route::get('/{id}/download.pdf', [DocumentMakerController::class, 'downloadPdf'])
             ->where('id', '[0-9a-fA-F-]{36}');
+        Route::post('/{id}/fix-compliance', [DocumentMakerController::class, 'fixCompliance'])
+            ->where('id', '[0-9a-fA-F-]{36}');
+        Route::post('/{id}/recheck-compliance', [DocumentMakerController::class, 'recheckCompliance'])
+            ->where('id', '[0-9a-fA-F-]{36}');
     });
 
     // =============================================
