@@ -59,6 +59,7 @@ class DataDiscoveryScanController extends Controller
                 'phone' => $req->input('phone'),
                 'dob' => $req->input('dob'),
             ],
+            targetSystemIds: $req->input('target_system_ids') ?: null,
         );
 
         return response()->json([

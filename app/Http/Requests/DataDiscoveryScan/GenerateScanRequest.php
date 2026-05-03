@@ -26,6 +26,11 @@ class GenerateScanRequest extends FormRequest
             'nik' => ['nullable', 'digits:16'],
             'phone' => ['nullable', 'string', 'max:20'],
             'dob' => ['nullable', 'date_format:Y-m-d'],
+            // Subset InformationSystem yang mau di-scan. Kosong/null =
+            // scan semua DB systems org user. Wajib UUID, tenant-scoped
+            // di service layer (anti tenant leak).
+            'target_system_ids' => ['nullable', 'array'],
+            'target_system_ids.*' => ['uuid'],
         ];
     }
 }

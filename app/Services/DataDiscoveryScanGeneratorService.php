@@ -40,8 +40,12 @@ class DataDiscoveryScanGeneratorService
      * Generate a scan plan + plan_systems via AI Text-to-SQL.
      *
      * @param  array{email?:?string,name?:?string,nik?:?string,phone?:?string,dob?:?string}  $identifiers
+     * @param  string[]|null  $targetSystemIds  Subset InformationSystem IDs untuk
+     *                                          di-scan. Null = scan semua org user.
+     *                                          Tetap di-filter org_id supaya tidak
+     *                                          bisa request system milik org lain.
      */
-    public function generate(string $orgId, string $userId, array $identifiers): DataDiscoveryScanPlan
+    public function generate(string $orgId, string $userId, array $identifiers, ?array $targetSystemIds = null): DataDiscoveryScanPlan
     {
         $aiService = app(AiService::class);
         if (! $aiService->isAvailable()) {
@@ -56,12 +60,20 @@ class DataDiscoveryScanGeneratorService
         // Iterate org's information_systems WITHOUT relying on
         // BelongsToOrg request-scope (this service may run from a worker
         // later) — explicit org_id filter via withoutGlobalScope().
-        $systems = InformationSystem::query()
+        // Kalau targetSystemIds di-supply, batasi ke subset itu — tapi
+        // org_id filter tetap berlaku, jadi user gak bisa request system
+        // milik org lain walau punya UUID-nya.
+        $query = InformationSystem::query()
             ->withoutGlobalScope('org')
             ->where('org_id', $orgId)
             ->whereNull('deleted_at')
-            ->whereNotNull('scan_results')
-            ->get();
+            ->whereNotNull('scan_results');
+
+        if ($targetSystemIds !== null && count($targetSystemIds) > 0) {
+            $query->whereIn('id', $targetSystemIds);
+        }
+
+        $systems = $query->get();
 
         $plan = DataDiscoveryScanPlan::create([
             'org_id' => $orgId,
