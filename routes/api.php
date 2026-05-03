@@ -33,6 +33,7 @@ use App\Http\Controllers\Api\DecryptorProfileController;
 use App\Http\Controllers\Api\DepartmentController;
 use App\Http\Controllers\Api\DiscoveryChangelogController;
 use App\Http\Controllers\Api\DocumentImportController;
+use App\Http\Controllers\Api\DocumentMakerController;
 use App\Http\Controllers\Api\DocumentTemplateController;
 use App\Http\Controllers\Api\DpiaAssessmentFrameworkController;
 use App\Http\Controllers\Api\DpiaRiskEventTemplateController;
@@ -473,6 +474,25 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::delete('/{id}', [PolicyReviewCrudController::class, 'destroy']);
         Route::post('/{id}/restore', [PolicyReviewCrudController::class, 'restore']);
         Route::delete('/{id}/force', [PolicyReviewCrudController::class, 'forceDelete']);
+    });
+
+    // =============================================
+    // Document Maker — AI-driven Policy + Contract drafts
+    //   Wizard input → AI sections JSON → DOCX/PDF download.
+    //   Used by /policy-review/add and /contract-review/add.
+    // =============================================
+    Route::prefix('document-maker')->group(function () {
+        Route::get('/', [DocumentMakerController::class, 'index']);
+        Route::post('/{kind}/generate', [DocumentMakerController::class, 'generate'])
+            ->where('kind', 'policy|contract');
+        Route::get('/{id}', [DocumentMakerController::class, 'show'])
+            ->where('id', '[0-9a-fA-F-]{36}');
+        Route::delete('/{id}', [DocumentMakerController::class, 'destroy'])
+            ->where('id', '[0-9a-fA-F-]{36}');
+        Route::get('/{id}/download.docx', [DocumentMakerController::class, 'downloadDocx'])
+            ->where('id', '[0-9a-fA-F-]{36}');
+        Route::get('/{id}/download.pdf', [DocumentMakerController::class, 'downloadPdf'])
+            ->where('id', '[0-9a-fA-F-]{36}');
     });
 
     // =============================================
