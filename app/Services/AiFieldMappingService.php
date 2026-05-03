@@ -24,6 +24,15 @@ class AiFieldMappingService
     private array $riskLibraryAllowlist = [];
 
     /**
+     * Cache: org-custom wizard sections for current call (loaded when targetModule
+     * is ropa/dpia and orgId is provided). Used for prompt injection so AI knows
+     * to extract custom field values from the document.
+     *
+     * Shape: array<int, ['section_key', 'label', 'description', 'fields' => [...]]>
+     */
+    private array $customSchema = [];
+
+    /**
      * Map extracted document data to RoPA fields using AI.
      *
      * @param  array  $extractedData  Output from DocumentParserService
@@ -44,6 +53,12 @@ class AiFieldMappingService
         // 1 query, scoped by org_id (system templates org_id=null + custom org-scoped).
         if ($targetModule === 'dpia') {
             $this->loadRiskLibrary($orgId);
+        }
+
+        // Phase 8: Load org-custom wizard schema (ROPA/DPIA only) so AI can
+        // map values into custom fields too. Skipped when org context missing.
+        if (in_array($targetModule, ['ropa', 'dpia'], true) && $orgId) {
+            $this->loadCustomSchema($orgId, $targetModule);
         }
 
         $prompt = $this->buildPrompt($extractedData, $targetModule);
@@ -90,6 +105,85 @@ class AiFieldMappingService
     }
 
     /**
+     * Phase 8: Load org-custom sections + fields for the current org+module.
+     *
+     * Filters out built-in sections (which AI handles via the canonical
+     * field schema) — only the `org_custom` slice is injected as custom
+     * fields the AI must populate alongside the canonical structure.
+     */
+    private function loadCustomSchema(string $orgId, string $module): void
+    {
+        try {
+            $service = app(WizardSchemaService::class);
+            $schema = $service->getSchema($orgId, $module);
+            $this->customSchema = array_values(array_filter(
+                $schema,
+                fn ($s) => ($s['source'] ?? null) === 'org_custom'
+                    && is_array($s['fields'] ?? null)
+                    && count($s['fields']) > 0,
+            ));
+        } catch (\Throwable $e) {
+            Log::warning('AiFieldMappingService: failed to load custom schema', [
+                'org_id' => $orgId,
+                'module' => $module,
+                'error' => $e->getMessage(),
+            ]);
+            $this->customSchema = [];
+        }
+    }
+
+    /**
+     * Build the custom fields section of the AI prompt — Phase 8.
+     *
+     * Returns empty string when no custom sections are loaded so the prompt
+     * stays clean for orgs that don't use custom fields.
+     */
+    private function buildCustomFieldsPromptSection(): string
+    {
+        if (empty($this->customSchema)) {
+            return '';
+        }
+
+        $lines = ["\n\n=== SECTION CUSTOM (org-specific) yang juga harus di-extract ===\n"];
+        foreach ($this->customSchema as $sec) {
+            $secLabel = (string) ($sec['label'] ?? $sec['section_key'] ?? 'Custom');
+            $secKey = (string) ($sec['section_key'] ?? '');
+            $lines[] = "[Section: {$secLabel}] (key: {$secKey})";
+            if (! empty($sec['description'])) {
+                $lines[] = "  Deskripsi: {$sec['description']}";
+            }
+            foreach (($sec['fields'] ?? []) as $f) {
+                $name = (string) ($f['name'] ?? '');
+                $label = (string) ($f['label'] ?? $name);
+                $type = (string) ($f['type'] ?? 'text');
+                $required = ! empty($f['is_required']) ? ' [REQUIRED]' : '';
+                $extra = '';
+                if (in_array($type, ['select', 'multiselect'], true) && is_array($f['options'] ?? null) && count($f['options']) > 0) {
+                    $opts = array_slice($f['options'], 0, 30);
+                    $extra = ', options: ['.implode(' | ', array_map('strval', $opts)).']';
+                }
+                $help = ! empty($f['help_text']) ? " — {$f['help_text']}" : '';
+                $lines[] = "  - {$label} (key: {$name}, type: {$type}{$extra}){$required}{$help}";
+            }
+            $lines[] = '';
+        }
+
+        $lines[] = 'INSTRUCTIONS untuk SECTION CUSTOM:';
+        $lines[] = '- Extract value dari konten dokumen kalau ada relevansi yang jelas. Skip kalau tidak ada (jangan invent).';
+        $lines[] = '- Output di JSON tambahan: "custom_fields": { "{field_name}": <value>, ... }';
+        $lines[] = '- Type-aware values:';
+        $lines[] = '  * text/textarea: string';
+        $lines[] = '  * number: numeric (integer atau decimal)';
+        $lines[] = '  * date: YYYY-MM-DD';
+        $lines[] = '  * boolean: true/false';
+        $lines[] = '  * select: WAJIB pilih PERSIS dari options di atas (string exact match)';
+        $lines[] = '  * multiselect: array of strings, semua dari options di atas';
+        $lines[] = '  * tags: array of strings (free-form)';
+
+        return implode("\n", $lines);
+    }
+
+    /**
      * Build the extraction prompt.
      */
     private function buildPrompt(array $extractedData, string $targetModule): string
@@ -130,6 +224,12 @@ class AiFieldMappingService
             $outputFormat = $this->getRopaOutputFormat();
         }
 
+        // Phase 8: append custom fields section + custom_fields slot in output
+        $customFieldsSection = $this->buildCustomFieldsPromptSection();
+        $customOutputSlot = ! empty($this->customSchema)
+            ? ",\n  \"custom_fields\": { \"<field_name>\": <value>, \"...\": \"...\" }"
+            : '';
+
         return <<<PROMPT
 Kamu adalah AI compliance analyst spesialis UU Pelindungan Data Pribadi (PDP) Indonesia.
 
@@ -139,7 +239,7 @@ TUGAS: Ekstrak dan mapping informasi dari dokumen berikut ke field-field yang di
 {$rawText}
 
 === TARGET FIELDS (JSON Schema) ===
-{$targetFields}{$riskLibrarySection}
+{$targetFields}{$riskLibrarySection}{$customFieldsSection}
 
 === INSTRUKSI ===
 1. Untuk setiap field, cari informasi yang relevan dari dokumen.
@@ -150,7 +250,7 @@ TUGAS: Ekstrak dan mapping informasi dari dokumen berikut ke field-field yang di
 6. Jawab HANYA dalam format JSON yang valid, tanpa markdown code blocks.
 
 FORMAT RESPONS (JSON):
-{$outputFormat}
+{$outputFormat}{$customOutputSlot}
 PROMPT;
     }
 
@@ -369,6 +469,19 @@ SCHEMA;
                 $cleanCategories = $this->validatePotensiRisiko($sectionFields, $validationWarnings);
                 $mappedFields[$sectionKey] = $cleanCategories;
                 $confidenceScores[$sectionKey] = []; // confidence stored inline per event
+
+                continue;
+            }
+
+            // Phase 8: custom_fields is a flat name->value map (no nested
+            // {value, confidence} wrappers per the prompt). Persist as-is so
+            // the FE renders into wizard_data.custom_fields[{field_name}].
+            if ($sectionKey === 'custom_fields' && is_array($sectionFields)) {
+                $mappedFields[$sectionKey] = $sectionFields;
+                $confidenceScores[$sectionKey] = [];
+                foreach ($sectionFields as $fieldKey => $fieldVal) {
+                    $confidenceScores[$sectionKey][$fieldKey] = 0.7;
+                }
 
                 continue;
             }

@@ -13,7 +13,9 @@ use App\Models\DpiaRiskEventTemplate;
 use App\Models\DsrRequest;
 use App\Models\GapAssessment;
 use App\Models\InformationSystem;
+use App\Models\ModuleCustomSection;
 use App\Models\Ropa;
+use App\Services\WizardSchemaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -60,12 +62,166 @@ class ExportController extends Controller
         return (string) $data;
     }
 
+    /**
+     * Resolve scope: which org_id should we filter custom schema by?
+     * Tenant users → own org_id. Superadmin → respect ?org_id= filter (or
+     * null = no extras / all orgs export which we render as "no extras").
+     */
+    private function resolveCustomFieldScope(Request $request): ?string
+    {
+        $user = $request->user();
+        if ($user && $user->role !== 'superadmin') {
+            return $user->org_id;
+        }
+
+        return $request->filled('org_id') ? (string) $request->org_id : null;
+    }
+
+    /**
+     * Load org-global custom field schema (sections + fields) for ROPA/DPIA
+     * export. Returns a flat ordered list of:
+     *   ['section_label' => ..., 'field_name' => ..., 'field_label' => ...,
+     *    'field_type' => ..., 'header' => '[Section] - [Field]']
+     *
+     * Returns [] when scope is null (no org filter possible).
+     */
+    private function getCustomFieldsForExport(?string $orgId, string $module): array
+    {
+        if (! $orgId) {
+            return [];
+        }
+
+        $service = app(WizardSchemaService::class);
+        $flat = $service->getCustomFieldsFlat($orgId, $module);
+        if (empty($flat)) {
+            return [];
+        }
+
+        // Map section_key → section_label for header prefixing.
+        $sections = ModuleCustomSection::forOrg($orgId)
+            ->forModule($module)
+            ->active()
+            ->get(['section_key', 'section_label'])
+            ->pluck('section_label', 'section_key')
+            ->all();
+
+        $rows = [];
+        foreach ($flat as $f) {
+            $sectionLabel = $sections[$f['section_key']] ?? null;
+            $header = $sectionLabel
+                ? "[{$sectionLabel}] - {$f['field_label']}"
+                : $f['field_label'];
+            $rows[] = [
+                'section_key' => $f['section_key'],
+                'section_label' => $sectionLabel,
+                'field_name' => $f['field_name'],
+                'field_label' => $f['field_label'],
+                'field_type' => $f['field_type'],
+                'header' => $header,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Format a custom-field value for CSV output, type-aware.
+     */
+    private function formatCustomValue($value, string $type): string
+    {
+        if ($value === null || $value === '') {
+            return '';
+        }
+        switch ($type) {
+            case 'boolean':
+                return ((bool) $value) ? 'Ya' : 'Tidak';
+            case 'multiselect':
+            case 'tags':
+                if (is_array($value)) {
+                    return implode(', ', array_map('strval', $value));
+                }
+
+                return (string) $value;
+            case 'date':
+                if (is_string($value) && strlen($value) >= 10) {
+                    return substr($value, 0, 10);
+                }
+
+                return (string) $value;
+            case 'number':
+                return is_numeric($value) ? (string) $value : '';
+            default:
+                if (is_array($value)) {
+                    return $this->flattenJson($value, 500);
+                }
+
+                return (string) $value;
+        }
+    }
+
+    /**
+     * Collect distinct per-record extras across all records in this export.
+     * Returns array of ['field_name' => ..., 'field_label' => ..., 'field_type' => ...]
+     * — first encounter wins on label/type collision (rare, just for header
+     * stability across rows).
+     */
+    private function collectPerRecordExtras($items): array
+    {
+        $byName = [];
+        foreach ($items as $r) {
+            $extras = ($r->wizard_data ?? [])['per_record_extras'] ?? [];
+            if (! is_array($extras)) {
+                continue;
+            }
+            foreach ($extras as $ex) {
+                if (! is_array($ex)) {
+                    continue;
+                }
+                $name = $ex['field_name'] ?? null;
+                if (! is_string($name) || $name === '' || isset($byName[$name])) {
+                    continue;
+                }
+                $byName[$name] = [
+                    'field_name' => $name,
+                    'field_label' => (string) ($ex['field_label'] ?? $name),
+                    'field_type' => (string) ($ex['field_type'] ?? 'text'),
+                ];
+            }
+        }
+
+        return array_values($byName);
+    }
+
+    /**
+     * Look up a per-record-extras value on a single record by field_name.
+     * Returns null when not present on this record.
+     */
+    private function findExtraValue(array $wizardData, string $fieldName): ?array
+    {
+        $extras = $wizardData['per_record_extras'] ?? [];
+        if (! is_array($extras)) {
+            return null;
+        }
+        foreach ($extras as $ex) {
+            if (is_array($ex) && ($ex['field_name'] ?? null) === $fieldName) {
+                return $ex;
+            }
+        }
+
+        return null;
+    }
+
     // =============================================
     // RoPA Export — Full 7-section wizard + metadata
     // =============================================
     public function ropa(Request $request)
     {
         $items = $this->getQuery($request, Ropa::class)->whereNull('deleted_at')->orderBy('created_at', 'desc')->get();
+
+        // Phase 7: org-global custom fields + per-record extras
+        $orgId = $this->resolveCustomFieldScope($request);
+        $customFields = $this->getCustomFieldsForExport($orgId, 'ropa');
+        $perRecordExtras = $this->collectPerRecordExtras($items);
 
         $headers = [
             'No. Registrasi', 'Aktivitas Pemrosesan', 'Tujuan', 'Dasar Hukum',
@@ -81,8 +237,16 @@ class ExportController extends Controller
             'Kategori Data', 'Subjek Data', 'Penerima (Array)', 'Security Measures',
             'Level Risiko', 'Status', 'Progress (%)', 'Dibuat', 'Diperbarui',
         ];
+        // Append org-global custom field columns
+        foreach ($customFields as $cf) {
+            $headers[] = $cf['header'];
+        }
+        // Append per-record extras columns
+        foreach ($perRecordExtras as $ex) {
+            $headers[] = '[Per-Record] - '.$ex['field_label'];
+        }
 
-        $rows = $items->map(function ($r) {
+        $rows = $items->map(function ($r) use ($customFields, $perRecordExtras) {
             $w = $r->wizard_data ?? [];
             $s1 = $w['detail_pemrosesan'] ?? [];
             $s2 = $w['dpo_team'] ?? [];
@@ -91,8 +255,9 @@ class ExportController extends Controller
             $s5 = $w['penggunaan_penyimpanan'] ?? [];
             $s6 = $w['pengiriman_data'] ?? [];
             $s7 = $w['retensi_keamanan'] ?? [];
+            $customValues = $w['custom_fields'] ?? [];
 
-            return [
+            $row = [
                 $r->registration_number,
                 $r->processing_activity,
                 $r->purpose,
@@ -133,6 +298,21 @@ class ExportController extends Controller
                 $r->created_at?->format('Y-m-d H:i'),
                 $r->updated_at?->format('Y-m-d H:i'),
             ];
+
+            // Append org-global custom field values for this record
+            foreach ($customFields as $cf) {
+                $val = is_array($customValues) ? ($customValues[$cf['field_name']] ?? null) : null;
+                $row[] = $this->formatCustomValue($val, $cf['field_type']);
+            }
+            // Append per-record extras values for this record
+            foreach ($perRecordExtras as $ex) {
+                $found = $this->findExtraValue($w, $ex['field_name']);
+                $row[] = $found
+                    ? $this->formatCustomValue($found['value'] ?? null, (string) ($found['field_type'] ?? 'text'))
+                    : '';
+            }
+
+            return $row;
         });
 
         return $this->streamCsv('ropa_export_'.date('Y-m-d').'.csv', $headers, $rows);
@@ -145,6 +325,11 @@ class ExportController extends Controller
     {
         $items = $this->getQuery($request, Dpia::class)->whereNull('deleted_at')->with('ropa:id,registration_number,processing_activity')->orderBy('created_at', 'desc')->get();
 
+        // Phase 7: org-global custom fields + per-record extras
+        $orgId = $this->resolveCustomFieldScope($request);
+        $customFields = $this->getCustomFieldsForExport($orgId, 'dpia');
+        $perRecordExtras = $this->collectPerRecordExtras($items);
+
         $headers = [
             'No. Registrasi', 'Deskripsi', 'Level Risiko', 'Status',
             'RoPA Terkait', 'RoPA Aktivitas',
@@ -155,8 +340,14 @@ class ExportController extends Controller
             // Comprehensive risk export columns (extends from wizard_data.potensi_risiko)
             'Total Risk Events', 'Risk Categories Covered', 'Risk Events (Detailed)',
         ];
+        foreach ($customFields as $cf) {
+            $headers[] = $cf['header'];
+        }
+        foreach ($perRecordExtras as $ex) {
+            $headers[] = '[Per-Record] - '.$ex['field_label'];
+        }
 
-        $rows = $items->map(function ($d) {
+        $rows = $items->map(function ($d) use ($customFields, $perRecordExtras) {
             $ra = $d->risk_assessment ?? [];
             $risks = $ra['risks'] ?? [];
             $mitigations = $d->mitigation_measures ?? [];
@@ -195,7 +386,10 @@ class ExportController extends Controller
                 $detailed = mb_substr($detailed, 0, 4990)."\n[...]";
             }
 
-            return [
+            $w = $d->wizard_data ?? [];
+            $customValues = $w['custom_fields'] ?? [];
+
+            $row = [
                 $d->registration_number,
                 $d->description,
                 strtoupper($d->risk_level),
@@ -219,6 +413,20 @@ class ExportController extends Controller
                 implode(', ', $categoriesCovered),
                 $detailed,
             ];
+            // Append org-global custom field values
+            foreach ($customFields as $cf) {
+                $val = is_array($customValues) ? ($customValues[$cf['field_name']] ?? null) : null;
+                $row[] = $this->formatCustomValue($val, $cf['field_type']);
+            }
+            // Append per-record extras
+            foreach ($perRecordExtras as $ex) {
+                $found = $this->findExtraValue($w, $ex['field_name']);
+                $row[] = $found
+                    ? $this->formatCustomValue($found['value'] ?? null, (string) ($found['field_type'] ?? 'text'))
+                    : '';
+            }
+
+            return $row;
         });
 
         return $this->streamCsv('dpia_export_'.date('Y-m-d').'.csv', $headers, $rows);

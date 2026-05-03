@@ -14,6 +14,11 @@ use Illuminate\Validation\Rule;
 
 /**
  * Sprint C1: Per-tenant custom fields and templates for RoPA / DPIA.
+ *
+ * Phase 9 (CUSTOM_WIZARD_PLAN.md): write paths share the same admin gate
+ * as CustomSectionController so non-admin tenants cannot mutate the schema.
+ * Audit log is written via AuditLog::log('wizard_schema', ...) for every
+ * create/update/delete/reorder.
  */
 class CustomFieldController extends Controller
 {
@@ -22,6 +27,39 @@ class CustomFieldController extends Controller
     private const ALLOWED_TYPES = ['text', 'textarea', 'select', 'multiselect', 'date', 'number', 'boolean', 'tags'];
 
     private const FIELD_NAME_REGEX = '/^[a-z][a-z0-9_]*$/';
+
+    /**
+     * Returns null when the user is allowed; otherwise a 403 JsonResponse.
+     * Mirrors CustomSectionController::authorizeWrite — both controllers
+     * gate on the same set of roles + tenant_role permission grants so
+     * the wizard schema has a single coherent admin contract.
+     */
+    private function authorizeWrite(Request $request): ?JsonResponse
+    {
+        $user = $request->user();
+        if (! $user) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+        if (in_array($user->role, ['root', 'superadmin', 'admin', 'dpo'], true)) {
+            return null;
+        }
+
+        if (! $user->relationLoaded('tenantRole')) {
+            $user->load('tenantRole');
+        }
+        $perms = $user->tenantRole?->permissions ?? null;
+        if (is_array($perms)) {
+            if (in_array('*', $perms, true) ||
+                in_array('wizard_schema:write', $perms, true) ||
+                in_array('settings:write', $perms, true)) {
+                return null;
+            }
+        }
+
+        return response()->json([
+            'message' => 'Akses ditolak — hanya admin/DPO yang boleh mengubah skema wizard.',
+        ], 403);
+    }
 
     // ---------------------------------------------------------------------
     // Custom Fields
@@ -44,6 +82,10 @@ class CustomFieldController extends Controller
 
     public function store(Request $request)
     {
+        if ($denied = $this->authorizeWrite($request)) {
+            return $denied;
+        }
+
         $data = $request->validate([
             'module' => ['required', Rule::in(self::ALLOWED_MODULES)],
             'section_key' => ['nullable', 'string', 'max:64', 'regex:'.self::FIELD_NAME_REGEX],
@@ -96,6 +138,10 @@ class CustomFieldController extends Controller
      */
     public function storeForSection(Request $request, string $sectionId): JsonResponse
     {
+        if ($denied = $this->authorizeWrite($request)) {
+            return $denied;
+        }
+
         $orgId = $request->user()->org_id;
         $section = ModuleCustomSection::forOrg($orgId)->findOrFail($sectionId);
 
@@ -146,6 +192,10 @@ class CustomFieldController extends Controller
 
     public function update(Request $request, string $id)
     {
+        if ($denied = $this->authorizeWrite($request)) {
+            return $denied;
+        }
+
         $field = ModuleCustomField::forOrg($request->user()->org_id)->findOrFail($id);
 
         $data = $request->validate([
@@ -176,6 +226,10 @@ class CustomFieldController extends Controller
 
     public function destroy(Request $request, string $id)
     {
+        if ($denied = $this->authorizeWrite($request)) {
+            return $denied;
+        }
+
         $field = ModuleCustomField::forOrg($request->user()->org_id)->findOrFail($id);
         $snapshot = $field->only(['module', 'section_key', 'field_name']);
         $field->delete();
@@ -190,6 +244,10 @@ class CustomFieldController extends Controller
      */
     public function reorder(Request $request): JsonResponse
     {
+        if ($denied = $this->authorizeWrite($request)) {
+            return $denied;
+        }
+
         $payload = $request->input('items', $request->all());
         $request->merge(['items' => $payload]);
 
