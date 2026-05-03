@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\ContainmentController;
 use App\Http\Controllers\Api\ContractReviewCrudController;
 use App\Http\Controllers\Api\CrossBorderController;
 use App\Http\Controllers\Api\CustomFieldController;
+use App\Http\Controllers\Api\CustomSectionController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DatabasePoolController;
 use App\Http\Controllers\Api\DataDiscoveryController;
@@ -99,6 +100,7 @@ use App\Http\Controllers\Api\V1\DsrApiV1Controller;
 use App\Http\Controllers\Api\V2\CookieCaptureController;
 use App\Http\Controllers\Api\VendorRiskController;
 use App\Http\Controllers\Api\VoiceTtsController;
+use App\Http\Controllers\Api\WizardSchemaController;
 use App\Http\Controllers\GapComparisonController;
 use App\Http\Middleware\AuthenticatePartnerApi;
 use Illuminate\Http\Middleware\HandleCors;
@@ -1112,9 +1114,30 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::delete('/{id}', [ModuleCommentController::class, 'destroy']);
     });
 
+    // =============================================
+    // Custom Wizard Foundation (CUSTOM_WIZARD_PLAN.md Phase 1+2)
+    //   - GET /wizard-schema/{module}      → built-in + org-custom merged schema
+    //   - CRUD /custom-sections            → org-custom section management
+    //   - CRUD /custom-fields              → org-custom field management
+    //
+    // NOTE: more-specific routes (`/reorder`) MUST be registered before the
+    // dynamic `/{id}` route or Laravel matches `reorder` as an id.
+    // =============================================
+    Route::get('/wizard-schema/{module}', [WizardSchemaController::class, 'show']);
+
+    Route::prefix('custom-sections')->group(function () {
+        Route::get('/', [CustomSectionController::class, 'index']);
+        Route::post('/', [CustomSectionController::class, 'store']);
+        Route::put('/reorder', [CustomSectionController::class, 'reorder']);
+        Route::put('/{id}', [CustomSectionController::class, 'update']);
+        Route::delete('/{id}', [CustomSectionController::class, 'destroy']);
+        Route::post('/{id}/fields', [CustomFieldController::class, 'storeForSection']);
+    });
+
     Route::prefix('custom-fields')->group(function () {
         Route::get('/', [CustomFieldController::class, 'index']);
         Route::post('/', [CustomFieldController::class, 'store']);
+        Route::put('/reorder', [CustomFieldController::class, 'reorder']);
         Route::put('/{id}', [CustomFieldController::class, 'update']);
         Route::delete('/{id}', [CustomFieldController::class, 'destroy']);
     });

@@ -11,6 +11,7 @@ class ModuleCustomField extends Model
     use SoftDeletes;
 
     public $incrementing = false;
+
     protected $keyType = 'string';
 
     protected $fillable = [
@@ -29,7 +30,7 @@ class ModuleCustomField extends Model
     protected static function booted(): void
     {
         static::creating(function ($model) {
-            if (!$model->id) {
+            if (! $model->id) {
                 $model->id = (string) Str::uuid();
             }
         });
@@ -43,6 +44,11 @@ class ModuleCustomField extends Model
     public function scopeForModule($query, string $module)
     {
         return $query->where('module', $module);
+    }
+
+    public function scopeForOrg($query, string $orgId)
+    {
+        return $query->where('org_id', $orgId);
     }
 
     public function scopeActive($query)
