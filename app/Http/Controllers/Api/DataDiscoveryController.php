@@ -1189,7 +1189,7 @@ class DataDiscoveryController extends Controller
 
         try {
             $ocr = new OcrScannerService;
-            $result = $ocr->extractText($fullPath, $request->user()->org_id);
+            $result = $ocr->extractText($fullPath, $request->user()->org_id, $request->user()->id);
         } finally {
             $cleanup();
         }

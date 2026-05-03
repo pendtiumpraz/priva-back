@@ -117,7 +117,11 @@ class MenuRegistrySeeder extends Seeder
 
             // Organisasi
             ['menu_key' => 'users', 'label' => 'User Management', 'href' => '/users', 'icon' => 'Users', 'section' => 'Organisasi', 'sort' => 910, 'roles' => self::ADMIN_SUPERADMIN],
-            ['menu_key' => 'custom-fields', 'label' => 'Custom Fields', 'href' => '/custom-fields', 'icon' => 'Layers', 'section' => 'Organisasi', 'sort' => 920, 'roles' => self::ADMIN_SUPERADMIN],
+            // 'custom-fields' menu deprecated (2026) — editor sudah pindah inline ke
+            // tombol "⚙ Edit Wizard Schema" di RoPA & DPIA list page. Custom sections
+            // sekarang dirender sebagai full wizard step. Entry dihapus dari registry
+            // supaya tidak muncul di sidebar; route /custom-fields masih ada (soft
+            // redirect) untuk bookmark lama.
             ['menu_key' => 'knowledge-base', 'label' => 'Knowledge Base', 'href' => '/knowledge-base', 'icon' => 'BookOpen', 'section' => 'Organisasi', 'sort' => 930, 'roles' => self::ADMIN_SUPERADMIN],
             ['menu_key' => 'notifications', 'label' => 'Notifikasi', 'href' => '/notifications', 'icon' => 'Bell', 'section' => 'Organisasi', 'sort' => 935, 'hideable' => false, 'roles' => self::ALL],
             ['menu_key' => 'settings', 'label' => 'Pengaturan Tenant', 'href' => '/settings', 'icon' => 'Settings', 'section' => 'Organisasi', 'sort' => 940, 'hideable' => false, 'roles' => self::ALL],
@@ -147,6 +151,15 @@ class MenuRegistrySeeder extends Seeder
                     ['is_allowed' => true]
                 );
             }
+        }
+
+        // Deprecated menu cleanup — drop legacy entries that have been superseded by
+        // inline editors. Custom-fields editor is now reachable via the
+        // "⚙ Edit Wizard Schema" button on the RoPA / DPIA list pages.
+        $deprecated = MenuItem::whereIn('menu_key', ['custom-fields'])->get();
+        foreach ($deprecated as $row) {
+            RoleMenuWhitelist::where('menu_id', $row->id)->delete();
+            $row->delete();
         }
 
         // Settings sub-tabs (children of 'settings' menu_item)
