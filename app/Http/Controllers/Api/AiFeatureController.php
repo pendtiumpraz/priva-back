@@ -1433,6 +1433,42 @@ class AiFeatureController extends Controller
 
         $contractType = $request->contract_type ?? 'vendor';
 
+        // Per-type relevance map — bukan semua kontrak harus punya semua 8
+        // klausul UU PDP. NDA tidak butuh klausul hak subjek data, dst.
+        // AI akan diberi mapping ini supaya tidak flag yang tidak applicable.
+        $relevance = [
+            'nda' => [
+                'core' => ['klausul_kerahasiaan'],
+                'conditional_pii' => ['masa_retensi', 'mekanisme_pemusnahan', 'klausul_pelanggaran_data'],
+                'not_applicable' => ['hak_subjek_data', 'kewajiban_pengendali', 'transfer_lintas_negara', 'klausul_tujuan_pemrosesan'],
+            ],
+            'dpa' => [
+                'core' => ['klausul_tujuan_pemrosesan', 'hak_subjek_data', 'kewajiban_pengendali', 'klausul_pelanggaran_data', 'masa_retensi', 'mekanisme_pemusnahan', 'klausul_kerahasiaan'],
+                'conditional_pii' => ['transfer_lintas_negara'],
+                'not_applicable' => [],
+            ],
+            'vendor' => [
+                'core' => ['klausul_kerahasiaan', 'klausul_pelanggaran_data'],
+                'conditional_pii' => ['hak_subjek_data', 'kewajiban_pengendali', 'masa_retensi', 'mekanisme_pemusnahan', 'klausul_tujuan_pemrosesan', 'transfer_lintas_negara'],
+                'not_applicable' => [],
+            ],
+            'employment' => [
+                'core' => ['klausul_kerahasiaan', 'masa_retensi'],
+                'conditional_pii' => ['hak_subjek_data', 'mekanisme_pemusnahan'],
+                'not_applicable' => ['transfer_lintas_negara', 'kewajiban_pengendali', 'klausul_tujuan_pemrosesan'],
+            ],
+            'customer' => [
+                'core' => ['klausul_kerahasiaan', 'hak_subjek_data', 'klausul_tujuan_pemrosesan'],
+                'conditional_pii' => ['masa_retensi', 'mekanisme_pemusnahan', 'klausul_pelanggaran_data', 'transfer_lintas_negara'],
+                'not_applicable' => ['kewajiban_pengendali'],
+            ],
+        ];
+        $typeRelevance = $relevance[strtolower($contractType)] ?? [
+            'core' => [],
+            'conditional_pii' => ['klausul_kerahasiaan', 'klausul_pelanggaran_data', 'masa_retensi', 'mekanisme_pemusnahan'],
+            'not_applicable' => [],
+        ];
+
         $systemPrompt = 'Kamu adalah Data Protection Officer ahli UU PDP Indonesia (UU No. 27/2022). '
             ."Output WAJIB berupa JSON valid. JANGAN tambahkan teks apapun di luar JSON.\n\n"
             ."Format output:\n"
@@ -1440,10 +1476,10 @@ class AiFeatureController extends Controller
                 'overall_rating' => 'baik/perlu_perbaikan/buruk',
                 'risk_score' => '0-100 (integer)',
                 'findings' => [['clause' => '...', 'issue' => '...', 'risk_level' => 'high/medium/low', 'recommendation' => '...', 'uu_pdp_reference' => 'Pasal X']],
-                'missing_clauses' => ['klausul yang seharusnya ada tapi tidak ditemukan'],
+                'missing_clauses' => ['klausul yang seharusnya ada tapi tidak ditemukan — HANYA dari core list yang berlaku untuk tipe kontrak ini'],
                 'summary' => 'ringkasan keseluruhan analisis (2-3 kalimat)',
                 'compliance_checklist' => [
-                    'klausul_tujuan_pemrosesan' => 'boolean',
+                    'klausul_tujuan_pemrosesan' => 'boolean — true kalau ada ATAU N.A. untuk tipe ini',
                     'hak_subjek_data' => 'boolean',
                     'kewajiban_pengendali' => 'boolean',
                     'transfer_lintas_negara' => 'boolean',
@@ -1452,15 +1488,29 @@ class AiFeatureController extends Controller
                     'klausul_kerahasiaan' => 'boolean',
                     'klausul_pelanggaran_data' => 'boolean',
                 ],
+                'not_applicable_clauses' => ['list klausul yang TIDAK applicable untuk tipe kontrak ini, supaya UI bisa hide'],
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        $coreList = empty($typeRelevance['core']) ? '(tidak ada core khusus)' : implode(', ', $typeRelevance['core']);
+        $condList = empty($typeRelevance['conditional_pii']) ? '(tidak ada)' : implode(', ', $typeRelevance['conditional_pii']);
+        $naList = empty($typeRelevance['not_applicable']) ? '(tidak ada)' : implode(', ', $typeRelevance['not_applicable']);
 
         $userPrompt = "Analisis kontrak/perjanjian berikut dari perspektif perlindungan data pribadi UU PDP.\n\n"
             ."Tipe Kontrak: {$contractType}\n\n"
+            ."=== APPLICABILITY CHECKLIST UNTUK TIPE INI ===\n"
+            ."- CORE (WAJIB ada di kontrak ini): {$coreList}\n"
+            ."- CONDITIONAL (WAJIB hanya kalau kontrak cover data pribadi/PII): {$condList}\n"
+            ."- NOT_APPLICABLE (TIDAK relevan untuk tipe ini, JANGAN flag sebagai missing): {$naList}\n\n"
+            ."ATURAN PENTING:\n"
+            ."1. Untuk item NOT_APPLICABLE: SET compliance_checklist value = true (anggap N.A. = lulus), JANGAN masukkan ke missing_clauses, JANGAN buat findings tentang ini, dan masukkan key-nya ke not_applicable_clauses array.\n"
+            ."2. Untuk item CONDITIONAL: pertama deteksi apakah kontrak ini menyebut/cover data pribadi (PII). Kalau YA, treat seperti core. Kalau TIDAK, treat seperti N.A.\n"
+            ."3. Untuk item CORE: WAJIB ada — flag missing kalau tidak ditemukan.\n"
+            ."4. Findings hanya untuk klausul yang MEMANG ditemukan tapi bermasalah, atau core yang hilang. JANGAN buat finding untuk klausul N.A.\n\n"
             ."=== ISI KONTRAK ===\n"
             .mb_substr($request->contract_text, 0, 8000)
             ."\n=== END ===\n\n"
-            .'Berikan analisis LENGKAP dalam format JSON yang diminta. '
-            .'Identifikasi semua temuan, klausul yang hilang, dan skor risiko 0-100. '
+            .'Berikan analisis sesuai applicability di atas. '
+            .'Skor risiko 0-100 dihitung HANYA berdasarkan klausul yang applicable (core + conditional kalau PII), bukan dari N.A. yang dipaksa-paksakan. '
             .'Jawab HANYA JSON valid.';
 
         $response = $ai->ask($systemPrompt, $userPrompt, 4000);
@@ -1725,12 +1775,28 @@ class AiFeatureController extends Controller
         ];
         $docLabel = $docTypeLabels[$docType] ?? $docType;
 
+        // Per-doc-type scope hint — supaya AI fokus dimensi yang relevan,
+        // bukan paksa semua dimensi UU PDP ke setiap dokumen. SOP Breach
+        // Response gak butuh dimensi consent management, dst.
+        $scopeHints = [
+            'kebijakan_privasi' => 'fokus: tujuan pemrosesan, dasar hukum, hak subjek data, retensi, transfer, kontak DPO, persetujuan',
+            'sop_data_handling' => 'fokus: prosedur pemrosesan, klasifikasi data, akses kontrol, enkripsi, log audit',
+            'sop_breach_response' => 'fokus: deteksi insiden, eskalasi, pelaporan 3x24 jam, notifikasi subjek data, post-mortem',
+            'peraturan_perusahaan' => 'fokus: kewajiban karyawan, sanksi, kerahasiaan, pelatihan PDP — TIDAK perlu hak subjek data eksternal',
+            'sop_dsr' => 'fokus: penerimaan permintaan, verifikasi identitas, deadline 72 jam, dokumentasi',
+            'sop_retensi' => 'fokus: jadwal retensi per kategori data, prosedur pemusnahan, sertifikat pemusnahan',
+            'other' => 'fokus: dimensi UU PDP yang RELEVAN dengan konten dokumen — JANGAN paksa dimensi yang tidak applicable',
+        ];
+        $scopeHint = $scopeHints[$docType] ?? $scopeHints['other'];
+
         $systemPrompt = 'Kamu adalah auditor kepatuhan senior UU PDP Indonesia (UU No. 27/2022). '
-            ."Tugasmu mengaudit kebijakan/SOP internal perusahaan terhadap kepatuhan UU PDP.\n"
+            .'Tugasmu mengaudit kebijakan/SOP internal terhadap kepatuhan UU PDP, '
+            .'DENGAN FOKUS pada dimensi yang RELEVAN untuk tipe dokumen — JANGAN paksa '
+            ."semua 8 dimensi UU PDP ke dokumen yang scope-nya sempit.\n"
             ."Konteks Tenant:\n$context\n\n"
             ."Output WAJIB berupa JSON valid. Format:\n"
             .json_encode([
-                'overall_score' => '0-100 (integer)',
+                'overall_score' => '0-100 (integer) — dihitung dari dimensi yang APPLICABLE saja',
                 'compliance_level' => 'compliant/partial/non_compliant',
                 'summary' => 'ringkasan keseluruhan 2-3 kalimat',
                 'sections' => [[
@@ -1741,20 +1807,25 @@ class AiFeatureController extends Controller
                     'recommendation' => 'Saran perbaikan konkret',
                     'uu_pdp_reference' => 'Pasal UU PDP yang relevan',
                 ]],
-                'missing_elements' => ['elemen penting yang belum ada dalam dokumen'],
+                'missing_elements' => ['elemen penting yang belum ada — HANYA dari yang applicable untuk tipe dokumen ini'],
                 'strengths' => ['hal-hal yang sudah baik'],
                 'priority_actions' => [['action' => '...', 'priority' => 'high/medium/low', 'deadline_suggestion' => '...']],
+                'not_applicable_dimensions' => ['list dimensi UU PDP yang TIDAK relevan untuk dokumen ini, dengan singkat alasannya'],
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
         $userPrompt = "Audit dokumen internal berikut terhadap kepatuhan UU PDP Indonesia:\n\n"
             ."Judul: {$title}\n"
             ."Tipe Dokumen: {$docLabel}\n"
+            ."Scope yang RELEVAN untuk tipe ini: {$scopeHint}\n"
             .($fileName ? "File: {$fileName}\n" : '')
             ."\n=== ISI DOKUMEN ===\n"
             .mb_substr($policyText, 0, 8000)
             ."\n=== END ===\n\n"
-            .'Berikan analisis LENGKAP per-section: status comply/partial/non_comply, gap, rekomendasi. '
-            .'Sertakan skor keseluruhan 0-100 dan list elemen yang hilang. '
+            ."ATURAN PENTING:\n"
+            ."1. Identifikasi dulu scope dokumen ini. Kalau dokumen-nya SOP Breach Response, JANGAN flag missing 'tujuan pemrosesan' karena itu domain Privacy Policy.\n"
+            ."2. Dimensi UU PDP yang TIDAK relevan untuk tipe dokumen ini → masukkan ke not_applicable_dimensions array dengan alasan singkat. JANGAN masukkan ke missing_elements.\n"
+            ."3. Sections: hanya audit per-bagian DOKUMEN yang ada — bukan per-dimensi UU PDP yang dipaksa-paksakan.\n"
+            ."4. Score 0-100 berdasarkan dimensi yang applicable saja, bukan rata-rata dengan N.A.\n"
             .'Jawab HANYA JSON valid.';
 
         $response = $ai->ask($systemPrompt, $userPrompt, 5000);
