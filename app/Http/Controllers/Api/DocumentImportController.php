@@ -143,6 +143,14 @@ class DocumentImportController extends Controller
         if ($request->status) {
             $query->where('status', $request->status);
         }
+        // Multi-status filter — frontend pakai untuk sub-tab Review/Selesai
+        // ?status_in=queued,parsing,analyzing,mapping,review,creating
+        if ($request->status_in) {
+            $statuses = array_filter(array_map('trim', explode(',', (string) $request->status_in)));
+            if (! empty($statuses)) {
+                $query->whereIn('status', $statuses);
+            }
+        }
         if ($request->target_module) {
             $query->where('target_module', $request->target_module);
         }
