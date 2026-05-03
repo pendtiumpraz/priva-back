@@ -2,9 +2,9 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use App\Models\AiProvider;
 use App\Models\AiModel;
+use App\Models\AiProvider;
+use Illuminate\Database\Seeder;
 
 class AiProviderSeeder extends Seeder
 {
@@ -105,8 +105,13 @@ class AiProviderSeeder extends Seeder
                 'website' => 'https://platform.deepseek.com',
                 'icon' => '🐋',
                 'models' => [
-                    ['model_id' => 'deepseek-chat', 'name' => 'DeepSeek Chat (V3.2)', 'category' => 'chat', 'context_window' => 128000, 'max_output_tokens' => 8192, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.27, 'output_price_per_m' => 1.1, 'sort_order' => 1],
-                    ['model_id' => 'deepseek-reasoner', 'name' => 'DeepSeek Reasoner (R1)', 'category' => 'reasoning', 'context_window' => 128000, 'max_output_tokens' => 8192, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 0.55, 'output_price_per_m' => 2.19, 'sort_order' => 2],
+                    // V4 series — released April 2026, 1M context, MoE architecture.
+                    // Replaces deepseek-chat/reasoner (V3.x) which retire 24 Jul 2026.
+                    ['model_id' => 'deepseek-v4-pro', 'name' => 'DeepSeek V4 Pro', 'category' => 'reasoning', 'context_window' => 1000000, 'max_output_tokens' => 384000, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 1.74, 'output_price_per_m' => 3.48, 'sort_order' => 1],
+                    ['model_id' => 'deepseek-v4-flash', 'name' => 'DeepSeek V4 Flash', 'category' => 'chat', 'context_window' => 1000000, 'max_output_tokens' => 384000, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.14, 'output_price_per_m' => 0.28, 'sort_order' => 2],
+                    // Legacy V3.x — retire 24 Jul 2026, kept for migration window.
+                    ['model_id' => 'deepseek-chat', 'name' => 'DeepSeek Chat (V3.2 — Legacy)', 'category' => 'chat', 'context_window' => 128000, 'max_output_tokens' => 8192, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.27, 'output_price_per_m' => 1.1, 'sort_order' => 10],
+                    ['model_id' => 'deepseek-reasoner', 'name' => 'DeepSeek Reasoner (R1 — Legacy)', 'category' => 'reasoning', 'context_window' => 128000, 'max_output_tokens' => 8192, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 0.55, 'output_price_per_m' => 2.19, 'sort_order' => 11],
                 ],
             ],
 
@@ -236,8 +241,10 @@ class AiProviderSeeder extends Seeder
                     ['model_id' => 'anthropic/claude-opus-4-6', 'name' => 'Claude Opus 4.6 (via OpenRouter)', 'category' => 'reasoning', 'context_window' => 1000000, 'max_output_tokens' => 32768, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 16.5, 'output_price_per_m' => 82.5, 'sort_order' => 4],
                     ['model_id' => 'google/gemini-2.5-pro', 'name' => 'Gemini 2.5 Pro (via OpenRouter)', 'category' => 'reasoning', 'context_window' => 1048576, 'max_output_tokens' => 65536, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 1.38, 'output_price_per_m' => 5.5, 'sort_order' => 5],
                     ['model_id' => 'google/gemini-2.5-flash', 'name' => 'Gemini 2.5 Flash (via OpenRouter)', 'category' => 'chat', 'context_window' => 1048576, 'max_output_tokens' => 65536, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.17, 'output_price_per_m' => 0.66, 'sort_order' => 6],
-                    ['model_id' => 'deepseek/deepseek-chat', 'name' => 'DeepSeek V3.2 (via OpenRouter)', 'category' => 'chat', 'context_window' => 128000, 'max_output_tokens' => 8192, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.3, 'output_price_per_m' => 1.2, 'sort_order' => 7],
-                    ['model_id' => 'deepseek/deepseek-r1', 'name' => 'DeepSeek R1 (via OpenRouter)', 'category' => 'reasoning', 'context_window' => 128000, 'max_output_tokens' => 8192, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 0.6, 'output_price_per_m' => 2.4, 'sort_order' => 8],
+                    ['model_id' => 'deepseek/deepseek-v4-pro', 'name' => 'DeepSeek V4 Pro (via OpenRouter)', 'category' => 'reasoning', 'context_window' => 1000000, 'max_output_tokens' => 384000, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 1.92, 'output_price_per_m' => 3.83, 'sort_order' => 7],
+                    ['model_id' => 'deepseek/deepseek-v4-flash', 'name' => 'DeepSeek V4 Flash (via OpenRouter)', 'category' => 'chat', 'context_window' => 1000000, 'max_output_tokens' => 384000, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.16, 'output_price_per_m' => 0.31, 'sort_order' => 8],
+                    ['model_id' => 'deepseek/deepseek-chat', 'name' => 'DeepSeek V3.2 — Legacy (via OpenRouter)', 'category' => 'chat', 'context_window' => 128000, 'max_output_tokens' => 8192, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.3, 'output_price_per_m' => 1.2, 'sort_order' => 18],
+                    ['model_id' => 'deepseek/deepseek-r1', 'name' => 'DeepSeek R1 — Legacy (via OpenRouter)', 'category' => 'reasoning', 'context_window' => 128000, 'max_output_tokens' => 8192, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 0.6, 'output_price_per_m' => 2.4, 'sort_order' => 19],
                     ['model_id' => 'x-ai/grok-4.20-beta', 'name' => 'Grok 4.20 Beta (via OpenRouter)', 'category' => 'reasoning', 'context_window' => 256000, 'max_output_tokens' => 32768, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 3.3, 'output_price_per_m' => 16.5, 'sort_order' => 9],
                     ['model_id' => 'mistralai/mistral-large-latest', 'name' => 'Mistral Large 3 (via OpenRouter)', 'category' => 'chat', 'context_window' => 131072, 'max_output_tokens' => 32768, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => true, 'input_price_per_m' => 2.2, 'output_price_per_m' => 6.6, 'sort_order' => 10],
                     ['model_id' => 'nvidia/nemotron-3-super-120b-a12b', 'name' => 'NVIDIA Nemotron 3 Super (via OpenRouter)', 'category' => 'agent', 'context_window' => 131072, 'max_output_tokens' => 16384, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 0.3, 'output_price_per_m' => 1.2, 'sort_order' => 11],
@@ -295,6 +302,6 @@ class AiProviderSeeder extends Seeder
             }
         }
 
-        $this->command->info('✅ Seeded ' . AiProvider::count() . ' AI providers with ' . AiModel::count() . ' LLM models');
+        $this->command->info('✅ Seeded '.AiProvider::count().' AI providers with '.AiModel::count().' LLM models');
     }
 }
