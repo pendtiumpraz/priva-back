@@ -7,6 +7,7 @@ use App\Models\QaBugReport;
 use App\Models\QaBugScreenshot;
 use App\Models\QaTestCase;
 use App\Models\QaTestResult;
+use App\Models\QaTestResultHistory;
 use App\Models\QaTestRun;
 use App\Services\AiService;
 use Illuminate\Http\JsonResponse;
@@ -352,9 +353,45 @@ class QaCenterController extends Controller
         if (isset($data['status']) && in_array($data['status'], ['pass', 'fail', 'blocked', 'skip'], true)) {
             $data['tested_at'] = now();
         }
+
+        $previousStatus = $result->status;
+        $statusChanged = isset($data['status']) && $data['status'] !== $previousStatus;
+
         $result->update($data);
 
+        // Catat riwayat hanya kalau status benar-benar berubah supaya history
+        // bersih dari noise (mis. user cuma ganti tester_name tanpa ubah status).
+        if ($statusChanged) {
+            QaTestResultHistory::create([
+                'test_result_id' => $result->id,
+                'previous_status' => $previousStatus,
+                'status' => $data['status'],
+                'tester_name' => $data['tester_name'] ?? $result->tester_name,
+                'notes' => $data['notes'] ?? null,
+                'changed_at' => now(),
+            ]);
+        }
+
         return response()->json(['data' => $result->fresh('bugs', 'testCase')]);
+    }
+
+    /**
+     * Riwayat perubahan status untuk satu test result. Append-only, urut
+     * dari yang paling baru. Buat regression detection.
+     */
+    public function resultHistory(string $resultId): JsonResponse
+    {
+        $result = QaTestResult::with('testCase:id,module,feature,interaction,title')->findOrFail($resultId);
+
+        $history = QaTestResultHistory::where('test_result_id', $resultId)
+            ->orderByDesc('changed_at')
+            ->limit(200)
+            ->get();
+
+        return response()->json([
+            'data' => $history,
+            'result' => $result,
+        ]);
     }
 
     // =========================================================================

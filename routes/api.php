@@ -1118,6 +1118,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         // Test results (per run)
         Route::get('/runs/{runId}/results', [QaCenterController::class, 'listResults'])->where('runId', '[0-9a-fA-F-]{36}');
         Route::patch('/results/{id}', [QaCenterController::class, 'updateResult'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::get('/results/{id}/history', [QaCenterController::class, 'resultHistory'])->where('id', '[0-9a-fA-F-]{36}');
 
         // Bug reports
         Route::get('/bugs', [QaCenterController::class, 'listBugs']);
