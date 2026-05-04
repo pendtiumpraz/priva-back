@@ -5,6 +5,7 @@ use App\Http\Middleware\AuthenticateDsrApiKey;
 use App\Http\Middleware\CheckPermission;
 use App\Http\Middleware\EnforceTenantReadOnly;
 use App\Http\Middleware\InitializeTenantDatabase;
+use App\Http\Middleware\RootOnly;
 use App\Http\Middleware\RootOrSuperadmin;
 use App\Http\Middleware\SetCurrentOrgContext;
 use Illuminate\Auth\AuthenticationException;
@@ -26,6 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'dsr.api_key' => AuthenticateDsrApiKey::class,
             'consent.api_key' => AuthenticateConsentApiKey::class,
             'role.root' => RootOrSuperadmin::class,
+            'role.root_only' => RootOnly::class,
             'tenant.context' => SetCurrentOrgContext::class,
             'tenant.db' => InitializeTenantDatabase::class,
             'tenant.readonly' => EnforceTenantReadOnly::class,

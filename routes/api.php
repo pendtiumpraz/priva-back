@@ -1093,7 +1093,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
     // =============================================
     // QA Center — root-only fitur untuk track test coverage seluruh platform
     // =============================================
-    Route::prefix('root/qa')->group(function () {
+    Route::prefix('root/qa')->middleware('role.root_only')->group(function () {
         // Test cases (catalog)
         Route::get('/cases', [QaCenterController::class, 'listCases']);
         Route::get('/cases/modules-summary', [QaCenterController::class, 'modulesSummary']);

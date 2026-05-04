@@ -30,16 +30,9 @@ use Illuminate\Support\Str;
  */
 class QaCenterController extends Controller
 {
-    public function __construct()
-    {
-        $this->middleware(function ($request, $next) {
-            if (($request->user()->role ?? null) !== 'root') {
-                abort(403, 'Hanya root yang dapat akses QA Center.');
-            }
-
-            return $next($request);
-        });
-    }
+    // Role gate enforced via 'role.root_only' middleware on the route group
+    // (lihat routes/api.php). Laravel 12 base Controller gak expose method
+    // middleware() di constructor, jadi gating dilakukan route-level.
 
     // =========================================================================
     // Test Cases (catalog)
