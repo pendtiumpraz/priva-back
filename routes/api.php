@@ -1103,6 +1103,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::delete('/cases/{id}', [QaCenterController::class, 'deleteCase'])->where('id', '[0-9a-fA-F-]{36}');
 
         // Test runs (cycles)
+        Route::get('/active-run', [QaCenterController::class, 'activeRun']);
         Route::get('/runs', [QaCenterController::class, 'listRuns']);
         Route::post('/runs', [QaCenterController::class, 'createRun']);
         Route::get('/runs/{id}', [QaCenterController::class, 'showRun'])->where('id', '[0-9a-fA-F-]{36}');

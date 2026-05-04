@@ -170,6 +170,44 @@ class QaCenterController extends Controller
         ]);
     }
 
+    /**
+     * Auto-resolve cycle aktif. Kalau gak ada, bikin baru "Cycle Default
+     * yyyy-MM-dd" + auto-seed semua test case. Ini dipakai oleh /qa landing
+     * page supaya user langsung mulai centang tanpa setup.
+     */
+    public function activeRun(Request $request): JsonResponse
+    {
+        $run = QaTestRun::where('status', 'active')
+            ->orderByDesc('started_at')
+            ->orderByDesc('created_at')
+            ->first();
+
+        if (! $run) {
+            $run = QaTestRun::create([
+                'name' => 'Cycle Default '.now()->format('Y-m-d'),
+                'status' => 'active',
+                'started_at' => now(),
+                'created_by' => $request->user()->id,
+            ]);
+            $this->seedResultsForRun($run);
+        }
+
+        $stats = QaTestResult::where('test_run_id', $run->id)
+            ->selectRaw('status, count(*) as cnt')
+            ->groupBy('status')
+            ->pluck('cnt', 'status');
+
+        $bugCount = QaBugReport::whereIn('test_result_id',
+            QaTestResult::where('test_run_id', $run->id)->pluck('id')
+        )->count();
+
+        return response()->json([
+            'data' => $run,
+            'stats' => $stats,
+            'bug_count' => $bugCount,
+        ]);
+    }
+
     public function createRun(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -273,7 +311,8 @@ class QaCenterController extends Controller
     public function listResults(Request $request, string $runId): JsonResponse
     {
         $q = QaTestResult::where('test_run_id', $runId)
-            ->with(['testCase:id,module,feature,interaction,title,description,expected_behavior']);
+            ->with(['testCase:id,module,feature,interaction,title,description,expected_behavior'])
+            ->withCount('bugs');
         if ($module = $request->query('module')) {
             $q->whereHas('testCase', fn ($w) => $w->where('module', $module));
         }
@@ -282,6 +321,18 @@ class QaCenterController extends Controller
         }
         if ($role = $request->query('role')) {
             $q->where('role', $role);
+        }
+        if ($request->boolean('has_bug')) {
+            $q->has('bugs');
+        }
+        if ($search = $request->query('q')) {
+            $q->whereHas('testCase', function ($w) use ($search) {
+                $w->where('title', 'like', "%{$search}%")
+                    ->orWhere('module', 'like', "%{$search}%")
+                    ->orWhere('feature', 'like', "%{$search}%")
+                    ->orWhere('interaction', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%");
+            });
         }
         $results = $q->orderBy('test_case_id')->orderBy('role')->paginate((int) ($request->query('per_page') ?? 100));
 
