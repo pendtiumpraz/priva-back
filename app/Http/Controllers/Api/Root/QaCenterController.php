@@ -8,6 +8,7 @@ use App\Models\QaBugScreenshot;
 use App\Models\QaTestCase;
 use App\Models\QaTestResult;
 use App\Models\QaTestRun;
+use App\Services\AiService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -515,6 +516,142 @@ class QaCenterController extends Controller
         $shot->delete();
 
         return response()->json(['message' => 'Deleted']);
+    }
+
+    // =========================================================================
+    // AI Analyzer — ringkasan bugs + failed cases via chat provider
+    // =========================================================================
+
+    /**
+     * Kirim daftar failed/blocked results + open bugs ke AI chat provider,
+     * dapatkan ringkasan terkonsolidasi: top blockers per modul, prioritas
+     * fix, rekomendasi langkah berikutnya. Untuk dev biar gak baca per-row.
+     */
+    public function analyzeRun(Request $request, string $runId): JsonResponse
+    {
+        $run = QaTestRun::findOrFail($runId);
+
+        $failedResults = QaTestResult::where('test_run_id', $runId)
+            ->whereIn('status', ['fail', 'blocked'])
+            ->with(['testCase:id,module,feature,interaction,title,description'])
+            ->withCount('bugs')
+            ->limit(300)
+            ->get();
+
+        $openBugs = QaBugReport::whereIn('test_result_id', $failedResults->pluck('id'))
+            ->whereIn('status', ['open', 'in_progress'])
+            ->with(['testResult.testCase:id,module,feature,interaction,title'])
+            ->limit(150)
+            ->get();
+
+        if ($failedResults->isEmpty() && $openBugs->isEmpty()) {
+            return response()->json([
+                'data' => [
+                    'overall' => 'baik',
+                    'summary' => 'Tidak ada test case yang gagal/terblokir dan tidak ada bug terbuka di cycle ini. Sistem aman dari sisi QA.',
+                    'top_blockers' => [],
+                    'priority_fixes' => [],
+                    'next_steps' => ['Lanjutkan testing untuk role lain atau pindah ke cycle berikutnya.'],
+                ],
+                'context' => [
+                    'run_id' => $run->id,
+                    'failed_count' => 0,
+                    'blocked_count' => 0,
+                    'open_bug_count' => 0,
+                ],
+            ]);
+        }
+
+        $ai = new AiService(null, 'chat');
+        $ai->setLocale($request->user()->locale ?? 'id');
+
+        if (! $ai->isAvailable()) {
+            return response()->json(['message' => 'AI provider untuk mode chat belum dikonfigurasi. Set di /ai-providers.'], 503);
+        }
+
+        $failedByModule = $failedResults->groupBy(fn ($r) => $r->testCase?->module ?? 'unknown');
+        $bugsByModule = $openBugs->groupBy(fn ($b) => $b->testResult?->testCase?->module ?? 'unknown');
+
+        $contextLines = ['=== TEST CASES YANG GAGAL / TERBLOKIR ==='];
+        foreach ($failedByModule as $module => $items) {
+            $contextLines[] = "\n## {$module} (".count($items).' kasus)';
+            foreach ($items->take(20) as $r) {
+                $bugSuffix = ($r->bugs_count ?? 0) > 0 ? " [🐞 {$r->bugs_count} bug]" : '';
+                $contextLines[] = "- [{$r->status}] [{$r->role}] {$r->testCase?->title}{$bugSuffix}";
+                if ($r->notes) {
+                    $contextLines[] = '  Notes: '.mb_substr($r->notes, 0, 200);
+                }
+            }
+        }
+
+        $contextLines[] = "\n\n=== BUG YANG MASIH TERBUKA ===";
+        foreach ($bugsByModule as $module => $bugs) {
+            $contextLines[] = "\n## {$module} (".count($bugs).' bug)';
+            foreach ($bugs->take(15) as $b) {
+                $contextLines[] = "- [{$b->severity}] [{$b->status}] {$b->title}";
+                if ($b->description) {
+                    $contextLines[] = '  Detail: '.mb_substr($b->description, 0, 250);
+                }
+                if ($b->resolution_notes) {
+                    $contextLines[] = '  Resolution notes: '.mb_substr($b->resolution_notes, 0, 200);
+                }
+            }
+        }
+
+        $context = implode("\n", $contextLines);
+
+        $system = 'Kamu adalah Senior QA / Engineering Lead untuk platform compliance Privasimu. '
+            ."Tugasmu: review hasil QA cycle dan kasih ringkasan terkonsolidasi untuk developer.\n\n"
+            ."Output WAJIB JSON valid murni — tanpa markdown atau teks di luar JSON.\n\n"
+            ."Format:\n"
+            .json_encode([
+                'overall' => 'baik|perlu_perhatian|kritis',
+                'summary' => 'ringkasan 2-3 kalimat dalam Bahasa Indonesia tentang kondisi platform',
+                'top_blockers' => [[
+                    'module' => 'nama modul',
+                    'severity' => 'kritis|tinggi|sedang|ringan',
+                    'count' => 'integer',
+                    'description' => 'deskripsi singkat masalah',
+                    'affected_features' => ['feature.interaction', '...'],
+                ]],
+                'priority_fixes' => [[
+                    'priority' => 'P0|P1|P2|P3',
+                    'title' => 'judul fix',
+                    'reason' => 'kenapa perlu di-fix lebih dulu',
+                    'modules' => ['modul1', 'modul2'],
+                    'estimated_effort' => 'kecil|sedang|besar',
+                ]],
+                'patterns' => ['pola masalah yang berulang (mis: banyak fail di permission gates → recheck CheckPermission middleware)'],
+                'next_steps' => ['langkah konkret yang harus dilakukan dev minggu ini'],
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        $user = "Cycle: {$run->name}".($run->version ? " (v{$run->version})" : '')."\n\n"
+            ."{$context}\n\n"
+            ."=== INSTRUKSI ===\n"
+            ."1. Identifikasi top 5-10 blocker yang paling banyak / paling kritis (group per module).\n"
+            ."2. Susun priority_fixes urut P0→P3 berdasarkan severity dan dampak ke user.\n"
+            ."3. Kalau ada pola masalah berulang (mis. semua fail di soft_delete → race condition?), tulis di patterns.\n"
+            ."4. next_steps harus konkret — file mana yang harus dicek, atau action apa yang harus diambil.\n"
+            .'Jawab HANYA JSON valid sesuai format.';
+
+        $resp = $ai->ask($system, $user, 4000);
+
+        if (! is_array($resp)) {
+            return response()->json(['message' => 'AI mengembalikan response yang tidak valid. Coba lagi atau cek provider config.'], 502);
+        }
+
+        return response()->json([
+            'data' => $resp,
+            'context' => [
+                'run_id' => $run->id,
+                'cycle_name' => $run->name,
+                'failed_count' => $failedResults->where('status', 'fail')->count(),
+                'blocked_count' => $failedResults->where('status', 'blocked')->count(),
+                'open_bug_count' => $openBugs->count(),
+                'modules_affected' => $failedResults->pluck('testCase.module')->filter()->unique()->values(),
+                'analyzed_at' => now()->toIso8601String(),
+            ],
+        ]);
     }
 
     // =========================================================================

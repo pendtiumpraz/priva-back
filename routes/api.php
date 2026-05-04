@@ -1112,6 +1112,9 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::post('/runs/{id}/restore', [QaCenterController::class, 'restoreRun'])->where('id', '[0-9a-fA-F-]{36}');
         Route::delete('/runs/{id}/force', [QaCenterController::class, 'forceDeleteRun'])->where('id', '[0-9a-fA-F-]{36}');
 
+        // AI Analyzer per run
+        Route::post('/runs/{runId}/analyze', [QaCenterController::class, 'analyzeRun'])->where('runId', '[0-9a-fA-F-]{36}');
+
         // Test results (per run)
         Route::get('/runs/{runId}/results', [QaCenterController::class, 'listResults'])->where('runId', '[0-9a-fA-F-]{36}');
         Route::patch('/results/{id}', [QaCenterController::class, 'updateResult'])->where('id', '[0-9a-fA-F-]{36}');
