@@ -101,6 +101,7 @@ class MenuRegistrySeeder extends Seeder
             ['menu_key' => 'api-hub', 'label' => 'API Hub', 'href' => '/api-hub', 'icon' => 'Globe', 'section' => 'Platform (Root)', 'sort' => 740, 'roles' => self::PLATFORM_ROOT],
             ['menu_key' => 'menu-control', 'label' => 'Menu Control Matrix', 'href' => '/menu-control', 'icon' => 'Layers', 'section' => 'Platform (Root)', 'sort' => 750, 'roles' => self::PLATFORM_ROOT],
             ['menu_key' => 'platform-config', 'label' => 'Platform Config', 'href' => '/platform-config', 'icon' => 'Settings', 'section' => 'Platform (Root)', 'sort' => 760, 'roles' => self::PLATFORM_ROOT],
+            ['menu_key' => 'qa-center', 'label' => 'QA Center', 'href' => '/qa', 'icon' => 'ClipboardCheck', 'section' => 'Platform (Root)', 'sort' => 770, 'roles' => self::PLATFORM_ROOT],
 
             // Superadmin (not root)
             ['menu_key' => 'system-settings', 'label' => 'System Settings', 'href' => '/platform-admin/system-settings', 'icon' => 'Settings2', 'section' => 'Superadmin', 'sort' => 790, 'roles' => ['root', 'superadmin']],

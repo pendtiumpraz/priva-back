@@ -73,6 +73,7 @@ use App\Http\Controllers\Api\PublicLandingController;
 use App\Http\Controllers\Api\RaciTemplateController;
 use App\Http\Controllers\Api\RetentionPolicyController;
 use App\Http\Controllers\Api\RiskTreatmentPlanController;
+use App\Http\Controllers\Api\Root\QaCenterController;
 use App\Http\Controllers\Api\RootDashboardController;
 use App\Http\Controllers\Api\RopaApprovalController;
 use App\Http\Controllers\Api\RopaLinkController;
@@ -1088,6 +1089,47 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
     // Root Dashboard (platform-level aggregates)
     // =============================================
     Route::get('/root-dashboard', [RootDashboardController::class, 'index']);
+
+    // =============================================
+    // QA Center — root-only fitur untuk track test coverage seluruh platform
+    // =============================================
+    Route::prefix('root/qa')->group(function () {
+        // Test cases (catalog)
+        Route::get('/cases', [QaCenterController::class, 'listCases']);
+        Route::get('/cases/modules-summary', [QaCenterController::class, 'modulesSummary']);
+        Route::get('/cases/{id}', [QaCenterController::class, 'showCase'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::post('/cases', [QaCenterController::class, 'createCase']);
+        Route::put('/cases/{id}', [QaCenterController::class, 'updateCase'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::delete('/cases/{id}', [QaCenterController::class, 'deleteCase'])->where('id', '[0-9a-fA-F-]{36}');
+
+        // Test runs (cycles)
+        Route::get('/runs', [QaCenterController::class, 'listRuns']);
+        Route::post('/runs', [QaCenterController::class, 'createRun']);
+        Route::get('/runs/{id}', [QaCenterController::class, 'showRun'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::put('/runs/{id}', [QaCenterController::class, 'updateRun'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::delete('/runs/{id}', [QaCenterController::class, 'deleteRun'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::post('/runs/{id}/restore', [QaCenterController::class, 'restoreRun'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::delete('/runs/{id}/force', [QaCenterController::class, 'forceDeleteRun'])->where('id', '[0-9a-fA-F-]{36}');
+
+        // Test results (per run)
+        Route::get('/runs/{runId}/results', [QaCenterController::class, 'listResults'])->where('runId', '[0-9a-fA-F-]{36}');
+        Route::patch('/results/{id}', [QaCenterController::class, 'updateResult'])->where('id', '[0-9a-fA-F-]{36}');
+
+        // Bug reports
+        Route::get('/bugs', [QaCenterController::class, 'listBugs']);
+        Route::post('/bugs', [QaCenterController::class, 'createBug']);
+        Route::get('/bugs/{id}', [QaCenterController::class, 'showBug'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::patch('/bugs/{id}', [QaCenterController::class, 'updateBug'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::delete('/bugs/{id}', [QaCenterController::class, 'deleteBug'])->where('id', '[0-9a-fA-F-]{36}');
+
+        // Bug screenshots
+        Route::post('/bugs/{bugId}/screenshots', [QaCenterController::class, 'uploadScreenshot'])->where('bugId', '[0-9a-fA-F-]{36}');
+        Route::get('/screenshots/{id}/download', [QaCenterController::class, 'downloadScreenshot'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::delete('/screenshots/{id}', [QaCenterController::class, 'deleteScreenshot'])->where('id', '[0-9a-fA-F-]{36}');
+
+        // Dashboard
+        Route::get('/dashboard', [QaCenterController::class, 'dashboard']);
+    });
 
     // =============================================
     // Tenant Branding / Theme (per-org isolation)
