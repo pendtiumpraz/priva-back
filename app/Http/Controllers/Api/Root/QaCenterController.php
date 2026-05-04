@@ -157,7 +157,8 @@ class QaCenterController extends Controller
         $stats = QaTestResult::where('test_run_id', $id)
             ->selectRaw('status, count(*) as cnt')
             ->groupBy('status')
-            ->pluck('cnt', 'status');
+            ->pluck('cnt', 'status')
+            ->map(fn ($v) => (int) $v);
 
         $bugCount = QaBugReport::whereIn('test_result_id',
             QaTestResult::where('test_run_id', $id)->pluck('id')
@@ -528,13 +529,15 @@ class QaCenterController extends Controller
         $statusCounts = (clone $resultQuery)
             ->selectRaw('status, count(*) as cnt')
             ->groupBy('status')
-            ->pluck('cnt', 'status');
+            ->pluck('cnt', 'status')
+            ->map(fn ($v) => (int) $v);
 
         $byModule = (clone $resultQuery)
             ->join('qa_test_cases', 'qa_test_cases.id', '=', 'qa_test_results.test_case_id')
             ->selectRaw('qa_test_cases.module, qa_test_results.status, count(*) as cnt')
             ->groupBy('qa_test_cases.module', 'qa_test_results.status')
-            ->get();
+            ->get()
+            ->map(fn ($r) => ['module' => $r->module, 'status' => $r->status, 'cnt' => (int) $r->cnt]);
 
         $bugQuery = QaBugReport::query();
         if ($runId) {
@@ -543,11 +546,13 @@ class QaCenterController extends Controller
         $bugSeverity = (clone $bugQuery)
             ->selectRaw('severity, count(*) as cnt')
             ->groupBy('severity')
-            ->pluck('cnt', 'severity');
+            ->pluck('cnt', 'severity')
+            ->map(fn ($v) => (int) $v);
         $bugStatus = (clone $bugQuery)
             ->selectRaw('status, count(*) as cnt')
             ->groupBy('status')
-            ->pluck('cnt', 'status');
+            ->pluck('cnt', 'status')
+            ->map(fn ($v) => (int) $v);
 
         $totalCases = QaTestCase::where('is_active', true)->count();
 
