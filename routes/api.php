@@ -1222,6 +1222,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::get('/consent', [ExportController::class, 'consent']);
         Route::get('/consent-records', [ExportController::class, 'consentRecords']);
         Route::get('/gap-assessment', [ExportController::class, 'gapAssessment']);
+        Route::get('/gap-assessment/xlsx', [ExportController::class, 'gapAssessmentXlsx']);
         Route::get('/data-discovery', [ExportController::class, 'dataDiscovery']);
         Route::get('/data-discovery-columns', [ExportController::class, 'dataDiscoveryColumns']);
         Route::get('/simulation', [ExportController::class, 'simulation']);

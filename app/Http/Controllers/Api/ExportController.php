@@ -701,7 +701,9 @@ class ExportController extends Controller
             'Dibuat', 'Diperbarui',
         ];
 
-        $rows = $items->map(function ($g) {
+        $totalQuestions = count(GapAssessment::getQuestionBank('uupdp'));
+
+        $rows = $items->map(function ($g) use ($totalQuestions) {
             $answers = $g->answers ?? [];
             $answered = collect($answers)->filter(fn ($a) => ! empty($a))->count();
             $summary = $g->summary ?? [];
@@ -713,7 +715,7 @@ class ExportController extends Controller
                 $g->compliance_level ?? '-',
                 ($g->progress ?? 0).'%',
                 $answered,
-                count($answers) ?: 33,
+                $totalQuestions,
                 $summary['tata_kelola_score'] ?? '-',
                 $summary['siklus_proses_score'] ?? '-',
                 $g->created_at?->format('Y-m-d H:i'),
@@ -722,6 +724,355 @@ class ExportController extends Controller
         });
 
         return $this->streamCsv('gap_assessment_export_'.date('Y-m-d').'.csv', $headers, $rows);
+    }
+
+    // =============================================
+    // Gap Assessment XLSX Export — multi-sheet structured workbook
+    // Sheets: Ringkasan | Detail Jawaban | Skor per Kategori
+    // =============================================
+    public function gapAssessmentXlsx(Request $request): StreamedResponse
+    {
+        $items = $this->getQuery($request, GapAssessment::class)
+            ->whereNull('deleted_at')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Question bank (single source of truth for headers, weights, recs).
+        $questionBank = GapAssessment::getQuestionBank('uupdp');
+        $totalQuestions = count($questionBank);
+
+        // Distinct categories (preserving order of first appearance).
+        $categories = [];
+        foreach ($questionBank as $q) {
+            $cat = $q['category'] ?? 'General';
+            if (! in_array($cat, $categories, true)) {
+                $categories[] = $cat;
+            }
+        }
+
+        // Map raw answer → label.
+        $answerLabel = static function ($raw): string {
+            return match ($raw) {
+                'yes' => 'Sudah Memenuhi',
+                'partial' => 'Memenuhi Sebagian',
+                'no' => 'Belum Memenuhi',
+                'na' => 'Tidak Berlaku',
+                null, '' => '-',
+                default => (string) $raw,
+            };
+        };
+
+        // Score earned per question per the GapAssessment model logic
+        // (yes=full weight, partial=½, no/na=0).
+        $perQuestionScore = static function ($raw, int $weight): string {
+            if ($raw === 'yes') {
+                return (string) $weight;
+            }
+            if ($raw === 'partial') {
+                return (string) ($weight * 0.5);
+            }
+            if ($raw === 'no') {
+                return '0';
+            }
+
+            return '-';
+        };
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet;
+        $spreadsheet->getProperties()
+            ->setCreator('Privasimu Nexus')
+            ->setTitle('GAP Assessment Export')
+            ->setSubject('GAP Assessment')
+            ->setDescription('Multi-sheet GAP assessment export');
+
+        // Reusable header style: bold + light-blue fill + thin border + centered.
+        $headerStyle = [
+            'font' => ['bold' => true, 'color' => ['rgb' => '1F3864']],
+            'fill' => [
+                'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                'startColor' => ['rgb' => 'B4C7E7'],
+            ],
+            'alignment' => [
+                'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+                'wrapText' => true,
+            ],
+            'borders' => [
+                'allBorders' => [
+                    'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                    'color' => ['rgb' => '8FAADC'],
+                ],
+            ],
+        ];
+
+        // ============================================================
+        // SHEET 1: Ringkasan
+        // ============================================================
+        $sheet1 = $spreadsheet->getActiveSheet();
+        $sheet1->setTitle('Ringkasan');
+
+        $sheet1Headers = [
+            'Assessment ID', 'Versi', 'Tanggal Dibuat', 'Tanggal Diperbarui',
+            'Progress (%)', 'Skor Keseluruhan (%)', 'Level Kepatuhan',
+            'Skor Tata Kelola', 'Skor Siklus Proses',
+            'Jumlah Soal Dijawab', 'Total Soal',
+        ];
+        $sheet1->fromArray($sheet1Headers, null, 'A1');
+        $lastCol1 = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($sheet1Headers));
+        $sheet1->getStyle("A1:{$lastCol1}1")->applyFromArray($headerStyle);
+        $sheet1->getRowDimension(1)->setRowHeight(28);
+        $sheet1->freezePane('A2');
+
+        $row = 2;
+        foreach ($items as $g) {
+            $answers = is_array($g->answers) ? $g->answers : [];
+            $answered = collect($answers)->filter(fn ($a) => ! empty($a) && $a !== 'na')->count();
+            $summary = [];
+            // Compute per-category score from the question bank for the
+            // Tata Kelola / Siklus Proses summary cells.
+            $catTotals = [];
+            foreach ($questionBank as $q) {
+                $cat = $q['category'] ?? 'General';
+                $catTotals[$cat] ??= ['total' => 0, 'earned' => 0];
+                $a = $answers[$q['id']] ?? null;
+                $w = (int) ($q['weight'] ?? 0);
+                if ($a === 'na') {
+                    continue;
+                }
+                $catTotals[$cat]['total'] += $w;
+                if ($a === 'yes') {
+                    $catTotals[$cat]['earned'] += $w;
+                } elseif ($a === 'partial') {
+                    $catTotals[$cat]['earned'] += $w * 0.5;
+                }
+            }
+            $tataKelola = isset($catTotals['Tata Kelola']) && $catTotals['Tata Kelola']['total'] > 0
+                ? round(($catTotals['Tata Kelola']['earned'] / $catTotals['Tata Kelola']['total']) * 100, 2)
+                : '-';
+            $siklus = isset($catTotals['Siklus Proses PDP']) && $catTotals['Siklus Proses PDP']['total'] > 0
+                ? round(($catTotals['Siklus Proses PDP']['earned'] / $catTotals['Siklus Proses PDP']['total']) * 100, 2)
+                : '-';
+
+            $sheet1->fromArray([
+                $g->id,
+                $g->version ?? '1.0',
+                $g->created_at?->format('Y-m-d H:i'),
+                $g->updated_at?->format('Y-m-d H:i'),
+                ($g->progress ?? 0),
+                ($g->overall_score ?? $g->score ?? 0),
+                $g->compliance_level ?? '-',
+                $tataKelola,
+                $siklus,
+                $answered,
+                $totalQuestions,
+            ], null, "A{$row}");
+            $row++;
+        }
+
+        // Bordered body rows.
+        if ($row > 2) {
+            $sheet1->getStyle("A2:{$lastCol1}".($row - 1))->applyFromArray([
+                'borders' => [
+                    'allBorders' => [
+                        'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                        'color' => ['rgb' => 'D0D7E2'],
+                    ],
+                ],
+                'alignment' => ['vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+            ]);
+        }
+
+        // Explicit column widths (avoid auto-calc cost on large datasets).
+        $widths1 = [38, 8, 18, 18, 12, 18, 16, 16, 18, 18, 12];
+        foreach ($widths1 as $i => $w) {
+            $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
+            $sheet1->getColumnDimension($col)->setWidth($w);
+        }
+
+        // ============================================================
+        // SHEET 2: Detail Jawaban
+        // ============================================================
+        $sheet2 = $spreadsheet->createSheet();
+        $sheet2->setTitle('Detail Jawaban');
+
+        $sheet2Headers = [
+            'Assessment Versi', 'Kategori', 'Kode Soal', 'Pertanyaan',
+            'Jawaban', 'Bobot', 'Skor Pertanyaan', 'Rekomendasi',
+        ];
+        $sheet2->fromArray($sheet2Headers, null, 'A1');
+        $lastCol2 = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($sheet2Headers));
+        $sheet2->getStyle("A1:{$lastCol2}1")->applyFromArray($headerStyle);
+        $sheet2->getRowDimension(1)->setRowHeight(28);
+        $sheet2->freezePane('A2');
+
+        $row = 2;
+        $separatorRows = []; // Track rows that should render as a thin separator.
+
+        foreach ($items as $idx => $g) {
+            $answers = is_array($g->answers) ? $g->answers : [];
+            $version = $g->version ?? '1.0';
+            $assessmentLabel = $version.' ('.($g->id ?? '').')';
+
+            foreach ($questionBank as $q) {
+                $qid = $q['id'];
+                $raw = $answers[$qid] ?? null;
+                $weight = (int) ($q['weight'] ?? 0);
+                $rec = '';
+                if (in_array($raw, ['no', 'partial'], true)) {
+                    $rec = (string) ($q['recommendation'] ?? '');
+                }
+
+                $sheet2->fromArray([
+                    $assessmentLabel,
+                    $q['category'] ?? '-',
+                    $qid,
+                    (string) ($q['question'] ?? ''),
+                    $answerLabel($raw),
+                    $weight,
+                    $perQuestionScore($raw, $weight),
+                    $rec,
+                ], null, "A{$row}");
+                $row++;
+            }
+
+            // Insert a visual separator row between assessments (except after the last one).
+            if ($idx < $items->count() - 1) {
+                $separatorRows[] = $row;
+                $row++;
+            }
+        }
+
+        if ($row > 2) {
+            $bodyRange = "A2:{$lastCol2}".($row - 1);
+            $sheet2->getStyle($bodyRange)->applyFromArray([
+                'borders' => [
+                    'allBorders' => [
+                        'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                        'color' => ['rgb' => 'D0D7E2'],
+                    ],
+                ],
+                'alignment' => [
+                    'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP,
+                    'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT,
+                    'wrapText' => true,
+                ],
+            ]);
+
+            // Style separator rows: light grey fill, thicker bottom border.
+            foreach ($separatorRows as $sr) {
+                $sheet2->getStyle("A{$sr}:{$lastCol2}{$sr}")->applyFromArray([
+                    'fill' => [
+                        'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                        'startColor' => ['rgb' => 'E7E6E6'],
+                    ],
+                    'borders' => [
+                        'bottom' => [
+                            'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_MEDIUM,
+                            'color' => ['rgb' => '8FAADC'],
+                        ],
+                    ],
+                ]);
+                $sheet2->getRowDimension($sr)->setRowHeight(8);
+            }
+        }
+
+        // Column widths — wide for Pertanyaan/Rekomendasi (wrap text).
+        // A:Versi B:Kategori C:Kode D:Pertanyaan E:Jawaban F:Bobot G:Skor H:Rekomendasi
+        $widths2 = [22, 22, 16, 50, 18, 8, 14, 50];
+        foreach ($widths2 as $i => $w) {
+            $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
+            $sheet2->getColumnDimension($col)->setWidth($w);
+        }
+
+        // ============================================================
+        // SHEET 3: Skor per Kategori (pivot)
+        // ============================================================
+        $sheet3 = $spreadsheet->createSheet();
+        $sheet3->setTitle('Skor per Kategori');
+
+        $sheet3Headers = array_merge(
+            ['Assessment ID', 'Versi', 'Tanggal Dibuat'],
+            array_map(static fn ($c) => $c.' (%)', $categories)
+        );
+        $sheet3->fromArray($sheet3Headers, null, 'A1');
+        $lastCol3 = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($sheet3Headers));
+        $sheet3->getStyle("A1:{$lastCol3}1")->applyFromArray($headerStyle);
+        $sheet3->getRowDimension(1)->setRowHeight(28);
+        $sheet3->freezePane('A2');
+
+        $row = 2;
+        foreach ($items as $g) {
+            $answers = is_array($g->answers) ? $g->answers : [];
+            // Recompute per-category scores against the live question bank.
+            $catScores = [];
+            foreach ($categories as $cat) {
+                $catScores[$cat] = ['total' => 0, 'earned' => 0];
+            }
+            foreach ($questionBank as $q) {
+                $cat = $q['category'] ?? 'General';
+                $a = $answers[$q['id']] ?? null;
+                $w = (int) ($q['weight'] ?? 0);
+                if ($a === 'na') {
+                    continue;
+                }
+                $catScores[$cat]['total'] += $w;
+                if ($a === 'yes') {
+                    $catScores[$cat]['earned'] += $w;
+                } elseif ($a === 'partial') {
+                    $catScores[$cat]['earned'] += $w * 0.5;
+                }
+            }
+
+            $rowVals = [
+                $g->id,
+                $g->version ?? '1.0',
+                $g->created_at?->format('Y-m-d H:i'),
+            ];
+            foreach ($categories as $cat) {
+                $t = $catScores[$cat]['total'];
+                $rowVals[] = $t > 0
+                    ? round(($catScores[$cat]['earned'] / $t) * 100, 2)
+                    : '-';
+            }
+            $sheet3->fromArray($rowVals, null, "A{$row}");
+            $row++;
+        }
+
+        if ($row > 2) {
+            $sheet3->getStyle("A2:{$lastCol3}".($row - 1))->applyFromArray([
+                'borders' => [
+                    'allBorders' => [
+                        'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                        'color' => ['rgb' => 'D0D7E2'],
+                    ],
+                ],
+                'alignment' => ['vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+            ]);
+        }
+
+        // Column widths for sheet 3.
+        $sheet3->getColumnDimension('A')->setWidth(38);
+        $sheet3->getColumnDimension('B')->setWidth(8);
+        $sheet3->getColumnDimension('C')->setWidth(18);
+        for ($i = 4; $i <= count($sheet3Headers); $i++) {
+            $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i);
+            $sheet3->getColumnDimension($col)->setWidth(26);
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $filename = 'gap_assessment_export_'.date('Y-m-d').'.xlsx';
+
+        return response()->streamDownload(function () use ($spreadsheet) {
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $writer->save('php://output');
+            $spreadsheet->disconnectWorksheets();
+            unset($spreadsheet);
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control' => 'max-age=0',
+        ]);
     }
 
     // =============================================
