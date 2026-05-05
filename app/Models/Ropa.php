@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToOrg;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -10,6 +11,57 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Ropa extends Model
 {
     use BelongsToOrg, HasUuids, SoftDeletes;
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $ropa): void {
+            $ropa->retention_due_date = $ropa->computeRetentionDueDate();
+        });
+    }
+
+    /**
+     * Estimate retention end date from retensi_list[0..n].duration.
+     * Picks the longest finite duration across all attached policies and
+     * adds it to created_at (or now() for new records). Returns null when
+     * no finite duration is found (incl. all 'indefinite' policies).
+     *
+     * Note: This is an estimate — the real "due" depends on trigger_event
+     * (e.g. "setelah hubungan kerja berakhir") which we cannot resolve to
+     * a concrete date here. Used to power Due-in-30-Days / Overdue cards.
+     */
+    public function computeRetentionDueDate(): ?Carbon
+    {
+        $rows = $this->retensi_rows ?? [];
+        if (empty($rows)) {
+            return null;
+        }
+
+        $longestDays = 0;
+        foreach ($rows as $row) {
+            $unit = $row['duration_unit'] ?? null;
+            $value = (int) ($row['duration_value'] ?? 0);
+            if ($unit === 'indefinite' || $value <= 0) {
+                continue;
+            }
+            $days = match ($unit) {
+                'day' => $value,
+                'month' => (int) round($value * 30.4375),
+                'year' => (int) round($value * 365.25),
+                default => 0,
+            };
+            if ($days > $longestDays) {
+                $longestDays = $days;
+            }
+        }
+
+        if ($longestDays === 0) {
+            return null;
+        }
+
+        $base = $this->created_at ?? now();
+
+        return $base->copy()->addDays($longestDays);
+    }
 
     protected $fillable = [
         'org_id', 'regulation_code', 'category_id', 'custom_number', 'registration_number',
