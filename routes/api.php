@@ -238,7 +238,9 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
     Route::prefix('gap')->group(
         function () {
             Route::post('/comparisons', [GapComparisonController::class, 'store'])->middleware('permission:gap_assessment,write');
+            Route::post('/comparisons/benchmark', [GapComparisonController::class, 'storeBenchmark'])->middleware('permission:gap_assessment,write');
             Route::get('/comparisons', [GapComparisonController::class, 'index'])->middleware('permission:gap_assessment,read');
+            Route::get('/benchmark', [GapComparisonController::class, 'benchmark'])->middleware('permission:gap_assessment,read');
             Route::get('/', [GapAssessmentController::class, 'index'])->middleware('permission:gap_assessment,read');
             Route::get('/compare', [GapAssessmentController::class, 'compare'])->middleware('permission:gap_assessment,read');
             Route::get('/regulations', [GapAssessmentController::class, 'getRegulations'])->middleware('permission:gap_assessment,read');
@@ -357,6 +359,10 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::post('/submit', [RopaApprovalController::class, 'submit'])->middleware('permission:ropa,write');
         Route::post('/approve', [RopaApprovalController::class, 'approve'])->middleware('permission:ropa,write');
         Route::post('/reject', [RopaApprovalController::class, 'reject'])->middleware('permission:ropa,write');
+        // Per-section approval (issue ROPA #17a). Section keys must match Ropa::WIZARD_SECTIONS.
+        Route::post('/sections/{sectionKey}/approve', [RopaApprovalController::class, 'approveSection'])->middleware('permission:ropa,write');
+        Route::post('/sections/{sectionKey}/reject', [RopaApprovalController::class, 'rejectSection'])->middleware('permission:ropa,write');
+        Route::post('/sections/{sectionKey}/comment', [RopaApprovalController::class, 'commentSection'])->middleware('permission:ropa,write');
     });
 
     // =============================================

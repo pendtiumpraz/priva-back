@@ -2,10 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use App\Models\GapComparison;
 use App\Models\GapAssessment;
+use App\Models\GapComparison;
 use App\Services\AiService;
+use App\Services\GapBenchmarkService;
+use Illuminate\Http\Request;
 
 class GapComparisonController extends Controller
 {
@@ -119,5 +120,114 @@ class GapComparisonController extends Controller
         } catch (\Exception $e) {}
 
         return response()->json(['data' => $comparison], 201);
+    }
+
+    /**
+     * GET /api/gap/benchmark — return per-category targets for the caller's
+     * organization industry (or `?industry=` override). Used by the FE
+     * "Bandingkan ke Standar Industri" flow before saving the comparison.
+     */
+    public function benchmark(Request $request)
+    {
+        $regCode = $request->query('regulation', 'uupdp');
+        $industry = $request->query('industry') ?? optional($request->user()->organization)->industry;
+        $series = GapBenchmarkService::buildSeriesFor($industry, $regCode);
+
+        return response()->json([
+            'regulation_code' => $regCode,
+            'industry' => $industry,
+            'industry_label' => $series['industry_label'],
+            'industry_scores' => $series['industry'],
+            'minimum_scores' => $series['minimum'],
+            'available_industries' => GapBenchmarkService::listIndustries(),
+        ]);
+    }
+
+    /**
+     * POST /api/gap/comparisons/benchmark — create a saved comparison
+     * between one assessment and the industry standard + UU PDP minimum.
+     * Stored as a regular GapComparison row (chart_data carries 3 series:
+     * "Anda", "Standar Industri", "Minimum UU PDP").
+     */
+    public function storeBenchmark(Request $request)
+    {
+        $request->validate([
+            'assessment_id' => 'required|string|exists:gap_assessments,id',
+            'title' => 'nullable|string',
+            'industry' => 'nullable|string',
+        ]);
+
+        $assessment = GapAssessment::where('org_id', $request->user()->org_id)
+            ->where('id', $request->input('assessment_id'))
+            ->firstOrFail();
+
+        $regCode = $assessment->regulation_code ?? 'uupdp';
+        $industry = $request->input('industry') ?? optional($request->user()->organization)->industry;
+
+        $qBank = GapAssessment::getQuestionBank($regCode);
+        $categories = array_values(array_unique(array_column($qBank, 'category')));
+
+        $calc = GapAssessment::calculateScore($assessment->answers ?: [], $regCode);
+        $series = GapBenchmarkService::buildSeriesFor($industry, $regCode);
+
+        $youLabel = $assessment->version ?: 'Anda';
+        $industryLabel = "Standar {$series['industry_label']}";
+        $minimumLabel = 'Minimum UU PDP';
+
+        $chartData = [];
+        $gaps = [];
+        foreach ($categories as $cat) {
+            $you = (float) ($calc['category_breakdown'][$cat] ?? 0);
+            $ind = (float) ($series['industry'][$cat] ?? 0);
+            $min = (float) ($series['minimum'][$cat] ?? 0);
+            $chartData[] = [
+                'category' => $cat,
+                $youLabel => $you,
+                $industryLabel => $ind,
+                $minimumLabel => $min,
+            ];
+            $gaps[$cat] = [
+                'you' => $you,
+                'industry' => $ind,
+                'minimum' => $min,
+                'gap_to_industry' => round($you - $ind, 1),
+                'gap_to_minimum' => round($you - $min, 1),
+            ];
+        }
+
+        // Build a quick narrative
+        $belowMinimum = array_filter($gaps, fn ($g) => $g['gap_to_minimum'] < 0);
+        $belowIndustry = array_filter($gaps, fn ($g) => $g['gap_to_industry'] < 0);
+
+        $analysis = "Perbandingan terhadap **{$series['industry_label']}** & Minimum UU PDP:\n\n";
+        if (! empty($belowMinimum)) {
+            $analysis .= "- ⚠️ Kategori di bawah ambang Minimum UU PDP: ".implode(', ', array_map(fn ($k) => "**{$k}** (gap ".$gaps[$k]['gap_to_minimum'].'%)', array_keys($belowMinimum)))."\n";
+        } else {
+            $analysis .= "- ✅ Semua kategori memenuhi Minimum UU PDP.\n";
+        }
+        if (! empty($belowIndustry)) {
+            $analysis .= '- 📉 Di bawah standar industri pada: '.implode(', ', array_map(fn ($k) => "**{$k}** (gap ".$gaps[$k]['gap_to_industry'].'%)', array_keys($belowIndustry)))."\n";
+        } else {
+            $analysis .= "- 🏆 Di atas/setara standar industri di seluruh kategori.\n";
+        }
+
+        $title = $request->input('title') ?: "Bandingkan ke {$series['industry_label']} — {$assessment->version}";
+
+        $comparison = GapComparison::create([
+            'id' => \Illuminate\Support\Str::uuid()->toString(),
+            'org_id' => $request->user()->org_id,
+            'title' => $title,
+            'regulation_code' => $regCode,
+            'assessment_ids' => [$assessment->id],
+            'chart_data' => $chartData,
+            'system_analysis' => $analysis,
+            'created_by' => $request->user()->id,
+        ]);
+
+        return response()->json(['data' => $comparison, 'meta' => [
+            'industry' => $industry,
+            'industry_label' => $series['industry_label'],
+            'gaps' => $gaps,
+        ]], 201);
     }
 }
