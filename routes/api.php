@@ -245,6 +245,14 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
             Route::get('/compare', [GapAssessmentController::class, 'compare'])->middleware('permission:gap_assessment,read');
             Route::get('/regulations', [GapAssessmentController::class, 'getRegulations'])->middleware('permission:gap_assessment,read');
             Route::get('/questions', [GapAssessmentController::class, 'questions'])->middleware('permission:gap_assessment,read');
+
+            // Custom Questions CRUD (Sprint B2). MUST precede /{id} or Laravel
+            // routes GET /gap/custom-questions to show($id='custom-questions') → 404.
+            Route::get('/custom-questions', [GapAssessmentController::class, 'customQuestions'])->middleware('permission:gap_assessment,read');
+            Route::post('/custom-questions', [GapAssessmentController::class, 'storeCustomQuestion'])->middleware('permission:gap_assessment,write');
+            Route::put('/custom-questions/{id}', [GapAssessmentController::class, 'updateCustomQuestion'])->middleware('permission:gap_assessment,write');
+            Route::delete('/custom-questions/{id}', [GapAssessmentController::class, 'destroyCustomQuestion'])->middleware('permission:gap_assessment,write');
+
             Route::post('/', [GapAssessmentController::class, 'store'])->middleware('permission:gap_assessment,write');
             Route::get('/{id}', [GapAssessmentController::class, 'show'])->middleware('permission:gap_assessment,read');
             Route::post('/{id}/submit', [GapAssessmentController::class, 'submitAnswers'])->middleware('permission:gap_assessment,write');
@@ -252,12 +260,6 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
             Route::post('/{id}/restore', [GapAssessmentController::class, 'restore'])->middleware('permission:gap_assessment,write');
             Route::delete('/{id}/force', [GapAssessmentController::class, 'forceDelete'])->middleware('permission:gap_assessment,write');
             Route::post('/{id}/upload-evidence', [GapAssessmentController::class, 'uploadEvidence'])->middleware('permission:gap_assessment,write');
-
-            // Custom Questions CRUD (Sprint B2)
-            Route::get('/custom-questions', [GapAssessmentController::class, 'customQuestions'])->middleware('permission:gap_assessment,read');
-            Route::post('/custom-questions', [GapAssessmentController::class, 'storeCustomQuestion'])->middleware('permission:gap_assessment,write');
-            Route::put('/custom-questions/{id}', [GapAssessmentController::class, 'updateCustomQuestion'])->middleware('permission:gap_assessment,write');
-            Route::delete('/custom-questions/{id}', [GapAssessmentController::class, 'destroyCustomQuestion'])->middleware('permission:gap_assessment,write');
         }
     );
 
