@@ -33,17 +33,25 @@ class GapAssessment extends Model
         $earnedWeight = 0;
         $recommendations = [];
         $categoryScores = [];
+        $subcategoryScores = [];
+        $subcategoryToCategory = [];
 
         foreach ($questions as $q) {
             $qId = $q['id'];
             $answer = $answers[$qId] ?? null;
             $weight = $q['weight'];
             $totalWeight += $weight;
+            $sub = $q['subcategory'] ?? '—';
+            $subcategoryToCategory[$sub] = $q['category'];
 
             if (! isset($categoryScores[$q['category']])) {
                 $categoryScores[$q['category']] = ['total' => 0, 'earned' => 0];
             }
+            if (! isset($subcategoryScores[$sub])) {
+                $subcategoryScores[$sub] = ['total' => 0, 'earned' => 0];
+            }
             $categoryScores[$q['category']]['total'] += $weight;
+            $subcategoryScores[$sub]['total'] += $weight;
 
             $score = match ($answer) {
                 'yes' => $weight,
@@ -56,9 +64,11 @@ class GapAssessment extends Model
             if ($answer === 'na') {
                 $totalWeight -= $weight; // Don't count N/A
                 $categoryScores[$q['category']]['total'] -= $weight;
+                $subcategoryScores[$sub]['total'] -= $weight;
             } else {
                 $earnedWeight += $score;
                 $categoryScores[$q['category']]['earned'] += $score;
+                $subcategoryScores[$sub]['earned'] += $score;
             }
 
             // Generate recommendation untuk jawaban No atau Partial
@@ -84,6 +94,13 @@ class GapAssessment extends Model
                 ? round(($scores['earned'] / $scores['total']) * 100, 2)
                 : 0;
         }
+        // Hitung per subkategori
+        $subBreakdown = [];
+        foreach ($subcategoryScores as $sub => $scores) {
+            $subBreakdown[$sub] = $scores['total'] > 0
+                ? round(($scores['earned'] / $scores['total']) * 100, 2)
+                : 0;
+        }
 
         // Sort recommendations by priority
         usort($recommendations, function ($a, $b) {
@@ -96,6 +113,8 @@ class GapAssessment extends Model
             'overall_score' => $overallScore,
             'compliance_level' => $level,
             'category_breakdown' => $breakdown,
+            'subcategory_breakdown' => $subBreakdown,
+            'subcategory_to_category' => $subcategoryToCategory,
             'recommendations' => $recommendations,
             'total_questions' => count($questions),
             'answered' => count(array_filter($answers, fn ($a) => $a !== null)),

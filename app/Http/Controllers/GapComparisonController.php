@@ -34,32 +34,32 @@ class GapComparisonController extends Controller
             return response()->json(['message' => 'Minimum 2 assessments are required'], 400);
         }
 
-        $qBank = GapAssessment::getQuestionBank($regCode);
-        $categories = array_values(array_unique(array_column($qBank, 'category')));
-
         $chartData = [];
-        $trends = []; // Store the first and last score per category
+        $trends = []; // Store the first and last score per subcategory
 
         $firstAssessment = $assessments->first();
         $lastAssessment = $assessments->last();
         $calcFirst = GapAssessment::calculateScore($firstAssessment->answers ?: [], $regCode);
         $calcLast = GapAssessment::calculateScore($lastAssessment->answers ?: [], $regCode);
 
-        foreach ($categories as $cat) {
-            $row = ['category' => $cat];
+        // Subcategory granularity for the radar (UU PDP has only 2 top-level
+        // categories — too few spokes for a meaningful polygon).
+        $subKeys = array_keys($calcFirst['subcategory_breakdown'] ?? []);
+
+        foreach ($subKeys as $sub) {
+            $row = ['category' => $sub];
             foreach ($assessments as $assessment) {
                 $calc = GapAssessment::calculateScore($assessment->answers ?: [], $regCode);
-                $row[$assessment->version] = $calc['category_breakdown'][$cat] ?? 0;
+                $row[$assessment->version] = $calc['subcategory_breakdown'][$sub] ?? 0;
             }
             $chartData[] = $row;
-            
-            // Calculate trend delta (Last - First)
-            $startScore = $calcFirst['category_breakdown'][$cat] ?? 0;
-            $endScore = $calcLast['category_breakdown'][$cat] ?? 0;
-            $trends[$cat] = [
+
+            $startScore = $calcFirst['subcategory_breakdown'][$sub] ?? 0;
+            $endScore = $calcLast['subcategory_breakdown'][$sub] ?? 0;
+            $trends[$sub] = [
                 'start' => $startScore,
                 'end' => $endScore,
-                'delta' => $endScore - $startScore
+                'delta' => $endScore - $startScore,
             ];
         }
 
@@ -164,9 +164,6 @@ class GapComparisonController extends Controller
         $regCode = $assessment->regulation_code ?? 'uupdp';
         $industry = $request->input('industry') ?? optional($request->user()->organization)->industry;
 
-        $qBank = GapAssessment::getQuestionBank($regCode);
-        $categories = array_values(array_unique(array_column($qBank, 'category')));
-
         $calc = GapAssessment::calculateScore($assessment->answers ?: [], $regCode);
         $series = GapBenchmarkService::buildSeriesFor($industry, $regCode);
 
@@ -174,24 +171,30 @@ class GapComparisonController extends Controller
         $industryLabel = "Standar {$series['industry_label']}";
         $minimumLabel = 'Minimum UU PDP';
 
+        // Use subcategory granularity (UU PDP has only 2 categories — radar with
+        // 2 spokes degenerates to a line). 14 subcategories give a proper polygon.
+        $subBreakdown = $calc['subcategory_breakdown'] ?? [];
+        $subToCat = $calc['subcategory_to_category'] ?? [];
+
         $chartData = [];
         $gaps = [];
-        foreach ($categories as $cat) {
-            $you = (float) ($calc['category_breakdown'][$cat] ?? 0);
-            $ind = (float) ($series['industry'][$cat] ?? 0);
-            $min = (float) ($series['minimum'][$cat] ?? 0);
+        foreach ($subBreakdown as $sub => $you) {
+            $parentCat = $subToCat[$sub] ?? null;
+            $ind = (float) ($series['industry'][$parentCat] ?? 0);
+            $min = (float) ($series['minimum'][$parentCat] ?? 0);
             $chartData[] = [
-                'category' => $cat,
-                $youLabel => $you,
+                'category' => $sub,
+                $youLabel => (float) $you,
                 $industryLabel => $ind,
                 $minimumLabel => $min,
             ];
-            $gaps[$cat] = [
-                'you' => $you,
+            $gaps[$sub] = [
+                'parent_category' => $parentCat,
+                'you' => (float) $you,
                 'industry' => $ind,
                 'minimum' => $min,
-                'gap_to_industry' => round($you - $ind, 1),
-                'gap_to_minimum' => round($you - $min, 1),
+                'gap_to_industry' => round((float) $you - $ind, 1),
+                'gap_to_minimum' => round((float) $you - $min, 1),
             ];
         }
 
