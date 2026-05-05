@@ -226,16 +226,37 @@ class ExportController extends Controller
         $headers = [
             'No. Registrasi', 'Aktivitas Pemrosesan', 'Tujuan', 'Dasar Hukum',
             'Entitas', 'Divisi', 'Unit Kerja', 'Deskripsi',
-            'Kategori Pemrosesan (Pengendali/Prosesor)',
+            'Kategori Pemrosesan (Pengendali/Prosesor/Bersama)',
             'Nama DPO', 'Email DPO', 'Telepon DPO',
             'Jenis Pemrosesan', 'Sistem Terkait',
-            'Sumber Data', 'Kategori Subjek (Array)', 'Jenis Data (Array)',
-            'Jenis Data Spesifik', 'Jenis Data Umum', 'Jenis Data PII',
-            'Pihak Pemroses', 'Kategori Pihak', 'Pihak Ketiga',
-            'Penerima Data', 'Transfer Luar Negeri', 'Negara Tujuan', 'Safeguards',
-            'Kontrol Keamanan', 'Masa Retensi', 'Prosedur Pemusnahan',
+            // Sec 3 — Bantuan AI sub-Q
+            'Bantuan AI', 'Nama Teknologi AI', 'Tujuan AI',
+            // Sec 3 — Dasar Pemrosesan sub-Q
+            'Dokumen Dasar — Nama', 'Dokumen Dasar — Nomor', 'Dokumen Dasar — Tanggal', 'Dokumen Dasar — Lokasi',
+            'Regulasi Dasar — Nama', 'Regulasi Dasar — Nomor', 'Kondisi Pemrosesan', 'Dokumentasi LIA',
+            // Sec 4 — Sumber Data
+            'Sumber Data (Legacy)', 'Sumber Data (Multi)', 'Sumber Data — Detail',
+            'Kategori Subjek (Array)', 'Jenis Data (Array)',
+            'Jenis Data Spesifik (Dikumpulkan)', 'Jenis Data Umum (Dikumpulkan)', 'Jenis Data PII (Dikumpulkan)',
+            // Sec 5 — Penggunaan/Penyimpanan
+            'Pihak Pemroses', 'Kategori Pihak', 'Kategori Pihak — Lainnya', 'Pihak Ketiga (Y/N)', 'Vendor TPRM (IDs)', 'Vendor TPRM (Nama)',
+            // Sec 6 — Penerima Internal
+            'Penerima Internal (Y/N)', 'Internal — Divisi', 'Internal — PIC', 'Internal — Email PIC', 'Internal — Telepon PIC',
+            // Sec 6 — Penerima Eksternal
+            'Penerima Eksternal (Y/N)', 'Eksternal — Organisasi', 'Eksternal — Alamat', 'Eksternal — PIC', 'Eksternal — Email PIC', 'Eksternal — Telepon PIC', 'Eksternal — Sistem Informasi',
+            // Sec 6 — Jenis data dikirimkan
+            'Jenis Data Spesifik (Dikirimkan)', 'Jenis Data Umum (Dikirimkan)', 'Jenis Data PII (Dikirimkan)',
+            // Sec 6 — Transfer LN
+            'Transfer Luar Negeri (Y/N)', 'Negara Tujuan', 'Dasar Transfer LN', 'Safeguards (Catatan)',
+            // Sec 7 — Retensi & Keamanan
+            'Kontrol Keamanan', 'Masa Retensi', 'Retensi Due Date',
+            'Ada Prosedur Pemusnahan', 'Prosedur Pemusnahan (Deskripsi)', 'Pemusnahan Terakhir', 'Berita Acara Pemusnahan',
+            'Pernah Insiden', 'Insiden — Penjelasan',
+            // Approval state
+            'Status', 'Approval — Section Status',
+            // Legacy normalized columns (kept for back-compat)
             'Kategori Data', 'Subjek Data', 'Penerima (Array)', 'Security Measures',
-            'Level Risiko', 'Status', 'Progress (%)', 'Dibuat', 'Diperbarui',
+            'Level Risiko', 'Progress (%)', 'Dibuat', 'Diperbarui',
         ];
         // Append org-global custom field columns
         foreach ($customFields as $cf) {
@@ -246,7 +267,31 @@ class ExportController extends Controller
             $headers[] = '[Per-Record] - '.$ex['field_label'];
         }
 
-        $rows = $items->map(function ($r) use ($customFields, $perRecordExtras) {
+        // Pre-resolve all vendor names referenced across the export so we don't
+        // fire one query per row. Walk the items, collect distinct vendor_ids
+        // from wizard_data.penggunaan_penyimpanan.vendor_ids[], fetch in bulk.
+        $allVendorIds = [];
+        foreach ($items as $r) {
+            $vIds = ($r->wizard_data ?? [])['penggunaan_penyimpanan']['vendor_ids'] ?? [];
+            if (is_array($vIds)) {
+                foreach ($vIds as $v) {
+                    if (is_string($v) && $v !== '') {
+                        $allVendorIds[$v] = true;
+                    }
+                }
+            }
+        }
+        $vendorNames = [];
+        if (! empty($allVendorIds) && class_exists(\App\Models\Vendor::class)) {
+            try {
+                $vendorNames = \App\Models\Vendor::whereIn('id', array_keys($allVendorIds))
+                    ->pluck('name', 'id')->all();
+            } catch (\Throwable $e) {
+                \Log::warning('ExportController: vendor name lookup failed: '.$e->getMessage());
+            }
+        }
+
+        $rows = $items->map(function ($r) use ($customFields, $perRecordExtras, $vendorNames) {
             $w = $r->wizard_data ?? [];
             $s1 = $w['detail_pemrosesan'] ?? [];
             $s2 = $w['dpo_team'] ?? [];
@@ -256,6 +301,37 @@ class ExportController extends Controller
             $s6 = $w['pengiriman_data'] ?? [];
             $s7 = $w['retensi_keamanan'] ?? [];
             $customValues = $w['custom_fields'] ?? [];
+
+            // Sumber Data — multi: combine list + per-option detail values.
+            $sumberList = $s4['sumber_data_list'] ?? [];
+            $sumberDetails = [];
+            if (is_array($sumberList)) {
+                foreach ($sumberList as $opt) {
+                    $key = 'sumber_data_detail_'.preg_replace('/[^a-z0-9]/i', '_', strtolower($opt));
+                    $val = $s4[$key] ?? null;
+                    if ($val) {
+                        $sumberDetails[] = "{$opt}: {$val}";
+                    }
+                }
+            }
+
+            // Vendor TPRM lookup
+            $vendorIds = $s5['vendor_ids'] ?? [];
+            $vendorIdsList = is_array($vendorIds) ? array_filter($vendorIds, 'is_string') : [];
+            $vendorNamesList = array_values(array_filter(array_map(fn ($id) => $vendorNames[$id] ?? null, $vendorIdsList)));
+
+            // Section approvals — flatten as "section: status, ..."
+            $approvals = $w['section_approvals'] ?? [];
+            $approvalSummary = '';
+            if (is_array($approvals)) {
+                $parts = [];
+                foreach ($approvals as $secKey => $secData) {
+                    if (is_array($secData) && ! empty($secData['status'])) {
+                        $parts[] = "{$secKey}:{$secData['status']}";
+                    }
+                }
+                $approvalSummary = implode(', ', $parts);
+            }
 
             $row = [
                 $r->registration_number,
@@ -272,28 +348,77 @@ class ExportController extends Controller
                 $s2['dpo_phone'] ?? '',
                 $this->flattenJson($s3['jenis_pemrosesan'] ?? []),
                 $this->flattenJson($s3['sistem_terkait'] ?? []),
+                // Sec 3 — Bantuan AI
+                $s3['bantuan_ai'] ?? '',
+                $s3['ai_teknologi'] ?? '',
+                $s3['ai_tujuan'] ?? '',
+                // Sec 3 — Dasar Pemrosesan sub-Q
+                $s3['lb_dok_nama'] ?? '',
+                $s3['lb_dok_nomor'] ?? '',
+                $s3['lb_dok_tanggal'] ?? '',
+                $s3['lb_dok_lokasi'] ?? '',
+                $s3['lb_reg_nama'] ?? '',
+                $s3['lb_reg_nomor'] ?? '',
+                $s3['lb_kondisi'] ?? '',
+                $s3['lb_lia'] ?? '',
+                // Sec 4 — Sumber Data (legacy single + new multi)
                 $s4['sumber_data'] ?? '',
+                $this->flattenJson($sumberList),
+                implode(' | ', $sumberDetails),
                 $this->flattenJson($s4['kategori_subjek'] ?? []),
                 $this->flattenJson($s4['jenis_data'] ?? []),
                 $this->flattenJson($s4['jenis_data_spesifik'] ?? []),
                 $this->flattenJson($s4['jenis_data_umum'] ?? []),
                 $this->flattenJson($s4['jenis_data_pii'] ?? []),
+                // Sec 5
                 $s5['pihak_pemroses'] ?? '',
                 $this->flattenJson($s5['kategori_pihak'] ?? []),
+                $s5['kategori_pihak_lainnya'] ?? '',
                 $s5['pihak_ketiga'] ?? '',
-                $s6['penerima_data'] ?? '',
+                implode(', ', $vendorIdsList),
+                implode(', ', $vendorNamesList),
+                // Sec 6 — Penerima Internal
+                $s6['penerima_internal'] ?? '',
+                $s6['penerima_internal_divisi'] ?? '',
+                $s6['penerima_internal_pic'] ?? '',
+                $s6['penerima_internal_email'] ?? '',
+                $s6['penerima_internal_telp'] ?? '',
+                // Sec 6 — Penerima Eksternal
+                $s6['penerima_eksternal'] ?? '',
+                $s6['penerima_eksternal_org'] ?? '',
+                $s6['penerima_eksternal_alamat'] ?? '',
+                $s6['penerima_eksternal_pic'] ?? '',
+                $s6['penerima_eksternal_email'] ?? '',
+                $s6['penerima_eksternal_telp'] ?? '',
+                $s6['penerima_eksternal_sistem'] ?? '',
+                // Sec 6 — Jenis data dikirimkan
+                $this->flattenJson($s6['jenis_data_spesifik_kirim'] ?? []),
+                $this->flattenJson($s6['jenis_data_umum_kirim'] ?? []),
+                $this->flattenJson($s6['jenis_data_pii_kirim'] ?? []),
+                // Sec 6 — Transfer LN
                 $s6['transfer_luar'] ?? '',
                 $s6['negara_tujuan'] ?? '',
+                $this->flattenJson($s6['transfer_basis'] ?? []),
                 $s6['safeguards'] ?? '',
+                // Sec 7
                 $this->flattenJson($s7['kontrol_keamanan'] ?? []),
                 $r->retention_period ?? $s7['masa_retensi'] ?? '',
+                $r->retention_due_date ? (string) $r->retention_due_date : '',
+                $s7['ada_prosedur_pemusnahan'] ?? '',
                 $s7['prosedur_pemusnahan'] ?? '',
+                $s7['pemusnahan_terakhir_at'] ?? '',
+                $s7['berita_acara_pemusnahan'] ?? '',
+                $s7['pernah_insiden'] ?? '',
+                $s7['insiden_jelaskan'] ?? '',
+                // Approval state
+                $r->status,
+                $approvalSummary,
+                // Legacy normalized
                 is_array($r->data_categories) ? implode(', ', $r->data_categories) : ($r->data_categories ?? ''),
                 is_array($r->data_subjects) ? implode(', ', $r->data_subjects) : ($r->data_subjects ?? ''),
                 is_array($r->recipients) ? implode(', ', $r->recipients) : ($r->recipients ?? ''),
                 $r->security_measures ?? '',
                 strtoupper($r->risk_level),
-                $r->status,
                 ($r->progress ?? 0).'%',
                 $r->created_at?->format('Y-m-d H:i'),
                 $r->updated_at?->format('Y-m-d H:i'),

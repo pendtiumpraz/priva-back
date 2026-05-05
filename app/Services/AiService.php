@@ -471,14 +471,30 @@ class AiService
                         'jenis_pemrosesan' => ['HARUS dari daftar jenis_pemrosesan, pilih yg relevan'],
                         'dasar_pemrosesan' => 'HARUS dari daftar dasar_pemrosesan',
                         'sistem_terkait' => ['array: nama sistem IT terkait'],
+                        // Sec 3 — Dasar Pemrosesan sub-Q (per opsi UU PDP). Isi field
+                        // yang relevan dengan dasar_pemrosesan yang dipilih.
+                        'lb_dok_nama' => 'string — nama Persetujuan/Perjanjian (jika dasar=Persetujuan/Perjanjian)',
+                        'lb_dok_nomor' => 'string — nomor dokumen (jika dasar=Persetujuan/Perjanjian)',
+                        'lb_dok_tanggal' => 'YYYY-MM-DD — tanggal dokumen',
+                        'lb_dok_lokasi' => 'string — lokasi penyimpanan dokumen',
+                        'lb_reg_nama' => 'string — nama regulasi (jika dasar=Kewajiban Hukum / Kepentingan Vital / Tugas Umum)',
+                        'lb_reg_nomor' => 'string — nomor regulasi',
+                        'lb_kondisi' => 'string — kondisi yang menyebabkan pemrosesan dilakukan (jika dasar=Kepentingan Vital)',
+                        'lb_lia' => 'string — dokumentasi Legitimate Interest Assessment (jika dasar=Legitimate Interest)',
+                        'legal_basis_detail' => 'string — catatan tambahan dasar pemrosesan',
                         // Sprint E4 — risk trigger fields
                         'bantuan_ai' => 'HARUS dari daftar bantuan_ai',
+                        // Sec 3 — Sub-Q jika bantuan_ai = Ya/Sebagian
+                        'ai_teknologi' => 'string — nama teknologi AI yang digunakan (e.g. GPT-4, Random Forest)',
+                        'ai_tujuan' => 'string — tujuan & penggunaan AI dalam pemrosesan',
                         'otomatis' => 'HARUS dari daftar otomatis',
                         'pemrofilan' => ['HARUS dari daftar pemrofilan'],
                         'teknologi_baru' => 'Ya | Tidak',
                     ],
                     'pengumpulan_data' => [
-                        'sumber_data' => 'string',
+                        // Sumber Data — UU PDP 5 opsi multi-checkbox
+                        'sumber_data_list' => ['array — pilih dari: Individu, Organisasi, Sumber Terbuka / Publik, Lembaga Pemerintahan, Lembaga Survey'],
+                        'sumber_data' => 'string (legacy single-select; isi sama dengan opsi pertama dari sumber_data_list)',
                         'jumlah_subjek' => 'HARUS dari daftar jumlah_subjek',
                         'kategori_subjek' => ['array string'],
                         'jenis_data' => ['array string'],
@@ -489,23 +505,45 @@ class AiService
                     'penggunaan_penyimpanan' => [
                         'pihak_pemroses' => 'string',
                         'kategori_pihak' => ['HARUS dari daftar kategori_pihak'],
+                        'kategori_pihak_lainnya' => 'string — sebutkan jika kategori_pihak berisi "Lainnya"',
                         'cara_pemrosesan' => 'string',
                         'lokasi_penyimpanan' => 'string',
                         'pihak_ketiga' => 'Ya | Tidak',
-                        'nama_pihak_ketiga' => 'string jika pihak_ketiga=Ya',
+                        'nama_pihak_ketiga' => 'string — fallback catatan jika tidak ada di TPRM',
+                        'vendor_ids' => ['array UUID vendor TPRM (isi kosong; sistem auto-resolve dari nama)'],
                     ],
                     'pengiriman_data' => [
-                        'ada_penerima' => 'Ya | Tidak',
-                        'penerima_data' => 'string',
+                        // Penerima Internal — split dari ada_penerima legacy
+                        'penerima_internal' => 'Ya | Tidak',
+                        'penerima_internal_divisi' => 'string — nama divisi internal',
+                        'penerima_internal_pic' => 'string — nama PIC internal',
+                        'penerima_internal_email' => 'string — email PIC internal',
+                        'penerima_internal_telp' => 'string — telepon PIC internal',
+                        // Penerima Eksternal — entitas di luar org
+                        'penerima_eksternal' => 'Ya | Tidak',
+                        'penerima_eksternal_org' => 'string — nama organisasi eksternal',
+                        'penerima_eksternal_alamat' => 'string',
+                        'penerima_eksternal_pic' => 'string',
+                        'penerima_eksternal_email' => 'string',
+                        'penerima_eksternal_telp' => 'string',
+                        'penerima_eksternal_sistem' => 'string — sistem informasi yang digunakan',
+                        // Legacy fields (back-compat)
+                        'ada_penerima' => 'Ya | Tidak (legacy; same as penerima_internal OR penerima_eksternal)',
+                        'penerima_data' => 'string (legacy)',
+                        // Jenis data pribadi yang dikirimkan (mirror Section 4 categories)
+                        'jenis_data_spesifik_kirim' => ['array — sub-set dari jenis_data_spesifik yang dikirim ke penerima'],
+                        'jenis_data_umum_kirim' => ['array — sub-set dari jenis_data_umum'],
+                        'jenis_data_pii_kirim' => ['array — sub-set dari jenis_data_pii'],
+                        // Transfer LN
                         'transfer_luar' => 'Ya | Tidak',
                         'negara_tujuan' => 'string jika transfer_luar=Ya',
-                        'safeguards' => 'string',
+                        'transfer_basis' => ['array — pilih dari 3 opsi UU PDP: "Negara domisili memiliki tingkat pelindungan setara/lebih tinggi", "Pelindungan memadai dan mengikat (kontrak)", "Persetujuan Subjek Data"'],
+                        'safeguards' => 'string — catatan tambahan',
                     ],
                     'retensi_keamanan' => [
                         'kontrol_keamanan' => ['HARUS dari daftar kontrol_keamanan, pilih yg relevan'],
                         // Sprint E3 — retention master data. AI can only suggest new policy
-                        // definitions; the create flow will persist them. Use inline definition
-                        // shape so the controller can create or match policies after parse.
+                        // definitions; the create flow will persist them.
                         'retensi_list' => [
                             [
                                 'name' => 'string — label retensi (e.g. "Retensi Karyawan 5 tahun")',
@@ -516,8 +554,14 @@ class AiService
                             ],
                         ],
                         'masa_retensi' => 'string (legacy free-text, opsional)',
-                        'prosedur_pemusnahan' => 'string',
-                        'pernah_insiden' => 'Ya | Tidak',
+                        // Prosedur Pemusnahan — sub-Q
+                        'ada_prosedur_pemusnahan' => 'Ya | Tidak',
+                        'prosedur_pemusnahan' => 'string — deskripsi prosedur (jika ada_prosedur_pemusnahan=Ya)',
+                        'pemusnahan_terakhir_at' => 'YYYY-MM-DD — tanggal terakhir pemusnahan dilakukan',
+                        'berita_acara_pemusnahan' => 'Ya | Tidak — apakah ada berita acara penghapusan',
+                        // Insiden Pelanggaran Data
+                        'pernah_insiden' => '"Ya, pernah terjadi" | "Tidak pernah"',
+                        'insiden_jelaskan' => 'string — jelaskan insiden jika pernah_insiden="Ya, pernah terjadi"',
                     ],
                 ],
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
