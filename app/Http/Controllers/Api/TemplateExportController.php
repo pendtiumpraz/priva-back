@@ -345,8 +345,22 @@ class TemplateExportController extends Controller
      * so it reads as a tag, value sits on white. Matches the book-style
      * reference design.
      */
-    private function addInfoRow($table, string $label, string $value)
+    private function addInfoRow($table, string $label, mixed $value)
     {
+        // Coerce any value to a printable string so AI-extracted/legacy fields
+        // that occasionally arrive as array/object/null don't crash the export.
+        if (is_array($value)) {
+            $value = $this->fmtArray($value);
+        } elseif (is_object($value)) {
+            $value = method_exists($value, '__toString') ? (string) $value : json_encode($value, JSON_UNESCAPED_UNICODE);
+        } elseif (is_null($value)) {
+            $value = '-';
+        } else {
+            $value = (string) $value;
+        }
+        if ($value === '') {
+            $value = '-';
+        }
         $row = $table->addRow(null, ['cantSplit' => true]);
 
         $labelCell = $row->addCell(3400, [
