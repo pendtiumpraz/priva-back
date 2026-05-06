@@ -278,6 +278,7 @@ class Ropa extends Model
                     'duration_unit' => null,
                     'trigger_event' => $ret['prosedur_pemusnahan'] ?? null,
                     'disposal_method' => null,
+                    'legal_basis' => null,
                     'scope_data_type' => null,
                     'catatan' => null,
                 ]];

@@ -703,12 +703,15 @@ class TemplateExportController extends Controller
                 $dur = ($row['duration_unit'] ?? null) === 'indefinite'
                     ? 'Tidak terbatas'
                     : (($row['duration_value'] ?? '?').' '.($row['duration_unit'] ?? ''));
+                $trigger = $row['trigger_event'] ?? null;
+                $disposal = $row['disposal_method'] ?? null;
+                $legalBasis = $row['legal_basis'] ?? null;
                 $lines = array_filter([
                     $row['name'] ?? '',
                     "Durasi: {$dur}",
-                    $row['trigger_event'] ? "Trigger: {$row['trigger_event']}" : '',
-                    $row['disposal_method'] ? 'Metode: '.$row['disposal_method'] : '',
-                    $row['legal_basis'] ? "Dasar hukum: {$row['legal_basis']}" : '',
+                    $trigger ? "Trigger: {$trigger}" : '',
+                    $disposal ? 'Metode: '.$disposal : '',
+                    $legalBasis ? "Dasar hukum: {$legalBasis}" : '',
                 ]);
                 $this->addInfoRow($t, $label, implode("\n", $lines) ?: '-');
             }
