@@ -531,7 +531,14 @@ class TemplateExportController extends Controller
             default => $kind,
         };
         $docTpl = DocumentTemplate::activeForOrg($user->org_id, $mapKind);
-        if (! $docTpl || empty(($docTpl->docx_templates ?? [])[$kind]['path'] ?? null)) {
+        if (! $docTpl) {
+            \Log::info("[DOCX export] No active template for org={$user->org_id} kind={$mapKind}; falling back to built-in.");
+
+            return null;
+        }
+        if (empty(($docTpl->docx_templates ?? [])[$kind]['path'] ?? null)) {
+            \Log::info("[DOCX export] Active template '{$docTpl->name}' (id={$docTpl->id}) has no docx_templates['{$kind}']['path']; falling back to built-in.");
+
             return null;
         }
 

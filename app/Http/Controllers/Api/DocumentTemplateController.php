@@ -399,10 +399,31 @@ class DocumentTemplateController extends Controller
         $tpl->docx_templates = $map;
         $tpl->save();
 
+        // Auto-assign this template as the active per-kind binding so the
+        // upload takes effect immediately without a separate trip to the
+        // assignment matrix. Without this, users uploaded DOCX templates and
+        // then wondered why exports still showed the built-in DOCX.
+        // Kind on upload is 'ropa'|'dpia'|'gap'; map key uses 'gap_report' for gap.
+        $assignmentKind = $request->kind === 'gap' ? 'gap_report' : $request->kind;
+        $autoAssigned = false;
+        try {
+            $theme = TenantTheme::firstOrCreate(['org_id' => $user->org_id]);
+            $activeMap = is_array($theme->active_template_map) ? $theme->active_template_map : [];
+            if (($activeMap[$assignmentKind] ?? null) !== $tpl->id) {
+                $activeMap[$assignmentKind] = $tpl->id;
+                $theme->active_template_map = $activeMap;
+                $theme->save();
+                $autoAssigned = true;
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('Auto-assign template after upload failed: '.$e->getMessage());
+        }
+
         return response()->json([
-            'message' => 'Template DOCX tersimpan.',
+            'message' => 'Template DOCX tersimpan'.($autoAssigned ? ' & otomatis di-assign sebagai aktif untuk '.strtoupper($request->kind) : '').'.',
             'data' => $tpl,
             'kind' => $request->kind,
+            'auto_assigned' => $autoAssigned,
         ]);
     }
 
