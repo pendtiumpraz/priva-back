@@ -11,7 +11,6 @@ class MeController extends Controller
     public function dashboard(Request $r)         { return StubResponse::notImplemented('me.dashboard'); }
     public function courses(Request $r)            { return StubResponse::notImplemented('me.courses'); }
     public function badges(Request $r)             { return StubResponse::notImplemented('me.badges'); }
-    public function certificates(Request $r)       { return StubResponse::notImplemented('me.certificates'); }
     public function bookmarks(Request $r)          { return StubResponse::notImplemented('me.bookmarks'); }
     public function notes(Request $r)              { return StubResponse::notImplemented('me.notes'); }
     public function progress(Request $r)           { return StubResponse::notImplemented('me.progress'); }

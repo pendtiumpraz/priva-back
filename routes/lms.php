@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\Lms\Admin\BadgeAdminController;
-use App\Http\Controllers\Lms\Admin\CertificateAdminController;
 use App\Http\Controllers\Lms\Admin\CourseAdminController;
 use App\Http\Controllers\Lms\Admin\LessonAdminController;
 use App\Http\Controllers\Lms\Admin\ModuleAdminController;
@@ -19,7 +18,6 @@ use Illuminate\Support\Facades\Route;
 Route::get('me/dashboard',     [MeController::class, 'dashboard']);
 Route::get('me/courses',       [MeController::class, 'courses']);
 Route::get('me/badges',        [MeController::class, 'badges']);
-Route::get('me/certificates',  [MeController::class, 'certificates']);
 Route::get('me/bookmarks',     [MeController::class, 'bookmarks']);
 Route::get('me/notes',         [MeController::class, 'notes']);
 Route::get('me/progress',      [MeController::class, 'progress']);
@@ -40,7 +38,6 @@ Route::post('courses/{slug}/exam/attempts',      [CourseController::class, 'exam
 Route::post('me/bookmarks',                      [MeController::class, 'bookmarkCreate']);
 Route::delete('me/bookmarks/{lessonId}',         [MeController::class, 'bookmarkDelete']);
 Route::put('me/notes/{lessonId}',                [MeController::class, 'noteUpsert']);
-Route::post('courses/{slug}/certificate',        [CourseController::class, 'issueCertificate']);
 
 // ---- Admin ----
 Route::prefix('admin')->group(function () {
@@ -50,7 +47,6 @@ Route::prefix('admin')->group(function () {
     Route::apiResource('quizzes',              QuizAdminController::class);
     Route::apiResource('quizzes.questions',    QuizQuestionAdminController::class)->shallow();
     Route::get('users',                        [UserAdminController::class, 'index']);
-    Route::post('certificates/{id}/revoke',    [CertificateAdminController::class, 'revoke']);
     Route::apiResource('badges',               BadgeAdminController::class);
     Route::post('videos',                      [VideoAdminController::class, 'store']);
 });

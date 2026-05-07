@@ -13,5 +13,4 @@ class CourseController extends Controller
     public function showModule(Request $r, $courseSlug, $moduleSlug) { return StubResponse::notImplemented('courses.module.show'); }
     public function showLesson(Request $r, $courseSlug, $moduleSlug, $lessonSlug) { return StubResponse::notImplemented('courses.lesson.show'); }
     public function examAttempt(Request $r, $courseSlug) { return StubResponse::notImplemented('courses.exam.attempt'); }
-    public function issueCertificate(Request $r, $courseSlug) { return StubResponse::notImplemented('courses.certificate.issue'); }
 }

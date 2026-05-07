@@ -58,7 +58,3 @@ Route::middleware('throttle:30,1')->group(function () {
     Route::get('/preview/dsr-widget', [\App\Http\Controllers\Api\PreviewController::class, 'dsrWidget']);
 });
 
-use App\Http\Controllers\Lms\PublicVerificationController;
-
-Route::get('/verify/{certificateNumber}', [PublicVerificationController::class, 'verify'])
-    ->name('lms.certificate.verify');

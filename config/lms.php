@@ -13,8 +13,4 @@ return [
     */
 
     'enabled' => env('LMS_ENABLED', false),
-
-    'certificate' => [
-        'verify_route_name' => 'lms.certificate.verify',
-    ],
 ];
