@@ -3,6 +3,7 @@
 use App\Http\Middleware\AuthenticateConsentApiKey;
 use App\Http\Middleware\AuthenticateDsrApiKey;
 use App\Http\Middleware\CheckPermission;
+use App\Http\Middleware\EnsureLmsEntitled;
 use App\Http\Middleware\EnforceTenantReadOnly;
 use App\Http\Middleware\InitializeTenantDatabase;
 use App\Http\Middleware\RootOrSuperadmin;
@@ -29,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant.context' => SetCurrentOrgContext::class,
             'tenant.db' => InitializeTenantDatabase::class,
             'tenant.readonly' => EnforceTenantReadOnly::class,
+            'lms.entitled' => EnsureLmsEntitled::class,
         ]);
         // Prevent "Route [login] not defined" on API auth failures
         $middleware->redirectGuestsTo(fn ($request) => $request->is('api/*') ? null : '/login');

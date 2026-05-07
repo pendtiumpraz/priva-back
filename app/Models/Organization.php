@@ -6,12 +6,13 @@ use App\Casts\EncryptedString;
 use App\Models\Concerns\LandlordPinned;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Organization extends Model
 {
-    use HasUuids, SoftDeletes, LandlordPinned;
+    use HasFactory, HasUuids, SoftDeletes, LandlordPinned;
 
     protected $fillable = [
         'parent_id', 'org_level',
