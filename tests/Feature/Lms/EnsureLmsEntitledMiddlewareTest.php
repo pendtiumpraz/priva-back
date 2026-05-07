@@ -62,4 +62,67 @@ class EnsureLmsEntitledMiddlewareTest extends TestCase
 
         $this->getJson('/_test/lms-gate')->assertOk()->assertJson(['ok' => true]);
     }
+
+    public function test_returns_403_when_entitlement_row_explicitly_false(): void
+    {
+        config(['lms.enabled' => true]);
+        $org = Organization::factory()->create();
+        $user = User::factory()->create(['org_id' => $org->id]);
+
+        $menuItem = MenuItem::firstOrCreate(
+            ['menu_key' => 'lms'],
+            [
+                'parent_menu_id' => null,
+                'label' => 'Learn',
+                'href' => '/learn',
+                'icon' => 'GraduationCap',
+                'section' => 'Menu Utama',
+                'sort_order' => 100,
+                'hideable' => true,
+                'required_packages' => [],
+            ]
+        );
+
+        TenantModuleEntitlement::create([
+            'org_id' => $org->id,
+            'menu_id' => $menuItem->id,
+            'is_entitled' => false,   // explicit revoke
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson('/_test/lms-gate')->assertStatus(403);
+    }
+
+    public function test_returns_403_when_entitlement_valid_until_in_past(): void
+    {
+        config(['lms.enabled' => true]);
+        $org = Organization::factory()->create();
+        $user = User::factory()->create(['org_id' => $org->id]);
+
+        $menuItem = MenuItem::firstOrCreate(
+            ['menu_key' => 'lms'],
+            [
+                'parent_menu_id' => null,
+                'label' => 'Learn',
+                'href' => '/learn',
+                'icon' => 'GraduationCap',
+                'section' => 'Menu Utama',
+                'sort_order' => 100,
+                'hideable' => true,
+                'required_packages' => [],
+            ]
+        );
+
+        TenantModuleEntitlement::create([
+            'org_id' => $org->id,
+            'menu_id' => $menuItem->id,
+            'is_entitled' => true,
+            'valid_until' => now()->subDay()->toDateString(), // expired yesterday
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson('/_test/lms-gate')->assertStatus(403);
+    }
 }

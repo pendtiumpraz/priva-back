@@ -37,6 +37,9 @@ class EnsureLmsEntitled
             ->where('org_id', $user->org_id)
             ->where('menu_id', $lmsMenuItem->id)
             ->where('is_entitled', true)
+            ->where(function ($q) {
+                $q->whereNull('valid_until')->orWhere('valid_until', '>=', now()->toDateString());
+            })
             ->exists();
 
         if (! $entitled) {
