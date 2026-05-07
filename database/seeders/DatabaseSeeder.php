@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
             MenuRegistrySeeder::class,
             LmsMenuSeeder::class,
             LmsPermissionsSeeder::class,
+            LmsXpRulesSeeder::class,
             RootUserSeeder::class,
             // Document templates — preset library + Nexus canonical DOCX.
             // Both are idempotent via updateOrCreate so re-running db:seed
