@@ -1343,3 +1343,7 @@ Route::middleware(['auth:sanctum', 'role.root', 'tenant.context'])->prefix('admi
     Route::put('/leads/{id}', [$c, 'updateLead']);
     Route::delete('/leads/{id}', [$c, 'destroyLead']);
 });
+
+Route::prefix('lms')
+    ->middleware(['auth:sanctum', 'lms.entitled'])
+    ->group(base_path('routes/lms.php'));
