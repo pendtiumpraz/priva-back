@@ -17,6 +17,8 @@ class DatabaseSeeder extends Seeder
         // Menu Registry + Root user seeders are always idempotent (see each class).
         $this->call([
             MenuRegistrySeeder::class,
+            LmsMenuSeeder::class,
+            LmsPermissionsSeeder::class,
             RootUserSeeder::class,
             // Document templates — preset library + Nexus canonical DOCX.
             // Both are idempotent via updateOrCreate so re-running db:seed
