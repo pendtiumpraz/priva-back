@@ -8,7 +8,7 @@ use Illuminate\Http\Request;
 
 class MeController extends Controller
 {
-    public function dashboard(Request $r)
+    public function dashboard(\Illuminate\Http\Request $r)
     {
         $user = $r->user();
 
@@ -26,13 +26,56 @@ class MeController extends Controller
             })
             ->count();
 
+        $coursesCompleted = \DB::table('lms_modules as m')
+            ->whereIn('m.course_id', function ($q) use ($user) {
+                $q->select('m2.course_id')->from('lms_modules as m2')
+                  ->leftJoin('lms_user_module_progress as p', function ($j) use ($user) {
+                      $j->on('p.module_id', '=', 'm2.id')
+                        ->where('p.user_id', '=', $user->id)
+                        ->where('p.status', '=', 'completed');
+                  })
+                  ->groupBy('m2.course_id')
+                  ->havingRaw('COUNT(m2.id) > 0 AND COUNT(m2.id) = COUNT(p.id)');
+            })
+            ->distinct()->count('m.course_id');
+
+        $leaderboardRow = \App\Lms\Models\OrgLeaderboard::query()
+            ->where('org_id', $user->org_id)
+            ->where('user_id', $user->id)
+            ->first();
+
+        $rankInOrg = null;
+        if ($leaderboardRow) {
+            $rankInOrg = \App\Lms\Models\OrgLeaderboard::query()
+                ->where('org_id', $user->org_id)
+                ->where('xp_total', '>', $leaderboardRow->xp_total)
+                ->count() + 1;
+        }
+
+        $recent = \App\Lms\Models\XpLog::query()
+            ->where('user_id', $user->id)
+            ->where('org_id', $user->org_id)
+            ->orderByDesc('created_at')
+            ->limit(5)
+            ->get(['action', 'xp_amount', 'created_at']);
+
         return response()->json(['data' => [
             'continue_learning' => $continue ? [
                 'lesson_id' => $continue->lesson_id,
                 'watched_seconds' => $continue->watched_seconds,
             ] : null,
             'courses_total' => $coursesTotal,
-            'courses_completed' => 0,
+            'courses_completed' => $coursesCompleted,
+            'xp_summary' => [
+                'total_xp' => (int) ($leaderboardRow->xp_total ?? 0),
+                'rank_in_org' => $rankInOrg,
+                'badges_count' => (int) ($leaderboardRow->badges_count ?? 0),
+                'recent_xp_events' => $recent->map(fn ($x) => [
+                    'action' => $x->action,
+                    'xp_amount' => (int) $x->xp_amount,
+                    'created_at' => $x->created_at?->toIso8601String(),
+                ])->values(),
+            ],
         ]]);
     }
 

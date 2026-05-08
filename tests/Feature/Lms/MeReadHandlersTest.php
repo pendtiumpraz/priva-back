@@ -134,4 +134,26 @@ class MeReadHandlersTest extends TestCase
         $titles = collect($r->json('data'))->pluck('title');
         $this->assertNotContains('Draft Course', $titles);
     }
+
+    public function test_me_dashboard_returns_xp_summary_block(): void
+    {
+        $user = $this->authedEntitledUser();
+        \App\Lms\Models\OrgLeaderboard::create([
+            'org_id' => $user->org_id, 'user_id' => $user->id,
+            'xp_total' => 250, 'badges_count' => 2, 'courses_completed' => 0,
+            'computed_at' => now(),
+        ]);
+        \App\Lms\Models\XpLog::create([
+            'user_id' => $user->id, 'org_id' => $user->org_id,
+            'action' => 'lesson.completed', 'xp_amount' => 10,
+            'ref_type' => null, 'ref_id' => null,
+        ]);
+
+        $r = $this->getJson('/api/lms/me/dashboard');
+        $r->assertOk()
+          ->assertJsonStructure(['data' => ['xp_summary' => ['total_xp', 'rank_in_org', 'badges_count', 'recent_xp_events']]]);
+        $this->assertEquals(250, $r->json('data.xp_summary.total_xp'));
+        $this->assertEquals(2, $r->json('data.xp_summary.badges_count'));
+        $this->assertCount(1, $r->json('data.xp_summary.recent_xp_events'));
+    }
 }
