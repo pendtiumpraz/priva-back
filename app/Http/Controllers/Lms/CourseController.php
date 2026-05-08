@@ -33,8 +33,19 @@ class CourseController extends Controller
         if (! $course) return response()->json(['message' => 'Course not found.'], 404);
 
         $modules = $course->modules()->orderBy('order')->get(['id', 'slug', 'title', 'description', 'order', 'unlock_after_module_id']);
-        $data = $course->toArray();
-        $data['modules'] = $modules;
+        $data = [
+            'id' => $course->id,
+            'slug' => $course->slug,
+            'title' => $course->title,
+            'description' => $course->description,
+            'level' => $course->level,
+            'duration_minutes' => $course->duration_minutes,
+            'thumbnail_url' => $course->thumbnail_url,
+            'regulation_code' => $course->regulation_code,
+            'published' => $course->published,
+            'order' => $course->order,
+            'modules' => $modules,
+        ];
 
         return response()->json(['data' => $data]);
     }
@@ -62,8 +73,15 @@ class CourseController extends Controller
         }
 
         $lessons = $module->lessons()->orderBy('order')->get(['id', 'slug', 'title', 'order', 'duration_seconds', 'video_id']);
-        $data = $module->toArray();
-        $data['lessons'] = $lessons;
+        $data = [
+            'id' => $module->id,
+            'slug' => $module->slug,
+            'title' => $module->title,
+            'description' => $module->description,
+            'order' => $module->order,
+            'unlock_after_module_id' => $module->unlock_after_module_id,
+            'lessons' => $lessons,
+        ];
 
         return response()->json(['data' => $data]);
     }
@@ -109,9 +127,20 @@ class CourseController extends Controller
         $userProgress = \App\Lms\Models\UserLessonProgress::query()
             ->where('user_id', $user->id)->where('lesson_id', $lesson->id)->first();
 
-        $data = $lesson->toArray();
-        $data['watched_seconds'] = $userProgress->watched_seconds ?? 0;
-        $data['completed_at'] = $userProgress->completed_at ?? null;
+        $data = [
+            'id' => $lesson->id,
+            'slug' => $lesson->slug,
+            'title' => $lesson->title,
+            'body' => $lesson->body,
+            'order' => $lesson->order,
+            'duration_seconds' => $lesson->duration_seconds,
+            'video_id' => $lesson->video_id,
+            'steps' => $lesson->steps,
+            'tips' => $lesson->tips,
+            'tags' => $lesson->tags,
+            'watched_seconds' => $userProgress->watched_seconds ?? 0,
+            'completed_at' => $userProgress->completed_at ?? null,
+        ];
 
         return response()->json(['data' => $data]);
     }
