@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Lms;
 
 use App\Http\Controllers\Controller;
-use App\Lms\Http\StubResponse;
 use Illuminate\Http\Request;
 
 class MeController extends Controller
