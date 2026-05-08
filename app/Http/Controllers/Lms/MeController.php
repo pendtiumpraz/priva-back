@@ -65,7 +65,71 @@ class MeController extends Controller
 
         return response()->json(['data' => $courses]);
     }
-    public function badges(Request $r)             { return StubResponse::notImplemented('me.badges'); }
+    public function badges(\Illuminate\Http\Request $r)
+    {
+        $user = $r->user();
+        $since = $r->query('since');
+
+        if ($since) {
+            $sinceCarbon = \Illuminate\Support\Carbon::parse($since);
+            $earned = \App\Lms\Models\UserBadge::query()
+                ->with('badge')
+                ->where('user_id', $user->id)
+                ->where('awarded_at', '>', $sinceCarbon)
+                ->orderByDesc('awarded_at')
+                ->get();
+
+            return response()->json(['data' => [
+                'earned' => $earned->map(fn ($ub) => $this->serializeEarned($ub))->values(),
+            ]]);
+        }
+
+        $allEarned = \App\Lms\Models\UserBadge::query()
+            ->with('badge')
+            ->where('user_id', $user->id)
+            ->orderByDesc('awarded_at')
+            ->get();
+
+        $earnedBadgeIds = $allEarned->pluck('badge_id')->all();
+
+        $lockedBadges = \App\Lms\Models\Badge::query()
+            ->whereNotIn('id', $earnedBadgeIds)
+            ->get();
+
+        $evaluator = app(\App\Lms\Services\BadgeEvaluator::class);
+
+        return response()->json(['data' => [
+            'earned' => $allEarned->map(fn ($ub) => $this->serializeEarned($ub))->values(),
+            'locked' => $lockedBadges->map(function ($b) use ($user, $evaluator) {
+                $criteria = is_array($b->criteria_json) ? $b->criteria_json : [];
+                $progress = $evaluator->progressFor($user, $b);
+                return [
+                    'id' => $b->id,
+                    'slug' => $b->slug,
+                    'name' => $b->name,
+                    'description' => $b->description,
+                    'icon' => $b->icon,
+                    'theme' => $criteria['theme'] ?? 'indigo',
+                    'progress' => $progress,
+                ];
+            })->values(),
+        ]]);
+    }
+
+    private function serializeEarned(\App\Lms\Models\UserBadge $ub): array
+    {
+        $b = $ub->badge;
+        $criteria = is_array($b->criteria_json) ? $b->criteria_json : [];
+        return [
+            'id' => $b->id,
+            'slug' => $b->slug,
+            'name' => $b->name,
+            'description' => $b->description,
+            'icon' => $b->icon,
+            'theme' => $criteria['theme'] ?? 'indigo',
+            'awarded_at' => $ub->awarded_at?->toIso8601String(),
+        ];
+    }
     public function bookmarks(Request $r)          { return StubResponse::notImplemented('me.bookmarks'); }
     public function notes(Request $r)              { return StubResponse::notImplemented('me.notes'); }
 
