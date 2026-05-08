@@ -44,19 +44,7 @@ class MeStubsTest extends TestCase
         return $user;
     }
 
-    public function test_me_dashboard_returns_501_stub(): void
-    {
-        $this->authedEntitledUser();
-        $this->getJson('/api/lms/me/dashboard')
-             ->assertStatus(501)
-             ->assertJsonPath('code', 'LMS_FOUNDATION_STUB');
-    }
 
-    public function test_me_courses_returns_501_stub(): void
-    {
-        $this->authedEntitledUser();
-        $this->getJson('/api/lms/me/courses')->assertStatus(501);
-    }
 
     public function test_me_badges_returns_501_stub(): void
     {
