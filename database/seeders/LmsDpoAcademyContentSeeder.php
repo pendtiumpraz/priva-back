@@ -83,6 +83,10 @@ class LmsDpoAcademyContentSeeder extends Seeder
                 'max_attempts'       => null,
             ]
         );
+        $expectedCount = count($modSpec['quiz']['questions']);
+        if ($quiz->questions()->count() === $expectedCount) {
+            return; // already seeded with the same set; skip
+        }
         DB::statement('PRAGMA foreign_keys = OFF');
         DB::table('lms_quiz_questions')->where('quiz_id', $quiz->id)->delete();
         DB::statement('PRAGMA foreign_keys = ON');
@@ -109,6 +113,10 @@ class LmsDpoAcademyContentSeeder extends Seeder
                 'max_attempts'       => 3,
             ]
         );
+        $expectedCount = count($this->examQuestions());
+        if ($quiz->questions()->count() === $expectedCount) {
+            return; // already seeded with the same set; skip
+        }
         DB::statement('PRAGMA foreign_keys = OFF');
         DB::table('lms_quiz_questions')->where('quiz_id', $quiz->id)->delete();
         DB::statement('PRAGMA foreign_keys = ON');
