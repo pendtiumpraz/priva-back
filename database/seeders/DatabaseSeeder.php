@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
             LmsXpRulesSeeder::class,
             LmsDpoAcademyContentSeeder::class,
             LmsBadgesSeeder::class,
+            LmsFeatureDocQuizzesSeeder::class,
             RootUserSeeder::class,
             // Document templates — preset library + Nexus canonical DOCX.
             // Both are idempotent via updateOrCreate so re-running db:seed

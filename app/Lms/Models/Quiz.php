@@ -9,7 +9,7 @@ class Quiz extends Model
     protected $table = 'lms_quizzes';
 
     protected $fillable = [
-        'owner_type', 'owner_key', 'passing_score', 'time_limit_seconds', 'max_attempts',
+        'owner_type', 'owner_key', 'title', 'passing_score', 'time_limit_seconds', 'max_attempts',
     ];
 
     protected $casts = [
