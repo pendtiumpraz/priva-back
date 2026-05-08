@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Lms;
 
 use App\Http\Controllers\Controller;
-use App\Lms\Http\StubResponse;
 use Illuminate\Http\Request;
 
 class CourseController extends Controller
@@ -144,5 +143,27 @@ class CourseController extends Controller
 
         return response()->json(['data' => $data]);
     }
-    public function examAttempt(Request $r, $courseSlug) { return StubResponse::notImplemented('courses.exam.attempt'); }
+    public function examAttempt(Request $r, $courseSlug)
+    {
+        $r->validate(['answers' => 'required|array']);
+        $user = $r->user();
+
+        $course = \App\Lms\Models\Course::query()
+            ->where('slug', $courseSlug)->where('published', true)
+            ->where(function ($q) use ($user) {
+                $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
+            })->first();
+        if (! $course) return response()->json(['message' => 'Course not found.'], 404);
+
+        $exam = \App\Lms\Models\Quiz::query()
+            ->where('owner_type', 'course')
+            ->where('owner_key', (string) $course->id)
+            ->first();
+        if (! $exam) return response()->json(['message' => 'Exam not configured.'], 404);
+
+        $request = \Illuminate\Http\Request::create("/api/lms/quizzes/{$exam->id}/attempts", 'POST', ['answers' => $r->input('answers')]);
+        $request->setUserResolver(fn () => $user);
+
+        return app(\App\Http\Controllers\Lms\QuizController::class)->attempt($request, $exam->id);
+    }
 }
