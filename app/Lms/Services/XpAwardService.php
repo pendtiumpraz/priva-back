@@ -57,6 +57,8 @@ class XpAwardService
                     'computed_at' => now(),
                 ]
             );
+
+            app(\App\Lms\Services\BadgeEvaluator::class)->evaluate($user);
         });
     }
 }

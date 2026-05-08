@@ -56,4 +56,31 @@ class XpAwardServiceTest extends TestCase
             'user_id' => $user->id, 'xp_total' => 60,
         ]);
     }
+
+    public function test_award_runs_badge_evaluator(): void
+    {
+        $this->seed(\Database\Seeders\LmsBadgesSeeder::class);
+        $org = \App\Models\Organization::factory()->create();
+        $user = \App\Models\User::factory()->create(['org_id' => $org->id]);
+        \App\Lms\Models\XpRule::create(['action_key' => 'lesson.completed', 'xp_amount' => 10]);
+
+        $course = \App\Lms\Models\Course::create([
+            'org_id' => null, 'slug' => 'c', 'title' => 'C', 'description' => '',
+            'level' => null, 'duration_minutes' => 0, 'thumbnail_url' => null,
+            'published' => true, 'order' => 1, 'created_by' => null,
+        ]);
+        $module = \App\Lms\Models\Module::create(['course_id' => $course->id, 'slug' => 'm', 'title' => 'M', 'description' => '', 'order' => 1]);
+        $lesson = \App\Lms\Models\Lesson::create(['module_id' => $module->id, 'slug' => 'l', 'title' => 'L', 'body' => '', 'order' => 1]);
+        \App\Lms\Models\UserLessonProgress::create([
+            'user_id' => $user->id, 'org_id' => $user->org_id,
+            'lesson_id' => $lesson->id, 'completed_at' => now(), 'watched_seconds' => 0,
+        ]);
+
+        app(\App\Lms\Services\XpAwardService::class)->award($user, 'lesson.completed');
+
+        $this->assertDatabaseHas('lms_user_badges', [
+            'user_id' => $user->id,
+            'badge_id' => \App\Lms\Models\Badge::where('slug', 'first-lesson')->value('id'),
+        ]);
+    }
 }
