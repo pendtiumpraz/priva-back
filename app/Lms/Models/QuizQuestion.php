@@ -18,4 +18,6 @@ class QuizQuestion extends Model
         'points' => 'integer',
         'order' => 'integer',
     ];
+
+    protected $hidden = ['correct_answer'];
 }
