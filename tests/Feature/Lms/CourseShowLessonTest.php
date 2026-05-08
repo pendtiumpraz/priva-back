@@ -52,6 +52,27 @@ class CourseShowLessonTest extends TestCase
           ->assertJsonPath('data.tags.0', 'x');
     }
 
+    public function test_show_lesson_includes_bookmarked_and_note_body(): void
+    {
+        $user = $this->authedEntitled();
+        $this->buildCourse();
+
+        // Default: not bookmarked, no note
+        $r = $this->getJson('/api/lms/courses/c1/modules/m1/lessons/l1');
+        $r->assertOk()
+          ->assertJsonPath('data.bookmarked', false)
+          ->assertJsonPath('data.note_body', null);
+
+        // Bookmark + note the lesson
+        \App\Lms\Models\UserBookmark::create(['user_id' => $user->id, 'org_id' => $user->org_id, 'lesson_id' => $r->json('data.id')]);
+        \App\Lms\Models\UserNote::create(['user_id' => $user->id, 'org_id' => $user->org_id, 'lesson_id' => $r->json('data.id'), 'body' => 'my note']);
+
+        $r2 = $this->getJson('/api/lms/courses/c1/modules/m1/lessons/l1');
+        $r2->assertOk()
+           ->assertJsonPath('data.bookmarked', true)
+           ->assertJsonPath('data.note_body', 'my note');
+    }
+
     public function test_second_lesson_locked_until_first_completed(): void
     {
         $this->authedEntitled();

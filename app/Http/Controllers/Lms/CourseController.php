@@ -126,6 +126,12 @@ class CourseController extends Controller
         $userProgress = \App\Lms\Models\UserLessonProgress::query()
             ->where('user_id', $user->id)->where('lesson_id', $lesson->id)->first();
 
+        $bookmarked = \App\Lms\Models\UserBookmark::query()
+            ->where('user_id', $user->id)->where('lesson_id', $lesson->id)->exists();
+
+        $userNote = \App\Lms\Models\UserNote::query()
+            ->where('user_id', $user->id)->where('lesson_id', $lesson->id)->first();
+
         $data = [
             'id' => $lesson->id,
             'slug' => $lesson->slug,
@@ -139,6 +145,8 @@ class CourseController extends Controller
             'tags' => $lesson->tags,
             'watched_seconds' => $userProgress->watched_seconds ?? 0,
             'completed_at' => $userProgress->completed_at ?? null,
+            'bookmarked' => $bookmarked,
+            'note_body' => $userNote->body ?? null,
         ];
 
         return response()->json(['data' => $data]);
