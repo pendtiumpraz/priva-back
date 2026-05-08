@@ -46,9 +46,9 @@ class MeStubsTest extends TestCase
 
 
 
-    public function test_me_badges_returns_501_stub(): void
+    public function test_me_badges_returns_ok(): void
     {
         $this->authedEntitledUser();
-        $this->getJson('/api/lms/me/badges')->assertStatus(501);
+        $this->getJson('/api/lms/me/badges')->assertOk()->assertJsonStructure(['data' => ['earned', 'locked']]);
     }
 }
