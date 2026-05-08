@@ -181,7 +181,34 @@ class MeController extends Controller
             'awarded_at' => $ub->awarded_at?->toIso8601String(),
         ];
     }
-    public function bookmarks(Request $r)          { return StubResponse::notImplemented('me.bookmarks'); }
+    public function bookmarks(Request $r): \Illuminate\Http\JsonResponse
+    {
+        $user = $r->user();
+
+        $bookmarks = \App\Lms\Models\UserBookmark::query()
+            ->where('user_id', $user->id)
+            ->where('org_id', $user->org_id)
+            ->with([
+                'lesson:id,slug,title,module_id',
+                'lesson.module:id,slug,title,course_id',
+                'lesson.module.course:id,slug,title',
+            ])
+            ->orderByDesc('created_at')
+            ->limit(100)
+            ->get()
+            ->map(fn ($b) => [
+                'lesson_id'    => $b->lesson_id,
+                'lesson_slug'  => $b->lesson->slug,
+                'lesson_title' => $b->lesson->title,
+                'module_slug'  => $b->lesson->module->slug,
+                'module_title' => $b->lesson->module->title,
+                'course_slug'  => $b->lesson->module->course->slug,
+                'course_title' => $b->lesson->module->course->title,
+                'created_at'   => $b->created_at->toIso8601String(),
+            ]);
+
+        return response()->json(['data' => $bookmarks]);
+    }
     public function notes(Request $r)              { return StubResponse::notImplemented('me.notes'); }
 
     public function progress(\Illuminate\Http\Request $r)
