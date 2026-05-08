@@ -97,6 +97,13 @@ class MeReadHandlersTest extends TestCase
         $this->assertContains('Test', $titles);
     }
 
+    public function test_me_progress_returns_summary(): void
+    {
+        $this->authedEntitledUser();
+        $r = $this->getJson('/api/lms/me/progress');
+        $r->assertOk()->assertJsonStructure(['data' => ['lessons_completed', 'modules_completed', 'courses_completed']]);
+    }
+
     public function test_me_courses_excludes_unpublished(): void
     {
         $user = $this->authedEntitledUser();
