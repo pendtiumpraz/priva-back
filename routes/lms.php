@@ -9,6 +9,7 @@ use App\Http\Controllers\Lms\Admin\QuizQuestionAdminController;
 use App\Http\Controllers\Lms\Admin\UserAdminController;
 use App\Http\Controllers\Lms\Admin\VideoAdminController;
 use App\Http\Controllers\Lms\CourseController;
+use App\Http\Controllers\Lms\FeatureDocQuizController;
 use App\Http\Controllers\Lms\LeaderboardController;
 use App\Http\Controllers\Lms\MeController;
 use App\Http\Controllers\Lms\QuizController;
@@ -29,6 +30,11 @@ Route::get('courses/{courseSlug}/modules/{moduleSlug}/lessons/{lessonSlug}', [Co
 Route::get('quizzes',                                                  [QuizController::class, 'findByOwner']);
 Route::get('quizzes/{id}',                                             [QuizController::class, 'show']);
 Route::get('leaderboard',                                              [LeaderboardController::class, 'index']);
+
+// ---- Feature-doc quizzes (Phase 6) ----
+Route::get('feature-doc-quizzes',                                      [FeatureDocQuizController::class, 'findByOwner']);
+Route::get('feature-doc-quizzes/{quiz}',                               [FeatureDocQuizController::class, 'show']);
+Route::post('feature-doc-quizzes/{quiz}/attempt',                      [FeatureDocQuizController::class, 'attempt']);
 
 // ---- Learner: write ----
 Route::post('me/lessons/{id}/complete',          [MeController::class, 'completeLesson']);
