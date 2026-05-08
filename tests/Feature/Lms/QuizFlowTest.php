@@ -6,6 +6,7 @@ use App\Lms\Models\Course;
 use App\Lms\Models\Module;
 use App\Lms\Models\Quiz;
 use App\Lms\Models\QuizQuestion;
+use App\Lms\Models\UserModuleProgress;
 use App\Lms\Models\XpRule;
 use App\Models\MenuItem;
 use App\Models\Organization;
@@ -67,6 +68,34 @@ class QuizFlowTest extends TestCase
         $this->assertDatabaseHas('lms_quiz_attempts', ['user_id' => $user->id, 'quiz_id' => $quiz->id, 'passed' => true]);
         $this->assertDatabaseHas('lms_xp_log', ['action' => 'quiz.passed']);
         $this->assertDatabaseHas('lms_xp_log', ['action' => 'quiz.perfect']);
+    }
+
+    public function test_show_quiz_blocked_when_module_locked(): void
+    {
+        $user = $this->setupAuthed();
+        $course = Course::create(['org_id' => null, 'slug' => 'c2', 'title' => 'C2', 'description' => '', 'level' => null, 'duration_minutes' => 0, 'thumbnail_url' => null, 'published' => true, 'order' => 2, 'created_by' => null]);
+        $prevModule = Module::create(['course_id' => $course->id, 'slug' => 'prev', 'title' => 'Prev', 'description' => '', 'order' => 1]);
+        $module = Module::create(['course_id' => $course->id, 'slug' => 'm2', 'title' => 'M2', 'description' => '', 'order' => 2, 'unlock_after_module_id' => $prevModule->id]);
+        $quiz = Quiz::create(['owner_type' => 'module', 'owner_key' => (string) $module->id, 'passing_score' => 70]);
+        QuizQuestion::create(['quiz_id' => $quiz->id, 'type' => 'mcq', 'prompt' => 'X', 'options' => [['key'=>'a','label'=>'A']], 'correct_answer' => ['a'], 'points' => 1, 'order' => 1]);
+
+        // Previous module not completed — quiz fetch should be 403.
+        $r = $this->getJson("/api/lms/quizzes/{$quiz->id}");
+        $r->assertForbidden()->assertJsonPath('code', 'LMS_LOCKED');
+    }
+
+    public function test_show_quiz_allowed_when_module_unlocked(): void
+    {
+        $user = $this->setupAuthed();
+        $course = Course::create(['org_id' => null, 'slug' => 'c3', 'title' => 'C3', 'description' => '', 'level' => null, 'duration_minutes' => 0, 'thumbnail_url' => null, 'published' => true, 'order' => 3, 'created_by' => null]);
+        $prevModule = Module::create(['course_id' => $course->id, 'slug' => 'prev2', 'title' => 'Prev2', 'description' => '', 'order' => 1]);
+        $module = Module::create(['course_id' => $course->id, 'slug' => 'm3', 'title' => 'M3', 'description' => '', 'order' => 2, 'unlock_after_module_id' => $prevModule->id]);
+        UserModuleProgress::create(['user_id' => $user->id, 'org_id' => $user->org_id, 'module_id' => $prevModule->id, 'status' => 'completed', 'completed_at' => now()]);
+        $quiz = Quiz::create(['owner_type' => 'module', 'owner_key' => (string) $module->id, 'passing_score' => 70]);
+        QuizQuestion::create(['quiz_id' => $quiz->id, 'type' => 'mcq', 'prompt' => 'X', 'options' => [['key'=>'a','label'=>'A']], 'correct_answer' => ['a'], 'points' => 1, 'order' => 1]);
+
+        $r = $this->getJson("/api/lms/quizzes/{$quiz->id}");
+        $r->assertOk()->assertJsonPath('data.id', $quiz->id);
     }
 
     public function test_failed_attempt_no_xp(): void

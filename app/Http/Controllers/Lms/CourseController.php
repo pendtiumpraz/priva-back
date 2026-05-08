@@ -155,6 +155,22 @@ class CourseController extends Controller
             })->first();
         if (! $course) return response()->json(['message' => 'Course not found.'], 404);
 
+        // Enforce: all modules of the course must be completed before exam is unlocked.
+        $allModuleIds = $course->modules()->pluck('id');
+        if ($allModuleIds->isNotEmpty()) {
+            $completedCount = \App\Lms\Models\UserModuleProgress::query()
+                ->where('user_id', $user->id)
+                ->whereIn('module_id', $allModuleIds)
+                ->where('status', 'completed')
+                ->count();
+            if ($completedCount < $allModuleIds->count()) {
+                return response()->json([
+                    'message' => 'Selesaikan semua modul terlebih dahulu.',
+                    'code' => 'LMS_EXAM_LOCKED',
+                ], 403);
+            }
+        }
+
         $exam = \App\Lms\Models\Quiz::query()
             ->where('owner_type', 'course')
             ->where('owner_key', (string) $course->id)

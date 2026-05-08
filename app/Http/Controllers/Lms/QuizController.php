@@ -12,6 +12,22 @@ class QuizController extends Controller
         $quiz = \App\Lms\Models\Quiz::with('questions')->find($id);
         if (! $quiz) return response()->json(['message' => 'Quiz not found.'], 404);
 
+        // Module-lock enforcement: if this quiz belongs to a locked module, deny access.
+        if ($quiz->owner_type === 'module') {
+            $module = \App\Lms\Models\Module::find((int) $quiz->owner_key);
+            if ($module && $module->unlock_after_module_id) {
+                $user = $r->user();
+                $prevDone = \App\Lms\Models\UserModuleProgress::query()
+                    ->where('user_id', $user->id)
+                    ->where('module_id', $module->unlock_after_module_id)
+                    ->where('status', 'completed')
+                    ->exists();
+                if (! $prevDone) {
+                    return response()->json(['message' => 'Module locked.', 'code' => 'LMS_LOCKED'], 403);
+                }
+            }
+        }
+
         $questions = $quiz->questions->map(fn ($q) => [
             'id' => $q->id,
             'type' => $q->type,
