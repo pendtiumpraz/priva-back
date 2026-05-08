@@ -86,4 +86,31 @@ class MeCompletionTest extends TestCase
 
         $this->assertDatabaseHas('lms_user_module_progress', ['module_id' => $module->id, 'status' => 'completed']);
     }
+
+    public function test_course_completed_xp_awarded_when_all_modules_done(): void
+    {
+        $user = $this->setupEntitledUser();
+        XpRule::create(['action_key' => 'course.completed', 'xp_amount' => 200]);
+
+        $course = Course::create(['org_id' => null, 'slug' => 'c', 'title' => 'C', 'description' => '', 'level' => null, 'duration_minutes' => 0, 'thumbnail_url' => null, 'published' => true, 'order' => 1, 'created_by' => null]);
+        $module = Module::create(['course_id' => $course->id, 'slug' => 'm', 'title' => 'M', 'description' => '', 'order' => 1]);
+        $lesson = Lesson::create(['module_id' => $module->id, 'slug' => 'l1', 'title' => 'L1', 'body' => '', 'order' => 1]);
+
+        $this->postJson("/api/lms/me/lessons/{$lesson->id}/complete");
+
+        $this->assertDatabaseHas('lms_xp_log', ['action' => 'course.completed', 'ref_id' => (string) $course->id]);
+        $this->assertDatabaseHas('lms_org_leaderboard', ['user_id' => $user->id, 'xp_total' => 210]);
+    }
+
+    public function test_courses_completed_count_excludes_zero_module_courses(): void
+    {
+        $user = $this->setupEntitledUser();
+
+        // course with no modules — must never count as completed
+        Course::create(['org_id' => null, 'slug' => 'empty', 'title' => 'Empty', 'description' => '', 'level' => null, 'duration_minutes' => 0, 'thumbnail_url' => null, 'published' => true, 'order' => 1, 'created_by' => null]);
+
+        $r = $this->getJson('/api/lms/me/progress');
+
+        $r->assertOk()->assertJsonPath('data.courses_completed', 0);
+    }
 }

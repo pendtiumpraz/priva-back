@@ -43,7 +43,7 @@ class XpAwardService
                             ->where('p.status', '=', 'completed');
                       })
                       ->groupBy('m2.course_id')
-                      ->havingRaw('COUNT(m2.id) = COUNT(p.id)');
+                      ->havingRaw('COUNT(m2.id) > 0 AND COUNT(m2.id) = COUNT(p.id)');
                 })
                 ->distinct()
                 ->count('m.course_id');
