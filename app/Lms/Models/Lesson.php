@@ -10,11 +10,15 @@ class Lesson extends Model
 
     protected $fillable = [
         'module_id', 'slug', 'title', 'body', 'order', 'duration_seconds', 'video_id',
+        'steps', 'tips', 'tags',
     ];
 
     protected $casts = [
         'order' => 'integer',
         'duration_seconds' => 'integer',
+        'steps' => 'array',
+        'tips' => 'array',
+        'tags' => 'array',
     ];
 
     public function module()
