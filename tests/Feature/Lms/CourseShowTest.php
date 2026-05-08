@@ -49,4 +49,19 @@ class CourseShowTest extends TestCase
         $this->authedEntitled();
         $this->getJson('/api/lms/courses/does-not-exist')->assertStatus(404);
     }
+
+    public function test_returns_course_with_empty_modules_array(): void
+    {
+        $this->authedEntitled();
+        Course::create([
+            'org_id' => null, 'slug' => 'empty', 'title' => 'Empty', 'description' => '',
+            'level' => null, 'duration_minutes' => 0, 'thumbnail_url' => null,
+            'published' => true, 'order' => 1, 'created_by' => null,
+        ]);
+
+        $r = $this->getJson('/api/lms/courses/empty');
+        $r->assertOk()
+          ->assertJsonPath('data.slug', 'empty')
+          ->assertJsonCount(0, 'data.modules');
+    }
 }
