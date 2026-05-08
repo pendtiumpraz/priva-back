@@ -200,7 +200,34 @@ class MeController extends Controller
         }
     }
 
-    public function bookmarkCreate(Request $r)     { return StubResponse::notImplemented('me.bookmark.create'); }
-    public function bookmarkDelete(Request $r, $lessonId) { return StubResponse::notImplemented('me.bookmark.delete'); }
-    public function noteUpsert(Request $r, $lessonId) { return StubResponse::notImplemented('me.note.upsert'); }
+    public function bookmarkCreate(\Illuminate\Http\Request $r)
+    {
+        $r->validate(['lesson_id' => 'required|integer']);
+        $user = $r->user();
+        \App\Lms\Models\UserBookmark::firstOrCreate(
+            ['user_id' => $user->id, 'lesson_id' => $r->lesson_id],
+            ['org_id' => $user->org_id]
+        );
+        return response()->json(['data' => ['bookmarked' => true]]);
+    }
+
+    public function bookmarkDelete(\Illuminate\Http\Request $r, $lessonId)
+    {
+        \App\Lms\Models\UserBookmark::query()
+            ->where('user_id', $r->user()->id)
+            ->where('lesson_id', $lessonId)
+            ->delete();
+        return response()->json(['data' => ['bookmarked' => false]]);
+    }
+
+    public function noteUpsert(\Illuminate\Http\Request $r, $lessonId)
+    {
+        $r->validate(['body' => 'required|string']);
+        $user = $r->user();
+        $note = \App\Lms\Models\UserNote::updateOrCreate(
+            ['user_id' => $user->id, 'lesson_id' => $lessonId],
+            ['org_id' => $user->org_id, 'body' => $r->body]
+        );
+        return response()->json(['data' => ['lesson_id' => (int) $lessonId, 'body' => $note->body]]);
+    }
 }
