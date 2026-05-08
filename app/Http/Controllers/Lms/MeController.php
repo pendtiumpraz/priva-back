@@ -46,9 +46,17 @@ class MeController extends Controller
 
         $rankInOrg = null;
         if ($leaderboardRow) {
+            // Mirror LeaderboardController's stable sort: DESC xp_total, ASC user_id.
+            // Rank = count of rows that sort strictly before this user + 1.
             $rankInOrg = \App\Lms\Models\OrgLeaderboard::query()
                 ->where('org_id', $user->org_id)
-                ->where('xp_total', '>', $leaderboardRow->xp_total)
+                ->where(function ($q) use ($leaderboardRow, $user) {
+                    $q->where('xp_total', '>', $leaderboardRow->xp_total)
+                      ->orWhere(function ($q2) use ($leaderboardRow, $user) {
+                          $q2->where('xp_total', '=', $leaderboardRow->xp_total)
+                             ->where('user_id', '<', $user->id);
+                      });
+                })
                 ->count() + 1;
         }
 
