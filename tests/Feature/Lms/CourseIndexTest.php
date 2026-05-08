@@ -38,6 +38,23 @@ class CourseIndexTest extends TestCase
         $r = $this->getJson('/api/lms/courses');
         $r->assertOk();
         $this->assertContains('Pub', collect($r->json('data'))->pluck('title')->all());
+        $r->assertJsonPath('data.0.regulation_code', null);  // test course has no regulation_code set
+    }
+
+    public function test_returns_regulation_code_when_set(): void
+    {
+        $this->authedEntitled();
+        Course::create([
+            'org_id' => null, 'slug' => 'pub2', 'title' => 'Pub2', 'description' => '',
+            'level' => null, 'duration_minutes' => 0, 'thumbnail_url' => null,
+            'regulation_code' => 'UU_PDP',
+            'published' => true, 'order' => 1, 'created_by' => null,
+        ]);
+
+        $r = $this->getJson('/api/lms/courses');
+        $r->assertOk();
+        $codes = collect($r->json('data'))->pluck('regulation_code');
+        $this->assertContains('UU_PDP', $codes);
     }
 
     public function test_excludes_other_orgs_private_courses(): void
