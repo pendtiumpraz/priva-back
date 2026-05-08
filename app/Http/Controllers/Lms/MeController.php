@@ -8,8 +8,48 @@ use Illuminate\Http\Request;
 
 class MeController extends Controller
 {
-    public function dashboard(Request $r)         { return StubResponse::notImplemented('me.dashboard'); }
-    public function courses(Request $r)            { return StubResponse::notImplemented('me.courses'); }
+    public function dashboard(Request $r)
+    {
+        $user = $r->user();
+
+        $continue = \App\Lms\Models\UserLessonProgress::query()
+            ->where('user_id', $user->id)
+            ->where('org_id', $user->org_id)
+            ->whereNull('completed_at')
+            ->orderByDesc('updated_at')
+            ->first();
+
+        $coursesTotal = \App\Lms\Models\Course::query()
+            ->where('published', true)
+            ->where(function ($q) use ($user) {
+                $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
+            })
+            ->count();
+
+        return response()->json(['data' => [
+            'continue_learning' => $continue ? [
+                'lesson_id' => $continue->lesson_id,
+                'watched_seconds' => $continue->watched_seconds,
+            ] : null,
+            'courses_total' => $coursesTotal,
+            'courses_completed' => 0,
+        ]]);
+    }
+
+    public function courses(Request $r)
+    {
+        $user = $r->user();
+
+        $courses = \App\Lms\Models\Course::query()
+            ->where('published', true)
+            ->where(function ($q) use ($user) {
+                $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
+            })
+            ->orderBy('order')
+            ->get(['id', 'slug', 'title', 'description', 'level', 'duration_minutes', 'thumbnail_url', 'regulation_code', 'order']);
+
+        return response()->json(['data' => $courses]);
+    }
     public function badges(Request $r)             { return StubResponse::notImplemented('me.badges'); }
     public function bookmarks(Request $r)          { return StubResponse::notImplemented('me.bookmarks'); }
     public function notes(Request $r)              { return StubResponse::notImplemented('me.notes'); }
