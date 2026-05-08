@@ -209,7 +209,36 @@ class MeController extends Controller
 
         return response()->json(['data' => $bookmarks]);
     }
-    public function notes(Request $r)              { return StubResponse::notImplemented('me.notes'); }
+    public function notes(Request $r): \Illuminate\Http\JsonResponse
+    {
+        $user = $r->user();
+
+        $notes = \App\Lms\Models\UserNote::query()
+            ->where('user_id', $user->id)
+            ->where('org_id', $user->org_id)
+            ->with([
+                'lesson:id,slug,title,module_id',
+                'lesson.module:id,slug,title,course_id',
+                'lesson.module.course:id,slug,title',
+            ])
+            ->orderByDesc('updated_at')
+            ->limit(100)
+            ->get()
+            ->map(fn ($n) => [
+                'lesson_id'      => $n->lesson_id,
+                'lesson_slug'    => $n->lesson->slug,
+                'lesson_title'   => $n->lesson->title,
+                'module_slug'    => $n->lesson->module->slug,
+                'module_title'   => $n->lesson->module->title,
+                'course_slug'    => $n->lesson->module->course->slug,
+                'course_title'   => $n->lesson->module->course->title,
+                'body_preview'   => mb_substr(strip_tags($n->body), 0, 200),
+                'body_truncated' => mb_strlen(strip_tags($n->body)) > 200,
+                'updated_at'     => $n->updated_at->toIso8601String(),
+            ]);
+
+        return response()->json(['data' => $notes]);
+    }
 
     public function progress(\Illuminate\Http\Request $r)
     {
