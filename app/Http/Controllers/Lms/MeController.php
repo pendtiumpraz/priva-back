@@ -36,11 +36,26 @@ class MeController extends Controller
         ]]);
     }
 
-    public function courses(Request $r)
+    public function courses(\Illuminate\Http\Request $r)
     {
         $user = $r->user();
 
+        // "My courses" = courses where the user has any lesson progress.
+        // (No progress yet → empty. This is intentional; full catalog lives at GET /api/lms/courses.)
+        $courseIds = \DB::table('lms_user_lesson_progress as p')
+            ->join('lms_lessons as l', 'l.id', '=', 'p.lesson_id')
+            ->join('lms_modules as m', 'm.id', '=', 'l.module_id')
+            ->where('p.user_id', $user->id)
+            ->where('p.org_id', $user->org_id)
+            ->distinct()
+            ->pluck('m.course_id');
+
+        if ($courseIds->isEmpty()) {
+            return response()->json(['data' => []]);
+        }
+
         $courses = \App\Lms\Models\Course::query()
+            ->whereIn('id', $courseIds)
             ->where('published', true)
             ->where(function ($q) use ($user) {
                 $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
