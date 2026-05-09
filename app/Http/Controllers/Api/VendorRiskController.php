@@ -6,9 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\Vendor;
 use App\Models\VendorAssessment;
+use App\Models\VendorQuestionnaire;
 use App\Services\AiService;
+use App\Services\ApprovalWorkflowDispatcher;
+use App\Services\AssessmentAutoTriggerService;
 use App\Services\DocumentParserService;
 use App\Services\TenantStorageService;
+use App\Services\VendorRiskScoreService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -63,11 +67,11 @@ class VendorRiskController extends Controller
         // Service handles both criteria + try/catch wrap.
         $autoTiaId = null;
         try {
-            $tia = app(\App\Services\AssessmentAutoTriggerService::class)
+            $tia = app(AssessmentAutoTriggerService::class)
                 ->fromVendor($vendor, $request->user()->id);
             $autoTiaId = $tia?->id;
         } catch (\Throwable $e) {
-            Log::warning('Auto-TIA on Vendor store failed (non-fatal): ' . $e->getMessage());
+            Log::warning('Auto-TIA on Vendor store failed (non-fatal): '.$e->getMessage());
         }
 
         return response()->json([
@@ -121,7 +125,7 @@ class VendorRiskController extends Controller
             'contact_name' => "{$opt}|string|max:200",
             'contact_email' => "{$opt}|email|max:200",
             // Phase 2 — TPRM category
-            'category' => "{$opt}|in:" . implode(',', \App\Models\VendorQuestionnaire::ALL_CATEGORIES),
+            'category' => "{$opt}|in:".implode(',', VendorQuestionnaire::ALL_CATEGORIES),
         ];
     }
 
@@ -135,12 +139,12 @@ class VendorRiskController extends Controller
      */
     public function getQuestionnaire(Request $request, string $category)
     {
-        if (!in_array($category, \App\Models\VendorQuestionnaire::ALL_CATEGORIES, true)) {
+        if (! in_array($category, VendorQuestionnaire::ALL_CATEGORIES, true)) {
             return response()->json(['message' => 'Unknown vendor category'], 422);
         }
         $version = $request->get('version', 'v1');
 
-        $questions = \App\Models\VendorQuestionnaire::query()
+        $questions = VendorQuestionnaire::query()
             ->where('category', $category)
             ->where('version', $version)
             ->where('is_active', true)
@@ -149,10 +153,10 @@ class VendorRiskController extends Controller
 
         return response()->json([
             'category' => $category,
-            'category_label' => \App\Models\VendorQuestionnaire::CATEGORY_LABELS[$category] ?? $category,
-            'category_description' => \App\Models\VendorQuestionnaire::CATEGORY_DESCRIPTIONS[$category] ?? null,
+            'category_label' => VendorQuestionnaire::CATEGORY_LABELS[$category] ?? $category,
+            'category_description' => VendorQuestionnaire::CATEGORY_DESCRIPTIONS[$category] ?? null,
             'version' => $version,
-            'sections' => \App\Models\VendorQuestionnaire::SECTION_LABELS,
+            'sections' => VendorQuestionnaire::SECTION_LABELS,
             'data' => $questions,
         ]);
     }
@@ -162,14 +166,15 @@ class VendorRiskController extends Controller
      */
     public function listCategories()
     {
-        $list = collect(\App\Models\VendorQuestionnaire::ALL_CATEGORIES)
+        $list = collect(VendorQuestionnaire::ALL_CATEGORIES)
             ->map(fn ($c) => [
                 'value' => $c,
-                'label' => \App\Models\VendorQuestionnaire::CATEGORY_LABELS[$c] ?? $c,
-                'description' => \App\Models\VendorQuestionnaire::CATEGORY_DESCRIPTIONS[$c] ?? null,
-                'question_count' => \App\Models\VendorQuestionnaire::query()
+                'label' => VendorQuestionnaire::CATEGORY_LABELS[$c] ?? $c,
+                'description' => VendorQuestionnaire::CATEGORY_DESCRIPTIONS[$c] ?? null,
+                'question_count' => VendorQuestionnaire::query()
                     ->where('category', $c)->where('version', 'v1')->where('is_active', true)->count(),
             ])->values();
+
         return response()->json(['data' => $list]);
     }
 
@@ -184,11 +189,11 @@ class VendorRiskController extends Controller
      */
     public function assessDeterministic(
         Request $request,
-        \App\Services\VendorRiskScoreService $scorer,
+        VendorRiskScoreService $scorer,
         ?string $id = null,
     ) {
         $data = $request->validate([
-            'category' => 'required|in:' . implode(',', \App\Models\VendorQuestionnaire::ALL_CATEGORIES),
+            'category' => 'required|in:'.implode(',', VendorQuestionnaire::ALL_CATEGORIES),
             'answers' => 'required|array',
             'version' => 'nullable|string|max:16',
             'notes' => 'nullable|string|max:2000',
@@ -245,7 +250,7 @@ class VendorRiskController extends Controller
         $vendor->save();
 
         return response()->json([
-            'message' => 'Assessment selesai. Skor: ' . $result['score'] . '/100 (' . strtoupper($result['risk_level']) . ').',
+            'message' => 'Assessment selesai. Skor: '.$result['score'].'/100 ('.strtoupper($result['risk_level']).').',
             'data' => [
                 'vendor' => $vendor->fresh(),
                 'assessment' => $assessment,
@@ -264,6 +269,25 @@ class VendorRiskController extends Controller
         $vendor->delete();
 
         return response()->json(['message' => 'Vendor dipindahkan ke tempat sampah']);
+    }
+
+    /**
+     * Submit assessment vendor untuk approval. Trigger Approval Workflow
+     * berdasarkan config /settings → Approval Workflow (module=vendor_risk).
+     * Dipakai setelah assessment selesai dan butuh sign-off compliance.
+     */
+    public function submitForApproval(Request $request, $id)
+    {
+        $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($id);
+
+        $wf = ApprovalWorkflowDispatcher::dispatch(
+            $vendor->org_id, 'vendor_risk', $vendor->id
+        );
+
+        return response()->json([
+            'message' => 'Submitted for approval',
+            'workflow' => $wf,
+        ]);
     }
 
     public function trashed(Request $request)

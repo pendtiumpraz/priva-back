@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\ApprovalWorkflow;
 use App\Models\AuditLog;
 use App\Models\BreachIncident;
+use App\Models\CrossBorderTransfer;
 use App\Models\Dpia;
 use App\Models\DsrRequest;
 use App\Models\Ropa;
+use App\Models\Vendor;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 
@@ -25,6 +27,8 @@ class ApprovalController extends Controller
             'dpia' => Dpia::class,
             'breach' => BreachIncident::class,
             'dsr' => DsrRequest::class,
+            'cross_border' => CrossBorderTransfer::class,
+            'vendor_risk' => Vendor::class,
             default => null,
         };
     }
@@ -39,6 +43,7 @@ class ApprovalController extends Controller
         return match ($module) {
             'breach' => 'closed',
             'dsr' => 'completed',
+            // ropa, dpia, cross_border, vendor_risk → 'approved'
             default => 'approved',
         };
     }
@@ -51,6 +56,8 @@ class ApprovalController extends Controller
         return match ($module) {
             'breach' => 'containment',
             'dsr' => 'in_progress',
+            'cross_border' => 'rejected',
+            // ropa, dpia, vendor_risk → 'revision'
             default => 'revision',
         };
     }

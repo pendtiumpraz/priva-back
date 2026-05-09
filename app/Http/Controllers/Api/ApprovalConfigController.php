@@ -30,6 +30,8 @@ class ApprovalConfigController extends Controller
         'dpia' => 'DPIA (Penilaian Dampak)',
         'breach' => 'Insiden Pelanggaran (Breach)',
         'dsr' => 'Permintaan Hak Subjek (DSR)',
+        'cross_border' => 'Transfer Lintas Negara',
+        'vendor_risk' => 'Vendor Risk Assessment',
     ];
 
     private function ensureAdmin(Request $request): ?JsonResponse

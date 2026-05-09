@@ -3,8 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\CountryAdequacy;
 use App\Models\CrossBorderTransfer;
 use App\Services\AiService;
+use App\Services\ApprovalWorkflowDispatcher;
+use App\Services\AssessmentAutoTriggerService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -46,11 +49,11 @@ class CrossBorderController extends Controller
         // Service wraps in try/catch so failures can't fail the create.
         $autoTiaId = null;
         try {
-            $tia = app(\App\Services\AssessmentAutoTriggerService::class)
+            $tia = app(AssessmentAutoTriggerService::class)
                 ->fromCrossBorder($transfer, $request->user()->id);
             $autoTiaId = $tia?->id;
         } catch (\Throwable $e) {
-            Log::warning('Auto-TIA on CrossBorder store failed (non-fatal): ' . $e->getMessage());
+            Log::warning('Auto-TIA on CrossBorder store failed (non-fatal): '.$e->getMessage());
         }
 
         return response()->json([
@@ -70,8 +73,21 @@ class CrossBorderController extends Controller
     public function update(Request $request, $id)
     {
         $transfer = CrossBorderTransfer::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $oldStatus = $transfer->status;
         $data = $request->validate($this->writeRules(true));
         $transfer->update($data);
+
+        // Trigger Approval Workflow saat status → 'pending' (submit for approval).
+        // Cross-border butuh sign-off compliance sebelum diakui sah.
+        if (
+            isset($data['status'])
+            && $data['status'] === 'pending'
+            && $oldStatus !== 'pending'
+        ) {
+            ApprovalWorkflowDispatcher::dispatch(
+                $transfer->org_id, 'cross_border', $transfer->id
+            );
+        }
 
         return response()->json(['message' => 'Data transfer berhasil diperbarui', 'data' => $transfer->fresh()]);
     }
@@ -327,10 +343,10 @@ class CrossBorderController extends Controller
             'ropa_id' => "{$opt}|uuid",
 
             // Phase 1 — transfer profile (drives TIA risk pre-fill)
-            'transfer_volume_band' => "{$opt}|in:" . implode(',', \App\Models\CrossBorderTransfer::VOLUME_BANDS),
-            'transfer_frequency' => "{$opt}|in:" . implode(',', \App\Models\CrossBorderTransfer::FREQUENCIES),
-            'data_sensitivity' => "{$opt}|in:" . implode(',', \App\Models\CrossBorderTransfer::SENSITIVITIES),
-            'transfer_mechanism' => "{$opt}|in:" . implode(',', \App\Models\CrossBorderTransfer::MECHANISMS),
+            'transfer_volume_band' => "{$opt}|in:".implode(',', CrossBorderTransfer::VOLUME_BANDS),
+            'transfer_frequency' => "{$opt}|in:".implode(',', CrossBorderTransfer::FREQUENCIES),
+            'data_sensitivity' => "{$opt}|in:".implode(',', CrossBorderTransfer::SENSITIVITIES),
+            'transfer_mechanism' => "{$opt}|in:".implode(',', CrossBorderTransfer::MECHANISMS),
             'encryption_in_transit' => "{$opt}|boolean",
             'encryption_at_rest' => "{$opt}|boolean",
             'data_minimization_applied' => "{$opt}|boolean",
@@ -354,35 +370,38 @@ class CrossBorderController extends Controller
         $q = $request->get('q');
         $tier = $request->get('tier');
 
-        $query = \App\Models\CountryAdequacy::query()->where('is_active', true);
+        $query = CountryAdequacy::query()->where('is_active', true);
         if ($q) {
-            $like = '%' . strtolower($q) . '%';
+            $like = '%'.strtolower($q).'%';
             $query->where(function ($w) use ($like) {
                 $w->whereRaw('LOWER(country_name) LIKE ?', [$like])
                     ->orWhereRaw('LOWER(country_code) LIKE ?', [$like]);
             });
         }
-        if ($tier) $query->where('tier', $tier);
+        if ($tier) {
+            $query->where('tier', $tier);
+        }
 
         return response()->json([
             'data' => $query->orderBy('tier')->orderBy('country_name')->get(),
-            'tier_labels' => \App\Models\CountryAdequacy::TIER_LABELS,
+            'tier_labels' => CountryAdequacy::TIER_LABELS,
         ]);
     }
 
     public function resolveCountry(Request $request, string $codeOrName)
     {
-        $rec = \App\Models\CountryAdequacy::resolve($codeOrName);
-        if (!$rec) {
+        $rec = CountryAdequacy::resolve($codeOrName);
+        if (! $rec) {
             return response()->json([
                 'message' => 'Country not in adequacy lookup. Treat as Tier "none" and require safeguards.',
                 'data' => null,
-                'tier_label' => \App\Models\CountryAdequacy::TIER_LABELS[\App\Models\CountryAdequacy::TIER_NONE],
+                'tier_label' => CountryAdequacy::TIER_LABELS[CountryAdequacy::TIER_NONE],
             ]);
         }
+
         return response()->json([
             'data' => $rec,
-            'tier_label' => \App\Models\CountryAdequacy::TIER_LABELS[$rec->tier] ?? $rec->tier,
+            'tier_label' => CountryAdequacy::TIER_LABELS[$rec->tier] ?? $rec->tier,
         ]);
     }
 }

@@ -535,6 +535,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::delete('/{id}', [VendorRiskController::class, 'destroy']);
         Route::post('/{id}/restore', [VendorRiskController::class, 'restore']);
         Route::delete('/{id}/force', [VendorRiskController::class, 'forceDelete']);
+        Route::post('/{id}/submit-for-approval', [VendorRiskController::class, 'submitForApproval']);
         // AI Assessment (existing — parallel path to deterministic)
         Route::post('/extract', [VendorRiskController::class, 'extract']);
         Route::post('/generate-questions', [VendorRiskController::class, 'generateQuestions']);
