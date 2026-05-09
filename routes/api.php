@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\AiProviderController;
 use App\Http\Controllers\Api\AlertController;
 use App\Http\Controllers\Api\ApiHubController;
 use App\Http\Controllers\Api\ApiKeyController;
+use App\Http\Controllers\Api\ApprovalConfigController;
 use App\Http\Controllers\Api\ApprovalController;
 use App\Http\Controllers\Api\AssessmentsController;
 use App\Http\Controllers\Api\AuthController;
@@ -842,6 +843,14 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::get('/pending', [ApprovalController::class, 'pending']);
         Route::post('/{id}/approve', [ApprovalController::class, 'approve']);
         Route::post('/{id}/reject', [ApprovalController::class, 'reject']);
+    });
+
+    // Approval Workflow Configuration (per module, per org)
+    Route::prefix('approval-configs')->group(function () {
+        Route::get('/', [ApprovalConfigController::class, 'index']);
+        Route::get('/eligible-roles/{module}', [ApprovalConfigController::class, 'eligibleRoles']);
+        Route::get('/{module}', [ApprovalConfigController::class, 'show']);
+        Route::put('/{module}', [ApprovalConfigController::class, 'update']);
     });
 
     // Security Posture & Alerts (DSPM) Phase 4

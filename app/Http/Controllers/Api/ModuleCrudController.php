@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ApprovalWorkflow;
+use App\Models\ApprovalWorkflowConfig;
 use App\Models\AuditLog;
 use App\Models\BreachIncident;
 use App\Models\ConsentCollectionPoint;
@@ -17,6 +18,7 @@ use App\Models\ModuleCustomField;
 use App\Models\Organization;
 use App\Models\ProcessingCategory;
 use App\Models\Ropa;
+use App\Models\TenantRole;
 use App\Services\AssessmentAutoTriggerService;
 use App\Services\NotificationService;
 use App\Services\RopaRiskCalculator;
@@ -855,16 +857,32 @@ class ModuleCrudController extends Controller
 
         // Approval Workflow trigger if status changes to 'waiting'
         if ($request->has('status') && $request->input('status') === 'waiting' && $oldStatus !== 'waiting') {
-            // Need to create workflow based on module
             if (in_array($module, ['ropa', 'dpia'])) {
-                $regulationCode = $record->regulation_code ?? 'uupdp';
-                // Simplified multi-level DPO -> CEO
-                $steps = [
-                    ['role' => 'dpo', 'status' => 'pending', 'name' => 'Review DPO'],
-                    ['role' => 'admin', 'status' => 'pending', 'name' => 'Final Approval (Management)'],
-                ];
+                // Pakai config approval kalau ada (per-org tenant_role-based).
+                // Fallback ke hardcoded DPO → Admin kalau config belum diset
+                // (backward-compat untuk org yang belum migrate ke workflow config).
+                $cfg = ApprovalWorkflowConfig::where('org_id', $record->org_id)
+                    ->where('module', $module)
+                    ->first();
 
-                // For GDPR/PDPA, maybe require an external auditor step. For now standard 2 step.
+                if ($cfg && $cfg->enabled && ! empty($cfg->steps)) {
+                    $steps = [];
+                    foreach ($cfg->steps as $s) {
+                        $tr = TenantRole::find($s['tenant_role_id'] ?? null);
+                        $steps[] = [
+                            'tenant_role_id' => $s['tenant_role_id'] ?? null,
+                            'role' => $tr ? strtolower($tr->name) : null, // legacy compat
+                            'status' => 'pending',
+                            'name' => $s['label'] ?? ($tr->name ?? 'Approval'),
+                        ];
+                    }
+                } else {
+                    // Default fallback: DPO → Admin
+                    $steps = [
+                        ['role' => 'dpo', 'status' => 'pending', 'name' => 'Review DPO'],
+                        ['role' => 'admin', 'status' => 'pending', 'name' => 'Final Approval (Management)'],
+                    ];
+                }
 
                 ApprovalWorkflow::updateOrCreate(
                     ['module' => $module, 'record_id' => $record->id, 'status' => 'pending'],

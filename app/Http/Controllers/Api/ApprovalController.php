@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\ApprovalWorkflow;
 use App\Models\AuditLog;
-use Illuminate\Support\Facades\DB;
+use App\Models\Dpia;
+use App\Models\Ropa;
+use App\Services\NotificationService;
+use Illuminate\Http\Request;
 
 class ApprovalController extends Controller
 {
@@ -16,34 +18,39 @@ class ApprovalController extends Controller
     public function pending(Request $request)
     {
         $user = $request->user();
-        
+
         $workflows = ApprovalWorkflow::where('org_id', $user->org_id)
             ->where('status', 'pending')
             ->get()
             ->filter(function ($workflow) use ($user) {
-                if (!isset($workflow->steps[$workflow->current_step])) return false;
-                
+                if (! isset($workflow->steps[$workflow->current_step])) {
+                    return false;
+                }
+
                 $step = $workflow->steps[$workflow->current_step];
                 $isApprover = false;
-                
+
                 if (isset($step['approver_id']) && $step['approver_id'] === $user->id) {
                     $isApprover = true;
+                } elseif (isset($step['tenant_role_id']) && $step['tenant_role_id'] && $user->tenant_role_id === $step['tenant_role_id']) {
+                    // Step pakai config baru: match by tenant_role_id (paling presisi)
+                    $isApprover = true;
                 } elseif (isset($step['role'])) {
-                    // check tenant role logic
+                    // Legacy fallback: match by role string
                     if ($user->role === $step['role'] || ($user->tenantRole && strtolower($user->tenantRole->name) === strtolower($step['role']))) {
                         $isApprover = true;
                     }
                 }
-                
+
                 return $isApprover && $step['status'] === 'pending';
             })->values();
 
         // Attach related models for context
         foreach ($workflows as $wf) {
             if ($wf->module === 'ropa') {
-                $wf->related_record = \App\Models\Ropa::find($wf->record_id);
+                $wf->related_record = Ropa::find($wf->record_id);
             } elseif ($wf->module === 'dpia') {
-                $wf->related_record = \App\Models\Dpia::find($wf->record_id);
+                $wf->related_record = Dpia::find($wf->record_id);
             }
             // other modules can be added
         }
@@ -68,30 +75,48 @@ class ApprovalController extends Controller
         $isApprover = false;
         if (isset($step['approver_id']) && $step['approver_id'] === $user->id) {
             $isApprover = true;
+        } elseif (isset($step['tenant_role_id']) && $step['tenant_role_id'] && $user->tenant_role_id === $step['tenant_role_id']) {
+            $isApprover = true;
         } elseif (isset($step['role'])) {
             if ($user->role === $step['role'] || ($user->tenantRole && strtolower($user->tenantRole->name) === strtolower($step['role']))) {
                 $isApprover = true;
             }
         }
 
-        if (!$isApprover) {
+        // Tambahan gate: cek permission `<module>:approve` di tenant_role
+        if ($isApprover && $user->tenantRole && is_array($user->tenantRole->permissions ?? null)) {
+            $perms = $user->tenantRole->permissions;
+            $approveKey = "{$workflow->module}:approve";
+            if (! in_array('*', $perms, true) && ! in_array($approveKey, $perms, true)) {
+                // Role belum punya permission approve untuk module ini.
+                // Skip check ini untuk system role (admin/dpo legacy) supaya
+                // backward-compat — mereka implicitly punya approve.
+                if (! $user->tenantRole->is_system) {
+                    return response()->json([
+                        'message' => "Role '{$user->tenantRole->name}' tidak punya permission '{$approveKey}'. Tambah permission Approve di /settings → Manajemen Role.",
+                    ], 403);
+                }
+            }
+        }
+
+        if (! $isApprover) {
             return response()->json(['message' => 'Unauthorized approver'], 403);
         }
 
         $steps[$current]['status'] = 'approved';
         $steps[$current]['approved_by'] = $user->id;
         $steps[$current]['approved_at'] = now()->toIso8601String();
-        
+
         $workflow->steps = $steps;
-        
+
         // If there is next step
         if ($current + 1 < count($steps)) {
             $workflow->current_step = $current + 1;
         } else {
             $workflow->status = 'approved';
-            
+
             // Mark model as approved
-            $modelClass = $workflow->module === 'ropa' ? \App\Models\Ropa::class : ($workflow->module === 'dpia' ? \App\Models\Dpia::class : null);
+            $modelClass = $workflow->module === 'ropa' ? Ropa::class : ($workflow->module === 'dpia' ? Dpia::class : null);
             if ($modelClass) {
                 $record = $modelClass::find($workflow->record_id);
                 if ($record) {
@@ -109,20 +134,22 @@ class ApprovalController extends Controller
                         ));
                         $regNum = $record->registration_number ?? '';
                         foreach (array_unique($targets) as $uid) {
-                            \App\Services\NotificationService::dispatch(
+                            NotificationService::dispatch(
                                 kind: 'info',
                                 severity: 'low',
                                 module: $workflow->module,
                                 type: "{$workflow->module}.approved",
-                                recipient: 'user:' . $uid,
+                                recipient: 'user:'.$uid,
                                 orgId: $record->org_id,
-                                title: "✅ " . strtoupper($workflow->module) . " {$regNum} disetujui",
+                                title: '✅ '.strtoupper($workflow->module)." {$regNum} disetujui",
                                 body: 'Semua step approval sudah selesai.',
                                 actionUrl: "/{$workflow->module}/{$record->id}",
                                 metadata: ['record_id' => $record->id]
                             );
                         }
-                    } catch (\Throwable $e) { \Log::warning('Approval approved notif failed: ' . $e->getMessage()); }
+                    } catch (\Throwable $e) {
+                        \Log::warning('Approval approved notif failed: '.$e->getMessage());
+                    }
                 }
             }
         }
@@ -131,7 +158,7 @@ class ApprovalController extends Controller
         AuditLog::log($user->org_id, $user->id, 'approve', $workflow->module, $workflow->record_id, [
             'workflow_id' => $workflow->id,
             'step' => $current,
-            'action' => 'approved'
+            'action' => 'approved',
         ]);
 
         return response()->json(['message' => 'Approved successfully', 'data' => $workflow]);
@@ -154,14 +181,14 @@ class ApprovalController extends Controller
         $steps[$current]['rejected_by'] = $user->id;
         $steps[$current]['rejected_at'] = now()->toIso8601String();
         $steps[$current]['reason'] = $request->reason;
-        
+
         $workflow->steps = $steps;
         $workflow->status = 'rejected';
         $workflow->rejection_reason = $request->reason;
         $workflow->save();
 
         // Mark model as rejection/draft
-        $modelClass = $workflow->module === 'ropa' ? \App\Models\Ropa::class : ($workflow->module === 'dpia' ? \App\Models\Dpia::class : null);
+        $modelClass = $workflow->module === 'ropa' ? Ropa::class : ($workflow->module === 'dpia' ? Dpia::class : null);
         if ($modelClass) {
             $record = $modelClass::find($workflow->record_id);
             if ($record) {
@@ -175,20 +202,22 @@ class ApprovalController extends Controller
                     ));
                     $regNum = $record->registration_number ?? '';
                     foreach (array_unique($targets) as $uid) {
-                        \App\Services\NotificationService::dispatch(
+                        NotificationService::dispatch(
                             kind: 'warning',
                             severity: 'high',
                             module: $workflow->module,
                             type: "{$workflow->module}.rejected",
-                            recipient: 'user:' . $uid,
+                            recipient: 'user:'.$uid,
                             orgId: $record->org_id,
-                            title: "❌ " . strtoupper($workflow->module) . " {$regNum} perlu revisi",
+                            title: '❌ '.strtoupper($workflow->module)." {$regNum} perlu revisi",
                             body: "Catatan reviewer: {$request->reason}",
                             actionUrl: "/{$workflow->module}/{$record->id}",
                             metadata: ['record_id' => $record->id, 'reason' => $request->reason]
                         );
                     }
-                } catch (\Throwable $e) { \Log::warning('Approval rejected notif failed: ' . $e->getMessage()); }
+                } catch (\Throwable $e) {
+                    \Log::warning('Approval rejected notif failed: '.$e->getMessage());
+                }
             }
         }
 
@@ -196,7 +225,7 @@ class ApprovalController extends Controller
             'workflow_id' => $workflow->id,
             'step' => $current,
             'action' => 'rejected',
-            'reason' => $request->reason
+            'reason' => $request->reason,
         ]);
 
         return response()->json(['message' => 'Rejected successfully', 'data' => $workflow]);
