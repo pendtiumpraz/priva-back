@@ -78,11 +78,13 @@ class SuperadminDashboardController extends Controller
                 ->limit(10)
                 ->get(['id', 'org_id', 'request_id', 'request_type', 'requester_name', 'deadline_at', 'status']),
 
-            'tenant_activity_7d' => DB::table('audit_logs')
-                ->select('org_id', DB::raw('count(*) as event_count'))
-                ->whereNotNull('org_id')
-                ->where('created_at', '>=', $week)
-                ->groupBy('org_id')
+            // audit_logs tidak punya kolom org_id — attribute via users.org_id
+            'tenant_activity_7d' => DB::table('audit_logs as a')
+                ->join('users as u', 'a.user_id', '=', 'u.id')
+                ->select('u.org_id', DB::raw('count(*) as event_count'))
+                ->whereNotNull('u.org_id')
+                ->where('a.created_at', '>=', $week)
+                ->groupBy('u.org_id')
                 ->orderByDesc('event_count')
                 ->limit(10)
                 ->get()
@@ -98,14 +100,13 @@ class SuperadminDashboardController extends Controller
                 ->filter()
                 ->values(),
 
-            'recent_audits' => AuditLog::with('user:id,name,email,role')
-                ->whereNotNull('org_id')
+            'recent_audits' => AuditLog::with(['user:id,name,email,role,org_id', 'user.organization:id,name'])
+                ->whereHas('user', fn ($q) => $q->whereNotNull('org_id'))
                 ->orderByDesc('created_at')
                 ->limit(20)
                 ->get()
                 ->map(function ($a) {
-                    $org = Organization::find($a->org_id);
-                    $a->org_name = $org?->name;
+                    $a->org_name = $a->user?->organization?->name;
 
                     return $a;
                 }),
