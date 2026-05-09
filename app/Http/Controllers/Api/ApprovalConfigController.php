@@ -168,6 +168,14 @@ class ApprovalConfigController extends Controller
         $eligible = $roles->filter(function ($r) use ($approveKey) {
             $perms = is_array($r->permissions) ? $r->permissions : [];
 
+            // System role yang umumnya jadi approver (admin/dpo) implisit
+            // eligible — konsisten dengan ApprovalController gate yang
+            // skip permission check untuk system role (backward-compat).
+            // Custom role harus explicit punya `<module>:approve` atau wildcard.
+            if ($r->is_system && in_array(strtolower($r->name), ['admin', 'dpo', 'manager', 'supervisor'], true)) {
+                return true;
+            }
+
             return in_array('*', $perms, true) || in_array($approveKey, $perms, true);
         })->values();
 

@@ -214,6 +214,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
     Route::apiResource('/users', UserController::class);
 
     // Tenant Roles & Apps (On-Premise Beli Putus)
+    Route::get('/tenant-roles/entitled-modules', [TenantRoleController::class, 'entitledModules']);
     Route::apiResource('/tenant-roles', TenantRoleController::class);
     Route::apiResource('/organization-apps', OrganizationAppController::class);
     Route::post('/users/{id}/restore', [UserController::class, 'restore']);

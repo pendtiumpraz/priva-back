@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\License;
+use App\Models\MenuItem;
+use App\Models\TenantModuleEntitlement;
 use App\Models\TenantRole;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -100,6 +102,58 @@ class TenantRoleController extends Controller
         $role->update($request->only('name', 'description', 'permissions'));
 
         return response()->json(['data' => $role, 'message' => 'Role berhasil diupdate']);
+    }
+
+    /**
+     * Daftar module ID yang tenant punya akses (entitlement aktif).
+     * Dipakai frontend RoleEditor supaya admin tenant gak bisa kasih
+     * permission Read/Write/Approve untuk module yang tenant-nya gak
+     * dikasih akses oleh root.
+     *
+     * Default: kalau tidak ada entitlement record sama sekali, semua
+     * module accessible (default open). Kalau ada record dengan
+     * is_entitled=false, module tsb di-exclude.
+     */
+    public function entitledModules(Request $request): JsonResponse
+    {
+        $orgId = $request->user()->org_id;
+        if (! $orgId) {
+            return response()->json(['data' => []]);
+        }
+
+        // Build menu_key → module_id mapping. Permission key di role pakai
+        // underscore (data_discovery), menu_key di registry pakai hyphen
+        // (data-discovery). Kita normalize.
+        $allMenus = MenuItem::pluck('menu_key', 'id');
+        $entitlements = TenantModuleEntitlement::where('org_id', $orgId)->get();
+
+        // Build set of revoked menu_ids
+        $revoked = [];
+        foreach ($entitlements as $e) {
+            if (! $e->isActive()) {
+                $revoked[$e->menu_id] = true;
+            }
+        }
+
+        $entitled = [];
+        foreach ($allMenus as $menuId => $menuKey) {
+            if (isset($revoked[$menuId])) {
+                continue;
+            }
+            // Normalize: data-discovery → data_discovery, gap-assessment → gap-assessment (keep)
+            $normalized = $menuKey;
+            $entitled[] = $normalized;
+            // Also add underscore variant for permission-key matching
+            $underscored = str_replace('-', '_', $menuKey);
+            if ($underscored !== $menuKey) {
+                $entitled[] = $underscored;
+            }
+        }
+
+        return response()->json([
+            'data' => array_values(array_unique($entitled)),
+            'org_id' => $orgId,
+        ]);
     }
 
     public function destroy($id)
