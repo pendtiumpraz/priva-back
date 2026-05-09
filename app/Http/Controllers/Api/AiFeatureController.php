@@ -1474,30 +1474,65 @@ class AiFeatureController extends Controller
 
     public function creditTopup(Request $request)
     {
-        if ($request->user()->role !== 'superadmin') {
+        if (! in_array($request->user()->role ?? null, ['root', 'superadmin'], true)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
         $request->validate([
             'org_id' => 'required|uuid',
-            'amount' => 'required|integer|min:1|max:10000',
-            'type' => 'nullable|string', // 'monthly' or 'purchased'
+            'amount' => 'required|integer|min:1|max:100000',
+            'type' => 'nullable|string', // 'monthly' atau 'purchased'
+            'note' => 'nullable|string|max:255',
         ]);
 
         $org = Organization::findOrFail($request->org_id);
         $type = $request->type ?? 'purchased';
+        $before = [
+            'monthly_limit' => $org->ai_credits_monthly,
+            'remaining' => $org->ai_credits_remaining,
+            'purchased' => $org->ai_credits_purchased,
+        ];
 
         if ($type === 'monthly') {
-            $org->update(['ai_credits_monthly' => $request->amount]);
+            // Set baseline monthly allocation. Adjust remaining proporsional supaya
+            // user gak dapet penalti / lompatan kasar saat limit dinaikkan/turunkan.
+            $delta = $request->amount - $org->ai_credits_monthly;
+            $org->update([
+                'ai_credits_monthly' => $request->amount,
+                'ai_credits_remaining' => max(0, $org->ai_credits_remaining + $delta),
+            ]);
         } else {
+            // Top-up extra credits — masuk ke pool 'purchased' yang gak ke-reset
+            // setiap bulan (lifetime sampai habis).
             $org->increment('ai_credits_purchased', $request->amount);
         }
 
+        $org = $org->fresh();
+        try {
+            \App\Models\AuditLog::log('ai_credits', $org->id, 'credit_topup', [
+                'org_id' => $org->id,
+                'org_name' => $org->name,
+                'type' => $type,
+                'amount' => $request->amount,
+                'note' => $request->note,
+                'before' => $before,
+                'after' => [
+                    'monthly_limit' => $org->ai_credits_monthly,
+                    'remaining' => $org->ai_credits_remaining,
+                    'purchased' => $org->ai_credits_purchased,
+                ],
+            ], 'credit_topup');
+        } catch (\Throwable $e) {
+            \Log::warning('AuditLog topup failed: '.$e->getMessage());
+        }
+
         return response()->json([
-            'message' => "Credit {$type} updated for {$org->name}",
+            'message' => $type === 'monthly'
+                ? "Monthly limit untuk {$org->name} di-set ke {$request->amount}"
+                : "Extra +{$request->amount} kredit ditambahkan ke {$org->name}",
             'data' => [
-                'monthly_limit' => $org->fresh()->ai_credits_monthly,
-                'remaining' => $org->fresh()->ai_credits_remaining,
-                'purchased' => $org->fresh()->ai_credits_purchased,
+                'monthly_limit' => $org->ai_credits_monthly,
+                'remaining' => $org->ai_credits_remaining,
+                'purchased' => $org->ai_credits_purchased,
             ],
         ]);
     }
