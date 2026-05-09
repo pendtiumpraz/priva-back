@@ -133,8 +133,22 @@ class Organization extends Model
                 ],
                 'dpo' => [
                     'name' => 'DPO',
-                    'desc' => 'Data Protection Officer untuk review dan approval',
-                    'permissions' => ['dashboard', 'ropa', 'dpia', 'dsr', 'breach', 'simulation', 'consent', 'contract-review', 'data-discovery', 'gap-assessment', 'settings'],
+                    'desc' => 'Data Protection Officer dengan kewenangan approve seluruh module',
+                    // DPO = approver default semua module (ropa, dpia, dsr, breach,
+                    // cross_border, vendor_risk). Akses module + explicit :approve key
+                    // supaya dropdown step approver di Approval Workflow Config selalu
+                    // mendeteksi DPO sebagai eligible.
+                    'permissions' => [
+                        'dashboard',
+                        'ropa', 'ropa:approve',
+                        'dpia', 'dpia:approve',
+                        'dsr', 'dsr:approve',
+                        'breach', 'breach:approve',
+                        'cross_border', 'cross_border:approve',
+                        'vendor_risk', 'vendor_risk:approve',
+                        'simulation', 'consent', 'contract-review',
+                        'data-discovery', 'gap-assessment', 'settings',
+                    ],
                 ],
                 'maker' => [
                     'name' => 'Maker',

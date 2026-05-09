@@ -49,10 +49,15 @@ class CreditService
     }
 
     /**
-     * Check if org has enough credits for action
+     * Check if org has enough credits for action.
+     *
+     * On-prem deployments tidak punya pembatasan credit — selalu return true.
+     * Credit logging tetap jalan supaya admin bisa lihat usage statistics, tapi
+     * gak ada quota gate.
      */
     public static function hasCredit(?string $orgId, string $actionType): bool
     {
+        if (self::isOnPrem()) return true;
         if ($orgId === null || $orgId === '') return false;
         $cost = self::COSTS[$actionType] ?? 1.0;
         $org = Organization::find($orgId);
@@ -60,6 +65,11 @@ class CreditService
 
         $available = $org->ai_credits_remaining + $org->ai_credits_purchased;
         return $available >= $cost;
+    }
+
+    public static function isOnPrem(): bool
+    {
+        return config('ai.deployment_mode', 'saas') === 'onprem';
     }
 
     /**
@@ -167,15 +177,66 @@ class CreditService
             ->limit(50)
             ->get();
 
+        $usedAllTime = AiCreditLog::where('org_id', $orgId)
+            ->where('status', 'success')
+            ->sum('credits_used');
+
         return [
             'monthly_limit' => $org->ai_credits_monthly,
             'remaining' => $org->ai_credits_remaining,
             'purchased' => $org->ai_credits_purchased,
             'used_this_month' => round($usedThisMonth, 2),
+            'used_all_time' => round($usedAllTime, 2),
             'reset_at' => $org->ai_credits_reset_at?->toISOString(),
             'breakdown' => $byAction,
             'recent_logs' => $recentLogs,
+            'deployment_mode' => self::isOnPrem() ? 'onprem' : 'saas',
+            'has_quota' => ! self::isOnPrem(),
         ];
+    }
+
+    /**
+     * Per-bulan usage untuk grafik history. Return last $months bulan.
+     * Untuk SaaS: setiap bulan = satu cycle reset (alokasi monthly).
+     * Untuk on-prem: angka usage murni (gak ada concept "limit").
+     */
+    public static function getMonthlyHistory(string $orgId, int $months = 12): array
+    {
+        $start = now()->subMonths($months - 1)->startOfMonth();
+
+        // DB-agnostic grouping di PHP — fetch (created_at, credits_used) dalam
+        // range, group per Y-m. Untuk 12 bulan rentang ini cukup ringan.
+        $logs = AiCreditLog::where('org_id', $orgId)
+            ->where('status', 'success')
+            ->where('created_at', '>=', $start)
+            ->get(['created_at', 'credits_used']);
+
+        $byYm = [];
+        foreach ($logs as $log) {
+            $ym = $log->created_at->format('Y-m');
+            if (! isset($byYm[$ym])) {
+                $byYm[$ym] = ['total' => 0, 'count' => 0];
+            }
+            $byYm[$ym]['total'] += (float) $log->credits_used;
+            $byYm[$ym]['count']++;
+        }
+
+        // Build full timeline (fill missing months with 0)
+        $result = [];
+        for ($i = $months - 1; $i >= 0; $i--) {
+            $m = now()->subMonths($i)->startOfMonth();
+            $ym = $m->format('Y-m');
+            $bucket = $byYm[$ym] ?? null;
+            $result[] = [
+                'month' => $ym,
+                'month_label' => $m->locale('id')->isoFormat('MMM YYYY'),
+                'used' => round((float) ($bucket['total'] ?? 0), 2),
+                'count' => (int) ($bucket['count'] ?? 0),
+                'is_current' => $m->isSameMonth(now()),
+            ];
+        }
+
+        return $result;
     }
 
     /**

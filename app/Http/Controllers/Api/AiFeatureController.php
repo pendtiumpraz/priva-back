@@ -1434,15 +1434,40 @@ class AiFeatureController extends Controller
                 'remaining' => 0,
                 'purchased' => 0,
                 'used_this_month' => 0,
+                'used_all_time' => 0,
                 'reset_at' => null,
                 'breakdown' => [],
                 'recent_logs' => [],
+                'deployment_mode' => CreditService::isOnPrem() ? 'onprem' : 'saas',
+                'has_quota' => ! CreditService::isOnPrem(),
             ]]);
         }
 
-        CreditService::resetIfNeeded($orgId);
+        // SaaS-only: lazy reset monthly. On-prem gak ada concept reset.
+        if (! CreditService::isOnPrem()) {
+            CreditService::resetIfNeeded($orgId);
+        }
 
         return response()->json(['data' => CreditService::getUsage($orgId)]);
+    }
+
+    public function creditMonthlyHistory(Request $request)
+    {
+        $user = $request->user();
+        $orgId = $user->org_id;
+        if ($user->role === 'superadmin' && $request->has('org_id')) {
+            $orgId = $request->org_id;
+        }
+        if (! $orgId) {
+            return response()->json(['data' => []]);
+        }
+        $months = (int) $request->query('months', 12);
+        $months = max(1, min(24, $months));
+
+        return response()->json([
+            'data' => CreditService::getMonthlyHistory($orgId, $months),
+            'deployment_mode' => CreditService::isOnPrem() ? 'onprem' : 'saas',
+        ]);
     }
 
     public function creditTopup(Request $request)

@@ -972,6 +972,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
 
     // AI Credit Management
     Route::get('/ai-credits/usage', [AiFeatureController::class, 'creditUsage']);
+    Route::get('/ai-credits/monthly-history', [AiFeatureController::class, 'creditMonthlyHistory']);
     Route::post('/ai-credits/topup', [AiFeatureController::class, 'creditTopup']);
 
     // =============================================
