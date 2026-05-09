@@ -31,6 +31,13 @@ class CreditService
      * Lazy reset: check & reset monthly credits if reset_at has passed.
      * Nullable orgId so root/superadmin users (who have no tenant org) can
      * call through without blowing up — they simply have no credits to reset.
+     *
+     * Reset date di-anchor ke awal bulan kalender (tanggal 1 jam 00:00),
+     * BUKAN rolling 30 hari. Ini supaya konsisten dengan `used_this_month`
+     * yang query log pakai `startOfMonth()` — kalau reset rolling, akan ada
+     * kasus aneh di mana sisa kredit dan total terpakai bulan ini tidak
+     * mathematically konsisten (mis. limit 500, used 91 log, remaining 474
+     * karena reset terjadi di tengah bulan kalender).
      */
     public static function resetIfNeeded(?string $orgId): void
     {
@@ -39,11 +46,10 @@ class CreditService
         $org = Organization::find($orgId);
         if (!$org) return;
 
-        // First time setup or reset date passed
         if ($org->ai_credits_reset_at === null || $org->ai_credits_reset_at->isPast()) {
             $org->update([
                 'ai_credits_remaining' => $org->ai_credits_monthly,
-                'ai_credits_reset_at' => now()->addMonth(),
+                'ai_credits_reset_at' => now()->addMonth()->startOfMonth(),
             ]);
         }
     }

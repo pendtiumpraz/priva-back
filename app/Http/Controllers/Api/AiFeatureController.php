@@ -1418,7 +1418,9 @@ class AiFeatureController extends Controller
         $user = $request->user();
         $orgId = $user->org_id;
 
-        if ($user->role === 'superadmin') {
+        // Root + superadmin: lihat seluruh tenant (table mode). Bisa drill-down
+        // ke tenant tertentu dengan ?org_id=...
+        if (in_array($user->role, ['root', 'superadmin'], true)) {
             if ($request->has('org_id')) {
                 $orgId = $request->org_id;
             } else {
@@ -1455,7 +1457,7 @@ class AiFeatureController extends Controller
     {
         $user = $request->user();
         $orgId = $user->org_id;
-        if ($user->role === 'superadmin' && $request->has('org_id')) {
+        if (in_array($user->role, ['root', 'superadmin'], true) && $request->has('org_id')) {
             $orgId = $request->org_id;
         }
         if (! $orgId) {
