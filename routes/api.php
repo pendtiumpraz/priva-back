@@ -76,6 +76,7 @@ use App\Http\Controllers\Api\RetentionPolicyController;
 use App\Http\Controllers\Api\RiskTreatmentPlanController;
 use App\Http\Controllers\Api\Root\QaCenterController;
 use App\Http\Controllers\Api\RootDashboardController;
+use App\Http\Controllers\Api\SuperadminDashboardController;
 use App\Http\Controllers\Api\RopaApprovalController;
 use App\Http\Controllers\Api\RopaLinkController;
 use App\Http\Controllers\Api\RopaTemplateController;
@@ -1107,6 +1108,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
     // Root Dashboard (platform-level aggregates)
     // =============================================
     Route::get('/root-dashboard', [RootDashboardController::class, 'index']);
+    Route::get('/superadmin-dashboard', [SuperadminDashboardController::class, 'index']);
 
     // =============================================
     // QA Center — root-only fitur untuk track test coverage seluruh platform
