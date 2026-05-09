@@ -11,11 +11,18 @@ use App\Models\User;
 
 /**
  * 3-layer menu visibility resolver:
- *   Layer 0 (Entitlement): root-controlled per-tenant licensing
- *   Layer 1 (Role whitelist): root-controlled globally per role
- *   Layer 2 (Tenant override): admin-controlled, hide within allowed set
+ *   Layer 0a (Entitlement REVOKED): root explicit lock — selalu hidden
+ *   Layer 0b (Entitlement GRANTED): tenant beli add-on → bypass whitelist + license gate
+ *   Layer 1  (Role whitelist):       global default per-role (kalau gak ada entitlement explicit)
+ *   Layer 2  (Tenant override):      admin tenant hide per-role (selalu di-honor)
  *
- * final_visible = entitled ∧ role_whitelisted ∧ not_tenant_hidden
+ * Resolusi (untuk non-root, non-superadmin):
+ *   - revoked → hidden
+ *   - entitled (explicit grant) → visible (bypass Layer 1 & license gate, tetap honor Layer 2)
+ *   - default (no entitlement record) → visible kalau whitelist + license gate match (& Layer 2 ok)
+ *
+ * Rasional SaaS: tenant yg sudah bayar add-on tidak boleh kehilangan akses karena
+ * root mengubah whitelist global. Whitelist = default platform; entitlement = pembelian.
  */
 class MenuRegistryService
 {
@@ -57,8 +64,10 @@ class MenuRegistryService
             return $visible;
         }
 
-        // Layer 0: entitlement — which menus is THIS tenant licensed for?
-        // If no row exists for (org_id, menu_id): default entitled=true.
+        // Layer 0: entitlement records.
+        //   isActive()=true   → explicit grant (bypass whitelist + license gate)
+        //   isActive()=false  → revoked (always hidden, ignore whitelist)
+        //   no record         → default path (whitelist + license gate menentukan)
         $entitlements = [];
         $revoked = [];
         if ($orgId) {
@@ -109,30 +118,44 @@ class MenuRegistryService
                 ->value('package_type');
         }
 
+        $whitelistedSet = array_flip($whitelistedMenuIds);
+
         $visible = [];
         $visibleIds = [];
         foreach ($all as $menu) {
-            if (! in_array($menu->id, $whitelistedMenuIds, true)) {
-                continue;
-            }
+            // Layer 0a — root explicit revoke selalu menutup akses.
             if (isset($revoked[$menu->id])) {
                 continue;
             }
-            if (isset($hidden[$menu->id])) {
-                continue;
-            }
 
-            // License package gate (skip kalau superadmin)
-            if (! $bypassPackageGate) {
-                $required = $menu->required_packages;
-                if (is_array($required) && count($required) > 0) {
-                    if (! $packageType || ! in_array($packageType, $required, true)) {
-                        continue;
+            $explicitlyEntitled = isset($entitlements[$menu->id]);
+
+            // Kalau tenant TIDAK punya entitlement explicit, jalankan default
+            // gating: whitelist + license package. Kalau punya entitlement
+            // explicit (mis. beli add-on), bypass dua layer ini — tenant
+            // sudah bayar dan harus tetap dapat akses walau whitelist global
+            // berubah atau paket license-nya tidak match.
+            if (! $explicitlyEntitled) {
+                if (! isset($whitelistedSet[$menu->id])) {
+                    continue;
+                }
+                if (! $bypassPackageGate) {
+                    $required = $menu->required_packages;
+                    if (is_array($required) && count($required) > 0) {
+                        if (! $packageType || ! in_array($packageType, $required, true)) {
+                            continue;
+                        }
                     }
                 }
             }
 
-            // If this is a sub-item, its parent must also be visible.
+            // Layer 2 — admin tenant tetap punya hak hide menu untuk role
+            // tertentu di org-nya, bahkan kalau ada entitlement.
+            if (isset($hidden[$menu->id])) {
+                continue;
+            }
+
+            // Sub-item: parent harus juga visible.
             if ($menu->parent_menu_id && ! isset($visibleIds[$menu->parent_menu_id])) {
                 continue;
             }

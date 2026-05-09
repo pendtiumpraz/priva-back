@@ -155,6 +155,67 @@ class MenuRegistryController extends Controller
         ]);
     }
 
+    /**
+     * Aggregate per-tenant entitlement stats untuk data table di /menu-control.
+     * Return array of tenant rows: id, name, slug, entitled_count,
+     * revoked_count, expiring_count (≤30d), last_updated.
+     *
+     * Default open (tidak ada record) tidak dihitung sebagai entitled —
+     * angka yang ditampilkan adalah "explicit grant/revoke" yang sudah
+     * di-set root, jadi admin bisa lihat tenant mana yang sudah dikonfigurasi.
+     */
+    public function entitlementsSummary(Request $request)
+    {
+        $this->requireRoot($request);
+
+        $orgs = Organization::select('id', 'name', 'slug')->orderBy('name')->get();
+        $rows = TenantModuleEntitlement::all();
+        $byOrg = $rows->groupBy('org_id');
+        $now = now();
+        $soon = $now->copy()->addDays(30);
+
+        $data = $orgs->map(function ($o) use ($byOrg, $now, $soon) {
+            $list = $byOrg->get($o->id, collect());
+            $entitled = 0;
+            $revoked = 0;
+            $expiring = 0;
+            $lastUpdated = null;
+
+            foreach ($list as $r) {
+                if ($r->is_entitled) {
+                    $entitled++;
+                    if ($r->valid_until) {
+                        $exp = \Carbon\Carbon::parse($r->valid_until);
+                        if ($exp->lte($soon) && $exp->gte($now)) {
+                            $expiring++;
+                        }
+                    }
+                } else {
+                    $revoked++;
+                }
+                if (! $lastUpdated || $r->updated_at > $lastUpdated) {
+                    $lastUpdated = $r->updated_at;
+                }
+            }
+
+            return [
+                'id' => $o->id,
+                'name' => $o->name,
+                'slug' => $o->slug,
+                'entitled_count' => $entitled,
+                'revoked_count' => $revoked,
+                'expiring_count' => $expiring,
+                'configured' => ($entitled + $revoked) > 0,
+                'last_updated' => $lastUpdated,
+            ];
+        });
+
+        return response()->json([
+            'data' => $data,
+            'total_menus' => MenuItem::count(),
+        ]);
+    }
+
     public function updateEntitlement(Request $request)
     {
         $this->requireRoot($request);
@@ -187,6 +248,34 @@ class MenuRegistryController extends Controller
         }
 
         return response()->json(['message' => 'Entitlement diperbarui', 'data' => $row]);
+    }
+
+    /**
+     * Hapus record entitlement → kembali ke perilaku default
+     * (mengikuti whitelist + license package gate).
+     */
+    public function deleteEntitlement(Request $request, string $id)
+    {
+        $this->requireRoot($request);
+        $row = TenantModuleEntitlement::find($id);
+        if (! $row) {
+            return response()->json(['message' => 'Entitlement tidak ditemukan'], 404);
+        }
+
+        $orgId = $row->org_id;
+        $menuId = $row->menu_id;
+        $before = $row->is_entitled;
+        $row->delete();
+
+        try {
+            AuditLog::log('menu_registry', $id, 'entitlement_reset', [
+                'org_id' => $orgId, 'menu_id' => $menuId, 'before' => $before,
+            ], 'tenant_entitlement');
+        } catch (\Throwable $e) {
+            \Log::warning('Audit log failed: '.$e->getMessage());
+        }
+
+        return response()->json(['message' => 'Entitlement direset ke default']);
     }
 
     // ──────────────────────────────────────────────

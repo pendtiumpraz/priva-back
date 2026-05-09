@@ -105,14 +105,15 @@ class TenantRoleController extends Controller
     }
 
     /**
-     * Daftar module ID yang tenant punya akses (entitlement aktif).
-     * Dipakai frontend RoleEditor supaya admin tenant gak bisa kasih
-     * permission Read/Write/Approve untuk module yang tenant-nya gak
-     * dikasih akses oleh root.
+     * Daftar module ID yang tenant punya akses — mirror MenuRegistryService::forUser
+     * supaya RoleEditor di /settings konsisten dengan apa yang bener-bener visible
+     * di sidebar.
      *
-     * Default: kalau tidak ada entitlement record sama sekali, semua
-     * module accessible (default open). Kalau ada record dengan
-     * is_entitled=false, module tsb di-exclude.
+     * Module di-include kalau:
+     *   - TIDAK revoked (record dengan is_entitled=false / valid_until expired), DAN
+     *   - explicit grant (record is_entitled=true) — bypass license package gate, ATAU
+     *   - default (no record) DAN tenant license package match menu.required_packages
+     *     (kalau menu tidak set required_packages → default available)
      */
     public function entitledModules(Request $request): JsonResponse
     {
@@ -121,31 +122,46 @@ class TenantRoleController extends Controller
             return response()->json(['data' => []]);
         }
 
-        // Build menu_key → module_id mapping. Permission key di role pakai
-        // underscore (data_discovery), menu_key di registry pakai hyphen
-        // (data-discovery). Kita normalize.
-        $allMenus = MenuItem::pluck('menu_key', 'id');
+        $allMenus = MenuItem::get(['id', 'menu_key', 'required_packages']);
         $entitlements = TenantModuleEntitlement::where('org_id', $orgId)->get();
 
-        // Build set of revoked menu_ids
+        $granted = [];
         $revoked = [];
         foreach ($entitlements as $e) {
-            if (! $e->isActive()) {
+            if ($e->isActive()) {
+                $granted[$e->menu_id] = true;
+            } else {
                 $revoked[$e->menu_id] = true;
             }
         }
 
+        $packageType = License::where('org_id', $orgId)
+            ->where('status', 'active')
+            ->value('package_type');
+
         $entitled = [];
-        foreach ($allMenus as $menuId => $menuKey) {
-            if (isset($revoked[$menuId])) {
+        foreach ($allMenus as $menu) {
+            if (isset($revoked[$menu->id])) {
                 continue;
             }
-            // Normalize: data-discovery → data_discovery, gap-assessment → gap-assessment (keep)
-            $normalized = $menuKey;
-            $entitled[] = $normalized;
-            // Also add underscore variant for permission-key matching
-            $underscored = str_replace('-', '_', $menuKey);
-            if ($underscored !== $menuKey) {
+
+            $explicitGrant = isset($granted[$menu->id]);
+            if (! $explicitGrant) {
+                // Default path: license package gate
+                $required = $menu->required_packages;
+                if (is_array($required) && count($required) > 0) {
+                    if (! $packageType || ! in_array($packageType, $required, true)) {
+                        continue;
+                    }
+                }
+            }
+
+            $key = $menu->menu_key;
+            $entitled[] = $key;
+            // Normalize hyphen → underscore untuk match permission key
+            // (e.g. menu_key=data-discovery, permission key=data_discovery)
+            $underscored = str_replace('-', '_', $key);
+            if ($underscored !== $key) {
                 $entitled[] = $underscored;
             }
         }

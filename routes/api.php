@@ -1084,7 +1084,9 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
         Route::put('/whitelist', [MenuRegistryController::class, 'updateWhitelist']);
         Route::get('/orgs', [MenuRegistryController::class, 'orgs']);
         Route::get('/entitlements', [MenuRegistryController::class, 'entitlements']);
+        Route::get('/entitlements-summary', [MenuRegistryController::class, 'entitlementsSummary']);
         Route::put('/entitlements', [MenuRegistryController::class, 'updateEntitlement']);
+        Route::delete('/entitlements/{id}', [MenuRegistryController::class, 'deleteEntitlement']);
         Route::post('/bulk-entitlement', [MenuRegistryController::class, 'bulkEntitlement']);
         Route::post('/copy-entitlement', [MenuRegistryController::class, 'copyEntitlement']);
         Route::get('/audit-log', [MenuRegistryController::class, 'auditLog']);
