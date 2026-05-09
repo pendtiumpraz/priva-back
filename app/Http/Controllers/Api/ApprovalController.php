@@ -5,13 +5,56 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ApprovalWorkflow;
 use App\Models\AuditLog;
+use App\Models\BreachIncident;
 use App\Models\Dpia;
+use App\Models\DsrRequest;
 use App\Models\Ropa;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 
 class ApprovalController extends Controller
 {
+    /**
+     * Resolve Eloquent model class dari module slug. Dipakai approve/reject
+     * untuk update record status dan kirim notifikasi.
+     */
+    private function modelClassForModule(string $module): ?string
+    {
+        return match ($module) {
+            'ropa' => Ropa::class,
+            'dpia' => Dpia::class,
+            'breach' => BreachIncident::class,
+            'dsr' => DsrRequest::class,
+            default => null,
+        };
+    }
+
+    /**
+     * Status target setelah approval workflow selesai. Setiap module punya
+     * status enum berbeda — RoPA/DPIA pakai 'approved', Breach 'closed',
+     * DSR 'completed'.
+     */
+    private function statusAfterApproval(string $module): string
+    {
+        return match ($module) {
+            'breach' => 'closed',
+            'dsr' => 'completed',
+            default => 'approved',
+        };
+    }
+
+    /**
+     * Status target setelah workflow di-reject. Kembali ke draft/in-progress.
+     */
+    private function statusAfterRejection(string $module): string
+    {
+        return match ($module) {
+            'breach' => 'containment',
+            'dsr' => 'in_progress',
+            default => 'revision',
+        };
+    }
+
     /**
      * Get pending approvals for the current user
      */
@@ -47,12 +90,10 @@ class ApprovalController extends Controller
 
         // Attach related models for context
         foreach ($workflows as $wf) {
-            if ($wf->module === 'ropa') {
-                $wf->related_record = Ropa::find($wf->record_id);
-            } elseif ($wf->module === 'dpia') {
-                $wf->related_record = Dpia::find($wf->record_id);
+            $cls = $this->modelClassForModule($wf->module);
+            if ($cls) {
+                $wf->related_record = $cls::find($wf->record_id);
             }
-            // other modules can be added
         }
 
         return response()->json(['data' => $workflows]);
@@ -116,15 +157,20 @@ class ApprovalController extends Controller
             $workflow->status = 'approved';
 
             // Mark model as approved
-            $modelClass = $workflow->module === 'ropa' ? Ropa::class : ($workflow->module === 'dpia' ? Dpia::class : null);
+            $modelClass = $this->modelClassForModule($workflow->module);
             if ($modelClass) {
                 $record = $modelClass::find($workflow->record_id);
                 if ($record) {
-                    $record->update([
-                        'status' => 'approved',
-                        'approver_id' => $user->id,
-                        'approved_at' => now(),
-                    ]);
+                    // Build update payload defensively — approver_id/approved_at
+                    // mungkin tidak ada di model breach/dsr.
+                    $payload = ['status' => $this->statusAfterApproval($workflow->module)];
+                    if (in_array('approver_id', $record->getFillable(), true)) {
+                        $payload['approver_id'] = $user->id;
+                    }
+                    if (in_array('approved_at', $record->getFillable(), true)) {
+                        $payload['approved_at'] = now();
+                    }
+                    $record->update($payload);
 
                     // Notify creator + assignees that the record was approved.
                     try {
@@ -192,7 +238,7 @@ class ApprovalController extends Controller
         if ($modelClass) {
             $record = $modelClass::find($workflow->record_id);
             if ($record) {
-                $record->update(['status' => 'revision']);
+                $record->update(['status' => $this->statusAfterRejection($workflow->module)]);
 
                 // Notify creator + assignees that the record was rejected with reason.
                 try {

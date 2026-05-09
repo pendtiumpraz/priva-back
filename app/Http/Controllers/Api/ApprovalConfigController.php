@@ -21,12 +21,15 @@ use Illuminate\Http\Request;
 class ApprovalConfigController extends Controller
 {
     /**
-     * Module yang saat ini support workflow config.
-     * LIA/TIA pakai pattern beda; Breach/DSR belum punya approval.
+     * Module yang support workflow config.
+     * LIA/TIA pakai mekanisme Maker-Checker-Approver sendiri.
+     * Vendor Risk & Cross-Border: future extension (controller bespoke).
      */
     public const SUPPORTED_MODULES = [
         'ropa' => 'RoPA (Catatan Pemrosesan)',
         'dpia' => 'DPIA (Penilaian Dampak)',
+        'breach' => 'Insiden Pelanggaran (Breach)',
+        'dsr' => 'Permintaan Hak Subjek (DSR)',
     ];
 
     private function ensureAdmin(Request $request): ?JsonResponse

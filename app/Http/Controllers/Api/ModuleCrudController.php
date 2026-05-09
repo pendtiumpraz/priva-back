@@ -855,9 +855,11 @@ class ModuleCrudController extends Controller
             \Log::warning('Assignee notification failed: '.$e->getMessage());
         }
 
-        // Approval Workflow trigger if status changes to 'waiting'
+        // Approval Workflow trigger if status changes to 'waiting'.
+        // Semua module-CRUD support: RoPA, DPIA, Breach, DSR. Admin tenant
+        // atur step + role per module di /settings → Approval Workflow.
         if ($request->has('status') && $request->input('status') === 'waiting' && $oldStatus !== 'waiting') {
-            if (in_array($module, ['ropa', 'dpia'])) {
+            if (in_array($module, ['ropa', 'dpia', 'breach', 'dsr'], true)) {
                 // Pakai config approval kalau ada (per-org tenant_role-based).
                 // Fallback ke hardcoded DPO → Admin kalau config belum diset
                 // (backward-compat untuk org yang belum migrate ke workflow config).
