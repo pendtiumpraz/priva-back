@@ -8,7 +8,6 @@ use App\Models\RoleMenuWhitelist;
 use App\Models\TenantMenuOverride;
 use App\Models\TenantModuleEntitlement;
 use App\Models\User;
-use Illuminate\Support\Facades\Cache;
 
 /**
  * 3-layer menu visibility resolver:
@@ -45,11 +44,16 @@ class MenuRegistryService
             $visible = [];
             $visibleIds = [];
             foreach ($all as $menu) {
-                if (!in_array($menu->id, $whitelistedMenuIds, true)) continue;
-                if ($menu->parent_menu_id && !isset($visibleIds[$menu->parent_menu_id])) continue;
+                if (! in_array($menu->id, $whitelistedMenuIds, true)) {
+                    continue;
+                }
+                if ($menu->parent_menu_id && ! isset($visibleIds[$menu->parent_menu_id])) {
+                    continue;
+                }
                 $visible[] = self::toArray($menu);
                 $visibleIds[$menu->id] = true;
             }
+
             return $visible;
         }
 
@@ -60,20 +64,37 @@ class MenuRegistryService
         if ($orgId) {
             $rows = TenantModuleEntitlement::where('org_id', $orgId)->get();
             foreach ($rows as $e) {
-                if ($e->isActive()) $entitlements[$e->menu_id] = true;
-                else $revoked[$e->menu_id] = true;
+                if ($e->isActive()) {
+                    $entitlements[$e->menu_id] = true;
+                } else {
+                    $revoked[$e->menu_id] = true;
+                }
             }
         }
 
-        // Layer 2: tenant override — admin-hidden per role
+        // Layer 2: tenant override — admin-hidden per role.
+        // Prioritas resolusi:
+        //   1. Override per tenant_role_id (kalau user punya custom role)
+        //   2. Fallback override per legacy role string
+        // Custom role yang gak match keyword tetap punya legacy role mapping
+        // di User.role, jadi legacy override masih efektif sebagai default.
         $hidden = [];
         if ($orgId) {
-            $rows = TenantMenuOverride::where('org_id', $orgId)
-                ->where('role', $role)
-                ->where('is_visible', false)
-                ->pluck('menu_id')
-                ->toArray();
-            $hidden = array_flip($rows);
+            $tenantRoleId = $user->tenant_role_id ?? null;
+
+            $q = TenantMenuOverride::where('org_id', $orgId)->where('is_visible', false);
+            if ($tenantRoleId) {
+                $q->where(function ($w) use ($tenantRoleId, $role) {
+                    $w->where('tenant_role_id', $tenantRoleId)
+                        ->orWhere(function ($leg) use ($role) {
+                            $leg->whereNull('tenant_role_id')->where('role', $role);
+                        });
+                });
+            } else {
+                $q->whereNull('tenant_role_id')->where('role', $role);
+            }
+
+            $hidden = array_flip($q->pluck('menu_id')->toArray());
         }
 
         // Layer 0.5: license package gate. Tenant's active license package_type
@@ -91,20 +112,30 @@ class MenuRegistryService
         $visible = [];
         $visibleIds = [];
         foreach ($all as $menu) {
-            if (!in_array($menu->id, $whitelistedMenuIds, true)) continue;
-            if (isset($revoked[$menu->id])) continue;
-            if (isset($hidden[$menu->id])) continue;
+            if (! in_array($menu->id, $whitelistedMenuIds, true)) {
+                continue;
+            }
+            if (isset($revoked[$menu->id])) {
+                continue;
+            }
+            if (isset($hidden[$menu->id])) {
+                continue;
+            }
 
             // License package gate (skip kalau superadmin)
             if (! $bypassPackageGate) {
                 $required = $menu->required_packages;
                 if (is_array($required) && count($required) > 0) {
-                    if (!$packageType || !in_array($packageType, $required, true)) continue;
+                    if (! $packageType || ! in_array($packageType, $required, true)) {
+                        continue;
+                    }
                 }
             }
 
             // If this is a sub-item, its parent must also be visible.
-            if ($menu->parent_menu_id && !isset($visibleIds[$menu->parent_menu_id])) continue;
+            if ($menu->parent_menu_id && ! isset($visibleIds[$menu->parent_menu_id])) {
+                continue;
+            }
             $visible[] = self::toArray($menu);
             $visibleIds[$menu->id] = true;
         }

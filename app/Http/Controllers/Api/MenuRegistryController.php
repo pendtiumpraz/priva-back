@@ -9,8 +9,10 @@ use App\Models\Organization;
 use App\Models\RoleMenuWhitelist;
 use App\Models\TenantMenuOverride;
 use App\Models\TenantModuleEntitlement;
+use App\Models\TenantRole;
 use App\Services\MenuRegistryService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 /**
  * Menu Registry API:
@@ -31,6 +33,7 @@ class MenuRegistryController extends Controller
     public function me(Request $request)
     {
         $menus = MenuRegistryService::forUser($request->user());
+
         return response()->json(['data' => $menus]);
     }
 
@@ -42,6 +45,7 @@ class MenuRegistryController extends Controller
         // Read-only list is needed by /menu-preferences too (superadmin + admin).
         $this->requireRootOrManager($request);
         $items = MenuItem::orderBy('sort_order')->get();
+
         return response()->json(['data' => $items]);
     }
 
@@ -52,6 +56,7 @@ class MenuRegistryController extends Controller
         // root-only.
         $this->requireRootOrManager($request);
         $rows = RoleMenuWhitelist::with('menu')->get();
+
         return response()->json(['data' => $rows]);
     }
 
@@ -79,7 +84,9 @@ class MenuRegistryController extends Controller
                 'menu_id' => $data['menu_id'], 'role' => $data['role'],
                 'before' => $before, 'after' => $data['is_allowed'],
             ], 'role_whitelist');
-        } catch (\Throwable $e) { \Log::warning('Audit log failed: ' . $e->getMessage()); }
+        } catch (\Throwable $e) {
+            \Log::warning('Audit log failed: '.$e->getMessage());
+        }
 
         return response()->json(['message' => 'Whitelist diperbarui', 'data' => $row]);
     }
@@ -107,9 +114,9 @@ class MenuRegistryController extends Controller
             [$lastName, $lastId] = array_pad(explode('|', base64_decode($cursor), 2), 2, '');
             $query->where(function ($w) use ($lastName, $lastId) {
                 $w->where('name', '>', $lastName)
-                  ->orWhere(function ($w2) use ($lastName, $lastId) {
-                      $w2->where('name', $lastName)->where('id', '>', $lastId);
-                  });
+                    ->orWhere(function ($w2) use ($lastName, $lastId) {
+                        $w2->where('name', $lastName)->where('id', '>', $lastId);
+                    });
             });
         }
 
@@ -119,7 +126,7 @@ class MenuRegistryController extends Controller
         $nextCursor = null;
         if ($hasMore) {
             $last = $data->last();
-            $nextCursor = base64_encode($last->name . '|' . $last->id);
+            $nextCursor = base64_encode($last->name.'|'.$last->id);
         }
 
         return response()->json(['data' => $data, 'next_cursor' => $nextCursor]);
@@ -132,6 +139,7 @@ class MenuRegistryController extends Controller
 
         if ($request->filled('org_id')) {
             $rows = TenantModuleEntitlement::where('org_id', $request->org_id)->get();
+
             return response()->json(['data' => $rows]);
         }
 
@@ -174,7 +182,9 @@ class MenuRegistryController extends Controller
                 'before' => $before?->is_entitled, 'after' => $data['is_entitled'],
                 'valid_until' => $data['valid_until'] ?? null, 'notes' => $data['notes'] ?? null,
             ], 'tenant_entitlement');
-        } catch (\Throwable $e) { \Log::warning('Audit log failed: ' . $e->getMessage()); }
+        } catch (\Throwable $e) {
+            \Log::warning('Audit log failed: '.$e->getMessage());
+        }
 
         return response()->json(['message' => 'Entitlement diperbarui', 'data' => $row]);
     }
@@ -188,16 +198,16 @@ class MenuRegistryController extends Controller
     public function tenantOverrides(Request $request)
     {
         $user = $request->user();
-        if (!in_array($user->role, ['root', 'superadmin', 'admin'], true)) {
+        if (! in_array($user->role, ['root', 'superadmin', 'admin'], true)) {
             return response()->json(['message' => 'Hanya root/superadmin/admin yang bisa akses'], 403);
         }
 
-        $isPlatform = in_array($user->role, ['root', 'superadmin'], true) && !$user->org_id;
+        $isPlatform = in_array($user->role, ['root', 'superadmin'], true) && ! $user->org_id;
 
         // Platform user without org_id → aggregate "consensus" view across all tenants:
         // return one row per (menu,role) only when every tenant agrees on the value.
-        if ($isPlatform && !$request->filled('org_id')) {
-            $orgCount = \App\Models\Organization::count();
+        if ($isPlatform && ! $request->filled('org_id')) {
+            $orgCount = Organization::count();
             $grouped = TenantMenuOverride::select('menu_id', 'role', 'is_visible')
                 ->selectRaw('COUNT(*) as c')
                 ->groupBy('menu_id', 'role', 'is_visible')
@@ -205,22 +215,27 @@ class MenuRegistryController extends Controller
 
             $agg = [];
             foreach ($grouped as $g) {
-                $k = $g->menu_id . ':' . $g->role;
-                if (!isset($agg[$k])) $agg[$k] = ['menu_id' => $g->menu_id, 'role' => $g->role, 'votes' => []];
+                $k = $g->menu_id.':'.$g->role;
+                if (! isset($agg[$k])) {
+                    $agg[$k] = ['menu_id' => $g->menu_id, 'role' => $g->role, 'votes' => []];
+                }
                 $agg[$k]['votes'][$g->is_visible ? '1' : '0'] = (int) $g->c;
             }
             $rows = [];
             foreach ($agg as $a) {
                 $total = array_sum($a['votes']);
-                if ($total !== $orgCount || count($a['votes']) > 1) continue; // consensus requires unanimous
+                if ($total !== $orgCount || count($a['votes']) > 1) {
+                    continue;
+                } // consensus requires unanimous
                 $rows[] = [
-                    'id' => '_global_' . $a['menu_id'] . '_' . $a['role'],
+                    'id' => '_global_'.$a['menu_id'].'_'.$a['role'],
                     'org_id' => null,
                     'menu_id' => $a['menu_id'],
                     'role' => $a['role'],
                     'is_visible' => (bool) array_key_first($a['votes']),
                 ];
             }
+
             return response()->json(['data' => $rows, 'scope' => 'global']);
         }
 
@@ -230,16 +245,28 @@ class MenuRegistryController extends Controller
             ? $request->org_id
             : $user->org_id;
 
-        if (!$orgId) return response()->json(['data' => []]);
+        if (! $orgId) {
+            return response()->json(['data' => []]);
+        }
 
         $rows = TenantMenuOverride::where('org_id', $orgId)->get();
-        return response()->json(['data' => $rows, 'scope' => 'tenant']);
+        // Daftar tenant_roles org untuk render kolom matrix per role custom.
+        $tenantRoles = TenantRole::where('org_id', $orgId)
+            ->orderByDesc('is_system')
+            ->orderBy('name')
+            ->get(['id', 'name', 'description', 'is_system', 'permissions']);
+
+        return response()->json([
+            'data' => $rows,
+            'tenant_roles' => $tenantRoles,
+            'scope' => 'tenant',
+        ]);
     }
 
     public function updateTenantOverride(Request $request)
     {
         $user = $request->user();
-        if (!in_array($user->role, ['root', 'superadmin', 'admin'], true)) {
+        if (! in_array($user->role, ['root', 'superadmin', 'admin'], true)) {
             return response()->json(['message' => 'Hanya root/superadmin/admin yang bisa akses'], 403);
         }
 
@@ -255,13 +282,58 @@ class MenuRegistryController extends Controller
 
         $data = $request->validate([
             'menu_id' => 'required|uuid|exists:menu_items,id',
-            'role' => "required|string|in:{$allowedRoles}",
+            'role' => "nullable|string|in:{$allowedRoles}",
+            'tenant_role_id' => 'nullable|uuid|exists:tenant_roles,id',
             'is_visible' => 'required|boolean',
         ]);
 
+        if (empty($data['role']) && empty($data['tenant_role_id'])) {
+            return response()->json(['message' => 'Wajib kirim salah satu: role (legacy) atau tenant_role_id'], 422);
+        }
+
         $menu = MenuItem::findOrFail($data['menu_id']);
-        if (!$menu->hideable) {
+        if (! $menu->hideable) {
             return response()->json(['message' => 'Menu ini tidak bisa di-hide'], 422);
+        }
+
+        // Tenant_role_id path: org-scoped custom role override.
+        // Validate role belongs to user's org (atau target org untuk root/superadmin).
+        if (! empty($data['tenant_role_id'])) {
+            $targetOrgId = in_array($user->role, ['root', 'superadmin'], true) && $request->filled('org_id')
+                ? $request->org_id
+                : $user->org_id;
+
+            $tenantRole = TenantRole::where('id', $data['tenant_role_id'])->first();
+            if (! $tenantRole || ($tenantRole->org_id !== $targetOrgId && ! in_array($user->role, ['root', 'superadmin'], true))) {
+                return response()->json(['message' => 'Tenant role tidak ditemukan / bukan bagian org'], 422);
+            }
+
+            $orgIdForOverride = $tenantRole->org_id;
+            $before = TenantMenuOverride::where('org_id', $orgIdForOverride)
+                ->where('menu_id', $data['menu_id'])
+                ->where('tenant_role_id', $data['tenant_role_id'])
+                ->value('is_visible');
+
+            $row = TenantMenuOverride::updateOrCreate(
+                [
+                    'org_id' => $orgIdForOverride,
+                    'menu_id' => $data['menu_id'],
+                    'tenant_role_id' => $data['tenant_role_id'],
+                ],
+                ['is_visible' => $data['is_visible'], 'role' => null]
+            );
+
+            try {
+                AuditLog::log('menu_registry', $row->id, 'tenant_override_role_updated', [
+                    'org_id' => $orgIdForOverride, 'menu_id' => $data['menu_id'],
+                    'tenant_role_id' => $data['tenant_role_id'], 'tenant_role_name' => $tenantRole->name,
+                    'before' => $before, 'after' => $data['is_visible'],
+                ], 'tenant_override');
+            } catch (\Throwable $e) {
+                \Log::warning('Audit log failed: '.$e->getMessage());
+            }
+
+            return response()->json(['message' => 'Override role diperbarui', 'data' => $row, 'scope' => 'tenant_role']);
         }
 
         // Platform roles (root/superadmin) aren't scoped to any org — they
@@ -273,7 +345,7 @@ class MenuRegistryController extends Controller
             if ($data['role'] === 'root' && $user->role !== 'root') {
                 return response()->json(['message' => 'Hanya root yang boleh mengatur role=root'], 403);
             }
-            if ($data['role'] === 'superadmin' && !in_array($user->role, ['root', 'superadmin'], true)) {
+            if ($data['role'] === 'superadmin' && ! in_array($user->role, ['root', 'superadmin'], true)) {
                 return response()->json(['message' => 'Hanya root/superadmin yang boleh mengatur role=superadmin'], 403);
             }
             $before = RoleMenuWhitelist::where('menu_id', $data['menu_id'])
@@ -288,7 +360,9 @@ class MenuRegistryController extends Controller
                     'menu_id' => $data['menu_id'], 'role' => $data['role'],
                     'before' => $before, 'after' => $data['is_visible'],
                 ], 'whitelist');
-            } catch (\Throwable $e) { \Log::warning('Audit log failed: ' . $e->getMessage()); }
+            } catch (\Throwable $e) {
+                \Log::warning('Audit log failed: '.$e->getMessage());
+            }
 
             return response()->json([
                 'message' => 'Whitelist platform diperbarui',
@@ -303,14 +377,14 @@ class MenuRegistryController extends Controller
                 ->where('role', $data['role'])
                 ->where('is_allowed', true)
                 ->exists();
-            if (!$whitelisted) {
+            if (! $whitelisted) {
                 return response()->json(['message' => 'Menu ini tidak di-whitelist oleh root untuk role tsb — tidak ada yg bisa di-toggle'], 422);
             }
         }
 
         // Root/Superadmin without org_id → bulk-apply to every organization.
-        if (in_array($user->role, ['root', 'superadmin'], true) && !$user->org_id && !$request->filled('org_id')) {
-            $orgIds = \App\Models\Organization::pluck('id');
+        if (in_array($user->role, ['root', 'superadmin'], true) && ! $user->org_id && ! $request->filled('org_id')) {
+            $orgIds = Organization::pluck('id');
             foreach ($orgIds as $orgId) {
                 TenantMenuOverride::updateOrCreate(
                     ['org_id' => $orgId, 'menu_id' => $data['menu_id'], 'role' => $data['role']],
@@ -323,7 +397,9 @@ class MenuRegistryController extends Controller
                     'menu_id' => $data['menu_id'], 'role' => $data['role'],
                     'is_visible' => $data['is_visible'], 'affected_tenants' => $orgIds->count(),
                 ], 'tenant_override');
-            } catch (\Throwable $e) { \Log::warning('Audit log failed: ' . $e->getMessage()); }
+            } catch (\Throwable $e) {
+                \Log::warning('Audit log failed: '.$e->getMessage());
+            }
 
             return response()->json([
                 'message' => "Override diterapkan ke {$orgIds->count()} tenant",
@@ -335,7 +411,9 @@ class MenuRegistryController extends Controller
         $orgId = in_array($user->role, ['root', 'superadmin'], true) && $request->filled('org_id')
             ? $request->org_id
             : $user->org_id;
-        if (!$orgId) return response()->json(['message' => 'org_id tidak ditemukan'], 422);
+        if (! $orgId) {
+            return response()->json(['message' => 'org_id tidak ditemukan'], 422);
+        }
 
         $before = TenantMenuOverride::where('org_id', $orgId)
             ->where('menu_id', $data['menu_id'])->where('role', $data['role'])->value('is_visible');
@@ -349,7 +427,9 @@ class MenuRegistryController extends Controller
                 'org_id' => $orgId, 'menu_id' => $data['menu_id'], 'role' => $data['role'],
                 'before' => $before, 'after' => $data['is_visible'],
             ], 'tenant_override');
-        } catch (\Throwable $e) { \Log::warning('Audit log failed: ' . $e->getMessage()); }
+        } catch (\Throwable $e) {
+            \Log::warning('Audit log failed: '.$e->getMessage());
+        }
 
         return response()->json(['message' => 'Override diperbarui', 'data' => $row, 'scope' => 'tenant']);
     }
@@ -386,11 +466,13 @@ class MenuRegistryController extends Controller
         }
 
         try {
-            AuditLog::log('menu_registry', (string) \Illuminate\Support\Str::uuid(), 'bulk_entitlement_applied', [
+            AuditLog::log('menu_registry', (string) Str::uuid(), 'bulk_entitlement_applied', [
                 'org_count' => count($data['org_ids']), 'menu_count' => count($data['menu_ids']),
                 'total_rows' => $count, 'is_entitled' => $data['is_entitled'],
             ], 'bulk_entitlement');
-        } catch (\Throwable $e) { \Log::warning('Audit log failed: ' . $e->getMessage()); }
+        } catch (\Throwable $e) {
+            \Log::warning('Audit log failed: '.$e->getMessage());
+        }
 
         return response()->json(['message' => "{$count} entitlement row diperbarui", 'count' => $count]);
     }
@@ -411,7 +493,9 @@ class MenuRegistryController extends Controller
 
         $count = 0;
         foreach ($data['target_org_ids'] as $targetId) {
-            if ($targetId === $data['source_org_id']) continue;
+            if ($targetId === $data['source_org_id']) {
+                continue;
+            }
             foreach ($source as $e) {
                 TenantModuleEntitlement::updateOrCreate(
                     ['org_id' => $targetId, 'menu_id' => $e->menu_id],
@@ -426,12 +510,14 @@ class MenuRegistryController extends Controller
         }
 
         try {
-            AuditLog::log('menu_registry', (string) \Illuminate\Support\Str::uuid(), 'entitlement_copied', [
+            AuditLog::log('menu_registry', (string) Str::uuid(), 'entitlement_copied', [
                 'source_org_id' => $data['source_org_id'],
                 'target_count' => count($data['target_org_ids']),
                 'total_rows' => $count,
             ], 'entitlement_copy');
-        } catch (\Throwable $e) { \Log::warning('Audit log failed: ' . $e->getMessage()); }
+        } catch (\Throwable $e) {
+            \Log::warning('Audit log failed: '.$e->getMessage());
+        }
 
         return response()->json(['message' => "Copy berhasil ke {$count} entry", 'count' => $count]);
     }
@@ -444,6 +530,7 @@ class MenuRegistryController extends Controller
             ->orderByDesc('created_at')
             ->limit($request->get('limit', 100))
             ->get();
+
         return response()->json(['data' => $rows]);
     }
 
@@ -463,7 +550,7 @@ class MenuRegistryController extends Controller
     private function requireRootOrManager(Request $request): void
     {
         $role = $request->user()->role ?? null;
-        if (!in_array($role, ['root', 'superadmin', 'admin'], true)) {
+        if (! in_array($role, ['root', 'superadmin', 'admin'], true)) {
             abort(403, 'Hanya root/superadmin/admin yang dapat mengakses endpoint ini.');
         }
     }
