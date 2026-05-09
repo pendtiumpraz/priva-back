@@ -103,7 +103,7 @@ class SuperadminDashboardController extends Controller
             'recent_audits' => AuditLog::with(['user:id,name,email,role,org_id', 'user.organization:id,name'])
                 ->whereHas('user', fn ($q) => $q->whereNotNull('org_id'))
                 ->orderByDesc('created_at')
-                ->limit(20)
+                ->limit(100)
                 ->get()
                 ->map(function ($a) {
                     $a->org_name = $a->user?->organization?->name;
