@@ -148,6 +148,18 @@ class SettingsServiceProvider extends ServiceProvider
 
             // Deployment mode.
             'deployment.mode' => 'ai.deployment_mode',
+
+            // Security — login lockout. DB key flat (security.lockout_*),
+            // dimapping ke nested config path supaya app code pakai
+            // config('security.login_lockout.tier1_attempts') yang readable.
+            'security.lockout_enabled' => 'security.login_lockout.enabled',
+            'security.lockout_tier1_attempts' => 'security.login_lockout.tier1_attempts',
+            'security.lockout_tier1_seconds' => 'security.login_lockout.tier1_seconds',
+            'security.lockout_tier2_attempts' => 'security.login_lockout.tier2_attempts',
+            'security.lockout_tier2_seconds' => 'security.login_lockout.tier2_seconds',
+            'security.lockout_tier3_attempts' => 'security.login_lockout.tier3_attempts',
+            'security.lockout_tier3_seconds' => 'security.login_lockout.tier3_seconds',
+            'security.lockout_window_minutes' => 'security.login_lockout.window_minutes',
         ];
 
         foreach ($map as $settingKey => $configPath) {

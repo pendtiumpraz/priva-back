@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\LoginAttemptService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -11,6 +12,8 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
+    public function __construct(private readonly LoginAttemptService $loginAttempts) {}
+
     /**
      * Register a new user + organization.
      */
@@ -77,6 +80,17 @@ class AuthController extends Controller
 
     /**
      * Login user.
+     *
+     * Lockout flow (configurable di /platform-admin/system-settings → Security):
+     *   1. Cari user; kalau tidak ada → generic error (anti enumeration), TIDAK
+     *      menaikkan counter manapun (mencegah attacker "lock" email random).
+     *   2. Kalau user sedang ke-lock → return 423 + retry_after_seconds. Cegah
+     *      attacker mengeksploitasi password check timing.
+     *   3. Cek password; kalau salah → recordFailure() (counter naik, mungkin
+     *      trigger lock baru) lalu generic error.
+     *   4. Cek is_active; kalau nonaktif → generic message tanpa reset counter
+     *      (akun dinonaktifkan tetap tidak boleh login).
+     *   5. recordSuccess() reset counter + tulis last_login_at/ip.
      */
     public function login(Request $request): JsonResponse
     {
@@ -87,17 +101,59 @@ class AuthController extends Controller
 
         $user = User::where('email', $request->email)->first();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
+        if (! $user) {
             throw ValidationException::withMessages([
                 'email' => ['Kredensial yang diberikan tidak cocok.'],
             ]);
         }
 
-        if (!$user->is_active) {
+        // Lockout check sebelum password check — supaya password check tidak
+        // jadi side-channel (attacker tetap bisa coba walau lock, hanya tahu
+        // "lock". Tapi tanpa cek ini, dia juga bisa terus brute force.)
+        if (($retryAfter = $this->loginAttempts->lockedRetryAfter($user)) !== null) {
+            return response()->json([
+                'message' => "Akun terkunci sementara. Coba lagi dalam {$retryAfter} detik.",
+                'errors' => [
+                    'email' => ["Akun terkunci sementara. Coba lagi dalam {$retryAfter} detik."],
+                ],
+                'locked' => true,
+                'retry_after_seconds' => $retryAfter,
+                'locked_until' => $user->locked_until?->toISOString(),
+            ], 423);
+        }
+
+        if (! Hash::check($request->password, $user->password)) {
+            $this->loginAttempts->recordFailure($user, $request->ip());
+
+            // Sesudah recordFailure, mungkin user baru saja melewati threshold
+            // dan langsung ke-lock. Sertakan info itu supaya UI bisa langsung
+            // pasang countdown tanpa user harus retry sekali lagi.
+            $user->refresh();
+            $retryAfter = $this->loginAttempts->lockedRetryAfter($user);
+            if ($retryAfter !== null) {
+                return response()->json([
+                    'message' => "Akun terkunci sementara. Coba lagi dalam {$retryAfter} detik.",
+                    'errors' => [
+                        'email' => ["Akun terkunci sementara. Coba lagi dalam {$retryAfter} detik."],
+                    ],
+                    'locked' => true,
+                    'retry_after_seconds' => $retryAfter,
+                    'locked_until' => $user->locked_until?->toISOString(),
+                ], 423);
+            }
+
+            throw ValidationException::withMessages([
+                'email' => ['Kredensial yang diberikan tidak cocok.'],
+            ]);
+        }
+
+        if (! $user->is_active) {
             throw ValidationException::withMessages([
                 'email' => ['Akun Anda telah dinonaktifkan.'],
             ]);
         }
+
+        $this->loginAttempts->recordSuccess($user, $request->ip());
 
         $token = $user->createToken('auth-token')->plainTextToken;
 

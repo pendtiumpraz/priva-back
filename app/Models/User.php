@@ -62,6 +62,11 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_active' => 'boolean',
             'settings' => 'array',
+            // Login lockout (added 2026-05-10) — datetime cast supaya
+            // Carbon comparison di LoginAttemptService gampang.
+            'last_failed_login_at' => 'datetime',
+            'locked_until' => 'datetime',
+            'last_login_at' => 'datetime',
             // PII Encryption — AES-256-CBC
             'name' => EncryptedString::class,
             'phone' => EncryptedString::class,

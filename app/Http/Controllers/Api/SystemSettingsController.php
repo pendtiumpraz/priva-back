@@ -8,6 +8,7 @@ use App\Http\Requests\SystemSettings\DeploymentRequest;
 use App\Http\Requests\SystemSettings\InfrastructureRequest;
 use App\Http\Requests\SystemSettings\MailRequest;
 use App\Http\Requests\SystemSettings\RedisRequest;
+use App\Http\Requests\SystemSettings\SecurityRequest;
 use App\Models\AuditLog;
 use App\Models\SystemSetting;
 use App\Providers\SettingsServiceProvider;
@@ -81,6 +82,16 @@ class SystemSettingsController extends Controller
         ],
         'deployment' => [
             'deployment.mode',
+        ],
+        'security' => [
+            'security.lockout_enabled',
+            'security.lockout_tier1_attempts',
+            'security.lockout_tier1_seconds',
+            'security.lockout_tier2_attempts',
+            'security.lockout_tier2_seconds',
+            'security.lockout_tier3_attempts',
+            'security.lockout_tier3_seconds',
+            'security.lockout_window_minutes',
         ],
     ];
 
@@ -352,6 +363,7 @@ class SystemSettingsController extends Controller
             'ai' => AiRequest::class,
             'mail' => MailRequest::class,
             'deployment' => DeploymentRequest::class,
+            'security' => SecurityRequest::class,
             default => null,
         };
 
@@ -401,6 +413,16 @@ class SystemSettingsController extends Controller
             // section's only required toggles are the operational ones.
             'ai' => ['ai.jobs_enabled', 'ai.max_concurrent_per_user', 'ai.history_retention_days'],
             'deployment' => ['deployment.mode'],
+            'security' => [
+                'security.lockout_enabled',
+                'security.lockout_tier1_attempts',
+                'security.lockout_tier1_seconds',
+                'security.lockout_tier2_attempts',
+                'security.lockout_tier2_seconds',
+                'security.lockout_tier3_attempts',
+                'security.lockout_tier3_seconds',
+                'security.lockout_window_minutes',
+            ],
             default => [], // mail — optional
         };
     }
