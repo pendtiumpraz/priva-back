@@ -190,7 +190,7 @@ Route::middleware('throttle:api')->group(function () {
 // =============================================
 // Protected Routes (Sanctum)
 // =============================================
-Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db', 'tenant.readonly'])->group(function () {
+Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenant.context', 'tenant.db', 'tenant.readonly'])->group(function () {
 
     // Auth
     Route::get('/auth/me', [AuthController::class, 'me']);

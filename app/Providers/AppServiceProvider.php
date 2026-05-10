@@ -46,6 +46,28 @@ class AppServiceProvider extends ServiceProvider
             return \Illuminate\Cache\RateLimiting\Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
         });
 
+        // 2a. Per-tenant rate limit — layer kedua di atas 'api'. Mencegah
+        // satu tenant flood seluruh platform (impact tenant lain). Bucket key
+        // pakai org_id supaya semua user dari org yang sama share quota.
+        // Kalau request gak punya org (root/superadmin lewat tanpa tenant
+        // context), fall back ke user_id supaya tetap di-limit.
+        //
+        // Limit + master enabled configurable via security.tenant_rate_limit_*.
+        // Default 300/menit cukup untuk dashboard yang load 10+ widget per
+        // user di tenant dengan 30+ user aktif simultan.
+        \Illuminate\Support\Facades\RateLimiter::for('tenant-api', function (\Illuminate\Http\Request $request) {
+            $enabled = (bool) config('security.tenant_rate_limit_enabled', true);
+            if (! $enabled) {
+                return \Illuminate\Cache\RateLimiting\Limit::none();
+            }
+
+            $perMinute = (int) config('security.tenant_rate_limit_per_minute', 300);
+            $user = $request->user();
+            $bucket = $user?->org_id ?? $user?->id ?? $request->ip();
+
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute($perMinute)->by('tenant:'.$bucket);
+        });
+
         // 3. Register Socialite Providers
         \Illuminate\Support\Facades\Event::listen(
             \SocialiteProviders\Manager\SocialiteWasCalled::class,

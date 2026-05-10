@@ -42,6 +42,14 @@ return [
     '2fa_required_for_superadmin' => false,
     '2fa_required_for_admin' => false,
     '2fa_required_for_dpo' => false,
+    '2fa_max_verify_attempts' => 5,         // Per-challenge brute-force protection
+
+    /**
+     * Per-tenant rate limit — layer di atas global throttle:api. Mencegah
+     * satu tenant flood seluruh platform. Bucket key = org_id.
+     */
+    'tenant_rate_limit_enabled' => true,
+    'tenant_rate_limit_per_minute' => 300,
 
     /**
      * AI prompt size guard. Cegah biaya tak terduga + abuse — attacker

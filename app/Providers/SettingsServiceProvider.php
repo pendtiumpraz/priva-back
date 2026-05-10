@@ -205,6 +205,9 @@ class SettingsServiceProvider extends ServiceProvider
             'security.2fa_required_for_superadmin' => 'security.2fa_required_for_superadmin',
             'security.2fa_required_for_admin' => 'security.2fa_required_for_admin',
             'security.2fa_required_for_dpo' => 'security.2fa_required_for_dpo',
+            'security.2fa_max_verify_attempts' => 'security.2fa_max_verify_attempts',
+            'security.tenant_rate_limit_enabled' => 'security.tenant_rate_limit_enabled',
+            'security.tenant_rate_limit_per_minute' => 'security.tenant_rate_limit_per_minute',
 
             // Security — email verification.
             'security.email_verification_required' => 'security.email_verification_required',

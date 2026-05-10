@@ -38,6 +38,7 @@ class TwoFactorAuthService
     private const RECOVERY_CODE_LENGTH = 10; // chars (XXXXX-XXXXX format)
     private const CHALLENGE_TTL_SECONDS = 300;
     private const CHALLENGE_CACHE_PREFIX = '2fa_challenge:';
+    private const CHALLENGE_ATTEMPTS_PREFIX = '2fa_attempts:';
 
     public function __construct(private readonly Google2FA $google2fa) {}
 
@@ -195,6 +196,12 @@ class TwoFactorAuthService
     /**
      * Verify login challenge + code. Return User kalau valid (dan delete
      * challenge dari cache supaya gak bisa dipakai 2x). Null kalau invalid.
+     *
+     * Brute-force protection: per-challenge attempt counter. Setelah N kali
+     * salah (configurable via security.2fa_max_verify_attempts, default 5),
+     * challenge di-invalidate paksa — user harus mulai login dari awal.
+     * Tanpa ini, attacker yang lolos password bisa coba 1M kombinasi 6-digit
+     * code dalam window TTL challenge (5 menit) → ratusan attempt feasible.
      */
     public function verifyChallenge(string $challenge, string $code): ?User
     {
@@ -209,14 +216,37 @@ class TwoFactorAuthService
         }
 
         if (! $this->verifyCode($user, $code)) {
-            // Tidak hapus challenge — biar user bisa retry kode yang bener
-            // dalam window TTL. Tapi rate-limit per challenge attempt? Untuk
-            // v1 skip, login throttle sudah handle abuse global.
+            // Increment per-challenge attempt counter
+            $attemptsKey = self::CHALLENGE_ATTEMPTS_PREFIX.$challenge;
+            $attempts = (int) Cache::get($attemptsKey, 0) + 1;
+            $maxAttempts = (int) config('security.2fa_max_verify_attempts', 5);
+
+            if ($attempts >= $maxAttempts) {
+                // Burnt — invalidate challenge + attempts counter. User HARUS
+                // login ulang dari awal (input password lagi). Mencegah brute.
+                Cache::forget($key);
+                Cache::forget($attemptsKey);
+            } else {
+                // TTL counter mirroring challenge TTL — kalau challenge
+                // expired, counter auto-clear sendiri.
+                Cache::put($attemptsKey, $attempts, self::CHALLENGE_TTL_SECONDS);
+            }
+
             return null;
         }
 
+        // Success — bersihin challenge dan attempts counter
         Cache::forget($key);
+        Cache::forget(self::CHALLENGE_ATTEMPTS_PREFIX.$challenge);
         return $user;
+    }
+
+    /**
+     * Untuk testing / monitoring: berapa attempts udah dipakai pada challenge ini.
+     */
+    public function challengeAttemptsUsed(string $challenge): int
+    {
+        return (int) Cache::get(self::CHALLENGE_ATTEMPTS_PREFIX.$challenge, 0);
     }
 
     /** Hitung sisa recovery codes user. */

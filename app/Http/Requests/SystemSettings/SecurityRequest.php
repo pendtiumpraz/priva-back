@@ -91,6 +91,11 @@ class SecurityRequest extends FormRequest
             '2fa_required_for_superadmin' => 'sometimes|boolean',
             '2fa_required_for_admin' => 'sometimes|boolean',
             '2fa_required_for_dpo' => 'sometimes|boolean',
+            '2fa_max_verify_attempts' => 'sometimes|integer|min:1|max:20',
+
+            // Per-tenant rate limit
+            'tenant_rate_limit_enabled' => 'sometimes|boolean',
+            'tenant_rate_limit_per_minute' => 'sometimes|integer|min:30|max:10000',
 
             // Email verification
             'email_verification_required' => 'sometimes|boolean',

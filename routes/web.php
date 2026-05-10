@@ -1,44 +1,9 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Artisan;
 
 Route::get('/', function () {
     return view('welcome');
-});
-
-/*
-|--------------------------------------------------------------------------
-| Setup Routes (untuk shared hosting tanpa SSH)
-|--------------------------------------------------------------------------
-| Akses via browser:
-|   - Migrate:       /setup/privasimu-setup-2026
-|   - Fresh + Seed:  /setup-fresh/privasimu-setup-2026
-|
-| ⚠️ HAPUS route ini setelah setup production selesai!
-*/
-
-Route::get('/setup/{secret}', function (string $secret) {
-    if ($secret !== 'privasimu-setup-2026') abort(404);
-    try {
-        Artisan::call('migrate', ['--force' => true]);
-        $m = Artisan::output();
-        Artisan::call('db:seed', ['--force' => true]);
-        $s = Artisan::output();
-        return response()->json(['status' => '✅ OK', 'migrate' => $m, 'seed' => $s]);
-    } catch (\Exception $e) {
-        return response()->json(['status' => '❌ ERROR', 'message' => $e->getMessage()], 500);
-    }
-});
-
-Route::get('/setup-fresh/{secret}', function (string $secret) {
-    if ($secret !== 'privasimu-setup-2026') abort(404);
-    try {
-        Artisan::call('migrate:fresh', ['--seed' => true, '--force' => true]);
-        return response()->json(['status' => '✅ OK', 'output' => Artisan::output()]);
-    } catch (\Exception $e) {
-        return response()->json(['status' => '❌ ERROR', 'message' => $e->getMessage()], 500);
-    }
 });
 
 /*
@@ -57,3 +22,22 @@ Route::middleware('throttle:30,1')->group(function () {
     Route::get('/preview/consent-banner', [\App\Http\Controllers\Api\PreviewController::class, 'consentBanner']);
     Route::get('/preview/dsr-widget', [\App\Http\Controllers\Api\PreviewController::class, 'dsrWidget']);
 });
+
+/*
+|--------------------------------------------------------------------------
+| ⚠️ Setup routes (/setup/{secret} and /setup-fresh/{secret}) DIHAPUS
+|--------------------------------------------------------------------------
+| Migration via browser dengan plaintext shared secret di repo = security
+| disaster. Setiap orang yang baca git history tahu secret-nya, dan endpoint
+| bisa nuke seluruh DB lewat HTTP request publik.
+|
+| Untuk migrate di shared hosting tanpa SSH, pakai salah satu:
+|   1. `composer dev` lokal + push DB dump
+|   2. Provider hosting yang support cron / job runners
+|   3. SSH ke server (cPanel terminal, dll) lalu `php artisan migrate`
+|   4. CI/CD pipeline yang trigger migrate (preferred — Vercel/GitHub Actions)
+|
+| Kalau benar-benar butuh web-trigger migrate, bikin artisan command yang
+| protected oleh Sanctum `auth:sanctum + role:root` middleware (bukan
+| shared secret di URL).
+*/
