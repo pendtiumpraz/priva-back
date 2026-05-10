@@ -101,6 +101,13 @@ class SystemSettingsController extends Controller
             'security.password_require_symbol',
             'security.password_block_common',
             'security.password_block_email_match',
+            // Response headers
+            'security.headers_enabled',
+            'security.headers_hsts_enabled',
+            'security.headers_hsts_max_age',
+            'security.headers_frame_options',
+            'security.headers_referrer_policy',
+            'security.headers_permissions_policy',
         ],
     ];
 
@@ -438,6 +445,12 @@ class SystemSettingsController extends Controller
                 'security.password_require_symbol',
                 'security.password_block_common',
                 'security.password_block_email_match',
+                'security.headers_enabled',
+                'security.headers_hsts_enabled',
+                'security.headers_hsts_max_age',
+                'security.headers_frame_options',
+                'security.headers_referrer_policy',
+                'security.headers_permissions_policy',
             ],
             default => [], // mail — optional
         };

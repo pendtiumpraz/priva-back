@@ -170,6 +170,14 @@ class SettingsServiceProvider extends ServiceProvider
             'security.password_require_symbol' => 'security.password.require_symbol',
             'security.password_block_common' => 'security.password.block_common',
             'security.password_block_email_match' => 'security.password.block_email_match',
+
+            // Security — response headers. Dibaca oleh SecurityHeaders middleware.
+            'security.headers_enabled' => 'security.headers.enabled',
+            'security.headers_hsts_enabled' => 'security.headers.hsts_enabled',
+            'security.headers_hsts_max_age' => 'security.headers.hsts_max_age',
+            'security.headers_frame_options' => 'security.headers.frame_options',
+            'security.headers_referrer_policy' => 'security.headers.referrer_policy',
+            'security.headers_permissions_policy' => 'security.headers.permissions_policy',
         ];
 
         foreach ($map as $settingKey => $configPath) {

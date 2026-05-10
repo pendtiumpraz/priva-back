@@ -48,6 +48,15 @@ class SecurityRequest extends FormRequest
             'password_require_symbol' => 'sometimes|boolean',
             'password_block_common' => 'sometimes|boolean',
             'password_block_email_match' => 'sometimes|boolean',
+
+            // Response headers — string fields jelas terbatas (frame_options
+            // hanya 2 nilai valid, sisanya free-form karena banyak varian).
+            'headers_enabled' => 'sometimes|boolean',
+            'headers_hsts_enabled' => 'sometimes|boolean',
+            'headers_hsts_max_age' => 'sometimes|integer|min:0|max:63072000', // max 2 tahun
+            'headers_frame_options' => 'sometimes|string|in:DENY,SAMEORIGIN',
+            'headers_referrer_policy' => 'sometimes|string|max:255',
+            'headers_permissions_policy' => 'sometimes|string|max:1024',
         ];
     }
 }

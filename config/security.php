@@ -15,6 +15,21 @@
 
 return [
     /**
+     * Security headers. Dijalankan di App\Http\Middleware\SecurityHeaders
+     * (registered global di bootstrap/app.php). Master `enabled` matikan
+     * semua sekaligus. HSTS punya toggle terpisah supaya local HTTP dev
+     * gak terkena.
+     */
+    'headers' => [
+        'enabled' => true,
+        'hsts_enabled' => true,
+        'hsts_max_age' => 31536000, // 1 tahun
+        'frame_options' => 'SAMEORIGIN',
+        'referrer_policy' => 'strict-origin-when-cross-origin',
+        'permissions_policy' => 'camera=(), microphone=(), geolocation=(), payment=()',
+    ],
+
+    /**
      * Password policy. Dijalankan di App\Services\PasswordPolicyService saat
      * password baru di-set (register, admin create user, admin update).
      * Policy LAMA tidak di-recheck — user lama gak dipaksa ganti password
