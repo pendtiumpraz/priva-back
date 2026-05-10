@@ -1160,11 +1160,21 @@ class AiFeatureController extends Controller
             return $creditErr;
         }
 
-        $point = DB::table('consent_collection_points')->where('id', $id)->first();
+        // SECURITY: tambah `where('org_id', user.org_id)` supaya tidak ada
+        // IDOR cross-tenant — sebelumnya $id bisa point ke collection point
+        // milik org lain dan attacker dapat AI-generated content berdasarkan
+        // data di sana.
+        $orgId = $request->user()->org_id;
+        $point = DB::table('consent_collection_points')
+            ->where('id', $id)
+            ->where('org_id', $orgId)
+            ->first();
         if (! $point) {
             return response()->json(['message' => 'Collection point not found'], 404);
         }
 
+        // consent_items terkait collection point yang sudah org-scoped di atas;
+        // tetap join via collection_point_id (point.id sudah verified milik org).
         $existingItems = DB::table('consent_items')->where('collection_point_id', $id)->pluck('title')->toArray();
 
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
