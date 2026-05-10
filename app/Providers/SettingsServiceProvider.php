@@ -178,6 +178,14 @@ class SettingsServiceProvider extends ServiceProvider
             'security.headers_frame_options' => 'security.headers.frame_options',
             'security.headers_referrer_policy' => 'security.headers.referrer_policy',
             'security.headers_permissions_policy' => 'security.headers.permissions_policy',
+
+            // Security — CORS. Hydrate cors.allowed_origins dst dari settings.
+            // `cors.allowed_origins` adalah array — applyToConfig() akan set
+            // selama valuenya bukan null/empty string. Array kosong tetap
+            // di-set (artinya: tolak semua cross-origin).
+            'security.cors_allowed_origins' => 'cors.allowed_origins',
+            'security.cors_allow_credentials' => 'cors.supports_credentials',
+            'security.cors_max_age_seconds' => 'cors.max_age',
         ];
 
         foreach ($map as $settingKey => $configPath) {

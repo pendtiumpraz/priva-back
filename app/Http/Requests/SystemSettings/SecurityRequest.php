@@ -57,6 +57,14 @@ class SecurityRequest extends FormRequest
             'headers_frame_options' => 'sometimes|string|in:DENY,SAMEORIGIN',
             'headers_referrer_policy' => 'sometimes|string|max:255',
             'headers_permissions_policy' => 'sometimes|string|max:1024',
+
+            // CORS allowlist — array of origin strings. Setiap entry harus
+            // valid URL (http/https + host). Array kosong = tolak semua
+            // cross-origin (extreme tapi valid).
+            'cors_allowed_origins' => 'sometimes|array|max:50',
+            'cors_allowed_origins.*' => ['string', 'max:255', 'regex:#^https?://[^/]+$#i'],
+            'cors_allow_credentials' => 'sometimes|boolean',
+            'cors_max_age_seconds' => 'sometimes|integer|min:0|max:86400', // max 24 jam
         ];
     }
 }

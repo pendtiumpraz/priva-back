@@ -108,6 +108,10 @@ class SystemSettingsController extends Controller
             'security.headers_frame_options',
             'security.headers_referrer_policy',
             'security.headers_permissions_policy',
+            // CORS allowlist
+            'security.cors_allowed_origins',
+            'security.cors_allow_credentials',
+            'security.cors_max_age_seconds',
         ],
     ];
 
@@ -451,6 +455,9 @@ class SystemSettingsController extends Controller
                 'security.headers_frame_options',
                 'security.headers_referrer_policy',
                 'security.headers_permissions_policy',
+                'security.cors_allowed_origins',
+                'security.cors_allow_credentials',
+                'security.cors_max_age_seconds',
             ],
             default => [], // mail — optional
         };
