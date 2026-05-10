@@ -15,6 +15,18 @@
 
 return [
     /**
+     * 2FA TOTP. `enabled` = master toggle; `required_for_<role>` = force
+     * untuk role tertentu (default semua false). User opt-in via profile.
+     * State per user di kolom users.two_factor_*; service di
+     * App\Services\TwoFactorAuthService.
+     */
+    '2fa_enabled' => true,
+    '2fa_required_for_root' => false,
+    '2fa_required_for_superadmin' => false,
+    '2fa_required_for_admin' => false,
+    '2fa_required_for_dpo' => false,
+
+    /**
      * AI prompt size guard. Cegah biaya tak terduga + abuse — attacker
      * authenticated bisa kirim prompt 100K char untuk drain credit tenant
      * atau bikin tagihan provider membengkak. Limit ini REJECT prompt

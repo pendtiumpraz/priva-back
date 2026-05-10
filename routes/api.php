@@ -122,6 +122,10 @@ Route::middleware('throttle:api')->group(function () {
     // Tidak return common-passwords list (server-side enforcement only).
     Route::get('/auth/password-policy', [AuthController::class, 'passwordPolicy']);
 
+    // 2FA verify (second step setelah login dengan password OK).
+    // Dipakai dengan challenge UUID dari respons /auth/login.
+    Route::post('/auth/2fa/verify', [AuthController::class, 'verifyTwoFactor']);
+
     // Public Feature Requests (read-only + upvote)
     Route::get('/public/feature-requests', [FeatureRequestController::class, 'publicIndex']);
     Route::post('/public/feature-requests', [FeatureRequestController::class, 'publicStore']);
@@ -186,6 +190,16 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'tenant.context', 'tenant.db'
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::put('/user/settings', [AuthController::class, 'updateSettings']);
     Route::put('/user/profile', [AuthController::class, 'updateProfile']);
+
+    // 2FA management — semua butuh auth karena per-user. Setup endpoint
+    // boleh dipanggil dengan setup_token (ability '2fa:setup') untuk role
+    // yang force enable, jadi user yang stuck di "must setup 2FA" bisa
+    // tetap akses ini meskipun belum punya full token.
+    Route::get('/auth/2fa/status', [AuthController::class, 'twoFactorStatus']);
+    Route::post('/auth/2fa/setup', [AuthController::class, 'setupTwoFactor']);
+    Route::post('/auth/2fa/confirm', [AuthController::class, 'confirmTwoFactor']);
+    Route::post('/auth/2fa/disable', [AuthController::class, 'disableTwoFactor']);
+    Route::post('/auth/2fa/recovery-codes/regenerate', [AuthController::class, 'regenerateRecoveryCodes']);
 
     // Dashboard
     Route::get('/dashboard/stats', [DashboardController::class, 'stats']);

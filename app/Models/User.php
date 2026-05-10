@@ -48,6 +48,10 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        // 2FA secrets — JANGAN bocor ke API response, even untuk owner.
+        // Ditampilkan hanya saat /auth/2fa/setup (one-time, plain text di QR).
+        'two_factor_secret',
+        'two_factor_recovery_codes',
     ];
 
     /**
@@ -67,6 +71,11 @@ class User extends Authenticatable
             'last_failed_login_at' => 'datetime',
             'locked_until' => 'datetime',
             'last_login_at' => 'datetime',
+            // 2FA (added 2026-05-11) — confirmed_at datetime; secret +
+            // recovery_codes tetap text/encrypted, gak di-cast karena
+            // Crypt::decryptString manual di service (kalau cast pakai
+            // 'encrypted' Laravel built-in, akan double-decrypt).
+            'two_factor_confirmed_at' => 'datetime',
             // PII Encryption — AES-256-CBC
             'name' => EncryptedString::class,
             'phone' => EncryptedString::class,

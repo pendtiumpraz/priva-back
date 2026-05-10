@@ -119,6 +119,12 @@ class SystemSettingsController extends Controller
             'security.ai_max_prompt_chars',
             'security.ai_max_message_chars',
             'security.ai_max_attachment_chars',
+            // 2FA
+            'security.2fa_enabled',
+            'security.2fa_required_for_root',
+            'security.2fa_required_for_superadmin',
+            'security.2fa_required_for_admin',
+            'security.2fa_required_for_dpo',
         ],
     ];
 
@@ -470,6 +476,11 @@ class SystemSettingsController extends Controller
                 'security.ai_max_prompt_chars',
                 'security.ai_max_message_chars',
                 'security.ai_max_attachment_chars',
+                'security.2fa_enabled',
+                'security.2fa_required_for_root',
+                'security.2fa_required_for_superadmin',
+                'security.2fa_required_for_admin',
+                'security.2fa_required_for_dpo',
             ],
             default => [], // mail — optional
         };

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\LoginAttemptService;
 use App\Services\PasswordPolicyService;
+use App\Services\TwoFactorAuthService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -16,6 +17,7 @@ class AuthController extends Controller
     public function __construct(
         private readonly LoginAttemptService $loginAttempts,
         private readonly PasswordPolicyService $passwordPolicy,
+        private readonly TwoFactorAuthService $twoFactor,
     ) {}
 
     /**
@@ -166,6 +168,34 @@ class AuthController extends Controller
             ]);
         }
 
+        // 2FA gate — kalau user sudah confirmed 2FA atau role-nya wajib 2FA,
+        // jangan langsung issue full token. Issue challenge UUID yang user
+        // pakai untuk POST /auth/2fa/verify dengan kode dari authenticator.
+        if (config('security.2fa_enabled', true) && $this->twoFactor->isRequiredFor($user)) {
+            // User sudah confirm 2FA → masuk flow verify
+            if ($user->two_factor_confirmed_at) {
+                $challenge = $this->twoFactor->issueChallenge($user);
+                // recordSuccess di-defer ke /auth/2fa/verify supaya counter
+                // failed_login_attempts tetap reset hanya kalau ENTIRE flow
+                // (password + 2FA) sukses.
+                return response()->json([
+                    'requires_2fa' => true,
+                    'challenge' => $challenge,
+                    'message' => 'Masukkan kode 2FA dari authenticator.',
+                ]);
+            }
+            // Role wajib 2FA tapi user belum setup → flag setup_required.
+            // Frontend render setup wizard. User tetap tidak dapat token
+            // sampai 2FA di-confirm.
+            return response()->json([
+                'requires_2fa_setup' => true,
+                'message' => 'Akun Anda wajib mengaktifkan 2FA. Silakan setup terlebih dahulu.',
+                // Issue temporary token dengan ability terbatas hanya untuk
+                // 2FA setup endpoints. Akan di-revoke setelah confirm.
+                'setup_token' => $user->createToken('2fa-setup', ['2fa:setup'])->plainTextToken,
+            ]);
+        }
+
         $this->loginAttempts->recordSuccess($user, $request->ip());
 
         $token = $user->createToken('auth-token')->plainTextToken;
@@ -173,6 +203,136 @@ class AuthController extends Controller
         return response()->json([
             'user' => $this->userWithPackageType($user),
             'token' => $token,
+        ]);
+    }
+
+    /**
+     * Verifikasi 2FA challenge — second step dari login.
+     */
+    public function verifyTwoFactor(Request $request): JsonResponse
+    {
+        $request->validate([
+            'challenge' => 'required|string|uuid',
+            'code' => 'required|string|max:32',
+        ]);
+
+        $user = $this->twoFactor->verifyChallenge($request->challenge, $request->code);
+        if (! $user) {
+            throw ValidationException::withMessages([
+                'code' => ['Kode 2FA tidak valid atau challenge sudah kedaluwarsa.'],
+            ]);
+        }
+
+        $this->loginAttempts->recordSuccess($user, $request->ip());
+
+        return response()->json([
+            'user' => $this->userWithPackageType($user),
+            'token' => $user->createToken('auth-token')->plainTextToken,
+        ]);
+    }
+
+    /**
+     * Setup 2FA — generate secret + QR. State = pending sampai confirm.
+     */
+    public function setupTwoFactor(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (! config('security.2fa_enabled', true)) {
+            return response()->json(['message' => '2FA fitur dimatikan oleh administrator.'], 403);
+        }
+        if ($user->two_factor_confirmed_at) {
+            return response()->json(['message' => '2FA sudah aktif. Disable dulu sebelum re-setup.'], 422);
+        }
+
+        $issuer = config('app.name', 'Privasimu');
+        $data = $this->twoFactor->setup($user, $issuer);
+
+        return response()->json($data);
+    }
+
+    /**
+     * Confirm 2FA setup dengan kode pertama dari authenticator. Return
+     * recovery codes (sekali itu doang plaintext — user wajib save).
+     */
+    public function confirmTwoFactor(Request $request): JsonResponse
+    {
+        $request->validate(['code' => 'required|string|size:6']);
+
+        $user = $request->user();
+        $recovery = $this->twoFactor->confirm($user, $request->code);
+        if (! $recovery) {
+            throw ValidationException::withMessages([
+                'code' => ['Kode tidak valid. Coba lagi dengan kode terbaru dari authenticator.'],
+            ]);
+        }
+
+        // Setelah confirm, revoke setup_token kalau ada — full token akan
+        // di-issue saat next login flow.
+        $current = $request->user()->currentAccessToken();
+        if ($current && $current->name === '2fa-setup') {
+            $current->delete();
+        }
+
+        return response()->json([
+            'message' => '2FA berhasil diaktifkan. Simpan recovery codes di tempat aman.',
+            'recovery_codes' => $recovery,
+        ]);
+    }
+
+    /**
+     * Disable 2FA. Wajib re-confirm password supaya gak ada attacker yang
+     * curi session bisa langsung disable.
+     */
+    public function disableTwoFactor(Request $request): JsonResponse
+    {
+        $request->validate(['password' => 'required|string']);
+
+        $user = $request->user();
+        if (! Hash::check($request->password, $user->password)) {
+            throw ValidationException::withMessages([
+                'password' => ['Password salah.'],
+            ]);
+        }
+
+        $this->twoFactor->disable($user);
+        return response()->json(['message' => '2FA dinonaktifkan.']);
+    }
+
+    /**
+     * Regenerate recovery codes. Old codes invalidated.
+     */
+    public function regenerateRecoveryCodes(Request $request): JsonResponse
+    {
+        $request->validate(['password' => 'required|string']);
+
+        $user = $request->user();
+        if (! Hash::check($request->password, $user->password)) {
+            throw ValidationException::withMessages([
+                'password' => ['Password salah.'],
+            ]);
+        }
+
+        if (! $user->two_factor_confirmed_at) {
+            return response()->json(['message' => '2FA belum aktif.'], 422);
+        }
+
+        return response()->json([
+            'recovery_codes' => $this->twoFactor->regenerateRecoveryCodes($user),
+        ]);
+    }
+
+    /**
+     * Status 2FA user — dipakai frontend profile page.
+     */
+    public function twoFactorStatus(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        return response()->json([
+            'enabled' => (bool) $user->two_factor_confirmed_at,
+            'pending_setup' => (bool) $user->two_factor_secret && ! $user->two_factor_confirmed_at,
+            'required_by_policy' => $this->twoFactor->isRequiredFor($user) && ! $user->two_factor_confirmed_at,
+            'recovery_codes_remaining' => $this->twoFactor->recoveryCodesCount($user),
+            'feature_enabled' => (bool) config('security.2fa_enabled', true),
         ]);
     }
 

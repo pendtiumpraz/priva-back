@@ -84,6 +84,13 @@ class SecurityRequest extends FormRequest
             'ai_max_prompt_chars' => 'sometimes|integer|min:1000|max:200000',
             'ai_max_message_chars' => 'sometimes|integer|min:100|max:200000',
             'ai_max_attachment_chars' => 'sometimes|integer|min:500|max:200000',
+
+            // 2FA toggles — semua boolean.
+            '2fa_enabled' => 'sometimes|boolean',
+            '2fa_required_for_root' => 'sometimes|boolean',
+            '2fa_required_for_superadmin' => 'sometimes|boolean',
+            '2fa_required_for_admin' => 'sometimes|boolean',
+            '2fa_required_for_dpo' => 'sometimes|boolean',
         ];
     }
 }
