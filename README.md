@@ -85,6 +85,71 @@ docker compose up -d --build
 docker compose exec backend php artisan migrate --seed --force
 ```
 
+## ⚠️ CORS Allowlist — set this BEFORE first migrate
+
+**Without this step, the frontend (production atau on-prem) akan ke-block oleh browser.** Tidak ada error message yang ramah — request preflight gagal, frontend kelihatan "kosong" / "loading forever".
+
+Setiap deployment (SaaS Privasimu, on-prem Client A, on-prem Client B, dst) baca origin frontend-nya **dari env var `CORS_ALLOWED_ORIGINS`** di `.env` masing-masing. Tidak ada customer-specific domain yang nyangkut di repo.
+
+### Set env sebelum `php artisan migrate`
+
+`CORS_ALLOWED_ORIGINS` adalah **comma-separated** list of origin (`scheme://host[:port]` tanpa trailing slash):
+
+```env
+# .env SaaS Privasimu
+CORS_ALLOWED_ORIGINS=https://nexus.privasimu.com,https://privasimu.sainskerta.net
+
+# .env on-prem klien A
+CORS_ALLOWED_ORIGINS=https://privacy.client-a.example.com
+
+# .env on-prem klien B (production-strict, tanpa localhost)
+CORS_ALLOWED_ORIGINS=https://compliance.client-b.example.id
+CORS_ALLOWED_ORIGINS_NO_LOCALHOST=true
+```
+
+Kalau env tidak di-set, seeder fallback ke `localhost:3000` + `127.0.0.1:3000` saja (cocok untuk dev, tapi berarti production akan ditolak browser sampai admin set lewat UI).
+
+### Setelah first boot — UI jadi source of truth
+
+Begitu migrate sudah jalan, edit allowlist via:
+
+```
+/platform-admin/system-settings → Security → CORS Allowlist
+```
+
+Admin bisa tambah/hapus origin tanpa redeploy. Cocok untuk white-label tenant yang request domain custom mereka. Maks 50 origin per deployment, regex divalidasi (`^https?://[^/]+$` — wildcard `*` tidak didukung).
+
+### Defense in depth
+
+Kalau DB `cors_allowed_origins` kosong (admin gak sengaja hapus semua, atau fresh install belum di-seed dengan benar), `SettingsServiceProvider` akan fallback ke env `CORS_ALLOWED_ORIGINS` di runtime — mencegah blackout window. Setelah admin set value baru via UI, DB akan menang lagi.
+
+### Yang TIDAK configurable dari UI (sengaja)
+
+`paths`, `allowed_methods`, `allowed_headers` di `config/cors.php` di-set static dengan default aman. Salah ubah `paths` = app rusak; `methods/headers` = `*` aman karena gating sebenarnya ada di route + auth middleware.
+
+### Verifikasi
+
+```bash
+# Allowed origin → header ACAO terstamp dengan nilai spesifik
+curl -X OPTIONS https://your-api/api/auth/password-policy \
+  -H "Origin: https://your-frontend.com" \
+  -H "Access-Control-Request-Method: GET" -i | grep -i access-control
+
+# Blocked origin → tidak ada header ACAO (browser akan tolak respons)
+curl -X OPTIONS https://your-api/api/auth/password-policy \
+  -H "Origin: https://evil.example.com" \
+  -H "Access-Control-Request-Method: GET" -i | grep -i access-control
+```
+
+### Related security knobs
+
+Section yang sama juga punya:
+- **Login lockout** per akun (3 fail → 30s, configurable tier)
+- **Password policy** (length, complexity, common-passwords blocklist)
+- **Response headers** (HSTS, Frame-Options, Referrer-Policy, Permissions-Policy)
+
+Semua persisted di `system_settings` dan editable lewat UI yang sama. Lihat `SECURITY_HARDENING_PROGRESS.md` di repo root untuk dokumentasi lengkap.
+
 ## Testing
 
 ```bash
@@ -338,6 +403,8 @@ Single file: `routes/api.php`.
 - Don't bypass `AiAgentToolExecutor` for AI tool calls.
 - Don't query a tenant table without `org_id` — even with `BelongsToOrg` global scope as a sabuk, explicit filtering in critical paths is required.
 - Don't add provisioner credentials to `.env` — register a `DatabasePool` row via `/platform-admin/database-pools` instead. Env-based creds were the old pattern; pool registry replaces it (see `BYODB.md` §2.5).
+- Don't deploy without setting `CORS_ALLOWED_ORIGINS` in `.env` first — fresh seeder akan default ke localhost-only, dan browser frontend production akan ditolak preflight tanpa error yang membantu. Lihat **CORS Allowlist** section di atas.
+- Don't hardcode customer-specific frontend domain di seeder/migration — pakai env var per-deployment. Repo platform harus tetap portable antara SaaS dan on-prem clients.
 - Don't drop the `landlord` connection alias or rename `LandlordPinned` trait without auditing every model that uses it — these are the rails that keep platform queries on landlord after `tenant.db` middleware switches the default.
 - Don't run `php artisan migrate` against a tenant DB by hand without using `tenants:migrate` — the provisioning flow drops cross-DB FK constraints that re-running raw `migrate` would re-create, breaking app inserts.
 - Don't use MySQL-only migration helpers (`->after()`, raw `ALTER COLUMN` without engine guards). When the migration *must* be raw SQL, gate by `DB::getDriverName()` and supply at least the pgsql + mysql + sqlite branches (see `2026_04_15_000001_expand_pii_columns_for_encryption.php` for a working pattern).
