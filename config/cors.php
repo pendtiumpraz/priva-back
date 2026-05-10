@@ -45,7 +45,14 @@ return [
 
     'allowed_headers' => ['*'],
 
-    'exposed_headers' => [],
+    /**
+     * Header yang dibolehkan di-baca oleh browser dari respons cross-origin.
+     * Tanpa entry di sini, browser akan sembunyikan header tersebut walaupun
+     * server kirim. `X-Refreshed-Token` dipakai oleh sliding refresh
+     * Sanctum (App\Http\Middleware\SanctumTokenRefresh) — tanpa di-expose,
+     * frontend gak bisa replace localStorage auth_token saat rotate.
+     */
+    'exposed_headers' => ['X-Refreshed-Token'],
 
     /**
      * Preflight cache duration. Browser akan cache hasil OPTIONS request

@@ -112,6 +112,9 @@ class SystemSettingsController extends Controller
             'security.cors_allowed_origins',
             'security.cors_allow_credentials',
             'security.cors_max_age_seconds',
+            // Token expiry + refresh
+            'security.token_lifetime_minutes',
+            'security.token_refresh_threshold_pct',
         ],
     ];
 
@@ -458,6 +461,8 @@ class SystemSettingsController extends Controller
                 'security.cors_allowed_origins',
                 'security.cors_allow_credentials',
                 'security.cors_max_age_seconds',
+                'security.token_lifetime_minutes',
+                'security.token_refresh_threshold_pct',
             ],
             default => [], // mail — optional
         };

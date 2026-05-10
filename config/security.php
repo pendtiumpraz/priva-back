@@ -15,6 +15,22 @@
 
 return [
     /**
+     * Sanctum personal access token — hard expiry + sliding refresh.
+     *
+     * `lifetime_minutes` di-mapping ke `sanctum.expiration` oleh
+     * SettingsServiceProvider. `refresh_threshold_pct` dipakai oleh
+     * App\Http\Middleware\SanctumTokenRefresh untuk decide kapan rotate.
+     *
+     * Default 7 hari + refresh setelah 50% lifetime — user aktif tidak
+     * pernah ke-logout (token rotate diam-diam), user idle ke-logout di
+     * hari ke-7.
+     */
+    'token' => [
+        'lifetime_minutes' => 10080,        // 7 hari
+        'refresh_threshold_pct' => 50,      // refresh kalau umur token >= 50% lifetime
+    ],
+
+    /**
      * Security headers. Dijalankan di App\Http\Middleware\SecurityHeaders
      * (registered global di bootstrap/app.php). Master `enabled` matikan
      * semua sekaligus. HSTS punya toggle terpisah supaya local HTTP dev

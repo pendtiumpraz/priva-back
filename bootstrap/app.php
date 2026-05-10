@@ -7,6 +7,7 @@ use App\Http\Middleware\EnforceTenantReadOnly;
 use App\Http\Middleware\InitializeTenantDatabase;
 use App\Http\Middleware\RootOnly;
 use App\Http\Middleware\RootOrSuperadmin;
+use App\Http\Middleware\SanctumTokenRefresh;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SetCurrentOrgContext;
 use Illuminate\Auth\AuthenticationException;
@@ -38,6 +39,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // ke SEMUA response. Master toggle + per-header knob tersedia di
         // /platform-admin/system-settings → Security section.
         $middleware->append(SecurityHeaders::class);
+
+        // Sliding refresh untuk Sanctum tokens — kalau token udah lewat
+        // threshold % dari lifetime, issue token baru via header
+        // X-Refreshed-Token. Append global aman karena no-op untuk request
+        // tanpa user authenticated.
+        $middleware->append(SanctumTokenRefresh::class);
 
         // Prevent "Route [login] not defined" on API auth failures
         $middleware->redirectGuestsTo(fn ($request) => $request->is('api/*') ? null : '/login');

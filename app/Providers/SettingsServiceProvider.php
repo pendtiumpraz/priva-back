@@ -186,6 +186,12 @@ class SettingsServiceProvider extends ServiceProvider
             'security.cors_allowed_origins' => 'cors.allowed_origins',
             'security.cors_allow_credentials' => 'cors.supports_credentials',
             'security.cors_max_age_seconds' => 'cors.max_age',
+
+            // Security — token expiry. Ke `sanctum.expiration` (Sanctum baca
+            // ini langsung untuk hard-cut) + ke security.token.* untuk
+            // SanctumTokenRefresh middleware.
+            'security.token_lifetime_minutes' => 'sanctum.expiration',
+            'security.token_refresh_threshold_pct' => 'security.token.refresh_threshold_pct',
         ];
 
         foreach ($map as $settingKey => $configPath) {

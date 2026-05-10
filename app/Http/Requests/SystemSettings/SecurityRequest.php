@@ -65,6 +65,15 @@ class SecurityRequest extends FormRequest
             'cors_allowed_origins.*' => ['string', 'max:255', 'regex:#^https?://[^/]+$#i'],
             'cors_allow_credentials' => 'sometimes|boolean',
             'cors_max_age_seconds' => 'sometimes|integer|min:0|max:86400', // max 24 jam
+
+            // Token expiry — min 60 menit (1 jam) supaya tidak terlalu agresif
+            // logout user, max 525600 (1 tahun) supaya tetap ada hard expiry.
+            // 0 = never expire, sengaja tidak diperbolehkan dari UI (defeats
+            // the purpose). Admin yang mau disable bisa edit DB langsung.
+            'token_lifetime_minutes' => 'sometimes|integer|min:60|max:525600',
+            // Threshold 1-99 (0 = no refresh, 100 = refresh setelah expired,
+            // dua-duanya ngaco).
+            'token_refresh_threshold_pct' => 'sometimes|integer|min:1|max:99',
         ];
     }
 }
