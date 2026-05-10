@@ -199,6 +199,25 @@ class SettingsServiceProvider extends ServiceProvider
             Config::set($configPath, $value);
         }
 
+        // Defense in depth — kalau DB origins kosong/array kosong (mis. admin
+        // sengaja hapus semua, atau fresh install belum migrate), fallback ke
+        // env CORS_ALLOWED_ORIGINS supaya frontend production tetap bisa
+        // connect saat first-deploy. Setelah admin set lewat UI, DB jadi
+        // source of truth.
+        $dbOrigins = $settings['security.cors_allowed_origins'] ?? null;
+        if (! is_array($dbOrigins) || count($dbOrigins) === 0) {
+            $envRaw = (string) env('CORS_ALLOWED_ORIGINS', '');
+            if ($envRaw !== '') {
+                $envOrigins = array_values(array_unique(array_filter(
+                    array_map('trim', explode(',', $envRaw)),
+                    fn ($s) => $s !== ''
+                )));
+                if (! empty($envOrigins)) {
+                    Config::set('cors.allowed_origins', $envOrigins);
+                }
+            }
+        }
+
         // Conditional SQS wiring — only when queue_driver=sqs. Object storage
         // (S3) is NOT wired here; that's handled by the StoragePool model on
         // a per-tenant basis.
