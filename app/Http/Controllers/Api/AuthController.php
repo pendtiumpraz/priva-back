@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\LoginAttemptService;
+use App\Services\PasswordPolicyService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -12,7 +13,10 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
-    public function __construct(private readonly LoginAttemptService $loginAttempts) {}
+    public function __construct(
+        private readonly LoginAttemptService $loginAttempts,
+        private readonly PasswordPolicyService $passwordPolicy,
+    ) {}
 
     /**
      * Register a new user + organization.
@@ -22,9 +26,18 @@ class AuthController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
-            'password' => 'required|string|min:8|confirmed',
+            'password' => 'required|string|confirmed',
             'organization_name' => 'required|string|max:255',
         ]);
+
+        // Password policy — separate dari format validation di atas supaya
+        // pesan policy bisa di-map ke field 'password' dengan multiple messages.
+        $violations = $this->passwordPolicy->validate($request->password, $request->email);
+        if (! empty($violations)) {
+            throw ValidationException::withMessages([
+                'password' => array_column($violations, 'message'),
+            ]);
+        }
 
         // Create organization
         $org = \App\Models\Organization::create([
@@ -170,6 +183,18 @@ class AuthController extends Controller
     {
         return response()->json([
             'user' => $this->userWithPackageType($request->user()),
+        ]);
+    }
+
+    /**
+     * Public — return active password policy supaya UI register / change-password
+     * bisa render checklist live. Tidak include daftar common-passwords (300+
+     * entries) untuk hemat payload; common-check tetap ditegakkan server-side.
+     */
+    public function passwordPolicy(): JsonResponse
+    {
+        return response()->json([
+            'policy' => $this->passwordPolicy->getPolicy(),
         ]);
     }
 

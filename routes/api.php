@@ -118,6 +118,10 @@ Route::middleware('throttle:api')->group(function () {
     Route::post('/auth/register', [AuthController::class, 'register']);
     Route::post('/auth/login', [AuthController::class, 'login']);
 
+    // Public — active password policy for register/change-password forms.
+    // Tidak return common-passwords list (server-side enforcement only).
+    Route::get('/auth/password-policy', [AuthController::class, 'passwordPolicy']);
+
     // Public Feature Requests (read-only + upvote)
     Route::get('/public/feature-requests', [FeatureRequestController::class, 'publicIndex']);
     Route::post('/public/feature-requests', [FeatureRequestController::class, 'publicStore']);

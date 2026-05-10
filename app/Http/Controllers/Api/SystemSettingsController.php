@@ -84,6 +84,7 @@ class SystemSettingsController extends Controller
             'deployment.mode',
         ],
         'security' => [
+            // Login lockout
             'security.lockout_enabled',
             'security.lockout_tier1_attempts',
             'security.lockout_tier1_seconds',
@@ -92,6 +93,14 @@ class SystemSettingsController extends Controller
             'security.lockout_tier3_attempts',
             'security.lockout_tier3_seconds',
             'security.lockout_window_minutes',
+            // Password policy
+            'security.password_min_length',
+            'security.password_require_uppercase',
+            'security.password_require_lowercase',
+            'security.password_require_digit',
+            'security.password_require_symbol',
+            'security.password_block_common',
+            'security.password_block_email_match',
         ],
     ];
 
@@ -422,6 +431,13 @@ class SystemSettingsController extends Controller
                 'security.lockout_tier3_attempts',
                 'security.lockout_tier3_seconds',
                 'security.lockout_window_minutes',
+                'security.password_min_length',
+                'security.password_require_uppercase',
+                'security.password_require_lowercase',
+                'security.password_require_digit',
+                'security.password_require_symbol',
+                'security.password_block_common',
+                'security.password_block_email_match',
             ],
             default => [], // mail — optional
         };

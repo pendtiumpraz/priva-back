@@ -15,6 +15,22 @@
 
 return [
     /**
+     * Password policy. Dijalankan di App\Services\PasswordPolicyService saat
+     * password baru di-set (register, admin create user, admin update).
+     * Policy LAMA tidak di-recheck — user lama gak dipaksa ganti password
+     * setelah policy diperketat (kecuali superadmin trigger force reset).
+     */
+    'password' => [
+        'min_length' => 12,
+        'require_uppercase' => true,
+        'require_lowercase' => true,
+        'require_digit' => true,
+        'require_symbol' => true,
+        'block_common' => true,
+        'block_email_match' => true,
+    ],
+
+    /**
      * Login lockout per akun. Dijalankan di App\Services\LoginAttemptService.
      * State (counter & locked_until) ada di kolom users.failed_login_attempts
      * dan users.locked_until — persisted DB, tidak ngandelin cache.

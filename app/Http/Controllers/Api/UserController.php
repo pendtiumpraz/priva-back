@@ -153,7 +153,9 @@ class UserController extends Controller
         $rules = [
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
-            'password' => 'required|string|min:8',
+            // Length & complexity di-validasi terpisah lewat PasswordPolicyService
+            // di bawah supaya bisa ngasih multiple-message yang detail.
+            'password' => 'required|string',
             'role' => ['sometimes', 'nullable'], // Keep as optional legacy fallback
             'tenant_role_id' => 'required|exists:tenant_roles,id',
             'phone' => 'nullable|string|max:20',
@@ -184,6 +186,16 @@ class UserController extends Controller
         }
 
         $validated = $request->validate($rules);
+
+        // Password policy — admin yang create user juga harus tunduk policy.
+        $policy = app(\App\Services\PasswordPolicyService::class);
+        $violations = $policy->validate($validated['password'], $validated['email']);
+        if (! empty($violations)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'password' => array_column($violations, 'message'),
+            ]);
+        }
+
         $validated['password'] = Hash::make($validated['password']);
 
         // Auto-create Organization if admin creates an 'admin' with org creation data
@@ -317,12 +329,22 @@ class UserController extends Controller
         }
 
         if ($request->filled('password')) {
-            $rules['password'] = 'string|min:8';
+            $rules['password'] = 'string';
         }
 
         $validated = $request->validate($rules);
 
         if (isset($validated['password'])) {
+            // Policy check sebelum hash. Pakai email baru kalau ada di payload,
+            // fallback ke email user existing.
+            $policy = app(\App\Services\PasswordPolicyService::class);
+            $email = $validated['email'] ?? $user->email;
+            $violations = $policy->validate($validated['password'], $email);
+            if (! empty($violations)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'password' => array_column($violations, 'message'),
+                ]);
+            }
             $validated['password'] = Hash::make($validated['password']);
         }
 

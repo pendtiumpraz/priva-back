@@ -26,16 +26,28 @@ class SecurityRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'lockout_enabled' => 'required|boolean',
+            // Login lockout — semua optional di payload (partial save). Boundaries
+            // di-tegakkan kalau dikirim. Kalau kosong, frontend gak boleh strip
+            // mereka — tapi `sometimes` lebih aman daripada `required`.
+            'lockout_enabled' => 'sometimes|boolean',
+            'lockout_tier1_attempts' => 'sometimes|integer|min:1|max:50',
+            'lockout_tier1_seconds' => 'sometimes|integer|min:5|max:86400',
+            'lockout_tier2_attempts' => 'sometimes|integer|min:1|max:100',
+            'lockout_tier2_seconds' => 'sometimes|integer|min:5|max:86400',
+            'lockout_tier3_attempts' => 'sometimes|integer|min:1|max:200',
+            'lockout_tier3_seconds' => 'sometimes|integer|min:5|max:604800',
+            'lockout_window_minutes' => 'sometimes|integer|min:1|max:1440',
 
-            'lockout_tier1_attempts' => 'required|integer|min:1|max:50',
-            'lockout_tier1_seconds' => 'required|integer|min:5|max:86400',
-            'lockout_tier2_attempts' => 'required|integer|min:1|max:100',
-            'lockout_tier2_seconds' => 'required|integer|min:5|max:86400',
-            'lockout_tier3_attempts' => 'required|integer|min:1|max:200',
-            'lockout_tier3_seconds' => 'required|integer|min:5|max:604800',
-
-            'lockout_window_minutes' => 'required|integer|min:1|max:1440',
+            // Password policy — min length 8 (jangan di bawah ini, OWASP min),
+            // max 128 (sane upper bound; bcrypt accepts up to 72 char anyway,
+            // tapi user input bisa lebih panjang).
+            'password_min_length' => 'sometimes|integer|min:8|max:128',
+            'password_require_uppercase' => 'sometimes|boolean',
+            'password_require_lowercase' => 'sometimes|boolean',
+            'password_require_digit' => 'sometimes|boolean',
+            'password_require_symbol' => 'sometimes|boolean',
+            'password_block_common' => 'sometimes|boolean',
+            'password_block_email_match' => 'sometimes|boolean',
         ];
     }
 }

@@ -160,6 +160,16 @@ class SettingsServiceProvider extends ServiceProvider
             'security.lockout_tier3_attempts' => 'security.login_lockout.tier3_attempts',
             'security.lockout_tier3_seconds' => 'security.login_lockout.tier3_seconds',
             'security.lockout_window_minutes' => 'security.login_lockout.window_minutes',
+
+            // Security — password policy. DB key flat (security.password_*)
+            // → config('security.password.*'). Service baca via config().
+            'security.password_min_length' => 'security.password.min_length',
+            'security.password_require_uppercase' => 'security.password.require_uppercase',
+            'security.password_require_lowercase' => 'security.password.require_lowercase',
+            'security.password_require_digit' => 'security.password.require_digit',
+            'security.password_require_symbol' => 'security.password.require_symbol',
+            'security.password_block_common' => 'security.password.block_common',
+            'security.password_block_email_match' => 'security.password.block_email_match',
         ];
 
         foreach ($map as $settingKey => $configPath) {
