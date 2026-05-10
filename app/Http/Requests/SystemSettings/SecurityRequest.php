@@ -91,6 +91,10 @@ class SecurityRequest extends FormRequest
             '2fa_required_for_superadmin' => 'sometimes|boolean',
             '2fa_required_for_admin' => 'sometimes|boolean',
             '2fa_required_for_dpo' => 'sometimes|boolean',
+
+            // Email verification
+            'email_verification_required' => 'sometimes|boolean',
+            'email_verification_grace_minutes' => 'sometimes|integer|min:1|max:43200', // max 30 hari
         ];
     }
 }

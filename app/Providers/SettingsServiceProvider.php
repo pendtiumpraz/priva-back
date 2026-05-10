@@ -205,6 +205,10 @@ class SettingsServiceProvider extends ServiceProvider
             'security.2fa_required_for_superadmin' => 'security.2fa_required_for_superadmin',
             'security.2fa_required_for_admin' => 'security.2fa_required_for_admin',
             'security.2fa_required_for_dpo' => 'security.2fa_required_for_dpo',
+
+            // Security — email verification.
+            'security.email_verification_required' => 'security.email_verification_required',
+            'security.email_verification_grace_minutes' => 'security.email_verification_grace_minutes',
         ];
 
         foreach ($map as $settingKey => $configPath) {

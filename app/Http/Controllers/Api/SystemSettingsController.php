@@ -125,6 +125,9 @@ class SystemSettingsController extends Controller
             'security.2fa_required_for_superadmin',
             'security.2fa_required_for_admin',
             'security.2fa_required_for_dpo',
+            // Email verification
+            'security.email_verification_required',
+            'security.email_verification_grace_minutes',
         ],
     ];
 
@@ -481,6 +484,8 @@ class SystemSettingsController extends Controller
                 'security.2fa_required_for_superadmin',
                 'security.2fa_required_for_admin',
                 'security.2fa_required_for_dpo',
+                'security.email_verification_required',
+                'security.email_verification_grace_minutes',
             ],
             default => [], // mail — optional
         };

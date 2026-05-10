@@ -62,6 +62,29 @@ class AuthController extends Controller
             $user->save();
         }
 
+        // Email verification — kalau setting required, kirim verification
+        // notification dan JANGAN issue token sampai user verify. Frontend
+        // akan render halaman "check your email".
+        $verificationRequired = (bool) config('security.email_verification_required', false);
+        if ($verificationRequired) {
+            try {
+                $user->sendEmailVerificationNotification();
+            } catch (\Throwable $e) {
+                \Log::warning('Gagal kirim email verification: '.$e->getMessage());
+            }
+            return response()->json([
+                'user' => $this->userWithPackageType($user),
+                'requires_email_verification' => true,
+                'message' => 'Akun dibuat. Cek email Anda untuk link verifikasi.',
+            ], 201);
+        }
+
+        // Kalau tidak required, set verified_at = now supaya gak nyangkut
+        // di unverified state.
+        if (! $user->email_verified_at) {
+            $user->forceFill(['email_verified_at' => now()])->save();
+        }
+
         $token = $user->createToken('auth-token')->plainTextToken;
 
         // Notify superadmins — new tenant signup. Platform-level (org_id=null).
@@ -166,6 +189,16 @@ class AuthController extends Controller
             throw ValidationException::withMessages([
                 'email' => ['Akun Anda telah dinonaktifkan.'],
             ]);
+        }
+
+        // Email verification gate — password OK tapi belum verify email.
+        // Block login dengan 403 + flag supaya frontend render "check email" page.
+        if ((bool) config('security.email_verification_required', false) && ! $user->hasVerifiedEmail()) {
+            return response()->json([
+                'message' => 'Email Anda belum diverifikasi. Cek inbox atau request link baru.',
+                'requires_email_verification' => true,
+                'email' => $user->email,
+            ], 403);
         }
 
         // 2FA gate — kalau user sudah confirmed 2FA atau role-nya wajib 2FA,
@@ -318,6 +351,64 @@ class AuthController extends Controller
 
         return response()->json([
             'recovery_codes' => $this->twoFactor->regenerateRecoveryCodes($user),
+        ]);
+    }
+
+    /**
+     * Verify email via signed link dari email notification.
+     * Laravel auto-generate signed URL pakai user.id + sha1(email).
+     */
+    public function verifyEmail(Request $request, string $id, string $hash): JsonResponse
+    {
+        $user = User::findOrFail($id);
+
+        // Validate signed hash — sha1 dari email user (sesuai Laravel default).
+        if (! hash_equals((string) sha1($user->getEmailForVerification()), (string) $hash)) {
+            return response()->json(['message' => 'Link verifikasi tidak valid.'], 403);
+        }
+
+        // Validate signed URL signature (URL::signedRoute → temporarySignedRoute)
+        if (! $request->hasValidSignature()) {
+            return response()->json(['message' => 'Link verifikasi kedaluwarsa atau invalid.'], 403);
+        }
+
+        if (! $user->hasVerifiedEmail()) {
+            $user->markEmailAsVerified();
+        }
+
+        // Redirect ke frontend halaman success — kalau dipanggil dari email
+        // browser, ideal-nya redirect ke /login dengan flash message. Untuk
+        // API-only behavior, return JSON.
+        $redirectTo = $request->query('redirect_to');
+        if ($redirectTo && str_starts_with($redirectTo, config('app.frontend_url', 'http://localhost:3000'))) {
+            return redirect()->away($redirectTo.'?verified=1');
+        }
+
+        return response()->json([
+            'message' => 'Email berhasil diverifikasi. Silakan login.',
+            'verified' => true,
+        ]);
+    }
+
+    /**
+     * Resend verification email. Public endpoint, throttled di route.
+     */
+    public function resendEmailVerification(Request $request): JsonResponse
+    {
+        $request->validate(['email' => 'required|email']);
+
+        $user = User::where('email', $request->email)->first();
+        // Generic response — JANGAN bocor apakah email exist atau sudah verified.
+        if ($user && ! $user->hasVerifiedEmail()) {
+            try {
+                $user->sendEmailVerificationNotification();
+            } catch (\Throwable $e) {
+                \Log::warning('Resend verification failed: '.$e->getMessage());
+            }
+        }
+
+        return response()->json([
+            'message' => 'Kalau email terdaftar dan belum diverifikasi, link verifikasi sudah dikirim.',
         ]);
     }
 

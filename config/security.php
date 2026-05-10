@@ -15,6 +15,15 @@
 
 return [
     /**
+     * Email verification — kirim verification link saat register, block login
+     * sampai user click link. Default OFF supaya gak break flow existing
+     * (butuh SMTP working). User existing di-grandfather verified_at = now
+     * di migration supaya gak ke-lock saat admin enable nanti.
+     */
+    'email_verification_required' => false,
+    'email_verification_grace_minutes' => 60,
+
+    /**
      * 2FA TOTP. `enabled` = master toggle; `required_for_<role>` = force
      * untuk role tertentu (default semua false). User opt-in via profile.
      * State per user di kolom users.two_factor_*; service di

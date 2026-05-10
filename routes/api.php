@@ -126,6 +126,13 @@ Route::middleware('throttle:api')->group(function () {
     // Dipakai dengan challenge UUID dari respons /auth/login.
     Route::post('/auth/2fa/verify', [AuthController::class, 'verifyTwoFactor']);
 
+    // Email verification — signed link dari email notification + resend.
+    Route::get('/auth/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])
+        ->name('verification.verify')
+        ->middleware('throttle:6,1');
+    Route::post('/auth/email/resend', [AuthController::class, 'resendEmailVerification'])
+        ->middleware('throttle:3,5'); // 3 per 5 menit per IP — anti spam
+
     // Public Feature Requests (read-only + upvote)
     Route::get('/public/feature-requests', [FeatureRequestController::class, 'publicIndex']);
     Route::post('/public/feature-requests', [FeatureRequestController::class, 'publicStore']);
