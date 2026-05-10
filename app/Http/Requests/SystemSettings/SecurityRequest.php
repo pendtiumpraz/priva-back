@@ -74,6 +74,16 @@ class SecurityRequest extends FormRequest
             // Threshold 1-99 (0 = no refresh, 100 = refresh setelah expired,
             // dua-duanya ngaco).
             'token_refresh_threshold_pct' => 'sometimes|integer|min:1|max:99',
+
+            // AI prompt size — char count.
+            // prompt: min 1000 (sangat ketat — chat singkat aja), max 200000
+            //   (200K char ≈ 50K token, di atas itu sebagian besar provider
+            //   tolak by their own context window).
+            // message: min 100 (1 kalimat), max sama dengan prompt.
+            // attachment: min 500, max sama dengan prompt.
+            'ai_max_prompt_chars' => 'sometimes|integer|min:1000|max:200000',
+            'ai_max_message_chars' => 'sometimes|integer|min:100|max:200000',
+            'ai_max_attachment_chars' => 'sometimes|integer|min:500|max:200000',
         ];
     }
 }

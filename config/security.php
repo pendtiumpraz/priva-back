@@ -15,6 +15,21 @@
 
 return [
     /**
+     * AI prompt size guard. Cegah biaya tak terduga + abuse — attacker
+     * authenticated bisa kirim prompt 100K char untuk drain credit tenant
+     * atau bikin tagihan provider membengkak. Limit ini REJECT prompt
+     * besar SEBELUM HTTP call ke provider.
+     *
+     * Service: App\Services\AiPromptGuard. Throw PromptTooLargeException
+     * (HTTP 413) kalau melewati limit.
+     */
+    'ai' => [
+        'max_prompt_chars' => 24000,        // ≈ 6000 token (system + user combined)
+        'max_message_chars' => 4000,        // single user message field di chat
+        'max_attachment_chars' => 12000,    // parsed text dari file upload
+    ],
+
+    /**
      * Sanctum personal access token — hard expiry + sliding refresh.
      *
      * `lifetime_minutes` di-mapping ke `sanctum.expiration` oleh

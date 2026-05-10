@@ -84,6 +84,14 @@ class AiService
             return null;
         }
 
+        // Prompt size guard — REJECT sebelum HTTP call ke provider supaya
+        // tidak ada biaya yang ke-charge untuk prompt oversized. Throws
+        // PromptTooLargeException → render() jadi HTTP 413.
+        // Dihitung gabungan system + language directive + user supaya
+        // total real yang sampai ke provider yang di-validate.
+        $combined = $this->getLanguageDirective().$systemPrompt."\n\n".$userPrompt;
+        app(\App\Services\AiPromptGuard::class)->assertPromptSize($combined);
+
         // Generate a unique cache key based on the model, prompts and language
         $cacheKey = 'ai_resp_'.md5($this->model.$systemPrompt.$userPrompt.$this->locale);
 

@@ -115,6 +115,10 @@ class SystemSettingsController extends Controller
             // Token expiry + refresh
             'security.token_lifetime_minutes',
             'security.token_refresh_threshold_pct',
+            // AI prompt size limits
+            'security.ai_max_prompt_chars',
+            'security.ai_max_message_chars',
+            'security.ai_max_attachment_chars',
         ],
     ];
 
@@ -463,6 +467,9 @@ class SystemSettingsController extends Controller
                 'security.cors_max_age_seconds',
                 'security.token_lifetime_minutes',
                 'security.token_refresh_threshold_pct',
+                'security.ai_max_prompt_chars',
+                'security.ai_max_message_chars',
+                'security.ai_max_attachment_chars',
             ],
             default => [], // mail — optional
         };

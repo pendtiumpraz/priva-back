@@ -34,8 +34,12 @@ class AiAgentController extends Controller
      */
     public function chat(Request $request)
     {
+        // Pakai limit dari setting (default 4000) supaya admin bisa tighten /
+        // longgarkan tanpa redeploy. Validator harus pakai integer literal,
+        // jadi kita bind ke dalam string rule via concat.
+        $maxMessageChars = app(\App\Services\AiPromptGuard::class)->getMaxMessageChars();
         $request->validate([
-            'message' => 'required|string|max:4000',
+            'message' => 'required|string|max:'.max(1, $maxMessageChars),
             'conversation_id' => 'nullable|string',
             'file' => 'nullable|file|max:10240|mimes:pdf,docx,xlsx,xls,csv,jpg,jpeg,png,gif,webp',
         ]);
@@ -61,11 +65,10 @@ class AiAgentController extends Controller
                     $parser = new DocumentParserService();
                     $parsed = $parser->parse($file->getRealPath(), $ext);
                     $rawText = $parsed['raw_text'] ?? '';
-                    // Truncate to prevent exceeding context window
-                    $fileContext = mb_substr($rawText, 0, 12000);
-                    if (mb_strlen($rawText) > 12000) {
-                        $fileContext .= "\n\n[... dokumen terlalu panjang, dipotong pada 12.000 karakter ...]";
-                    }
+                    // Configurable truncation via AiPromptGuard supaya admin
+                    // bisa nyesuaikan ke context window provider yang aktif.
+                    $truncated = app(\App\Services\AiPromptGuard::class)->truncateAttachment($rawText);
+                    $fileContext = $truncated['text'];
                 } catch (\Throwable $e) {
                     \Log::warning('AI Agent file parse failed: ' . $e->getMessage());
                     $fileContext = "[Gagal membaca file: {$e->getMessage()}]";
@@ -338,6 +341,14 @@ PROMPT;
                 }
             }
         }
+
+        // Prompt size guard SEBELUM open stream — kalau prompt + history +
+        // attachment combined udah melewati limit, throw 413 dengan body JSON
+        // yang clear, daripada open stream + kasih error di tengah-tengah.
+        // Pakai json_encode($messages) sebagai estimasi konservatif: itu
+        // ukuran real payload yang sampai ke provider, termasuk struktur.
+        app(\App\Services\AiPromptGuard::class)
+            ->assertPromptSize(json_encode($messages, JSON_UNESCAPED_UNICODE) ?: '');
 
         // Function calling loop
         return response()->stream(function () use ($messages, $tools, $apiKey, $agentModel, $agentBaseUrl, $agentAuthHeader, $agentAuthPrefix, $executor, $conversation, $user, $orgId, $isSuperAdmin) {

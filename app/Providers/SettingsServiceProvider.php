@@ -192,6 +192,11 @@ class SettingsServiceProvider extends ServiceProvider
             // SanctumTokenRefresh middleware.
             'security.token_lifetime_minutes' => 'sanctum.expiration',
             'security.token_refresh_threshold_pct' => 'security.token.refresh_threshold_pct',
+
+            // Security — AI prompt size limits. Dibaca oleh App\Services\AiPromptGuard.
+            'security.ai_max_prompt_chars' => 'security.ai.max_prompt_chars',
+            'security.ai_max_message_chars' => 'security.ai.max_message_chars',
+            'security.ai_max_attachment_chars' => 'security.ai.max_attachment_chars',
         ];
 
         foreach ($map as $settingKey => $configPath) {
