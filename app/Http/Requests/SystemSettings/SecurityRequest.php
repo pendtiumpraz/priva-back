@@ -95,6 +95,10 @@ class SecurityRequest extends FormRequest
             // Email verification
             'email_verification_required' => 'sometimes|boolean',
             'email_verification_grace_minutes' => 'sometimes|integer|min:1|max:43200', // max 30 hari
+
+            // Webhook HMAC
+            'webhook_hmac_required' => 'sometimes|boolean',
+            'webhook_timestamp_tolerance_seconds' => 'sometimes|integer|min:30|max:3600',
         ];
     }
 }

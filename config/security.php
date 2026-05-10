@@ -15,6 +15,14 @@
 
 return [
     /**
+     * Webhook HMAC signature verification untuk incoming webhooks. Dipakai
+     * di endpoint /webhooks/threat-intel/{org_id} dan future webhook receivers.
+     * Default OFF (backward-compat dengan vendor yang belum support).
+     */
+    'webhook_hmac_required' => false,
+    'webhook_timestamp_tolerance_seconds' => 300,
+
+    /**
      * Email verification — kirim verification link saat register, block login
      * sampai user click link. Default OFF supaya gak break flow existing
      * (butuh SMTP working). User existing di-grandfather verified_at = now

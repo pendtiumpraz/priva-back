@@ -209,6 +209,10 @@ class SettingsServiceProvider extends ServiceProvider
             // Security — email verification.
             'security.email_verification_required' => 'security.email_verification_required',
             'security.email_verification_grace_minutes' => 'security.email_verification_grace_minutes',
+
+            // Security — webhook HMAC.
+            'security.webhook_hmac_required' => 'security.webhook_hmac_required',
+            'security.webhook_timestamp_tolerance_seconds' => 'security.webhook_timestamp_tolerance_seconds',
         ];
 
         foreach ($map as $settingKey => $configPath) {

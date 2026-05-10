@@ -29,7 +29,7 @@ class ThreatIntelController extends Controller
             return response()->json(['error' => 'Organization not found'], 404);
         }
 
-        // Verify webhook secret
+        // Verify webhook secret (layer 1: shared-secret bearer-style)
         $secret = $request->header('X-Webhook-Secret');
         $webhook = Webhook::where('org_id', $orgId)
             ->where('is_active', true)
@@ -41,6 +41,25 @@ class ThreatIntelController extends Controller
                 'ip' => $request->ip(),
             ]);
             return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        // Verify HMAC signature (layer 2: additive, anti-replay).
+        // Behavior tergantung setting webhook_hmac_required:
+        //   - true:  signature WAJIB di X-Webhook-Signature header
+        //   - false: signature OPTIONAL — verify kalau dikirim, skip kalau gak
+        // Webhook.secret yang sama dipakai untuk verify HMAC.
+        $sigCheck = app(\App\Services\WebhookSignatureService::class)
+            ->verifyRequest($request, $webhook->secret);
+        if (!$sigCheck['ok']) {
+            Log::warning("Threat intel webhook signature failed for org {$orgId}", [
+                'ip' => $request->ip(),
+                'reason' => $sigCheck['reason'],
+                'meta' => $sigCheck,
+            ]);
+            return response()->json([
+                'error' => 'Webhook signature verification failed',
+                'reason' => $sigCheck['reason'],
+            ], 401);
         }
 
         // Parse the incoming alert — support multiple formats

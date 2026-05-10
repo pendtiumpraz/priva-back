@@ -128,6 +128,9 @@ class SystemSettingsController extends Controller
             // Email verification
             'security.email_verification_required',
             'security.email_verification_grace_minutes',
+            // Webhook HMAC
+            'security.webhook_hmac_required',
+            'security.webhook_timestamp_tolerance_seconds',
         ],
     ];
 
@@ -486,6 +489,8 @@ class SystemSettingsController extends Controller
                 'security.2fa_required_for_dpo',
                 'security.email_verification_required',
                 'security.email_verification_grace_minutes',
+                'security.webhook_hmac_required',
+                'security.webhook_timestamp_tolerance_seconds',
             ],
             default => [], // mail — optional
         };
