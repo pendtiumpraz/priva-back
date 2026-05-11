@@ -49,6 +49,7 @@ class PasswordPolicyService
     public const CODE_SYMBOL = 'symbol';
     public const CODE_COMMON = 'common';
     public const CODE_EMAIL_MATCH = 'email_match';
+    public const CODE_PWNED = 'pwned';
 
     /**
      * Validate password against active policy. Returns list of violations.
@@ -124,7 +125,57 @@ class PasswordPolicyService
             }
         }
 
+        // HIBP check (HaveIBeenPwned k-anonymity API) — opt-in, network call.
+        // Cuma run kalau setting aktif DAN belum ada violation lain (gak perlu
+        // bayar latency network kalau pasti reject anyway).
+        if (($cfg['check_hibp'] ?? false) && empty($violations)) {
+            if ($this->isPasswordPwned($password)) {
+                $violations[] = [
+                    'code' => self::CODE_PWNED,
+                    'message' => 'Password ini ditemukan di data breach publik. Pilih password lain.',
+                ];
+            }
+        }
+
         return $violations;
+    }
+
+    /**
+     * Check HIBP via k-anonymity: kirim cuma 5 char pertama dari SHA-1 hash,
+     * server return list semua hash yang punya prefix sama. Compare sisanya
+     * locally. Password plaintext gak pernah ke jaringan.
+     *
+     * https://haveibeenpwned.com/API/v3#PwnedPasswords
+     *
+     * Gagal network = pass (jangan block login karena API mati).
+     */
+    private function isPasswordPwned(string $password): bool
+    {
+        try {
+            $sha1 = strtoupper(sha1($password));
+            $prefix = substr($sha1, 0, 5);
+            $suffix = substr($sha1, 5);
+
+            $response = \Illuminate\Support\Facades\Http::timeout(3)
+                ->retry(1, 100)
+                ->get("https://api.pwnedpasswords.com/range/{$prefix}");
+
+            if (! $response->successful()) {
+                return false; // Fail-open
+            }
+
+            foreach (explode("\n", $response->body()) as $line) {
+                $parts = explode(':', trim($line));
+                if (count($parts) === 2 && hash_equals($suffix, $parts[0])) {
+                    return true; // Found in breach
+                }
+            }
+        } catch (\Throwable $e) {
+            // Fail-open — jangan break user experience karena HIBP API mati
+            \Log::warning('HIBP check failed: '.$e->getMessage());
+        }
+
+        return false;
     }
 
     /**
@@ -143,7 +194,21 @@ class PasswordPolicyService
             'require_symbol' => (bool) ($cfg['require_symbol'] ?? true),
             'block_common' => (bool) ($cfg['block_common'] ?? true),
             'block_email_match' => (bool) ($cfg['block_email_match'] ?? true),
+            'check_hibp' => (bool) ($cfg['check_hibp'] ?? false),
         ];
+    }
+
+    /**
+     * Apakah password user perlu di-rotate (sudah melewati rotation policy).
+     * Return true kalau setting aktif DAN password_changed_at lebih lama dari
+     * rotation_days. Default rotation_days = 0 = disabled.
+     */
+    public function needsRotation(\App\Models\User $user): bool
+    {
+        $days = (int) config('security.password.rotation_days', 0);
+        if ($days <= 0) return false;
+        if (! $user->password_changed_at) return false;
+        return $user->password_changed_at->diffInDays(now()) >= $days;
     }
 
     private function config(): array

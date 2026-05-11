@@ -77,6 +77,7 @@ class User extends Authenticatable implements MustVerifyEmail
             // Crypt::decryptString manual di service (kalau cast pakai
             // 'encrypted' Laravel built-in, akan double-decrypt).
             'two_factor_confirmed_at' => 'datetime',
+            'password_changed_at' => 'datetime',
             // PII Encryption — AES-256-CBC
             'name' => EncryptedString::class,
             'phone' => EncryptedString::class,

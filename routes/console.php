@@ -19,3 +19,6 @@ Artisan::command('inspire', function () {
 \Illuminate\Support\Facades\Schedule::command('consent:prune-cookie-logs')->dailyAt('02:30');
 // Phase 3a — daily privacy posture snapshot per org. Drives trend chart.
 \Illuminate\Support\Facades\Schedule::command('privasimu:posture-snapshot')->dailyAt('05:00')->withoutOverlapping();
+// Audit log retention — prune entries lebih lama dari security.audit_log_retention_days.
+// No-op kalau setting = 0 (keep forever, default).
+\Illuminate\Support\Facades\Schedule::command('audit-logs:prune')->dailyAt('04:00');

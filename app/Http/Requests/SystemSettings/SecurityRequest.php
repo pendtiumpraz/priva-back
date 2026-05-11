@@ -48,6 +48,16 @@ class SecurityRequest extends FormRequest
             'password_require_symbol' => 'sometimes|boolean',
             'password_block_common' => 'sometimes|boolean',
             'password_block_email_match' => 'sometimes|boolean',
+            'password_check_hibp' => 'sometimes|boolean',
+            'password_rotation_days' => 'sometimes|integer|min:0|max:3650', // max 10 tahun, 0 = off
+            'max_sessions_per_user' => 'sometimes|integer|min:0|max:100',   // 0 = unlimited
+            'ip_allowlist_enabled_for_root' => 'sometimes|boolean',
+            'ip_allowlist_enabled_for_superadmin' => 'sometimes|boolean',
+            'ip_allowlist_root' => 'sometimes|array|max:50',
+            'ip_allowlist_root.*' => ['string', 'max:64'],
+            'ip_allowlist_superadmin' => 'sometimes|array|max:50',
+            'ip_allowlist_superadmin.*' => ['string', 'max:64'],
+            'audit_log_retention_days' => 'sometimes|integer|min:0|max:3650', // 0 = keep forever
 
             // Response headers — string fields jelas terbatas (frame_options
             // hanya 2 nilai valid, sisanya free-form karena banyak varian).

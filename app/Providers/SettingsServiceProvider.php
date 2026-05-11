@@ -170,6 +170,14 @@ class SettingsServiceProvider extends ServiceProvider
             'security.password_require_symbol' => 'security.password.require_symbol',
             'security.password_block_common' => 'security.password.block_common',
             'security.password_block_email_match' => 'security.password.block_email_match',
+            'security.password_check_hibp' => 'security.password.check_hibp',
+            'security.password_rotation_days' => 'security.password.rotation_days',
+            'security.max_sessions_per_user' => 'security.max_sessions_per_user',
+            'security.ip_allowlist_enabled_for_root' => 'security.ip_allowlist_enabled_for_root',
+            'security.ip_allowlist_enabled_for_superadmin' => 'security.ip_allowlist_enabled_for_superadmin',
+            'security.ip_allowlist_root' => 'security.ip_allowlist_root',
+            'security.ip_allowlist_superadmin' => 'security.ip_allowlist_superadmin',
+            'security.audit_log_retention_days' => 'security.audit_log_retention_days',
 
             // Security — response headers. Dibaca oleh SecurityHeaders middleware.
             'security.headers_enabled' => 'security.headers.enabled',

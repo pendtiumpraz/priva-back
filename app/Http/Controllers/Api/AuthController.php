@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\IpAllowlistService;
 use App\Services\LoginAttemptService;
 use App\Services\PasswordPolicyService;
 use App\Services\TwoFactorAuthService;
@@ -18,6 +19,7 @@ class AuthController extends Controller
         private readonly LoginAttemptService $loginAttempts,
         private readonly PasswordPolicyService $passwordPolicy,
         private readonly TwoFactorAuthService $twoFactor,
+        private readonly IpAllowlistService $ipAllowlist,
     ) {}
 
     /**
@@ -54,6 +56,7 @@ class AuthController extends Controller
             'password' => $request->password,
             'org_id' => $org->id,
             'role' => 'admin',
+            'password_changed_at' => now(),
         ]);
 
         $tenantRole = \App\Models\TenantRole::where('org_id', $org->id)->where('name', 'Admin')->first();
@@ -191,6 +194,18 @@ class AuthController extends Controller
             ]);
         }
 
+        // IP allowlist gate — root/superadmin only. Kalau dipaksa enforce
+        // tapi IP request bukan di list, block dengan generic message
+        // (gak bocor info bahwa email/password yang benar).
+        if (! $this->ipAllowlist->isAllowed($user->role ?? '', $request->ip())) {
+            \Log::warning('Login blocked by IP allowlist', [
+                'user_id' => $user->id, 'role' => $user->role, 'ip' => $request->ip(),
+            ]);
+            throw ValidationException::withMessages([
+                'email' => ['Akses dari IP ini tidak diizinkan untuk role Anda. Hubungi administrator.'],
+            ]);
+        }
+
         // Email verification gate — password OK tapi belum verify email.
         // Block login dengan 403 + flag supaya frontend render "check email" page.
         if ((bool) config('security.email_verification_required', false) && ! $user->hasVerifiedEmail()) {
@@ -198,6 +213,16 @@ class AuthController extends Controller
                 'message' => 'Email Anda belum diverifikasi. Cek inbox atau request link baru.',
                 'requires_email_verification' => true,
                 'email' => $user->email,
+            ], 403);
+        }
+
+        // Password rotation gate — kalau setting aktif dan password sudah
+        // melewati rotation policy, block login + flag UI render "change password".
+        if ($this->passwordPolicy->needsRotation($user)) {
+            return response()->json([
+                'message' => 'Password Anda perlu diganti sesuai kebijakan rotasi.',
+                'requires_password_rotation' => true,
+                'days_since_change' => $user->password_changed_at?->diffInDays(now()),
             ], 403);
         }
 
@@ -231,12 +256,34 @@ class AuthController extends Controller
 
         $this->loginAttempts->recordSuccess($user, $request->ip());
 
+        $this->enforceSessionLimit($user);
         $token = $user->createToken('auth-token')->plainTextToken;
 
         return response()->json([
             'user' => $this->userWithPackageType($user),
             'token' => $token,
         ]);
+    }
+
+    /**
+     * Concurrent session limit — sebelum issue token baru, kalau user sudah
+     * punya >= max sessions, hapus token lama (FIFO) supaya total tetap di
+     * limit. Setting = 0 → disabled (unlimited).
+     */
+    private function enforceSessionLimit(User $user): void
+    {
+        $max = (int) config('security.max_sessions_per_user', 0);
+        if ($max <= 0) return;
+
+        $tokens = $user->tokens()
+            ->where('name', 'auth-token') // hanya count login tokens (skip 2fa-setup dll)
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+        $deleteCount = $tokens->count() - ($max - 1); // -1 karena akan issue baru
+        if ($deleteCount <= 0) return;
+
+        $tokens->take($deleteCount)->each->delete();
     }
 
     /**
@@ -257,6 +304,8 @@ class AuthController extends Controller
         }
 
         $this->loginAttempts->recordSuccess($user, $request->ip());
+
+        $this->enforceSessionLimit($user);
 
         return response()->json([
             'user' => $this->userWithPackageType($user),

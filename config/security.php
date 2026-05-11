@@ -111,7 +111,31 @@ return [
         'require_symbol' => true,
         'block_common' => true,
         'block_email_match' => true,
+        'check_hibp' => false,           // Nice-to-have, default OFF — network call ke HIBP API
+        'rotation_days' => 0,             // 0 = disabled. Set N untuk force ganti tiap N hari
     ],
+
+    /**
+     * Max concurrent Sanctum sessions per user. 0 = unlimited (default).
+     * Saat melewati limit, token lama (FIFO oldest) dihapus saat issue token baru.
+     */
+    'max_sessions_per_user' => 0,
+
+    /**
+     * IP allowlist untuk platform-level role (root, superadmin). Mitigasi
+     * credential theft. SEMUA default false dengan empty list.
+     * Service: App\Services\IpAllowlistService.
+     */
+    'ip_allowlist_enabled_for_root' => false,
+    'ip_allowlist_enabled_for_superadmin' => false,
+    'ip_allowlist_root' => [],
+    'ip_allowlist_superadmin' => [],
+
+    /**
+     * Audit log retention. 0 = keep forever (default). Set N untuk
+     * auto-prune entries lebih lama dari N hari via daily cron.
+     */
+    'audit_log_retention_days' => 0,
 
     /**
      * Login lockout per akun. Dijalankan di App\Services\LoginAttemptService.

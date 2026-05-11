@@ -197,6 +197,7 @@ class UserController extends Controller
         }
 
         $validated['password'] = Hash::make($validated['password']);
+        $validated['password_changed_at'] = now();
 
         // Auto-create Organization if admin creates an 'admin' with org creation data
         if ((in_array($auth->role, ['root','superadmin'], true) || $auth->role === 'admin') && $validated['role'] === 'admin' && empty($validated['org_id'])) {
@@ -346,6 +347,7 @@ class UserController extends Controller
                 ]);
             }
             $validated['password'] = Hash::make($validated['password']);
+            $validated['password_changed_at'] = now();
         }
 
         // Auto-create Organization if superadmin changes a role to 'admin' and no org_id is present
