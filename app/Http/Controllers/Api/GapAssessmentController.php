@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\GapAssessment;
 use App\Models\CustomGapQuestion;
 use App\Models\Organization;
+use App\Services\FileUploadValidator;
 use App\Services\TenantStorageService;
 use Illuminate\Http\Request;
+use RuntimeException;
 
 class GapAssessmentController extends Controller
 {
@@ -307,27 +309,47 @@ class GapAssessmentController extends Controller
     // Evidence Upload (Sprint B3)
     // =============================================
 
-    public function uploadEvidence(Request $request, string $id, TenantStorageService $storage)
+    public function uploadEvidence(Request $request, string $id, TenantStorageService $storage, FileUploadValidator $validator)
     {
         $request->validate([
             'question_id' => 'required|string',
-            'file' => 'required|file|max:10240|mimes:pdf,png,jpg,jpeg,docx',
+            'file' => 'required|file|max:10240',
         ]);
 
-        $assessment = GapAssessment::findOrFail($id);
-        $org = Organization::findOrFail($assessment->org_id);
+        $assessment = GapAssessment::where('org_id', $request->user()->org_id)->findOrFail($id);
         $file = $request->file('file');
 
-        $result = $storage->storePublicAsset(
-            $org,
-            $file,
-            "gap/{$assessment->id}/evidence"
-        );
+        try {
+            $validator->validate($file, FileUploadValidator::PRESET_CHAT_ATTACHMENT);
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        $org = Organization::findOrFail($assessment->org_id);
+
+        try {
+            $result = $storage->storePublicAsset(
+                $org,
+                $file,
+                "gap/{$assessment->id}/evidence"
+            );
+        } catch (\Throwable $e) {
+            report($e);
+            return response()->json([
+                'message' => 'Gagal menyimpan file ke storage: ' . $e->getMessage(),
+            ], 500);
+        }
+
+        if (empty($result['path'])) {
+            return response()->json([
+                'message' => 'Gagal menyimpan file (path kosong). Periksa konfigurasi storage.',
+            ], 500);
+        }
 
         $attachments = $assessment->attachments ?? [];
         $qId = $request->question_id;
 
-        if (!isset($attachments[$qId])) {
+        if (!isset($attachments[$qId]) || !is_array($attachments[$qId])) {
             $attachments[$qId] = [];
         }
 
@@ -336,15 +358,15 @@ class GapAssessmentController extends Controller
             'url' => $result['url'],
             'name' => $file->getClientOriginalName(),
             'driver' => $result['driver'],
-            'uploaded_at' => now()->toIso8601String()
+            'uploaded_at' => now()->toIso8601String(),
         ];
 
         $assessment->update(['attachments' => $attachments]);
 
         return response()->json([
-            'message' => 'Evidence uploaded',
+            'message' => 'Bukti berhasil diunggah',
             'data' => end($attachments[$qId]),
-            'attachments' => $attachments
+            'attachments' => $attachments,
         ]);
     }
 

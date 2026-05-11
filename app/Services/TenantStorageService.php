@@ -278,7 +278,10 @@ class TenantStorageService
         $basePath = "tenants/{$org->id}/" . trim($directory, '/') . '/';
         $path = $basePath . $name;
 
-        $disk->put($path, file_get_contents($file->getRealPath()), 'public');
+        $ok = $disk->put($path, file_get_contents($file->getRealPath()), 'public');
+        if ($ok === false) {
+            throw new \RuntimeException("Gagal menulis file ke storage (disk: {$org->storage_driver}, path: {$path}). Periksa permission folder atau konfigurasi cloud storage.");
+        }
 
         try {
             $url = $disk->url($path);
