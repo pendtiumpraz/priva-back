@@ -7,6 +7,7 @@ use App\Models\DocumentTemplate;
 use App\Models\Organization;
 use App\Models\TenantTheme;
 use App\Services\DocxTemplateService;
+use App\Services\PdfRenderService;
 use App\Services\TenantStorageService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -520,7 +521,7 @@ class DocumentTemplateController extends Controller
      * yang dipakai (mis. "reports.templates.midnight-indigo"). Jika tidak,
      * Blade generic `reports.templates.preview` tetap digunakan.
      */
-    public function preview(Request $request)
+    public function preview(Request $request, PdfRenderService $renderer)
     {
         $user = $request->user();
         $config = $request->input('config', []);
@@ -536,6 +537,7 @@ class DocumentTemplateController extends Controller
         // Resolusi Blade view: default ke generic preview, override bila
         // template tertentu memiliki `blade_view`.
         $view = 'reports.templates.preview';
+        $engine = 'dompdf';
         $templateId = $request->input('template_id');
         if ($templateId) {
             $tpl = DocumentTemplate::where('id', $templateId)
@@ -545,6 +547,7 @@ class DocumentTemplateController extends Controller
                 ->first();
             if ($tpl && ! empty($tpl->blade_view)) {
                 $view = $tpl->blade_view;
+                $engine = $tpl->engine ?: 'dompdf';
                 // Gabungkan config tersimpan dengan override request supaya
                 // preview tetap responsif terhadap perubahan editor.
                 $merged = array_merge(
@@ -583,15 +586,16 @@ class DocumentTemplateController extends Controller
             'generatedAt' => now()->locale('id')->isoFormat('D MMMM Y · HH:mm'),
         ];
 
-        $pdf = Pdf::loadView($view, $payload)
-            ->setPaper($merged['page_size'] ?? 'a4')
-            ->setOption([
-                'isHtml5ParserEnabled' => true,
-                'isRemoteEnabled' => true,
-                'defaultFont' => $merged['font_family'] ?? 'DejaVu Sans',
-            ]);
+        $binary = $renderer->render($view, $payload, [
+            'engine' => $engine,
+            'page_size' => strtoupper($merged['page_size'] ?? 'A4'),
+            'orientation' => $merged['orientation'] ?? 'portrait',
+            'font_family' => $merged['font_family'] ?? 'DejaVu Sans',
+        ]);
 
-        return $pdf->stream('template-preview.pdf');
+        return response($binary)
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'inline; filename="template-preview.pdf"');
     }
 
     /**
