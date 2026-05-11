@@ -29,10 +29,14 @@ class EleganceTemplatesSeeder extends Seeder
         $now = now();
         $defaultConfig = DocumentTemplate::DEFAULT_CONFIG;
         $seeded = 0;
+        $available = 0;
 
         foreach (self::TEMPLATES as $tpl) {
             $name = sprintf('%02d — %s', $tpl['number'], $tpl['display']);
             $isAvailable = $tpl['implemented'];
+            if ($isAvailable) {
+                $available++;
+            }
 
             $config = array_merge($defaultConfig, [
                 'primary_color' => $tpl['primary_color'],
@@ -71,7 +75,8 @@ class EleganceTemplatesSeeder extends Seeder
             $seeded++;
         }
 
-        $this->command?->info("Seeded {$seeded} elegance document templates (3 available, 17 coming soon).");
+        $comingSoon = $seeded - $available;
+        $this->command?->info("Seeded {$seeded} elegance document templates ({$available} available, {$comingSoon} coming soon).");
     }
 
     /**
@@ -108,7 +113,7 @@ class EleganceTemplatesSeeder extends Seeder
             'slug' => 'pure-minimal',
             'engine' => 'dompdf',
             'style_category' => 'minimalist',
-            'implemented' => false,
+            'implemented' => true,
             'description' => 'Putih bersih dengan tipografi ringan dan whitespace luas.',
             'primary_color' => '#111111',
             'accent_color' => '#3a3a3a',
@@ -119,7 +124,7 @@ class EleganceTemplatesSeeder extends Seeder
             'slug' => 'lilac-modernist',
             'engine' => 'dompdf',
             'style_category' => 'modern',
-            'implemented' => false,
+            'implemented' => true,
             'description' => 'Palet ungu lembut dengan sentuhan grid modernis.',
             'primary_color' => '#2e1a47',
             'accent_color' => '#9b7ed1',
@@ -130,7 +135,7 @@ class EleganceTemplatesSeeder extends Seeder
             'slug' => 'sage-corporate',
             'engine' => 'dompdf',
             'style_category' => 'corporate',
-            'implemented' => false,
+            'implemented' => true,
             'description' => 'Hijau sage menenangkan untuk laporan korporasi formal.',
             'primary_color' => '#1f3a2e',
             'accent_color' => '#6f8f7a',
@@ -141,7 +146,7 @@ class EleganceTemplatesSeeder extends Seeder
             'slug' => 'terracotta-heritage',
             'engine' => 'dompdf',
             'style_category' => 'heritage',
-            'implemented' => false,
+            'implemented' => true,
             'description' => 'Terakota hangat dengan nuansa warisan dan dokumen klasik.',
             'primary_color' => '#3d1e10',
             'accent_color' => '#b35a3a',
@@ -152,7 +157,7 @@ class EleganceTemplatesSeeder extends Seeder
             'slug' => 'geometric-tech',
             'engine' => 'dompdf',
             'style_category' => 'technical',
-            'implemented' => false,
+            'implemented' => true,
             'description' => 'Aksen geometris dan biru sian untuk laporan teknis.',
             'primary_color' => '#0f1e2e',
             'accent_color' => '#00b4d8',
@@ -163,7 +168,7 @@ class EleganceTemplatesSeeder extends Seeder
             'slug' => 'slate-architectural',
             'engine' => 'dompdf',
             'style_category' => 'technical',
-            'implemented' => false,
+            'implemented' => true,
             'description' => 'Abu-abu slate dengan struktur cetak biru arsitektural.',
             'primary_color' => '#1c2733',
             'accent_color' => '#5a6c7d',
@@ -174,7 +179,7 @@ class EleganceTemplatesSeeder extends Seeder
             'slug' => 'newsprint-gazette',
             'engine' => 'dompdf',
             'style_category' => 'editorial',
-            'implemented' => false,
+            'implemented' => true,
             'description' => 'Estetika koran lawas dengan serif padat dan kolom rapat.',
             'primary_color' => '#1a1a1a',
             'accent_color' => '#8a7f6a',
@@ -185,7 +190,7 @@ class EleganceTemplatesSeeder extends Seeder
             'slug' => 'onyx-premium',
             'engine' => 'dompdf',
             'style_category' => 'premium',
-            'implemented' => false,
+            'implemented' => true,
             'description' => 'Hitam onyx dengan finishing platinum untuk dokumen premium.',
             'primary_color' => '#0a0a0a',
             'accent_color' => '#9aa0a6',
@@ -196,7 +201,7 @@ class EleganceTemplatesSeeder extends Seeder
             'slug' => 'bauhaus-primary',
             'engine' => 'dompdf',
             'style_category' => 'modern',
-            'implemented' => false,
+            'implemented' => true,
             'description' => 'Warna primer Bauhaus (merah, kuning, biru) pada grid modernis.',
             'primary_color' => '#1d1d1d',
             'accent_color' => '#e63946',
@@ -207,7 +212,7 @@ class EleganceTemplatesSeeder extends Seeder
             'slug' => 'japandi-zen',
             'engine' => 'dompdf',
             'style_category' => 'minimalist',
-            'implemented' => false,
+            'implemented' => true,
             'description' => 'Perpaduan Jepang–Skandinavia: krem, kayu hangat, dan ruang kosong.',
             'primary_color' => '#2b2a26',
             'accent_color' => '#a68a64',
@@ -218,7 +223,7 @@ class EleganceTemplatesSeeder extends Seeder
             'slug' => 'brutalist-mono',
             'engine' => 'dompdf',
             'style_category' => 'technical',
-            'implemented' => false,
+            'implemented' => true,
             'description' => 'Mono-spaced brutalist dengan garis tegas hitam-putih.',
             'primary_color' => '#000000',
             'accent_color' => '#1a1a1a',
@@ -229,7 +234,7 @@ class EleganceTemplatesSeeder extends Seeder
             'slug' => 'memphis-postmodern',
             'engine' => 'dompdf',
             'style_category' => 'modern',
-            'implemented' => false,
+            'implemented' => true,
             'description' => 'Pola Memphis post-modern dengan warna ceria dan bentuk geometri.',
             'primary_color' => '#1a1a40',
             'accent_color' => '#ff4f7e',
@@ -240,7 +245,7 @@ class EleganceTemplatesSeeder extends Seeder
             'slug' => 'art-deco-gold',
             'engine' => 'dompdf',
             'style_category' => 'premium',
-            'implemented' => false,
+            'implemented' => true,
             'description' => 'Art Deco simetris dengan ornamen emas mewah.',
             'primary_color' => '#1c1410',
             'accent_color' => '#d4af37',
@@ -251,7 +256,7 @@ class EleganceTemplatesSeeder extends Seeder
             'slug' => 'botanical-vintage',
             'engine' => 'dompdf',
             'style_category' => 'heritage',
-            'implemented' => false,
+            'implemented' => true,
             'description' => 'Ilustrasi botani vintage dengan hijau zaitun dan krem antik.',
             'primary_color' => '#2d3a23',
             'accent_color' => '#7a8c5a',
@@ -284,7 +289,7 @@ class EleganceTemplatesSeeder extends Seeder
             'slug' => 'manuscript-vellum',
             'engine' => 'dompdf',
             'style_category' => 'heritage',
-            'implemented' => false,
+            'implemented' => true,
             'description' => 'Manuskrip pada kertas vellum dengan kapital iluminasi.',
             'primary_color' => '#3a2a14',
             'accent_color' => '#8a5a2a',
