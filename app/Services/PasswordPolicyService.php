@@ -93,7 +93,7 @@ class PasswordPolicyService
         if (($cfg['require_symbol'] ?? true) && ! preg_match('/[^A-Za-z0-9]/u', $password)) {
             $violations[] = [
                 'code' => self::CODE_SYMBOL,
-                'message' => 'Password harus mengandung minimal 1 simbol (mis. !@#$%).',
+                'message' => 'Password harus mengandung minimal 1 simbol (contoh: !@#$%).',
             ];
         }
 
@@ -103,7 +103,7 @@ class PasswordPolicyService
             if (isset($blockSet[$lower])) {
                 $violations[] = [
                     'code' => self::CODE_COMMON,
-                    'message' => 'Password ini termasuk yang paling umum digunakan — pilih yang lebih unik.',
+                    'message' => 'Password ini termasuk yang paling umum digunakan. Silakan pilih password yang lebih unik.',
                 ];
             }
         }
@@ -132,7 +132,7 @@ class PasswordPolicyService
             if ($this->isPasswordPwned($password)) {
                 $violations[] = [
                     'code' => self::CODE_PWNED,
-                    'message' => 'Password ini ditemukan di data breach publik. Pilih password lain.',
+                    'message' => 'Password ini ditemukan di database breach publik. Silakan pilih password lain demi keamanan akun Anda.',
                 ];
             }
         }

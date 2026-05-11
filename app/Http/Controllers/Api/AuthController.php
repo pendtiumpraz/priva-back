@@ -78,7 +78,7 @@ class AuthController extends Controller
             return response()->json([
                 'user' => $this->userWithPackageType($user),
                 'requires_email_verification' => true,
-                'message' => 'Akun dibuat. Cek email Anda untuk link verifikasi.',
+                'message' => 'Akun berhasil dibuat. Silakan periksa email Anda untuk menyelesaikan verifikasi.',
             ], 201);
         }
 
@@ -210,7 +210,7 @@ class AuthController extends Controller
         // Block login dengan 403 + flag supaya frontend render "check email" page.
         if ((bool) config('security.email_verification_required', false) && ! $user->hasVerifiedEmail()) {
             return response()->json([
-                'message' => 'Email Anda belum diverifikasi. Cek inbox atau request link baru.',
+                'message' => 'Email Anda belum diverifikasi. Silakan periksa inbox email Anda atau ajukan permintaan link verifikasi baru.',
                 'requires_email_verification' => true,
                 'email' => $user->email,
             ], 403);
@@ -220,7 +220,7 @@ class AuthController extends Controller
         // melewati rotation policy, block login + flag UI render "change password".
         if ($this->passwordPolicy->needsRotation($user)) {
             return response()->json([
-                'message' => 'Password Anda perlu diganti sesuai kebijakan rotasi.',
+                'message' => 'Password Anda perlu diperbarui sesuai dengan kebijakan rotasi password yang berlaku. Silakan hubungi administrator.',
                 'requires_password_rotation' => true,
                 'days_since_change' => $user->password_changed_at?->diffInDays(now()),
             ], 403);
@@ -239,7 +239,7 @@ class AuthController extends Controller
                 return response()->json([
                     'requires_2fa' => true,
                     'challenge' => $challenge,
-                    'message' => 'Masukkan kode 2FA dari authenticator.',
+                    'message' => 'Silakan masukkan kode 2FA dari authenticator app Anda.',
                 ]);
             }
             // Role wajib 2FA tapi user belum setup → flag setup_required.
@@ -247,7 +247,7 @@ class AuthController extends Controller
             // sampai 2FA di-confirm.
             return response()->json([
                 'requires_2fa_setup' => true,
-                'message' => 'Akun Anda wajib mengaktifkan 2FA. Silakan setup terlebih dahulu.',
+                'message' => 'Akun Anda wajib mengaktifkan 2FA. Silakan melakukan setup terlebih dahulu sebelum mengakses platform.',
                 // Issue temporary token dengan ability terbatas hanya untuk
                 // 2FA setup endpoints. Akan di-revoke setelah confirm.
                 'setup_token' => $user->createToken('2fa-setup', ['2fa:setup'])->plainTextToken,
@@ -299,7 +299,7 @@ class AuthController extends Controller
         $user = $this->twoFactor->verifyChallenge($request->challenge, $request->code);
         if (! $user) {
             throw ValidationException::withMessages([
-                'code' => ['Kode 2FA tidak valid atau challenge sudah kedaluwarsa.'],
+                'code' => ['Kode 2FA tidak valid atau sesi verifikasi telah kedaluwarsa. Silakan login ulang.'],
             ]);
         }
 
@@ -320,10 +320,10 @@ class AuthController extends Controller
     {
         $user = $request->user();
         if (! config('security.2fa_enabled', true)) {
-            return response()->json(['message' => '2FA fitur dimatikan oleh administrator.'], 403);
+            return response()->json(['message' => 'Fitur 2FA telah dinonaktifkan oleh administrator.'], 403);
         }
         if ($user->two_factor_confirmed_at) {
-            return response()->json(['message' => '2FA sudah aktif. Disable dulu sebelum re-setup.'], 422);
+            return response()->json(['message' => '2FA sudah aktif. Silakan nonaktifkan terlebih dahulu sebelum melakukan setup ulang.'], 422);
         }
 
         $issuer = config('app.name', 'Privasimu');
@@ -344,7 +344,7 @@ class AuthController extends Controller
         $recovery = $this->twoFactor->confirm($user, $request->code);
         if (! $recovery) {
             throw ValidationException::withMessages([
-                'code' => ['Kode tidak valid. Coba lagi dengan kode terbaru dari authenticator.'],
+                'code' => ['Kode tidak valid. Silakan coba lagi dengan kode terbaru dari authenticator app.'],
             ]);
         }
 
@@ -356,7 +356,7 @@ class AuthController extends Controller
         }
 
         return response()->json([
-            'message' => '2FA berhasil diaktifkan. Simpan recovery codes di tempat aman.',
+            'message' => '2FA berhasil diaktifkan. Mohon simpan recovery codes di tempat yang aman.',
             'recovery_codes' => $recovery,
         ]);
     }
@@ -372,12 +372,12 @@ class AuthController extends Controller
         $user = $request->user();
         if (! Hash::check($request->password, $user->password)) {
             throw ValidationException::withMessages([
-                'password' => ['Password salah.'],
+                'password' => ['Password yang Anda masukkan tidak benar.'],
             ]);
         }
 
         $this->twoFactor->disable($user);
-        return response()->json(['message' => '2FA dinonaktifkan.']);
+        return response()->json(['message' => '2FA berhasil dinonaktifkan.']);
     }
 
     /**
@@ -390,12 +390,12 @@ class AuthController extends Controller
         $user = $request->user();
         if (! Hash::check($request->password, $user->password)) {
             throw ValidationException::withMessages([
-                'password' => ['Password salah.'],
+                'password' => ['Password yang Anda masukkan tidak benar.'],
             ]);
         }
 
         if (! $user->two_factor_confirmed_at) {
-            return response()->json(['message' => '2FA belum aktif.'], 422);
+            return response()->json(['message' => '2FA belum aktif untuk akun ini.'], 422);
         }
 
         return response()->json([
@@ -457,7 +457,7 @@ class AuthController extends Controller
         }
 
         return response()->json([
-            'message' => 'Kalau email terdaftar dan belum diverifikasi, link verifikasi sudah dikirim.',
+            'message' => 'Apabila email tersebut terdaftar dan belum diverifikasi, link verifikasi telah dikirim.',
         ]);
     }
 
@@ -481,7 +481,7 @@ class AuthController extends Controller
         $user = $request->user();
         if (! Hash::check($request->password, $user->password)) {
             throw ValidationException::withMessages([
-                'password' => ['Password salah.'],
+                'password' => ['Password yang Anda masukkan tidak benar.'],
             ]);
         }
 
