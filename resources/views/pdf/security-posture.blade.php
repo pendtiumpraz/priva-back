@@ -10,6 +10,12 @@
     h2 { font-size: 13pt; margin: 22pt 0 6pt; color: #1e40af; border-bottom: 1.5pt solid #1e40af; padding-bottom: 3pt; }
     h3 { font-size: 11pt; margin: 14pt 0 4pt; color: #334155; }
     p { margin: 4pt 0; }
+    /* Group title row — pakai table biar badge horizontal-aligned sama title.
+       dompdf flex/inline-block vertical-align quirky; table-cell paling reliable. */
+    table.group-title { width: 100%; border-collapse: collapse; margin: 14pt 0 4pt; }
+    table.group-title td { border: none; padding: 0; vertical-align: middle; }
+    table.group-title .group-name { font-size: 11pt; font-weight: bold; color: #334155; }
+    table.group-title .group-badge-cell { text-align: right; }
     .meta-box { background: #f1f5f9; border: 1pt solid #cbd5e1; border-radius: 4pt; padding: 10pt 14pt; margin: 12pt 0; }
     .meta-row { display: block; font-size: 9pt; line-height: 1.7; }
     .meta-row strong { color: #0f172a; }
@@ -24,7 +30,7 @@
     table.posture th { background: #1e40af; color: #fff; padding: 6pt 8pt; text-align: left; font-weight: normal; }
     table.posture td { border: 0.5pt solid #cbd5e1; padding: 5pt 8pt; vertical-align: top; }
     table.posture tr:nth-child(even) td { background: #f8fafc; }
-    .badge { display: inline-block; padding: 2pt 6pt; border-radius: 8pt; font-size: 8pt; font-weight: bold; }
+    .badge { display: inline-block; padding: 2pt 8pt; border-radius: 8pt; font-size: 8pt; font-weight: bold; line-height: 11pt; }
     .badge-on { background: #dcfce7; color: #166534; }
     .badge-off { background: #fef3c7; color: #92400e; }
     .badge-config { background: #dbeafe; color: #1e40af; }
@@ -71,13 +77,18 @@
 </div>
 
 @foreach ($data['groups'] as $group)
-    <h3>{{ $group['name'] }}
-        @php
-            $ms = $group['master_status'] ?? 'configured';
-            $msClass = $ms === 'enabled' ? 'badge-on' : ($ms === 'disabled' ? 'badge-off' : 'badge-config');
-        @endphp
-        <span class="badge {{ $msClass }}" style="margin-left: 8pt; vertical-align: 2pt;">{{ strtoupper($ms) }}</span>
-    </h3>
+    @php
+        $ms = $group['master_status'] ?? 'configured';
+        $msClass = $ms === 'enabled' ? 'badge-on' : ($ms === 'disabled' ? 'badge-off' : 'badge-config');
+    @endphp
+    <table class="group-title">
+        <tr>
+            <td class="group-name">{{ $group['name'] }}</td>
+            <td class="group-badge-cell">
+                <span class="badge {{ $msClass }}">{{ strtoupper($ms) }}</span>
+            </td>
+        </tr>
+    </table>
     <p class="group-desc">{{ $group['description'] }}</p>
     <table class="posture">
         <thead>
