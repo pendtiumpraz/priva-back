@@ -51,9 +51,10 @@ class EleganceTemplatesSeeder extends Seeder
 
             $id = $existing->id ?? (string) Str::uuid();
 
-            // Midnight Indigo jadi system default supaya org yang belum aktivasi
-            // template tetap dapat PDF cantik (bukan PhpWord navy hardcoded).
-            $isDefault = ($tpl['slug'] === 'midnight-indigo');
+            // Nexus Klasik jadi system default — match palette + tipografi
+            // DOCX reference user (navy #16284C + lavender #F4F2FE + Poppins/Roboto).
+            // Org yang belum aktivasi template tetap dapat PDF formal BUMN.
+            $isDefault = ($tpl['slug'] === 'nexus-klasik');
 
             DB::table('document_templates')->updateOrInsert(
                 ['org_id' => null, 'name' => $name],
@@ -79,11 +80,11 @@ class EleganceTemplatesSeeder extends Seeder
             $seeded++;
         }
 
-        // Pastikan hanya Midnight Indigo yang is_default=true (unset legacy default
+        // Pastikan hanya Nexus Klasik yang is_default=true (unset legacy default
         // seperti "Nexus Canonical" yang blade_view-nya NULL).
         DB::table('document_templates')
             ->whereNull('org_id')
-            ->where('name', '!=', '01 — Midnight Indigo')
+            ->where('name', '!=', '00 — Nexus Klasik')
             ->where('is_default', true)
             ->update(['is_default' => false, 'updated_at' => $now]);
 
@@ -97,6 +98,17 @@ class EleganceTemplatesSeeder extends Seeder
      * visual (mis. Midnight Indigo → emas hangat, Swiss → merah Helvetica).
      */
     private const TEMPLATES = [
+        [
+            'number' => 0,
+            'display' => 'Nexus Klasik',
+            'slug' => 'nexus-klasik',
+            'engine' => 'browsershot',
+            'style_category' => 'corporate',
+            'implemented' => true,
+            'description' => 'Formal BUMN — navy klasik dengan aksen lavender, tipografi Poppins/Roboto. Mengikuti palette dan struktur dokumen referensi BUMN.',
+            'primary_color' => '#16284C',
+            'accent_color' => '#F4F2FE',
+        ],
         [
             'number' => 1,
             'display' => 'Midnight Indigo',
