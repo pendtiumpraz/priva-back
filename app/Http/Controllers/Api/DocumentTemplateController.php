@@ -674,6 +674,51 @@ class DocumentTemplateController extends Controller
                 'Vulnerability Assessment',
             ],
             'retention' => 'Data nasabah disimpan selama 5 tahun setelah penutupan akun, log aktivitas selama 2 tahun.',
+
+            // Section 4 — Pengumpulan Data (full sesuai DOCX reference)
+            'data_subjects' => ['Nasabah', 'Pengguna Aplikasi'],
+            'data_subjects_volume' => '> 1.000 subjek',
+            'data_source' => 'Diberikan langsung oleh Subjek Data',
+
+            // Section 3 — pertanyaan AI/automation (DOCX)
+            'uses_ai' => 'Tidak menggunakan bantuan AI',
+            'uses_automated_decision' => 'Tidak',
+            'uses_new_tech' => 'Tidak',
+            'profiling_purpose' => 'Penawaran Produk, Personalisasi Konten',
+
+            // Section 5 — Penggunaan & Penyimpanan
+            'processor_role' => ['Pengendali Data (Controller)', 'Pemroses Data (Processor)'],
+            'processor_entity' => 'PT Sentra Proteksi Data Teknologi Indonesia',
+            'has_third_party' => 'Ya',
+            'third_parties' => [
+                [
+                    'name' => 'Amazon Web Services (AWS)',
+                    'address' => 'AWS Singapore Region',
+                    'pic_name' => 'AWS Account Manager',
+                    'pic_email' => 'aws-pic@example.com',
+                    'pic_phone' => '+65-6555-1234',
+                ],
+            ],
+
+            // Section 6 — Pengiriman Data
+            'recipients_internal' => 'Tidak',
+            'recipients_internal_list' => [],
+            'recipients_external' => 'Tidak',
+            'recipients_external_list' => [],
+            'cross_border_transfer' => 'Tidak',
+            'cross_border_destinations' => [],
+
+            // Section 7 — Retensi & Keamanan (tambahan)
+            'retention_doc_name' => 'Registrasi Nasabah via Aplikasi ABCDE',
+            'retention_period' => '5 tahun setelah penutupan akun (log aktivitas 2 tahun)',
+            'retention_effective_date' => '27 April 2026',
+            'retention_end_date' => '-',
+            'has_deletion_activity' => 'Tidak',
+            'has_past_incident' => 'Tidak',
+
+            // Risk / klasifikasi
+            'risk_level' => 'HIGH',
+            'risk_justification' => 'Memproses data keuangan pribadi, biometrik, dan PII (NIK/KTP, Rekening, NPWP) dalam volume besar (> 1.000 subjek).',
         ];
     }
 

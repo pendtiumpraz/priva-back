@@ -3,362 +3,741 @@
 <head>
     <meta charset="UTF-8">
     <title>ROPA — {{ $ropa['name'] ?? '' }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         @page { size: A4 portrait; margin: 0; }
         * { box-sizing: border-box; }
-        body { margin: 0; padding: 0; font-family: 'DejaVu Sans', 'Helvetica', sans-serif; color: #1a1a2e; }
-
-        /* ---------- COVER (Memphis Postmodern) ---------- */
-        .cover {
-            position: relative;
-            width: 21cm; height: 29.7cm;
-            background: #fef7ed;
+        html, body { margin: 0; padding: 0; }
+        body {
+            font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
             color: #1a1a2e;
-            page-break-after: always;
-            overflow: hidden;
         }
-        /* decorative shapes top-right */
-        .deco-circle-red {
-            position: absolute;
-            top: 18mm; right: 18mm;
+
+        /* =========================================================
+           Palette Memphis Postmodern
+           ========================================================= */
+        :root {
+            --cream: #fef7ed;
+            --ink: #1a1a2e;
+            --pink: #ff6b6b;
+            --teal: #4ecdc4;
+            --yellow: #ffd166;
+            --purple: #a78bfa;
+            --muted: #7a7a8e;
+        }
+
+        .page {
+            position: relative;
+            width: 21cm;
+            height: 29.7cm;
+            background: var(--cream);
+            overflow: hidden;
+            page-break-after: always;
+        }
+        .page:last-child { page-break-after: auto; }
+
+        /* =========================================================
+           COVER — decorative shapes
+           ========================================================= */
+        .shape { position: absolute; }
+        .shape.circle-pink {
+            top: 14mm; right: 14mm;
             width: 32mm; height: 32mm;
-            background: #ff6b6b;
+            background: var(--pink);
             border-radius: 50%;
         }
-        .deco-sq-teal {
-            position: absolute;
-            top: 28mm; right: 56mm;
-            width: 17mm; height: 17mm;
-            background: #4ecdc4;
+        .shape.square-teal {
+            top: 24mm; right: 56mm;
+            width: 16mm; height: 16mm;
+            background: var(--teal);
         }
-        .deco-bars {
-            position: absolute;
-            top: 56mm; right: 28mm;
+        .shape.bars {
+            top: 50mm; right: 22mm;
+            width: 22mm; height: 24mm;
         }
-        .deco-bar {
-            width: 22mm; height: 2.2mm;
-            background: #1a1a2e;
-            margin-bottom: 2.2mm;
+        .shape.bars div {
+            height: 2.4mm;
+            background: var(--ink);
+            margin-bottom: 4mm;
         }
-        /* dot grid SVG (5x5) */
-        .deco-dots {
-            position: absolute;
-            top: 78mm; right: 56mm;
+        .shape.dot-grid {
+            top: 76mm; right: 56mm;
         }
-        /* yellow triangle bottom-left, dompdf no clip-path → inline svg */
-        .deco-triangle {
-            position: absolute;
-            bottom: -20mm; left: -20mm;
-            width: 62mm; height: 62mm;
+        .shape.triangle-yellow {
+            bottom: -22mm; left: -22mm;
+            width: 60mm; height: 60mm;
+            background: var(--yellow);
+            clip-path: polygon(50% 0, 100% 100%, 0 100%);
         }
-        /* dashed cyan circle bottom-right */
-        .deco-dashed {
-            position: absolute;
-            bottom: 16mm; right: -10mm;
-            width: 45mm; height: 45mm;
+        .shape.dashed-circle {
+            bottom: 14mm; right: -10mm;
+            width: 44mm; height: 44mm;
+            border-radius: 50%;
+            border: 3.4mm dashed var(--teal);
         }
 
         .cover-inner {
-            position: absolute;
-            top: 16mm; left: 16mm; right: 16mm; bottom: 16mm;
+            position: relative;
+            z-index: 2;
+            padding: 18mm 16mm;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
         }
-        .logo-row table { border-collapse: collapse; }
-        .logo-row td { vertical-align: middle; padding: 0 3mm 0 0; }
-        .logo-sq {
-            width: 11mm; height: 11mm;
-            background: #1a1a2e;
-            color: #ffd166;
+
+        .brand-row { display: flex; align-items: center; gap: 10pt; }
+        .brand-mark {
+            width: 32pt; height: 32pt;
+            background: var(--ink);
+            color: var(--yellow);
+            border-radius: 8pt;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             font-weight: 900;
             font-size: 17pt;
-            text-align: center;
-            line-height: 11mm;
         }
-        .logo-text { font-size: 11pt; font-weight: 700; }
-
-        .title-block {
-            position: absolute;
-            top: 90mm; left: 0; right: 30mm;
-        }
-        .pill-tag {
-            display: inline-block;
-            padding: 1.5mm 4mm;
-            background: #1a1a2e;
-            color: #ffd166;
-            border-radius: 8mm;
-            font-size: 9pt;
+        .brand-name {
+            font-size: 11pt;
             font-weight: 700;
-            letter-spacing: 1.2pt;
+        }
+
+        .pill-eyebrow {
+            display: inline-block;
+            padding: 5pt 13pt;
+            background: var(--ink);
+            color: var(--yellow);
+            border-radius: 999pt;
+            font-size: 9.5pt;
+            font-weight: 700;
+            letter-spacing: 0.15em;
             text-transform: uppercase;
         }
         .cover-title {
-            font-size: 76pt;
+            font-size: 80pt;
             font-weight: 900;
             line-height: 0.92;
-            letter-spacing: -2.5pt;
-            margin: 4mm 0 0;
+            letter-spacing: -0.04em;
+            margin: 14pt 0 0;
         }
-        .cover-title .red { color: #ff6b6b; }
+        .cover-title .pink { color: var(--pink); }
         .cover-desc {
-            margin-top: 7mm;
-            font-size: 12pt;
+            margin-top: 18pt;
+            font-size: 13pt;
             line-height: 1.55;
+            max-width: 360pt;
             color: #3a3a5e;
-            max-width: 140mm;
+            font-weight: 500;
         }
 
-        /* 3 colored info boxes at bottom */
-        .info-row {
-            position: absolute;
-            bottom: 0; left: 0; right: 0;
+        .meta-cards {
+            display: flex;
+            gap: 10pt;
         }
-        .info-row table { width: 100%; border-collapse: separate; border-spacing: 3mm 0; }
-        .info-row td {
-            width: 33.33%;
-            padding: 4mm 5mm;
-            border: 0.8mm solid #1a1a2e;
-            border-radius: 5mm;
-            vertical-align: top;
+        .meta-card {
+            flex: 1;
+            padding: 12pt 14pt;
+            border: 2.4pt solid var(--ink);
+            border-radius: 14pt;
+            box-shadow: 4pt 4pt 0 var(--ink);
         }
-        .info-row td.c-red { background: #ff6b6b; }
-        .info-row td.c-teal { background: #4ecdc4; }
-        .info-row td.c-yellow { background: #ffd166; }
-        .info-k {
-            font-size: 8pt;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1.2pt;
-        }
-        .info-v {
-            margin-top: 2mm;
-            font-size: 12pt;
+        .meta-card.pink { background: var(--pink); }
+        .meta-card.teal { background: var(--teal); }
+        .meta-card.yellow { background: var(--yellow); }
+        .meta-card .k {
+            font-size: 9pt;
             font-weight: 800;
-            display: block;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+        }
+        .meta-card .v {
+            margin-top: 5pt;
+            font-size: 14pt;
+            font-weight: 800;
         }
 
-        /* ---------- CONTENT PAGE ---------- */
-        .content {
-            position: relative;
-            width: 21cm; height: 29.7cm;
-            background: #fef7ed;
-            color: #1a1a2e;
+        /* =========================================================
+           CONTENT PAGES
+           ========================================================= */
+        .content-pad { padding: 14mm 14mm 18mm; position: relative; height: 100%; }
+
+        .sec-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14pt;
         }
-        .ct-pad { padding: 12mm 14mm 0; }
-        .ct-h-row { width: 100%; border-collapse: collapse; }
-        .ct-h-row td { vertical-align: middle; }
-        .ct-h-row td.r { text-align: right; }
-        .ct-h2 {
-            font-size: 24pt;
+        .sec-head h2 {
+            font-size: 30pt;
             font-weight: 900;
+            letter-spacing: -0.02em;
             margin: 0;
-            letter-spacing: -0.7pt;
         }
-        .ct-h2 .red { color: #ff6b6b; }
-        .ct-h2 .teal { color: #4ecdc4; }
-        .ct-pill {
-            display: inline-block;
-            padding: 1.5mm 4mm;
-            background: #1a1a2e;
-            color: #fef7ed;
-            border-radius: 8mm;
+        .sec-head h2 .num { color: var(--pink); }
+        .sec-head h2 .num.teal { color: var(--teal); }
+        .sec-head h2 .num.yellow { color: var(--yellow); }
+        .sec-head h2 .num.purple { color: var(--purple); }
+        .sec-head .badge {
+            padding: 6pt 12pt;
+            background: var(--ink);
+            color: var(--cream);
+            border-radius: 999pt;
+            font-size: 10pt;
+            font-weight: 700;
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10pt;
+            margin-bottom: 14pt;
+        }
+        .card {
+            padding: 13pt 15pt;
+            background: #fff;
+            border: 2.4pt solid var(--ink);
+            border-radius: 16pt;
+            box-shadow: 4pt 4pt 0 var(--ink);
+        }
+        .card.span-2 { grid-column: span 2; }
+        .card.pink { background: var(--pink); }
+        .card.teal { background: var(--teal); }
+        .card.yellow { background: var(--yellow); }
+        .card.purple { background: var(--purple); }
+        .card.ink { background: var(--ink); color: var(--cream); }
+        .card .k {
+            font-size: 9pt;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+        }
+        .card .k.muted { color: var(--muted); }
+        .card .v {
+            margin-top: 5pt;
+            font-size: 14pt;
+            font-weight: 700;
+            line-height: 1.4;
+        }
+        .card .v.body { font-size: 11.5pt; font-weight: 500; line-height: 1.55; }
+
+        /* Chip / category pills */
+        .chip-row { display: flex; flex-wrap: wrap; gap: 5pt; margin-top: 7pt; }
+        .chip {
+            padding: 5pt 11pt;
+            border-radius: 999pt;
+            font-size: 10pt;
+            font-weight: 700;
+            border: 2pt solid var(--ink);
+            color: var(--ink);
+        }
+        .chip.c0 { background: var(--pink); }
+        .chip.c1 { background: var(--teal); }
+        .chip.c2 { background: var(--yellow); }
+        .chip.c3 { background: var(--purple); }
+        .chip.pii { background: var(--ink); color: var(--cream); }
+        .chip.outline { background: #fff; }
+
+        /* Lists inside cards */
+        ul.fun-list { list-style: none; margin: 4pt 0 0; padding: 0; }
+        ul.fun-list li {
+            padding: 3pt 0;
+            font-size: 11pt;
+            font-weight: 600;
+            display: flex;
+            gap: 7pt;
+            align-items: center;
+        }
+        ul.fun-list li::before {
+            content: "";
+            width: 8pt; height: 8pt;
+            border-radius: 50%;
+            background: var(--pink);
+            flex-shrink: 0;
+        }
+        ul.fun-list li:nth-child(2n)::before { background: var(--teal); }
+        ul.fun-list li:nth-child(3n)::before { background: var(--yellow); }
+        ul.fun-list li:nth-child(4n)::before { background: var(--purple); }
+
+        /* Data table */
+        table.fun-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-top: 4pt;
+        }
+        table.fun-table th {
+            background: var(--ink);
+            color: var(--cream);
+            padding: 8pt 10pt;
+            text-align: left;
+            font-size: 9pt;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+        table.fun-table th:first-child { border-top-left-radius: 12pt; }
+        table.fun-table th:last-child { border-top-right-radius: 12pt; }
+        table.fun-table td {
+            padding: 8pt 10pt;
+            background: #fff;
+            border-top: 2pt solid var(--ink);
+            font-size: 10.5pt;
+            vertical-align: top;
+            line-height: 1.45;
+        }
+        table.fun-table tr td:first-child { border-left: 2pt solid var(--ink); }
+        table.fun-table tr td:last-child { border-right: 2pt solid var(--ink); }
+        table.fun-table tr:last-child td { border-bottom: 2pt solid var(--ink); }
+        table.fun-table tr:last-child td:first-child { border-bottom-left-radius: 12pt; }
+        table.fun-table tr:last-child td:last-child { border-bottom-right-radius: 12pt; }
+        table.fun-table td.seq {
+            font-weight: 800;
+            background: var(--yellow);
+            text-align: center;
+        }
+
+        .risk-card {
+            padding: 16pt 18pt;
+            border-radius: 16pt;
+            border: 2.4pt solid var(--ink);
+            box-shadow: 4pt 4pt 0 var(--ink);
+            display: flex;
+            align-items: center;
+            gap: 16pt;
+        }
+        .risk-card.HIGH { background: var(--pink); }
+        .risk-card.MEDIUM { background: var(--yellow); }
+        .risk-card.LOW { background: var(--teal); }
+        .risk-card .badge {
+            padding: 8pt 18pt;
+            background: var(--ink);
+            color: var(--cream);
+            border-radius: 999pt;
+            font-size: 12pt;
+            font-weight: 900;
+            letter-spacing: 0.14em;
+        }
+
+        /* Footer */
+        .page-footer {
+            position: absolute;
+            bottom: 8mm;
+            left: 14mm; right: 14mm;
+            display: flex;
+            justify-content: space-between;
             font-size: 9pt;
             font-weight: 700;
+            color: var(--muted);
         }
-
-        /* card grid */
-        .card-grid { width: 100%; border-collapse: separate; border-spacing: 4mm 4mm; margin-top: 4mm; }
-        .card {
-            padding: 4mm 5mm;
-            border: 0.8mm solid #1a1a2e;
-            border-radius: 5mm;
-            vertical-align: top;
-            background: #fff;
-        }
-        .card.c-red { background: #ff6b6b; }
-        .card.c-teal { background: #4ecdc4; }
-        .card.c-yellow { background: #ffd166; }
-        .c-key {
-            font-size: 8pt;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 1.3pt;
-            color: #1a1a2e;
-        }
-        .c-key.muted { color: #7a7a8e; }
-        .c-val {
-            margin-top: 2mm;
-            font-size: 12pt;
-            font-weight: 700;
-            display: block;
-        }
-        .c-val.normal { font-weight: 500; font-size: 10.5pt; line-height: 1.5; }
-
-        .cat-row {
-            margin-top: 2mm;
-        }
-        .cat-pill {
-            display: inline-block;
-            padding: 1.2mm 4mm;
-            border-radius: 8mm;
-            font-size: 9.5pt;
-            font-weight: 700;
-            border: 0.6mm solid #1a1a2e;
-            margin: 0 1.5mm 1.5mm 0;
-            color: #1a1a2e;
-        }
-        .cp-red { background: #ff6b6b; }
-        .cp-teal { background: #4ecdc4; }
-        .cp-yellow { background: #ffd166; }
-        .cp-purple { background: #a78bfa; }
     </style>
 </head>
 <body>
-    {{-- COVER --}}
-    <div class="cover">
-        <div class="deco-circle-red"></div>
-        <div class="deco-sq-teal"></div>
-        <div class="deco-bars">
-            <div class="deco-bar"></div>
-            <div class="deco-bar"></div>
-            <div class="deco-bar"></div>
+
+@php
+    $r = $ropa;
+    $orgName = $r['org'] ?? ($orgName ?? '-');
+    $totalPages = 7;
+    $catColors = ['c0', 'c1', 'c2', 'c3'];
+@endphp
+
+{{-- ============================================================
+     PAGE 1 — COVER
+     ============================================================ --}}
+<section class="page">
+    <div class="shape circle-pink"></div>
+    <div class="shape square-teal"></div>
+    <div class="shape bars"><div></div><div></div><div></div></div>
+    <svg class="shape dot-grid" width="120" height="120" viewBox="0 0 120 120">
+        @for($i = 0; $i < 5; $i++)
+            @for($j = 0; $j < 5; $j++)
+                <circle cx="{{ $i * 24 + 8 }}" cy="{{ $j * 24 + 8 }}" r="4" fill="#ffd166" />
+            @endfor
+        @endfor
+    </svg>
+    <div class="shape triangle-yellow"></div>
+    <div class="shape dashed-circle"></div>
+
+    <div class="cover-inner">
+        <div class="brand-row">
+            <div class="brand-mark">R</div>
+            <div class="brand-name">ROPA Export</div>
         </div>
-        {{-- dot grid: 5x5 yellow circles via svg --}}
-        <svg class="deco-dots" width="34mm" height="34mm" viewBox="0 0 120 120">
-            <circle cx="8" cy="8" r="4" fill="#ffd166"/>
-            <circle cx="32" cy="8" r="4" fill="#ffd166"/>
-            <circle cx="56" cy="8" r="4" fill="#ffd166"/>
-            <circle cx="80" cy="8" r="4" fill="#ffd166"/>
-            <circle cx="104" cy="8" r="4" fill="#ffd166"/>
-            <circle cx="8" cy="32" r="4" fill="#ffd166"/>
-            <circle cx="32" cy="32" r="4" fill="#ffd166"/>
-            <circle cx="56" cy="32" r="4" fill="#ffd166"/>
-            <circle cx="80" cy="32" r="4" fill="#ffd166"/>
-            <circle cx="104" cy="32" r="4" fill="#ffd166"/>
-            <circle cx="8" cy="56" r="4" fill="#ffd166"/>
-            <circle cx="32" cy="56" r="4" fill="#ffd166"/>
-            <circle cx="56" cy="56" r="4" fill="#ffd166"/>
-            <circle cx="80" cy="56" r="4" fill="#ffd166"/>
-            <circle cx="104" cy="56" r="4" fill="#ffd166"/>
-            <circle cx="8" cy="80" r="4" fill="#ffd166"/>
-            <circle cx="32" cy="80" r="4" fill="#ffd166"/>
-            <circle cx="56" cy="80" r="4" fill="#ffd166"/>
-            <circle cx="80" cy="80" r="4" fill="#ffd166"/>
-            <circle cx="104" cy="80" r="4" fill="#ffd166"/>
-            <circle cx="8" cy="104" r="4" fill="#ffd166"/>
-            <circle cx="32" cy="104" r="4" fill="#ffd166"/>
-            <circle cx="56" cy="104" r="4" fill="#ffd166"/>
-            <circle cx="80" cy="104" r="4" fill="#ffd166"/>
-            <circle cx="104" cy="104" r="4" fill="#ffd166"/>
-        </svg>
-        {{-- yellow triangle, dompdf no clip-path → inline svg --}}
-        <svg class="deco-triangle" viewBox="0 0 100 100">
-            <polygon points="50,0 100,100 0,100" fill="#ffd166"/>
-        </svg>
-        {{-- dashed teal circle as svg (dashed border can be glitchy in dompdf) --}}
-        <svg class="deco-dashed" viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="42" stroke="#4ecdc4" stroke-width="6" stroke-dasharray="8 6" fill="none"/>
-        </svg>
 
-        <div class="cover-inner">
-            <div class="logo-row">
-                <table><tr>
-                    <td><div class="logo-sq">R</div></td>
-                    <td><span class="logo-text">ROPA Export</span></td>
-                </tr></table>
+        <div>
+            <span class="pill-eyebrow">Record of Processing</span>
+            <h1 class="cover-title">Hello, <span class="pink">data!</span><br>Mari kita catat.</h1>
+            <div class="cover-desc">{{ $r['description'] ?? '-' }}</div>
+        </div>
+
+        <div class="meta-cards">
+            <div class="meta-card pink">
+                <div class="k">No.</div>
+                <div class="v">{{ $r['number'] ?? '-' }}</div>
             </div>
-
-            <div class="title-block">
-                <span class="pill-tag">Record of Processing</span>
-                <h1 class="cover-title">
-                    Hello, <span class="red">data!</span><br>
-                    Mari kita catat.
-                </h1>
-                <div class="cover-desc">{{ $ropa['description'] ?? '' }}</div>
+            <div class="meta-card teal">
+                <div class="k">Divisi</div>
+                <div class="v">{{ $r['division'] ?? '-' }}</div>
             </div>
-
-            <div class="info-row">
-                <table><tr>
-                    <td class="c-red">
-                        <div class="info-k">No.</div>
-                        <span class="info-v">{{ $ropa['number'] ?? '-' }}</span>
-                    </td>
-                    <td class="c-teal">
-                        <div class="info-k">Divisi</div>
-                        <span class="info-v">{{ $ropa['division'] ?? '-' }}</span>
-                    </td>
-                    <td class="c-yellow">
-                        <div class="info-k">Tanggal</div>
-                        <span class="info-v">{{ $ropa['date'] ?? ($today ?? '-') }}</span>
-                    </td>
-                </tr></table>
+            <div class="meta-card yellow">
+                <div class="k">Tanggal</div>
+                <div class="v">{{ $r['date'] ?? '-' }}</div>
             </div>
         </div>
     </div>
+</section>
 
-    {{-- CONTENT --}}
-    <div class="content">
-        <div class="ct-pad">
-            <table class="ct-h-row"><tr>
-                <td><h2 class="ct-h2"><span class="red">01.</span> Deskripsi</h2></td>
-                <td class="r"><span class="ct-pill">{{ $ropa['number'] ?? '' }}</span></td>
-            </tr></table>
+{{-- ============================================================
+     PAGE 2 — I Deskripsi + II Pejabat
+     ============================================================ --}}
+<section class="page">
+    <div class="content-pad">
+        <div class="sec-head">
+            <h2><span class="num">01.</span> Deskripsi</h2>
+            <div class="badge">{{ $r['number'] ?? '-' }}</div>
+        </div>
+        <div class="card-grid">
+            <div class="card pink">
+                <div class="k">Nama Pemrosesan</div>
+                <div class="v">{{ $r['name'] ?? '-' }}</div>
+            </div>
+            <div class="card teal">
+                <div class="k">Entitas</div>
+                <div class="v">{{ $orgName }}</div>
+            </div>
+            <div class="card">
+                <div class="k muted">Divisi</div>
+                <div class="v">{{ $r['division'] ?? '-' }}</div>
+            </div>
+            <div class="card">
+                <div class="k muted">Unit Kerja</div>
+                <div class="v">{{ $r['unit'] ?? '-' }}</div>
+            </div>
+            <div class="card span-2 yellow">
+                <div class="k">Deskripsi Singkat</div>
+                <div class="v body">{{ $r['description'] ?? '-' }}</div>
+            </div>
+            <div class="card span-2">
+                <div class="k muted">Kategori Perusahaan</div>
+                <div class="v body">{{ $r['category'] ?? '-' }}</div>
+            </div>
+        </div>
 
-            <table class="card-grid">
-                <tr>
-                    <td class="card c-red" style="width: 50%;">
-                        <div class="c-key">Nama</div>
-                        <span class="c-val">{{ $ropa['name'] ?? '-' }}</span>
-                    </td>
-                    <td class="card c-teal" style="width: 50%;">
-                        <div class="c-key">Entitas</div>
-                        <span class="c-val">{{ $ropa['org'] ?? ($orgName ?? '-') }}</span>
-                    </td>
-                </tr>
-                <tr>
-                    <td class="card" style="width: 50%;">
-                        <div class="c-key muted">Divisi</div>
-                        <span class="c-val">{{ $ropa['division'] ?? '-' }}</span>
-                    </td>
-                    <td class="card" style="width: 50%;">
-                        <div class="c-key muted">Unit</div>
-                        <span class="c-val">{{ $ropa['unit'] ?? '-' }}</span>
-                    </td>
-                </tr>
-                <tr>
-                    <td class="card c-yellow" colspan="2">
-                        <div class="c-key">Deskripsi Singkat</div>
-                        <span class="c-val normal">{{ $ropa['description'] ?? '-' }}</span>
-                    </td>
-                </tr>
-            </table>
-
-            <h2 class="ct-h2" style="margin-top: 9mm;"><span class="teal">02.</span> Informasi</h2>
-
-            <table class="card-grid">
-                <tr>
-                    <td class="card" colspan="2">
-                        <div class="c-key muted">Tujuan</div>
-                        <span class="c-val normal">{{ $ropa['purpose'] ?? '-' }}</span>
-                    </td>
-                </tr>
-                <tr>
-                    <td class="card" colspan="2">
-                        <div class="c-key muted">Kategori Pemrosesan</div>
-                        <div class="cat-row">
-                            @if(!empty($ropa['categories']) && is_array($ropa['categories']))
-                                @foreach($ropa['categories'] as $i => $cat)
-                                    @php
-                                        $cls = ['cp-red','cp-teal','cp-yellow','cp-purple'][$i % 4];
-                                    @endphp
-                                    <span class="cat-pill {{ $cls }}">{{ $cat }}</span>
-                                @endforeach
-                            @else
-                                <span class="cat-pill cp-red">-</span>
-                            @endif
-                        </div>
-                    </td>
-                </tr>
-            </table>
+        <div class="sec-head">
+            <h2><span class="num teal">02.</span> Pejabat &amp; PIC</h2>
+            <div class="badge">DPO + PIC</div>
+        </div>
+        <div class="card-grid">
+            <div class="card span-2 purple">
+                <div class="k">Pejabat PDP (DPO)</div>
+                <div class="v">{{ $r['dpo']['name'] ?? '-' }}</div>
+                <div class="v body">{{ $r['dpo']['email'] ?? '-' }} &nbsp;·&nbsp; {{ $r['dpo']['phone'] ?? '-' }}</div>
+            </div>
+            <div class="card span-2 ink">
+                <div class="k">Process Owner / PIC</div>
+                <div class="v">{{ $r['pic']['name'] ?? '-' }}</div>
+                <div class="v body">{{ $r['pic']['role'] ?? '-' }} &nbsp;·&nbsp; {{ $r['pic']['email'] ?? '-' }}</div>
+            </div>
         </div>
     </div>
+    <div class="page-footer">
+        <span>{{ $orgName }}</span>
+        <span>02 / {{ $totalPages }}</span>
+    </div>
+</section>
+
+{{-- ============================================================
+     PAGE 3 — III Informasi + IV Sistem + V Teknologi
+     ============================================================ --}}
+<section class="page">
+    <div class="content-pad">
+        <div class="sec-head">
+            <h2><span class="num yellow">03.</span> Informasi</h2>
+            <div class="badge">PROCESSING</div>
+        </div>
+        <div class="card-grid">
+            <div class="card span-2">
+                <div class="k muted">Tujuan</div>
+                <div class="v body">{{ $r['purpose'] ?? '-' }}</div>
+            </div>
+            <div class="card span-2">
+                <div class="k muted">Aktivitas</div>
+                <div class="v body">{{ $r['activity'] ?? '-' }}</div>
+            </div>
+            <div class="card span-2 pink">
+                <div class="k">Dasar Hukum</div>
+                <div class="v body">{{ $r['legal_basis'] ?? '-' }}</div>
+            </div>
+            <div class="card span-2">
+                <div class="k muted">Kategori Pemrosesan</div>
+                <div class="chip-row">
+                    @foreach($r['categories'] ?? [] as $i => $cat)
+                        <span class="chip {{ $catColors[$i % 4] }}">{{ $cat }}</span>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+
+        <div class="sec-head">
+            <h2><span class="num purple">04.</span> Sistem</h2>
+            <div class="badge">{{ count($r['systems'] ?? []) }} systems</div>
+        </div>
+        <table class="fun-table">
+            <thead>
+                <tr>
+                    <th style="width: 6%;">No.</th>
+                    <th>Nama Sistem</th>
+                    <th>Lokasi Simpan</th>
+                    <th>Lokasi Pakai</th>
+                </tr>
+            </thead>
+            <tbody>
+                @forelse($r['systems'] ?? [] as $i => $sys)
+                    <tr>
+                        <td class="seq">{{ $i + 1 }}</td>
+                        <td><b>{{ $sys['name'] ?? '-' }}</b></td>
+                        <td>{{ $sys['loc'] ?? '-' }}</td>
+                        <td>{{ $sys['use_loc'] ?? ($sys['loc'] ?? '-') }}</td>
+                    </tr>
+                @empty
+                    <tr><td colspan="4" style="text-align:center;">—</td></tr>
+                @endforelse
+            </tbody>
+        </table>
+
+        <div class="sec-head" style="margin-top: 14pt;">
+            <h2><span class="num">05.</span> Teknologi</h2>
+            <div class="badge">AI · ADM</div>
+        </div>
+        <div class="card-grid">
+            <div class="card pink"><div class="k">Bantuan AI</div><div class="v">{{ $r['uses_ai'] ?? '-' }}</div></div>
+            <div class="card teal"><div class="k">Keputusan Otomatis</div><div class="v">{{ $r['uses_automated_decision'] ?? '-' }}</div></div>
+            <div class="card yellow"><div class="k">Teknologi Baru</div><div class="v">{{ $r['uses_new_tech'] ?? '-' }}</div></div>
+            <div class="card purple"><div class="k">Tujuan Pemrofilan</div><div class="v body">{{ $r['profiling_purpose'] ?? '-' }}</div></div>
+        </div>
+    </div>
+    <div class="page-footer">
+        <span>{{ $orgName }}</span>
+        <span>03 / {{ $totalPages }}</span>
+    </div>
+</section>
+
+{{-- ============================================================
+     PAGE 4 — VI Pengumpulan Data
+     ============================================================ --}}
+<section class="page">
+    <div class="content-pad">
+        <div class="sec-head">
+            <h2><span class="num teal">06.</span> Pengumpulan Data</h2>
+            <div class="badge">DATA SUBJECTS</div>
+        </div>
+        <div class="card-grid">
+            <div class="card span-2 yellow">
+                <div class="k">Jenis Subjek Data</div>
+                <ul class="fun-list">
+                    @foreach($r['data_subjects'] ?? [] as $s)
+                        <li>{{ $s }}</li>
+                    @endforeach
+                </ul>
+            </div>
+            <div class="card pink"><div class="k">Jumlah Subjek</div><div class="v">{{ $r['data_subjects_volume'] ?? '-' }}</div></div>
+            <div class="card teal"><div class="k">Sumber Pengumpulan</div><div class="v body">{{ $r['data_source'] ?? '-' }}</div></div>
+
+            <div class="card span-2">
+                <div class="k muted">Data Pribadi — Umum</div>
+                <div class="chip-row">
+                    @foreach($r['data_general'] ?? [] as $d)
+                        <span class="chip outline">{{ $d }}</span>
+                    @endforeach
+                </div>
+            </div>
+            <div class="card span-2">
+                <div class="k muted">Data Pribadi — Spesifik</div>
+                <div class="chip-row">
+                    @foreach($r['data_specific'] ?? [] as $i => $d)
+                        <span class="chip {{ $catColors[$i % 4] }}">{{ $d }}</span>
+                    @endforeach
+                </div>
+            </div>
+            <div class="card span-2 ink">
+                <div class="k">Data Pribadi — PII (Sensitif)</div>
+                <div class="chip-row">
+                    @foreach($r['data_pii'] ?? [] as $d)
+                        <span class="chip pii" style="background: var(--pink); color: var(--ink); border-color: var(--cream);">{{ $d }}</span>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="page-footer">
+        <span>{{ $orgName }}</span>
+        <span>04 / {{ $totalPages }}</span>
+    </div>
+</section>
+
+{{-- ============================================================
+     PAGE 5 — VII Penggunaan + VIII Pihak Ketiga
+     ============================================================ --}}
+<section class="page">
+    <div class="content-pad">
+        <div class="sec-head">
+            <h2><span class="num purple">07.</span> Penggunaan &amp; Simpan</h2>
+            <div class="badge">STORAGE</div>
+        </div>
+        <div class="card-grid">
+            <div class="card span-2 teal">
+                <div class="k">Kategori Pemroses</div>
+                <div class="chip-row">
+                    @foreach($r['processor_role'] ?? [] as $i => $role)
+                        <span class="chip outline">{{ $role }}</span>
+                    @endforeach
+                </div>
+            </div>
+            <div class="card"><div class="k muted">Pemroses Utama</div><div class="v">{{ $r['processor_entity'] ?? '-' }}</div></div>
+            <div class="card"><div class="k muted">Pihak Ketiga Terlibat</div><div class="v">{{ $r['has_third_party'] ?? '-' }}</div></div>
+        </div>
+
+        @if(!empty($r['third_parties']))
+        <div class="sec-head">
+            <h2><span class="num">08.</span> Pihak Ketiga</h2>
+            <div class="badge">{{ count($r['third_parties']) }} mitra</div>
+        </div>
+        <table class="fun-table">
+            <thead>
+                <tr>
+                    <th style="width: 5%;">No.</th>
+                    <th>Nama Entitas</th>
+                    <th>Alamat</th>
+                    <th>PIC</th>
+                    <th>Kontak</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach($r['third_parties'] as $i => $tp)
+                    <tr>
+                        <td class="seq">{{ $i + 1 }}</td>
+                        <td><b>{{ $tp['name'] ?? '-' }}</b></td>
+                        <td>{{ $tp['address'] ?? '-' }}</td>
+                        <td>{{ $tp['pic_name'] ?? '-' }}</td>
+                        <td>{{ $tp['pic_email'] ?? '-' }}<br><span style="color: var(--muted); font-size: 9pt;">{{ $tp['pic_phone'] ?? '' }}</span></td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+        @endif
+    </div>
+    <div class="page-footer">
+        <span>{{ $orgName }}</span>
+        <span>05 / {{ $totalPages }}</span>
+    </div>
+</section>
+
+{{-- ============================================================
+     PAGE 6 — IX Pengiriman + X Jenis Data Dikirim
+     ============================================================ --}}
+<section class="page">
+    <div class="content-pad">
+        <div class="sec-head">
+            <h2><span class="num yellow">09.</span> Pengiriman Data</h2>
+            <div class="badge">TRANSFER</div>
+        </div>
+        <div class="card-grid">
+            <div class="card pink"><div class="k">Penerima Internal</div><div class="v body">{{ $r['recipients_internal'] ?? '-' }}</div></div>
+            <div class="card teal"><div class="k">Penerima Eksternal</div><div class="v body">{{ $r['recipients_external'] ?? '-' }}</div></div>
+            <div class="card yellow"><div class="k">Transfer Lintas Batas</div><div class="v">{{ $r['cross_border_transfer'] ?? '-' }}</div></div>
+            <div class="card purple"><div class="k">Negara Tujuan</div><div class="v body">{{ !empty($r['cross_border_destinations']) ? implode(', ', $r['cross_border_destinations']) : '-' }}</div></div>
+        </div>
+
+        <div class="sec-head">
+            <h2><span class="num teal">10.</span> Jenis Data Dikirim</h2>
+            <div class="badge">CATEGORIES</div>
+        </div>
+        <div class="card-grid">
+            <div class="card span-2">
+                <div class="k muted">Umum</div>
+                <div class="chip-row">
+                    @foreach($r['data_general'] ?? [] as $d)
+                        <span class="chip outline">{{ $d }}</span>
+                    @endforeach
+                </div>
+            </div>
+            <div class="card span-2">
+                <div class="k muted">Spesifik</div>
+                <div class="chip-row">
+                    @foreach($r['data_specific'] ?? [] as $i => $d)
+                        <span class="chip {{ $catColors[$i % 4] }}">{{ $d }}</span>
+                    @endforeach
+                </div>
+            </div>
+            <div class="card span-2 ink">
+                <div class="k">PII</div>
+                <div class="chip-row">
+                    @foreach($r['data_pii'] ?? [] as $d)
+                        <span class="chip" style="background: var(--pink); color: var(--ink); border-color: var(--cream);">{{ $d }}</span>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="page-footer">
+        <span>{{ $orgName }}</span>
+        <span>06 / {{ $totalPages }}</span>
+    </div>
+</section>
+
+{{-- ============================================================
+     PAGE 7 — XI Retensi + XII Keamanan + XIII Risiko
+     ============================================================ --}}
+<section class="page">
+    <div class="content-pad">
+        <div class="sec-head">
+            <h2><span class="num purple">11.</span> Retensi</h2>
+            <div class="badge">DATA LIFECYCLE</div>
+        </div>
+        <div class="card-grid">
+            <div class="card span-2 teal">
+                <div class="k">Dokumen Terkait</div>
+                <div class="v">{{ $r['retention_doc_name'] ?? $r['name'] ?? '-' }}</div>
+            </div>
+            <div class="card pink"><div class="k">Masa Retensi</div><div class="v">{{ $r['retention_period'] ?? '-' }}</div></div>
+            <div class="card yellow"><div class="k">Aktivitas Penghapusan</div><div class="v">{{ $r['has_deletion_activity'] ?? '-' }}</div></div>
+            <div class="card span-2"><div class="k muted">Tanggal Berlaku</div><div class="v">{{ $r['retention_effective_date'] ?? '-' }} &nbsp;&rarr;&nbsp; {{ $r['retention_end_date'] ?? '-' }}</div></div>
+        </div>
+
+        <div class="sec-head">
+            <h2><span class="num">12.</span> Keamanan</h2>
+            <div class="badge">CONTROLS</div>
+        </div>
+        <div class="card-grid">
+            <div class="card span-2 yellow">
+                <div class="k">Kontrol Keamanan</div>
+                <ul class="fun-list">
+                    @foreach($r['controls'] ?? [] as $ctrl)
+                        <li>{{ $ctrl }}</li>
+                    @endforeach
+                </ul>
+            </div>
+            <div class="card span-2"><div class="k muted">Riwayat Insiden</div><div class="v">{{ $r['has_past_incident'] ?? '-' }}</div></div>
+        </div>
+
+        <div class="sec-head">
+            <h2><span class="num teal">13.</span> Risiko</h2>
+            <div class="badge">{{ $r['risk_level'] ?? 'MEDIUM' }}</div>
+        </div>
+        <div class="risk-card {{ $r['risk_level'] ?? 'MEDIUM' }}">
+            <span class="badge">{{ $r['risk_level'] ?? 'MEDIUM' }}</span>
+            <div style="font-size: 12pt; font-weight: 600; line-height: 1.5; flex: 1;">{{ $r['risk_justification'] ?? '-' }}</div>
+        </div>
+    </div>
+    <div class="page-footer">
+        <span>{{ $orgName }}</span>
+        <span>07 / {{ $totalPages }}</span>
+    </div>
+</section>
+
 </body>
 </html>
