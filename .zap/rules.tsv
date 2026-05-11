@@ -1,0 +1,18 @@
+# OWASP ZAP Baseline rules — ignore false positives umum di Laravel SPA stack.
+# Format: <rule_id>	<action: IGNORE|WARN|FAIL>	<reason>
+#
+# Bisa di-extend tiap kali ada false positive yang terverifikasi safe.
+# Re-evaluate per quarter saat re-pentest.
+
+# CSP — backend serve mixed JSON+HTML preview pages, strict CSP belum
+# di-implement (lihat catatan di SECURITY_HARDENING_PROGRESS.md).
+10038	WARN	(CSP per-route belum di-implement — known gap, lihat progress doc)
+
+# Cookie tanpa Secure flag — di local HTTP dev expected. Production di
+# belakang reverse proxy yang force HTTPS, ZAP scan staging URL HTTPS
+# seharusnya tidak trigger.
+10202	WARN	(Cookie Secure flag — verify staging URL HTTPS)
+
+# Anti-CSRF token tidak ada di response — Sanctum bearer-token auth,
+# tidak butuh CSRF token (different threat model).
+10202	WARN	(Bearer-token auth, no CSRF needed)

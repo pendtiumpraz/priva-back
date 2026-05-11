@@ -1470,6 +1470,24 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
             Route::post('/{section}/test', [SystemSettingsController::class, 'test']);
         });
 
+    // Pentest reports — rekap hasil penetration test dari vendor pihak ketiga.
+    // Platform-level (tidak tenant-scoped), gate by settings,write permission.
+    Route::prefix('platform-admin/pentest-reports')
+        ->middleware('permission:settings,write')
+        ->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\PentestReportController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\PentestReportController::class, 'store']);
+            // Security posture endpoints — di-mount SEBELUM /{id} supaya
+            // tidak ke-conflict dengan UUID route parameter.
+            Route::get('/security-posture', [\App\Http\Controllers\Api\PentestReportController::class, 'securityPosture']);
+            Route::get('/security-posture/download', [\App\Http\Controllers\Api\PentestReportController::class, 'securityPosturePdf']);
+            Route::get('/{id}', [\App\Http\Controllers\Api\PentestReportController::class, 'show']);
+            Route::put('/{id}', [\App\Http\Controllers\Api\PentestReportController::class, 'update']);
+            Route::post('/{id}', [\App\Http\Controllers\Api\PentestReportController::class, 'update']); // multipart workaround
+            Route::delete('/{id}', [\App\Http\Controllers\Api\PentestReportController::class, 'destroy']);
+            Route::get('/{id}/download', [\App\Http\Controllers\Api\PentestReportController::class, 'download']);
+        });
+
 });
 
 // =============================================

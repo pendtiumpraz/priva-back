@@ -76,3 +76,47 @@ jobs:
       # tambah error level 5 akan fail CI.
       - name: Run Larastan
         run: vendor/bin/phpstan analyse --memory-limit=2G --no-progress
+
+  zap-baseline:
+    name: OWASP ZAP Baseline Scan
+    # Hanya jalan di scheduled cron + manual dispatch (bukan di tiap PR
+    # karena butuh staging URL stable + 15-30 menit per run).
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ZAP_TARGET_URL = URL staging yang accessible publik. Kalau secret
+      # tidak di-set, job di-skip (gak fail) — admin enable nanti setelah
+      # staging deployment stabil.
+      - name: Check staging URL configured
+        id: check_url
+        run: |
+          if [ -z "${{ secrets.ZAP_TARGET_URL }}" ]; then
+            echo "::warning::ZAP_TARGET_URL secret not configured — skipping DAST scan"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: OWASP ZAP Baseline Scan
+        if: steps.check_url.outputs.skip == 'false'
+        uses: zaproxy/action-baseline@v0.13.0
+        with:
+          target: ${{ secrets.ZAP_TARGET_URL }}
+          rules_file_name: '.zap/rules.tsv'
+          # cmd_options: '-a'  # include alpha rules — enable kalau mau strict
+          fail_action: false  # don't fail CI on warnings, only on actual issues
+          allow_issue_writing: false  # jangan auto-create GitHub issues
+          artifact_name: 'zap-baseline-report'
+
+      - name: Upload ZAP report
+        if: steps.check_url.outputs.skip == 'false' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-baseline-report-${{ github.run_id }}
+          path: |
+            report_html.html
+            report_md.md
+            report_json.json
+          if-no-files-found: ignore
