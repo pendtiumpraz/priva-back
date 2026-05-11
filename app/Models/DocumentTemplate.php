@@ -12,6 +12,7 @@ class DocumentTemplate extends Model
 
     protected $fillable = [
         'org_id', 'name', 'description', 'preview_image',
+        'blade_view', 'engine', 'status', 'style_category',
         'config', 'docx_templates', 'is_default', 'is_system', 'usage_count', 'created_by',
     ];
 

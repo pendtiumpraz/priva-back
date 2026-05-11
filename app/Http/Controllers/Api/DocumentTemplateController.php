@@ -514,6 +514,11 @@ class DocumentTemplateController extends Controller
      * Preview a template with sample data — renders a demo PDF so the
      * /branding editor can show live result. Accepts an ad-hoc config
      * so the editor can preview before saving.
+     *
+     * Bila request menyertakan `template_id`, controller akan mencari
+     * template tersebut. Jika kolom `blade_view` terisi, Blade view itulah
+     * yang dipakai (mis. "reports.templates.midnight-indigo"). Jika tidak,
+     * Blade generic `reports.templates.preview` tetap digunakan.
      */
     public function preview(Request $request)
     {
@@ -528,10 +533,49 @@ class DocumentTemplateController extends Controller
         $merged['watermark_image'] = $this->assetUrlToDataUri($merged['watermark_image'] ?? null, $org);
         $merged['cover_bg_image'] = $this->assetUrlToDataUri($merged['cover_bg_image'] ?? null, $org);
 
+        // Resolusi Blade view: default ke generic preview, override bila
+        // template tertentu memiliki `blade_view`.
+        $view = 'reports.templates.preview';
+        $templateId = $request->input('template_id');
+        if ($templateId) {
+            $tpl = DocumentTemplate::where('id', $templateId)
+                ->where(function ($q) use ($user) {
+                    $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
+                })
+                ->first();
+            if ($tpl && ! empty($tpl->blade_view)) {
+                $view = $tpl->blade_view;
+                // Gabungkan config tersimpan dengan override request supaya
+                // preview tetap responsif terhadap perubahan editor.
+                $merged = array_merge(
+                    DocumentTemplate::DEFAULT_CONFIG,
+                    is_array($tpl->config) ? $tpl->config : [],
+                    $config
+                );
+            }
+        }
+
+        $orgName = $org?->name ?? 'Sample Organization';
+
+        // Theme bundle: nilai-nilai yang sering dipakai Blade agar tidak
+        // perlu mengakses $config['…'] berulang kali. Memudahkan
+        // pemeliharaan 20 template yang akan dibuat.
+        $theme = [
+            'accent' => $merged['accent_color'] ?? '#3b82f6',
+            'primary' => $merged['primary_color'] ?? '#1e293b',
+            'logo' => $this->assetUrlToDataUri($org?->logo_url ?? null, $org),
+            'watermark' => $merged['watermark_image'] ?? null,
+            'watermark_opacity' => $merged['watermark_opacity'] ?? 0.08,
+            'header_text' => $merged['header_text'] ?? null,
+            'footer_text' => $merged['footer_text'] ?? null,
+        ];
+
         $payload = [
+            'ropa' => $this->sampleRopaData($orgName),
             'config' => $merged,
-            'orgName' => $org?->name ?? 'Sample Organization',
-            'orgLogoUrl' => $this->assetUrlToDataUri($org?->logo_url ?? null, $org),
+            'theme' => $theme,
+            'orgName' => $orgName,
+            'orgLogoUrl' => $theme['logo'],
             'orgAddress' => $org?->address ?? 'Sample Address',
             'orgWebsite' => $org?->website ?? 'example.com',
             'today' => now()->locale('id')->isoFormat('D MMMM Y'),
@@ -539,7 +583,7 @@ class DocumentTemplateController extends Controller
             'generatedAt' => now()->locale('id')->isoFormat('D MMMM Y · HH:mm'),
         ];
 
-        $pdf = Pdf::loadView('reports.templates.preview', $payload)
+        $pdf = Pdf::loadView($view, $payload)
             ->setPaper($merged['page_size'] ?? 'a4')
             ->setOption([
                 'isHtml5ParserEnabled' => true,
@@ -548,6 +592,75 @@ class DocumentTemplateController extends Controller
             ]);
 
         return $pdf->stream('template-preview.pdf');
+    }
+
+    /**
+     * Data contoh ROPA yang dipakai semua Blade preview template.
+     * Disusun mengikuti referensi handoff supaya tampilan 20 template
+     * konsisten dengan mockup HTML aslinya.
+     */
+    private function sampleRopaData(string $orgName): array
+    {
+        return [
+            'number' => 'ROPA-HR-002',
+            'name' => 'Registrasi Nasabah via Aplikasi ABCDE',
+            'org' => $orgName,
+            'division' => 'Finance & Accounting',
+            'unit' => 'Tim Pengembangan Aplikasi',
+            'category' => 'Pengendali Data Pribadi',
+            'description' => 'Pengumpulan dan pemrosesan data pribadi nasabah untuk keperluan registrasi serta penyelenggaraan layanan keuangan melalui Aplikasi ABCDE.',
+            'purpose' => 'Registrasi nasabah baru untuk layanan aplikasi ABCDE',
+            'activity' => 'Data pribadi dikumpulkan untuk verifikasi identitas, pembuatan akun, dan pemenuhan kewajiban Know Your Customer (KYC).',
+            'legal_basis' => 'Pemenuhan Kewajiban Perjanjian',
+            'date' => '27 April 2026',
+            'dpo' => [
+                'name' => 'Budi DPO',
+                'email' => 'budi.dpo@tester.co.id',
+            ],
+            'pic' => [
+                'name' => 'Galih Admin',
+                'role' => 'IT Manager',
+                'email' => 'pendtiumpraz@gmail.com',
+            ],
+            'categories' => [
+                'Pemerolehan dan pengumpulan data',
+                'Penyimpanan data',
+                'Perbaikan dan pembaruan data',
+                'Pengolahan dan penganalisisan data',
+            ],
+            'systems' => [
+                ['name' => 'Aplikasi ABCDE', 'loc' => 'Cloud'],
+                ['name' => 'Cloud Storage AWS', 'loc' => 'AWS Singapore'],
+                ['name' => 'Database On-Premise', 'loc' => 'Jakarta DC'],
+            ],
+            'data_general' => [
+                'Nama Lengkap',
+                'Alamat',
+                'Nomor Telepon',
+                'Email',
+                'Tanggal Lahir',
+                'Jenis Kelamin',
+            ],
+            'data_specific' => [
+                'Data Keuangan Pribadi',
+                'Data Biometrik',
+            ],
+            'data_pii' => [
+                'NIK/KTP',
+                'Nomor Rekening',
+                'Alamat IP',
+                'Cookie ID',
+                'NPWP',
+            ],
+            'controls' => [
+                'Enkripsi (at-rest & in-transit)',
+                'Access Control (RBAC)',
+                'Backup & Disaster Recovery',
+                'Audit Log & Monitoring',
+                'Vulnerability Assessment',
+            ],
+            'retention' => 'Data nasabah disimpan selama 5 tahun setelah penutupan akun, log aktivitas selama 2 tahun.',
+        ];
     }
 
     /**
