@@ -58,6 +58,7 @@ class SecurityRequest extends FormRequest
             'ip_allowlist_superadmin' => 'sometimes|array|max:50',
             'ip_allowlist_superadmin.*' => ['string', 'max:64'],
             'audit_log_retention_days' => 'sometimes|integer|min:0|max:3650', // 0 = keep forever
+            'audit_log_hash_chain_enabled' => 'sometimes|boolean',
 
             // Response headers — string fields jelas terbatas (frame_options
             // hanya 2 nilai valid, sisanya free-form karena banyak varian).

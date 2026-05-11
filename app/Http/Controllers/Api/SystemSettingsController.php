@@ -109,6 +109,7 @@ class SystemSettingsController extends Controller
             'security.ip_allowlist_root',
             'security.ip_allowlist_superadmin',
             'security.audit_log_retention_days',
+            'security.audit_log_hash_chain_enabled',
             // Response headers
             'security.headers_enabled',
             'security.headers_hsts_enabled',
@@ -488,6 +489,7 @@ class SystemSettingsController extends Controller
                 'security.ip_allowlist_root',
                 'security.ip_allowlist_superadmin',
                 'security.audit_log_retention_days',
+                'security.audit_log_hash_chain_enabled',
                 'security.headers_enabled',
                 'security.headers_hsts_enabled',
                 'security.headers_hsts_max_age',

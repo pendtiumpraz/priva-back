@@ -22,3 +22,8 @@ Artisan::command('inspire', function () {
 // Audit log retention — prune entries lebih lama dari security.audit_log_retention_days.
 // No-op kalau setting = 0 (keep forever, default).
 \Illuminate\Support\Facades\Schedule::command('audit-logs:prune')->dailyAt('04:00');
+
+// Audit log hash-chain verify — daily integrity check.
+// Kalau chain disabled, command no-op (langsung exit). Kalau enabled +
+// chain rusak, log warning level (akan muncul di alert dashboard).
+\Illuminate\Support\Facades\Schedule::command('audit-logs:chain verify')->dailyAt('04:30');

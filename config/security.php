@@ -145,6 +145,15 @@ return [
     'ssrf_allow_private' => env('SECURITY_SSRF_ALLOW_PRIVATE', false),
 
     /**
+     * Audit log hash chain — tamper-evident audit trail. Default OFF
+     * (opt-in). Saat aktifkan pertama kali, jalankan
+     * `php artisan audit-logs:chain rebuild` untuk seed hash existing rows.
+     * Verifikasi otomatis lewat daily cron + manual via
+     * `php artisan audit-logs:chain verify`.
+     */
+    'audit_log_hash_chain_enabled' => false,
+
+    /**
      * Login lockout per akun. Dijalankan di App\Services\LoginAttemptService.
      * State (counter & locked_until) ada di kolom users.failed_login_attempts
      * dan users.locked_until — persisted DB, tidak ngandelin cache.

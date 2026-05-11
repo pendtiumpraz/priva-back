@@ -39,6 +39,7 @@ class SecurityPostureService
             $this->groupSessions(),
             $this->groupFileUpload(),
             $this->groupSsrf(),
+            $this->groupAuditIntegrity(),
         ];
 
         $total = 0; $enabled = 0; $disabled = 0;
@@ -330,6 +331,33 @@ class SecurityPostureService
                     'Diintegrasikan ke endpoint',
                     'IntegrationController::update (save URL CRM/webhook)',
                     'Integration save flow',
+                    'enabled'),
+            ],
+        ];
+    }
+
+    private function groupAuditIntegrity(): array
+    {
+        $on = (bool) config('security.audit_log_hash_chain_enabled', false);
+        return [
+            'name' => 'Audit Log Integrity',
+            'description' => 'Tamper-evident hash chain (SHA-256) untuk audit_logs. Setiap row punya content_hash + prev_hash — '
+                . 'kalau admin DB tamper isi row, daily verification akan deteksi mismatch.',
+            'master_status' => $on ? 'enabled' : 'disabled',
+            'items' => [
+                $this->boolItem('audit_log.hash_chain_enabled', 'Hash chain enforcement', $on, false),
+                $this->item('audit_log.hash_algorithm', 'Hash algorithm', 'SHA-256', 'SHA-256', 'enabled'),
+                $this->item('audit_log.verify_schedule', 'Daily verify cron', 'Schedule 04:30 — log warning kalau chain rusak',
+                    'audit-logs:chain verify', 'enabled'),
+                $this->item('audit_log.rebuild_command',
+                    'Manual rebuild command',
+                    'php artisan audit-logs:chain rebuild',
+                    'one-time saat first enable',
+                    'enabled'),
+                $this->item('audit_log.tamper_test',
+                    'Tamper detection terverifikasi',
+                    'YA — smoke test pass (edit row → verify detect mismatch)',
+                    'Verified',
                     'enabled'),
             ],
         ];

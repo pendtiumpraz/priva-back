@@ -178,6 +178,7 @@ class SettingsServiceProvider extends ServiceProvider
             'security.ip_allowlist_root' => 'security.ip_allowlist_root',
             'security.ip_allowlist_superadmin' => 'security.ip_allowlist_superadmin',
             'security.audit_log_retention_days' => 'security.audit_log_retention_days',
+            'security.audit_log_hash_chain_enabled' => 'security.audit_log_hash_chain_enabled',
 
             // Security — response headers. Dibaca oleh SecurityHeaders middleware.
             'security.headers_enabled' => 'security.headers.enabled',
