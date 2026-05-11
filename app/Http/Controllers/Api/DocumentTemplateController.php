@@ -108,6 +108,9 @@ class DocumentTemplateController extends Controller
         ]);
 
         $config = $data['config'];
+        $bladeView = null;
+        $engine = 'dompdf';
+        $styleCategory = null;
         if (! empty($data['clone_from'])) {
             $src = DocumentTemplate::withoutGlobalScope('org')
                 ->where(function ($q) use ($user) {
@@ -115,6 +118,12 @@ class DocumentTemplateController extends Controller
                 })->find($data['clone_from']);
             if ($src) {
                 $config = array_merge($src->config ?? [], $config);
+                // Inherit blade_view, engine, dan style_category dari sumber.
+                // Tanpa ini, tenant fork dari template elegance kehilangan visual
+                // signature-nya dan jatuh ke parametric generic.
+                $bladeView = $src->blade_view;
+                $engine = $src->engine ?: 'dompdf';
+                $styleCategory = $src->style_category;
             }
         }
 
@@ -125,6 +134,10 @@ class DocumentTemplateController extends Controller
             'config' => $config,
             'is_system' => false,
             'is_default' => false,
+            'blade_view' => $bladeView,
+            'engine' => $engine,
+            'style_category' => $styleCategory,
+            'status' => 'available',
             'created_by' => $user->id,
         ]);
 
@@ -179,6 +192,13 @@ class DocumentTemplateController extends Controller
                 'config' => array_merge($tpl->config ?? [], $data['config'] ?? []),
                 'is_system' => false,
                 'is_default' => false,
+                // Inherit blade_view + engine + style_category dari sistem template.
+                // Tanpa ini, customisasi template elegance kehilangan visual
+                // signature-nya dan jatuh ke parametric generic / PhpWord navy.
+                'blade_view' => $tpl->blade_view,
+                'engine' => $tpl->engine ?: 'dompdf',
+                'style_category' => $tpl->style_category,
+                'status' => 'available',
                 'created_by' => $user->id,
             ]);
 

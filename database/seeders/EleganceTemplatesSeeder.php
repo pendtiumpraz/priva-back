@@ -51,6 +51,10 @@ class EleganceTemplatesSeeder extends Seeder
 
             $id = $existing->id ?? (string) Str::uuid();
 
+            // Midnight Indigo jadi system default supaya org yang belum aktivasi
+            // template tetap dapat PDF cantik (bukan PhpWord navy hardcoded).
+            $isDefault = ($tpl['slug'] === 'midnight-indigo');
+
             DB::table('document_templates')->updateOrInsert(
                 ['org_id' => null, 'name' => $name],
                 [
@@ -63,7 +67,7 @@ class EleganceTemplatesSeeder extends Seeder
                     'style_category' => $tpl['style_category'],
                     'config' => json_encode($config),
                     'docx_templates' => $existing->docx_templates ?? null,
-                    'is_default' => false,
+                    'is_default' => $isDefault,
                     'is_system' => true,
                     'usage_count' => $existing->usage_count ?? 0,
                     'created_by' => $existing->created_by ?? null,
@@ -74,6 +78,14 @@ class EleganceTemplatesSeeder extends Seeder
 
             $seeded++;
         }
+
+        // Pastikan hanya Midnight Indigo yang is_default=true (unset legacy default
+        // seperti "Nexus Canonical" yang blade_view-nya NULL).
+        DB::table('document_templates')
+            ->whereNull('org_id')
+            ->where('name', '!=', '01 — Midnight Indigo')
+            ->where('is_default', true)
+            ->update(['is_default' => false, 'updated_at' => $now]);
 
         $comingSoon = $seeded - $available;
         $this->command?->info("Seeded {$seeded} elegance document templates ({$available} available, {$comingSoon} coming soon).");
