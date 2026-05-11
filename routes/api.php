@@ -204,6 +204,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // tetap akses ini meskipun belum punya full token.
     Route::get('/auth/2fa/status', [AuthController::class, 'twoFactorStatus']);
     Route::get('/auth/whoami-ip', [AuthController::class, 'whoamiIp']);
+    Route::post('/auth/verify-password', [AuthController::class, 'verifyPassword']);
     Route::post('/auth/2fa/setup', [AuthController::class, 'setupTwoFactor']);
     Route::post('/auth/2fa/confirm', [AuthController::class, 'confirmTwoFactor']);
     Route::post('/auth/2fa/disable', [AuthController::class, 'disableTwoFactor']);

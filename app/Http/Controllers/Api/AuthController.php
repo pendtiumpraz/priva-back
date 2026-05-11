@@ -462,6 +462,33 @@ class AuthController extends Controller
     }
 
     /**
+     * Verify password user current — re-auth untuk operation sensitif
+     * tanpa harus logout-relogin. Pattern industry: GitHub "Confirm password
+     * to access settings", AWS "MFA required for billing", dll.
+     *
+     * Dipakai untuk action yang lock-yourself-out risk seperti:
+     *   - Toggle IP allowlist enforcement
+     *   - Disable 2FA (already enforced di disableTwoFactor)
+     *   - Force password rotation OFF (future)
+     *
+     * Return 200 kalau benar, 401 + ValidationException kalau salah.
+     * Throttle:api 60/menit global ditambah sudah cukup anti brute force.
+     */
+    public function verifyPassword(Request $request): JsonResponse
+    {
+        $request->validate(['password' => 'required|string']);
+
+        $user = $request->user();
+        if (! Hash::check($request->password, $user->password)) {
+            throw ValidationException::withMessages([
+                'password' => ['Password salah.'],
+            ]);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
      * "What's my IP?" helper untuk PlatformTab di SecuritySection.
      * Admin sering bingung kalau IP-nya berubah-ubah (wifi/cellular/VPN) —
      * endpoint ini ngebantu cari nilai yang harus dimasukkan ke allowlist.
