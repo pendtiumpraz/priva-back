@@ -113,7 +113,10 @@ class DocumentTemplate extends Model
                     $theme->active_document_template_id,
                 ]);
                 foreach ($candidates as $id) {
-                    $tpl = self::where('id', $id)
+                    // withoutGlobalScope('org') supaya sistem template org_id NULL
+                    // bisa di-lookup; BelongsToOrg scope-nya filter habis kalau tidak.
+                    $tpl = self::withoutGlobalScope('org')
+                        ->where('id', $id)
                         ->where(function ($q) use ($orgId) {
                             $q->where('org_id', $orgId)->orWhereNull('org_id');
                         })
@@ -122,6 +125,9 @@ class DocumentTemplate extends Model
                 }
             }
         }
-        return self::whereNull('org_id')->where('is_default', true)->first();
+        return self::withoutGlobalScope('org')
+            ->whereNull('org_id')
+            ->where('is_default', true)
+            ->first();
     }
 }
