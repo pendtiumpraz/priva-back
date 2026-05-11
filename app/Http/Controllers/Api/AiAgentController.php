@@ -50,6 +50,15 @@ class AiAgentController extends Controller
         $fileName = null;
         if ($request->hasFile('file')) {
             $file = $request->file('file');
+
+            // Validate real MIME (anti file rename attack — `evil.php` → `evil.pdf`)
+            try {
+                app(\App\Services\FileUploadValidator::class)
+                    ->validate($file, \App\Services\FileUploadValidator::PRESET_CHAT_ATTACHMENT);
+            } catch (\RuntimeException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+
             $fileName = $file->getClientOriginalName();
             $ext = strtolower($file->getClientOriginalExtension());
             $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp']);

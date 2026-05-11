@@ -139,6 +139,17 @@ class IntegrationController extends Controller
             if ($fKey === 'webhook_url') continue; // readonly
             $val = $request->input($fKey);
             if ($val !== null && $val !== '') {
+                // SSRF guard untuk field URL yang user-supplied. Validate
+                // sebelum simpan — gak save URL yang resolve ke private IP.
+                if (str_ends_with($fKey, '_url') || str_contains($fKey, 'url')) {
+                    try {
+                        app(\App\Services\OutboundUrlValidator::class)->validate($val);
+                    } catch (\RuntimeException $e) {
+                        return response()->json([
+                            'message' => "URL '{$fKey}' ditolak: " . $e->getMessage(),
+                        ], 422);
+                    }
+                }
                 $newConfig[$fKey] = $val;
             } elseif (isset($existing[$fKey])) {
                 $newConfig[$fKey] = $existing[$fKey]; // keep old

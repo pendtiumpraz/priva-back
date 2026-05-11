@@ -138,6 +138,13 @@ return [
     'audit_log_retention_days' => 0,
 
     /**
+     * SSRF guard untuk outbound HTTP request. Default OFF override —
+     * artinya validator AKTIF (block private IP / loopback / metadata).
+     * Set true HANYA untuk dev environment yang butuh akses ke localhost.
+     */
+    'ssrf_allow_private' => env('SECURITY_SSRF_ALLOW_PRIVATE', false),
+
+    /**
      * Login lockout per akun. Dijalankan di App\Services\LoginAttemptService.
      * State (counter & locked_until) ada di kolom users.failed_login_attempts
      * dan users.locked_until — persisted DB, tidak ngandelin cache.
