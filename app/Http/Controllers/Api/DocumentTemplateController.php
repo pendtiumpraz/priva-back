@@ -28,9 +28,12 @@ class DocumentTemplateController extends Controller
         $user = $request->user();
         $orgId = $user->org_id;
 
-        $rows = DocumentTemplate::where(function ($q) use ($orgId) {
-            $q->whereNull('org_id')->orWhere('org_id', $orgId);
-        })
+        // withoutGlobalScope('org'): sistem template org_id NULL akan ke-filter
+        // oleh BelongsToOrg scope. Kita kontrol visibility manual di sini.
+        $rows = DocumentTemplate::withoutGlobalScope('org')
+            ->where(function ($q) use ($orgId) {
+                $q->whereNull('org_id')->orWhere('org_id', $orgId);
+            })
             ->orderByDesc('is_default')
             ->orderBy('name')
             ->get()
@@ -64,9 +67,10 @@ class DocumentTemplateController extends Controller
     public function show(Request $request, string $id)
     {
         $user = $request->user();
-        $tpl = DocumentTemplate::where(function ($q) use ($user) {
-            $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
-        })->findOrFail($id);
+        $tpl = DocumentTemplate::withoutGlobalScope('org')
+            ->where(function ($q) use ($user) {
+                $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
+            })->findOrFail($id);
 
         return response()->json([
             'data' => $tpl,
@@ -105,9 +109,10 @@ class DocumentTemplateController extends Controller
 
         $config = $data['config'];
         if (! empty($data['clone_from'])) {
-            $src = DocumentTemplate::where(function ($q) use ($user) {
-                $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
-            })->find($data['clone_from']);
+            $src = DocumentTemplate::withoutGlobalScope('org')
+                ->where(function ($q) use ($user) {
+                    $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
+                })->find($data['clone_from']);
             if ($src) {
                 $config = array_merge($src->config ?? [], $config);
             }
@@ -136,8 +141,9 @@ class DocumentTemplateController extends Controller
         // Look up target. Tenant-owned → edit in place. System preset →
         // auto-fork silently to tenant copy (copy-on-write) so "Edit" UX
         // just works.
-        $tpl = DocumentTemplate::where(function ($q) use ($user) {
-            $q->where('org_id', $user->org_id)->orWhereNull('org_id');
+        $tpl = DocumentTemplate::withoutGlobalScope('org')
+            ->where(function ($q) use ($user) {
+                $q->where('org_id', $user->org_id)->orWhereNull('org_id');
         })->findOrFail($id);
 
         $data = $request->validate([
@@ -214,9 +220,10 @@ class DocumentTemplateController extends Controller
             return response()->json(['message' => 'Tidak diizinkan.'], 403);
         }
 
-        $tpl = DocumentTemplate::where(function ($q) use ($user) {
-            $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
-        })->findOrFail($id);
+        $tpl = DocumentTemplate::withoutGlobalScope('org')
+            ->where(function ($q) use ($user) {
+                $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
+            })->findOrFail($id);
 
         // Create a minimal TenantTheme row if this tenant doesn't have one
         // yet. palette/name are required NOT NULL — provide safe defaults.
@@ -274,7 +281,8 @@ class DocumentTemplateController extends Controller
         $user = $request->user();
         $orgId = $user->org_id;
         $theme = $orgId ? TenantTheme::where('org_id', $orgId)->first() : null;
-        $systemDefault = DocumentTemplate::whereNull('org_id')
+        $systemDefault = DocumentTemplate::withoutGlobalScope('org')
+            ->whereNull('org_id')
             ->where('is_default', true)
             ->first();
 
@@ -317,7 +325,8 @@ class DocumentTemplateController extends Controller
             }
             if ($id) {
                 // Verify the template exists and is accessible to this tenant.
-                $tpl = DocumentTemplate::where('id', $id)
+                $tpl = DocumentTemplate::withoutGlobalScope('org')
+                    ->where('id', $id)
                     ->where(function ($q) use ($user) {
                         $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
                     })->first();
@@ -540,7 +549,8 @@ class DocumentTemplateController extends Controller
         $engine = 'dompdf';
         $templateId = $request->input('template_id');
         if ($templateId) {
-            $tpl = DocumentTemplate::where('id', $templateId)
+            $tpl = DocumentTemplate::withoutGlobalScope('org')
+                ->where('id', $templateId)
                 ->where(function ($q) use ($user) {
                     $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
                 })
