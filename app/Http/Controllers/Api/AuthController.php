@@ -462,6 +462,24 @@ class AuthController extends Controller
     }
 
     /**
+     * "What's my IP?" helper untuk PlatformTab di SecuritySection.
+     * Admin sering bingung kalau IP-nya berubah-ubah (wifi/cellular/VPN) —
+     * endpoint ini ngebantu cari nilai yang harus dimasukkan ke allowlist.
+     *
+     * Return juga role supaya UI tau tombol "add to which allowlist".
+     */
+    public function whoamiIp(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        return response()->json([
+            'ip' => $request->ip(),
+            'forwarded_for' => $request->header('X-Forwarded-For'),
+            'real_ip' => $request->header('X-Real-IP'),
+            'role' => $user?->role,
+        ]);
+    }
+
+    /**
      * Status 2FA user — dipakai frontend profile page.
      */
     public function twoFactorStatus(Request $request): JsonResponse
