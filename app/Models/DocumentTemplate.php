@@ -12,7 +12,6 @@ class DocumentTemplate extends Model
 
     protected $fillable = [
         'org_id', 'name', 'description', 'preview_image',
-        'blade_view', 'engine', 'status', 'style_category',
         'config', 'docx_templates', 'is_default', 'is_system', 'usage_count', 'created_by',
     ];
 
@@ -121,7 +120,9 @@ class DocumentTemplate extends Model
                             $q->where('org_id', $orgId)->orWhereNull('org_id');
                         })
                         ->first();
-                    if ($tpl) return $tpl;
+                    if ($tpl) {
+                        return $tpl;
+                    }
                 }
             }
         }
@@ -130,4 +131,5 @@ class DocumentTemplate extends Model
             ->where('is_default', true)
             ->first();
     }
+
 }

@@ -458,6 +458,13 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::put('/{id}', [DocumentTemplateController::class, 'update'])->where('id', '[0-9a-fA-F-]{36}');
         Route::delete('/{id}', [DocumentTemplateController::class, 'destroy'])->where('id', '[0-9a-fA-F-]{36}');
     });
+
+    // Phase H2 — slug template React PDF aktif per tenant.
+    // Disimpan di tenant_themes.active_template_slug; sumber kebenaran
+    // melampaui localStorage supaya pilihan user lintas perangkat.
+    Route::get('/template-slug/active', [DocumentTemplateController::class, 'getActiveSlug']);
+    Route::put('/template-slug/active', [DocumentTemplateController::class, 'setActiveSlug']);
+
     Route::get('/raci-matrix', [ContainmentController::class, 'getRaciMatrix']);
     Route::put('/raci-matrix', [ContainmentController::class, 'updateRaciMatrix']);
 

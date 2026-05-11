@@ -7,7 +7,6 @@ use App\Models\DocumentTemplate;
 use App\Models\Organization;
 use App\Models\TenantTheme;
 use App\Services\DocxTemplateService;
-use App\Services\PdfRenderService;
 use App\Services\TenantStorageService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -108,9 +107,6 @@ class DocumentTemplateController extends Controller
         ]);
 
         $config = $data['config'];
-        $bladeView = null;
-        $engine = 'dompdf';
-        $styleCategory = null;
         if (! empty($data['clone_from'])) {
             $src = DocumentTemplate::withoutGlobalScope('org')
                 ->where(function ($q) use ($user) {
@@ -118,12 +114,6 @@ class DocumentTemplateController extends Controller
                 })->find($data['clone_from']);
             if ($src) {
                 $config = array_merge($src->config ?? [], $config);
-                // Inherit blade_view, engine, dan style_category dari sumber.
-                // Tanpa ini, tenant fork dari template elegance kehilangan visual
-                // signature-nya dan jatuh ke parametric generic.
-                $bladeView = $src->blade_view;
-                $engine = $src->engine ?: 'dompdf';
-                $styleCategory = $src->style_category;
             }
         }
 
@@ -134,10 +124,6 @@ class DocumentTemplateController extends Controller
             'config' => $config,
             'is_system' => false,
             'is_default' => false,
-            'blade_view' => $bladeView,
-            'engine' => $engine,
-            'style_category' => $styleCategory,
-            'status' => 'available',
             'created_by' => $user->id,
         ]);
 
@@ -192,13 +178,6 @@ class DocumentTemplateController extends Controller
                 'config' => array_merge($tpl->config ?? [], $data['config'] ?? []),
                 'is_system' => false,
                 'is_default' => false,
-                // Inherit blade_view + engine + style_category dari sistem template.
-                // Tanpa ini, customisasi template elegance kehilangan visual
-                // signature-nya dan jatuh ke parametric generic / PhpWord navy.
-                'blade_view' => $tpl->blade_view,
-                'engine' => $tpl->engine ?: 'dompdf',
-                'style_category' => $tpl->style_category,
-                'status' => 'available',
                 'created_by' => $user->id,
             ]);
 
@@ -382,6 +361,108 @@ class DocumentTemplateController extends Controller
     }
 
     /**
+     * Phase H2 — daftar slug template React PDF yang valid.
+     *
+     * Mirror dari `frontend/src/lib/pdf/registry.ts`. Backend hanya
+     * menerima slug dari daftar ini supaya tidak menyimpan nilai
+     * sembarangan. Bila ada penambahan template di frontend, daftar
+     * ini WAJIB diperbarui juga.
+     */
+    public const TEMPLATE_SLUGS = [
+        'midnight-indigo',
+        'editorial-classic',
+        'pure-minimal',
+        'lilac-modernist',
+        'sage-corporate',
+        'terracotta-heritage',
+        'geometric-tech',
+        'slate-architectural',
+        'newsprint-gazette',
+        'onyx-premium',
+        'bauhaus-primary',
+        'japandi-zen',
+        'brutalist-mono',
+        'memphis-postmodern',
+        'art-deco-gold',
+        'botanical-vintage',
+        'swiss-international',
+        'risograph-duotone',
+        'manuscript-vellum',
+        'cyber-glass',
+    ];
+
+    public const DEFAULT_TEMPLATE_SLUG = 'midnight-indigo';
+
+    /**
+     * GET /template-slug/active
+     *
+     * Mengembalikan slug template React PDF yang aktif untuk tenant
+     * saat ini. Jika tenant belum memilih, kembalikan null — caller
+     * (frontend) yang memutuskan default.
+     */
+    public function getActiveSlug(Request $request)
+    {
+        $user = $request->user();
+        $orgId = $user->org_id;
+        $slug = null;
+        if ($orgId) {
+            $theme = TenantTheme::where('org_id', $orgId)->first();
+            $slug = $theme?->active_template_slug;
+        }
+
+        return response()->json([
+            'slug' => $slug,
+            'default_slug' => self::DEFAULT_TEMPLATE_SLUG,
+        ]);
+    }
+
+    /**
+     * PUT /template-slug/active  { slug: string }
+     *
+     * Menyimpan slug template aktif ke tenant_themes.active_template_slug.
+     * Slug divalidasi terhadap TEMPLATE_SLUGS supaya hanya nilai yang
+     * dikenali frontend yang masuk DB.
+     */
+    public function setActiveSlug(Request $request)
+    {
+        $user = $request->user();
+        if (! $this->canEdit($user)) {
+            return response()->json(['message' => 'Anda tidak memiliki izin untuk mengubah template aktif.'], 403);
+        }
+        if (! $user->org_id) {
+            return response()->json(['message' => 'Pengaturan template aktif membutuhkan konteks tenant.'], 422);
+        }
+
+        $data = $request->validate([
+            'slug' => 'required|string|max:64',
+        ]);
+
+        if (! in_array($data['slug'], self::TEMPLATE_SLUGS, true)) {
+            return response()->json([
+                'message' => 'Slug template tidak dikenali. Silakan pilih template yang tersedia di daftar.',
+            ], 422);
+        }
+
+        $theme = TenantTheme::firstOrCreate(
+            ['org_id' => $user->org_id],
+            [
+                'name' => 'Default',
+                'palette' => TenantTheme::defaultPalette(),
+                'layout_preset' => 'classic',
+                'font_family' => 'Inter',
+                'is_active' => false,
+            ]
+        );
+        $theme->active_template_slug = $data['slug'];
+        $theme->save();
+
+        return response()->json([
+            'message' => 'Template aktif telah disimpan.',
+            'slug' => $theme->active_template_slug,
+        ]);
+    }
+
+    /**
      * Upload a .docx template with placeholder variables for a specific export kind.
      * Stores via TenantStorageService as a private tenant file and updates the
      * active DocumentTemplate's `docx_templates` map.
@@ -545,12 +626,12 @@ class DocumentTemplateController extends Controller
      * /branding editor can show live result. Accepts an ad-hoc config
      * so the editor can preview before saving.
      *
-     * Bila request menyertakan `template_id`, controller akan mencari
-     * template tersebut. Jika kolom `blade_view` terisi, Blade view itulah
-     * yang dipakai (mis. "reports.templates.midnight-indigo"). Jika tidak,
-     * Blade generic `reports.templates.preview` tetap digunakan.
+     * Memakai Blade generic `reports.templates.preview` (legacy) supaya
+     * endpoint tetap responsif terhadap perubahan editor config (warna,
+     * watermark, header/footer, dsb). Rendering PDF/DOCX yang lebih kaya
+     * untuk export ROPA/DPIA sudah dipindah ke frontend client-side.
      */
-    public function preview(Request $request, PdfRenderService $renderer)
+    public function preview(Request $request)
     {
         $user = $request->user();
         $config = $request->input('config', []);
@@ -563,52 +644,13 @@ class DocumentTemplateController extends Controller
         $merged['watermark_image'] = $this->assetUrlToDataUri($merged['watermark_image'] ?? null, $org);
         $merged['cover_bg_image'] = $this->assetUrlToDataUri($merged['cover_bg_image'] ?? null, $org);
 
-        // Resolusi Blade view: default ke generic preview, override bila
-        // template tertentu memiliki `blade_view`.
-        $view = 'reports.templates.preview';
-        $engine = 'dompdf';
-        $templateId = $request->input('template_id');
-        if ($templateId) {
-            $tpl = DocumentTemplate::withoutGlobalScope('org')
-                ->where('id', $templateId)
-                ->where(function ($q) use ($user) {
-                    $q->whereNull('org_id')->orWhere('org_id', $user->org_id);
-                })
-                ->first();
-            if ($tpl && ! empty($tpl->blade_view)) {
-                $view = $tpl->blade_view;
-                $engine = $tpl->engine ?: 'dompdf';
-                // Gabungkan config tersimpan dengan override request supaya
-                // preview tetap responsif terhadap perubahan editor.
-                $merged = array_merge(
-                    DocumentTemplate::DEFAULT_CONFIG,
-                    is_array($tpl->config) ? $tpl->config : [],
-                    $config
-                );
-            }
-        }
-
         $orgName = $org?->name ?? 'Sample Organization';
-
-        // Theme bundle: nilai-nilai yang sering dipakai Blade agar tidak
-        // perlu mengakses $config['…'] berulang kali. Memudahkan
-        // pemeliharaan 20 template yang akan dibuat.
-        $theme = [
-            'accent' => $merged['accent_color'] ?? '#3b82f6',
-            'primary' => $merged['primary_color'] ?? '#1e293b',
-            'logo' => $this->assetUrlToDataUri($org?->logo_url ?? null, $org),
-            'watermark' => $merged['watermark_image'] ?? null,
-            'watermark_opacity' => $merged['watermark_opacity'] ?? 0.08,
-            'header_text' => $merged['header_text'] ?? null,
-            'footer_text' => $merged['footer_text'] ?? null,
-        ];
 
         $payload = [
             'ropa' => $this->sampleRopaData($orgName),
             'config' => $merged,
-            'theme' => $theme,
             'orgName' => $orgName,
-            'orgLogoUrl' => $theme['logo'],
+            'orgLogoUrl' => $this->assetUrlToDataUri($org?->logo_url ?? null, $org),
             'orgAddress' => $org?->address ?? 'Sample Address',
             'orgWebsite' => $org?->website ?? 'example.com',
             'today' => now()->locale('id')->isoFormat('D MMMM Y'),
@@ -616,22 +658,21 @@ class DocumentTemplateController extends Controller
             'generatedAt' => now()->locale('id')->isoFormat('D MMMM Y · HH:mm'),
         ];
 
-        $binary = $renderer->render($view, $payload, [
-            'engine' => $engine,
-            'page_size' => strtoupper($merged['page_size'] ?? 'A4'),
-            'orientation' => $merged['orientation'] ?? 'portrait',
-            'font_family' => $merged['font_family'] ?? 'DejaVu Sans',
-        ]);
+        $pdf = Pdf::loadView('reports.templates.preview', $payload)
+            ->setPaper(strtolower($merged['page_size'] ?? 'a4'), $merged['orientation'] ?? 'portrait')
+            ->setOption([
+                'isHtml5ParserEnabled' => true,
+                'isRemoteEnabled' => true,
+                'defaultFont' => $merged['font_family'] ?? 'DejaVu Sans',
+            ]);
 
-        return response($binary)
+        return response($pdf->output())
             ->header('Content-Type', 'application/pdf')
             ->header('Content-Disposition', 'inline; filename="template-preview.pdf"');
     }
 
     /**
-     * Data contoh ROPA yang dipakai semua Blade preview template.
-     * Disusun mengikuti referensi handoff supaya tampilan 20 template
-     * konsisten dengan mockup HTML aslinya.
+     * Data contoh ROPA yang dipakai Blade preview template.
      */
     private function sampleRopaData(string $orgName): array
     {
@@ -639,52 +680,14 @@ class DocumentTemplateController extends Controller
             'number' => 'ROPA-HR-002',
             'name' => 'Registrasi Nasabah via Aplikasi ABCDE',
             'org' => $orgName,
-            'division' => 'Finance & Accounting',
-            'unit' => 'Tim Pengembangan Aplikasi',
-            'category' => 'Pengendali Data Pribadi',
-            'description' => 'Pengumpulan dan pemrosesan data pribadi nasabah untuk keperluan registrasi serta penyelenggaraan layanan keuangan melalui Aplikasi ABCDE.',
             'purpose' => 'Registrasi nasabah baru untuk layanan aplikasi ABCDE',
-            'activity' => 'Data pribadi dikumpulkan untuk verifikasi identitas, pembuatan akun, dan pemenuhan kewajiban Know Your Customer (KYC).',
             'legal_basis' => 'Pemenuhan Kewajiban Perjanjian',
             'date' => '27 April 2026',
-            'dpo' => [
-                'name' => 'Budi DPO',
-                'email' => 'budi.dpo@tester.co.id',
-            ],
-            'pic' => [
-                'name' => 'Galih Admin',
-                'role' => 'IT Manager',
-                'email' => 'pendtiumpraz@gmail.com',
-            ],
             'categories' => [
                 'Pemerolehan dan pengumpulan data',
                 'Penyimpanan data',
                 'Perbaikan dan pembaruan data',
                 'Pengolahan dan penganalisisan data',
-            ],
-            'systems' => [
-                ['name' => 'Aplikasi ABCDE', 'loc' => 'Cloud'],
-                ['name' => 'Cloud Storage AWS', 'loc' => 'AWS Singapore'],
-                ['name' => 'Database On-Premise', 'loc' => 'Jakarta DC'],
-            ],
-            'data_general' => [
-                'Nama Lengkap',
-                'Alamat',
-                'Nomor Telepon',
-                'Email',
-                'Tanggal Lahir',
-                'Jenis Kelamin',
-            ],
-            'data_specific' => [
-                'Data Keuangan Pribadi',
-                'Data Biometrik',
-            ],
-            'data_pii' => [
-                'NIK/KTP',
-                'Nomor Rekening',
-                'Alamat IP',
-                'Cookie ID',
-                'NPWP',
             ],
             'controls' => [
                 'Enkripsi (at-rest & in-transit)',
@@ -694,51 +697,6 @@ class DocumentTemplateController extends Controller
                 'Vulnerability Assessment',
             ],
             'retention' => 'Data nasabah disimpan selama 5 tahun setelah penutupan akun, log aktivitas selama 2 tahun.',
-
-            // Section 4 — Pengumpulan Data (full sesuai DOCX reference)
-            'data_subjects' => ['Nasabah', 'Pengguna Aplikasi'],
-            'data_subjects_volume' => '> 1.000 subjek',
-            'data_source' => 'Diberikan langsung oleh Subjek Data',
-
-            // Section 3 — pertanyaan AI/automation (DOCX)
-            'uses_ai' => 'Tidak menggunakan bantuan AI',
-            'uses_automated_decision' => 'Tidak',
-            'uses_new_tech' => 'Tidak',
-            'profiling_purpose' => 'Penawaran Produk, Personalisasi Konten',
-
-            // Section 5 — Penggunaan & Penyimpanan
-            'processor_role' => ['Pengendali Data (Controller)', 'Pemroses Data (Processor)'],
-            'processor_entity' => 'PT Sentra Proteksi Data Teknologi Indonesia',
-            'has_third_party' => 'Ya',
-            'third_parties' => [
-                [
-                    'name' => 'Amazon Web Services (AWS)',
-                    'address' => 'AWS Singapore Region',
-                    'pic_name' => 'AWS Account Manager',
-                    'pic_email' => 'aws-pic@example.com',
-                    'pic_phone' => '+65-6555-1234',
-                ],
-            ],
-
-            // Section 6 — Pengiriman Data
-            'recipients_internal' => 'Tidak',
-            'recipients_internal_list' => [],
-            'recipients_external' => 'Tidak',
-            'recipients_external_list' => [],
-            'cross_border_transfer' => 'Tidak',
-            'cross_border_destinations' => [],
-
-            // Section 7 — Retensi & Keamanan (tambahan)
-            'retention_doc_name' => 'Registrasi Nasabah via Aplikasi ABCDE',
-            'retention_period' => '5 tahun setelah penutupan akun (log aktivitas 2 tahun)',
-            'retention_effective_date' => '27 April 2026',
-            'retention_end_date' => '-',
-            'has_deletion_activity' => 'Tidak',
-            'has_past_incident' => 'Tidak',
-
-            // Risk / klasifikasi
-            'risk_level' => 'HIGH',
-            'risk_justification' => 'Memproses data keuangan pribadi, biometrik, dan PII (NIK/KTP, Rekening, NPWP) dalam volume besar (> 1.000 subjek).',
         ];
     }
 

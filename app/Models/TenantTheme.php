@@ -14,6 +14,7 @@ class TenantTheme extends Model
         'org_id', 'name', 'palette', 'logo_url', 'favicon_url',
         'layout_preset', 'font_family', 'is_active', 'created_by',
         'active_document_template_id', 'active_template_map',
+        'active_template_slug',
     ];
 
     protected $casts = [

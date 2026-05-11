@@ -22,8 +22,6 @@ class DatabaseSeeder extends Seeder
             // Both are idempotent via updateOrCreate so re-running db:seed
             // refreshes config/docx paths without duplicating rows.
             DocumentTemplateSeeder::class,
-            // 20 template PDF elegan Fase 1 (3 available + 17 coming_soon).
-            EleganceTemplatesSeeder::class,
             NexusCanonicalDocxSeeder::class,
             // RACI template presets for breach containment matrix editor.
             RaciTemplateSeeder::class,

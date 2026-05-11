@@ -15,7 +15,6 @@ use App\Models\Organization;
 use App\Models\RegulationFramework;
 use App\Models\Ropa;
 use App\Services\DocxTemplateService;
-use App\Services\PdfRenderService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -557,229 +556,35 @@ class TemplateExportController extends Controller
             return null;
         }
 
-        // Prioritas 1 — Blade PDF template (20 template elegance via Browsershot/dompdf).
-        // Diutamakan karena kualitas visual lebih tinggi dan langsung pakai aktif blade_view
-        // yang dipilih user di /branding tab Document Template.
-        if (! empty($docTpl->blade_view)) {
+        // Legacy tenant DOCX template upload (per kind). Render PDF/HTML
+        // server-side sudah dipindah ke frontend (@react-pdf/renderer + docx);
+        // di sini kita hanya melayani DOCX upload pengguna yang sudah ada.
+        $docxPath = ($docTpl->docx_templates ?? [])[$kind]['path'] ?? null;
+        if (! empty($docxPath)) {
             try {
-                $pdfName = preg_replace('/\.docx?$/i', '', $baseFileName).'.pdf';
-                $resp = $this->renderPdfFromBladeTemplate($docTpl, $kind, $model, $org, $pdfName);
-                if ($resp) {
-                    return $resp;
+                $svc = app(DocxTemplateService::class);
+                $tempFile = match ($kind) {
+                    'ropa' => $svc->renderRopa($model, $docTpl, $org),
+                    'dpia' => $svc->renderDpia($model, $docTpl, $org),
+                    'gap' => $svc->renderGap($model, $docTpl, $org),
+                    default => null,
+                };
+                if ($tempFile) {
+                    while (ob_get_level() > 0) {
+                        ob_end_clean();
+                    }
+                    return response()->download($tempFile, $baseFileName, [
+                        'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    ])->deleteFileAfterSend(true);
                 }
             } catch (\Throwable $e) {
-                \Log::warning("Blade PDF template render failed ({$kind}, tpl={$docTpl->id}): ".$e->getMessage());
-                // jatuh ke DOCX path / built-in
+                \Log::warning("Tenant DOCX template render failed ({$kind}, tpl={$docTpl->id}, path={$docxPath}): ".$e->getMessage());
+                // jatuh ke built-in PhpWord generator di caller
             }
         }
 
-        // Prioritas 2 — DOCX template upload (legacy custom .docx per kind).
-        if (empty(($docTpl->docx_templates ?? [])[$kind]['path'] ?? null)) {
-            \Log::info("[export] Active template '{$docTpl->name}' (id={$docTpl->id}) has no blade_view nor docx_templates['{$kind}']['path']; falling back to built-in.");
-
-            return null;
-        }
-
-        try {
-            $svc = app(DocxTemplateService::class);
-            $tempFile = match ($kind) {
-                'ropa' => $svc->renderRopa($model, $docTpl, $org),
-                'dpia' => $svc->renderDpia($model, $docTpl, $org),
-                'gap' => $svc->renderGap($model, $docTpl, $org),
-                default => null,
-            };
-            if (! $tempFile) {
-                return null;
-            }
-
-            while (ob_get_level() > 0) {
-                ob_end_clean();
-            }
-
-            return response()->download($tempFile, $baseFileName, [
-                'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            ])->deleteFileAfterSend(true);
-        } catch (\Throwable $e) {
-            \Log::warning("Tenant DOCX template render failed ({$kind}): ".$e->getMessage());
-
-            return null;
-        }
-    }
-
-    /**
-     * Render PDF dari Blade template (20 template elegance) menggunakan
-     * data Eloquent model yang di-map ke struktur array yang sama dengan
-     * sampleRopaData() di DocumentTemplateController.
-     *
-     * Return Response (PDF stream) atau null kalau render gagal.
-     */
-    private function renderPdfFromBladeTemplate(DocumentTemplate $tpl, string $kind, $model, Organization $org, string $outputFileName)
-    {
-        $payload = $this->buildBladePayload($kind, $model, $org, $tpl);
-        if (! $payload) {
-            return null;
-        }
-
-        $config = array_merge(DocumentTemplate::DEFAULT_CONFIG, is_array($tpl->config) ? $tpl->config : []);
-        $engine = $tpl->engine ?: 'dompdf';
-
-        $binary = app(PdfRenderService::class)->render($tpl->blade_view, $payload, [
-            'engine' => $engine,
-            'page_size' => strtoupper($config['page_size'] ?? 'A4'),
-            'orientation' => $config['orientation'] ?? 'portrait',
-            'font_family' => $config['font_family'] ?? 'DejaVu Sans',
-        ]);
-
-        while (ob_get_level() > 0) {
-            ob_end_clean();
-        }
-
-        return response($binary)
-            ->header('Content-Type', 'application/pdf')
-            ->header('Content-Disposition', 'attachment; filename="'.$outputFileName.'"');
-    }
-
-    /**
-     * Map Eloquent model (Ropa/Dpia/GapAssessment) ke struktur array
-     * yang dipakai 20 Blade template. Field mapping mengikuti
-     * sampleRopaData() di DocumentTemplateController.
-     */
-    private function buildBladePayload(string $kind, $model, Organization $org, DocumentTemplate $tpl): ?array
-    {
-        $config = array_merge(DocumentTemplate::DEFAULT_CONFIG, is_array($tpl->config) ? $tpl->config : []);
-        $theme = [
-            'accent' => $config['accent_color'] ?? '#3b82f6',
-            'primary' => $config['primary_color'] ?? '#1e293b',
-            'logo' => null,
-            'watermark' => $config['watermark_image'] ?? null,
-            'watermark_opacity' => $config['watermark_opacity'] ?? 0.08,
-            'header_text' => $config['header_text'] ?? null,
-            'footer_text' => $config['footer_text'] ?? null,
-        ];
-
-        $base = [
-            'config' => $config,
-            'theme' => $theme,
-            'orgName' => $org->name ?? '-',
-            'orgLogoUrl' => null,
-            'orgAddress' => $org->address ?? '',
-            'orgWebsite' => $org->website ?? '',
-            'today' => now()->locale('id')->isoFormat('D MMMM Y'),
-            'generatedBy' => auth()->user()?->name ?? '-',
-            'generatedAt' => now()->locale('id')->isoFormat('D MMMM Y · HH:mm'),
-        ];
-
-        if ($kind === 'ropa') {
-            $base['ropa'] = $this->mapRopaToBladeArray($model, $org);
-
-            return $base;
-        }
-        if ($kind === 'dpia') {
-            // DPIA pakai struktur sama dengan ROPA untuk Blade — banyak field shared.
-            $base['ropa'] = $this->mapDpiaToBladeArray($model, $org);
-
-            return $base;
-        }
-        if ($kind === 'gap') {
-            $base['ropa'] = $this->mapGapToBladeArray($model, $org);
-
-            return $base;
-        }
-
+        \Log::info("[export] Active template '{$docTpl->name}' (id={$docTpl->id}) tanpa DOCX upload untuk kind={$kind}; falling back to built-in PhpWord.");
         return null;
-    }
-
-    /**
-     * Map Ropa Eloquent → array. Field-field yang tidak ada di model
-     * di-default ke '-' supaya Blade tidak error.
-     */
-    private function mapRopaToBladeArray($ropa, Organization $org): array
-    {
-        $wizard = is_array($ropa->wizard_data ?? null) ? $ropa->wizard_data : [];
-        $categories = is_array($ropa->data_categories ?? null) ? $ropa->data_categories : [];
-        $subjects = is_array($ropa->data_subjects ?? null) ? $ropa->data_subjects : [];
-        $recipients = is_array($ropa->recipients ?? null) ? $ropa->recipients : [];
-        $controls = is_array($ropa->security_measures ?? null) ? $ropa->security_measures : [];
-
-        return [
-            'number' => $ropa->registration_number ?? $ropa->custom_number ?? '-',
-            'name' => $ropa->processing_activity ?? '-',
-            'org' => $org->name ?? '-',
-            'division' => $ropa->division ?? '-',
-            'unit' => $ropa->work_unit ?? '-',
-            'category' => $ropa->category ?? ($ropa->kategori_pemrosesan ?? '-'),
-            'description' => $ropa->description ?? '-',
-            'purpose' => $ropa->purpose ?? '-',
-            'activity' => $wizard['activity_detail'] ?? ($ropa->processing_activity ?? '-'),
-            'legal_basis' => $ropa->legal_basis ?? '-',
-            'date' => optional($ropa->submitted_at ?? $ropa->created_at)?->locale('id')->isoFormat('D MMMM Y') ?? '-',
-            'dpo' => [
-                'name' => $wizard['dpo_name'] ?? '-',
-                'email' => $wizard['dpo_email'] ?? '-',
-            ],
-            'pic' => [
-                'name' => $wizard['pic_name'] ?? '-',
-                'role' => $wizard['pic_role'] ?? '-',
-                'email' => $wizard['pic_email'] ?? '-',
-            ],
-            'categories' => $categories,
-            'systems' => array_map(fn($s) => [
-                'name' => is_array($s) ? ($s['name'] ?? '-') : $s,
-                'loc' => is_array($s) ? ($s['loc'] ?? '-') : '-',
-            ], is_array($wizard['systems'] ?? null) ? $wizard['systems'] : []),
-            'data_general' => $wizard['data_general'] ?? [],
-            'data_specific' => $wizard['data_specific'] ?? [],
-            'data_pii' => $wizard['data_pii'] ?? [],
-            'controls' => $controls,
-            'retention' => $ropa->retention_period ?? '-',
-            'data_subjects' => is_array($subjects) ? $subjects : [],
-            'data_subjects_volume' => $wizard['data_subjects_volume'] ?? '-',
-            'data_source' => $wizard['data_source'] ?? '-',
-            'uses_ai' => $wizard['uses_ai'] ?? '-',
-            'uses_automated_decision' => $wizard['uses_automated_decision'] ?? '-',
-            'uses_new_tech' => $wizard['uses_new_tech'] ?? '-',
-            'profiling_purpose' => $wizard['profiling_purpose'] ?? '-',
-            'processor_role' => $wizard['processor_role'] ?? [],
-            'processor_entity' => $wizard['processor_entity'] ?? ($org->name ?? '-'),
-            'has_third_party' => $wizard['has_third_party'] ?? '-',
-            'third_parties' => $wizard['third_parties'] ?? [],
-            'recipients_internal' => $wizard['recipients_internal'] ?? '-',
-            'recipients_internal_list' => $wizard['recipients_internal_list'] ?? [],
-            'recipients_external' => $wizard['recipients_external'] ?? '-',
-            'recipients_external_list' => $recipients,
-            'cross_border_transfer' => $wizard['cross_border_transfer'] ?? '-',
-            'cross_border_destinations' => $wizard['cross_border_destinations'] ?? [],
-            'retention_doc_name' => $ropa->processing_activity ?? '-',
-            'retention_period' => $ropa->retention_period ?? '-',
-            'retention_effective_date' => optional($ropa->submitted_at ?? $ropa->created_at)?->locale('id')->isoFormat('D MMMM Y') ?? '-',
-            'retention_end_date' => $ropa->retention_due_date ? \Carbon\Carbon::parse($ropa->retention_due_date)->locale('id')->isoFormat('D MMMM Y') : '-',
-            'has_deletion_activity' => $wizard['has_deletion_activity'] ?? '-',
-            'has_past_incident' => $wizard['has_past_incident'] ?? '-',
-            'risk_level' => strtoupper($ropa->risk_level ?? 'MEDIUM'),
-            'risk_justification' => $wizard['risk_justification'] ?? '-',
-        ];
-    }
-
-    private function mapDpiaToBladeArray($dpia, Organization $org): array
-    {
-        // DPIA Eloquent biasanya pakai field mirip ROPA. Sementara reuse mapping
-        // ROPA dengan field DPIA. Refinement per-DPIA-section bisa nyusul.
-        $wizard = is_array($dpia->wizard_data ?? null) ? $dpia->wizard_data : [];
-
-        return array_merge($this->mapRopaToBladeArray($dpia, $org), [
-            'number' => $dpia->registration_number ?? $dpia->code ?? '-',
-            'name' => $dpia->processing_activity ?? $dpia->title ?? '-',
-        ]);
-    }
-
-    private function mapGapToBladeArray($gap, Organization $org): array
-    {
-        $wizard = is_array($gap->wizard_data ?? null) ? $gap->wizard_data : [];
-
-        return array_merge($this->mapRopaToBladeArray($gap, $org), [
-            'number' => $gap->code ?? '-',
-            'name' => $gap->title ?? $gap->processing_activity ?? '-',
-        ]);
     }
 
     // ================================================================
