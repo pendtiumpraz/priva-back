@@ -1,0 +1,27 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+    - phpstan-baseline.neon
+
+parameters:
+    paths:
+        - app/
+
+    # Level 5 = Laravel-friendly default. Catch:
+    # - Unknown method/property access
+    # - Wrong argument types
+    # - Unreachable code
+    # - Missing return type hints
+    # Level lebih tinggi sering false-positive di kode legacy Laravel
+    # karena macros + magic methods. 5 cukup buat catch real bugs.
+    level: 5
+
+    # Skip vendor, tests, dan migrations (auto-generated patterns).
+    excludePaths:
+        - tests/
+        - app/Console/Commands/CreateRootUser.php  # one-off command, low risk
+
+    # Tiap kali kita catch issue critical (mis. DB::table tanpa org_id),
+    # tambahkan rule di sini. Untuk sekarang pakai default Larastan.
+    ignoreErrors: []
+
+    reportUnmatchedIgnoredErrors: false

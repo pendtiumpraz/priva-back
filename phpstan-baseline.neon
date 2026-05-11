@@ -1,0 +1,2425 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Cannot call method toDateString\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: app/Console/Commands/CleanupArchivedTenants.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: app/Console/Commands/CleanupArchivedTenants.php
+
+		-
+			message: '#^Call to function is_array\(\) with array will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Console/Commands/MigrateLegacyCookieLogsCommand.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\License\:\:\$organization\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Console/Commands/ScanLicenseExpiry.php
+
+		-
+			message: '#^Call to an undefined method App\\Models\\License\:\:trustedExpiresAt\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Console/Commands/ScanLicenseExpiry.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>email" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Console/Commands/ScanLicenseExpiry.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Console/Commands/ScanLicenseExpiry.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>phone" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Console/Commands/ScanLicenseExpiry.php
+
+		-
+			message: '#^Parameter \#1 \$model of method App\\Casts\\EncryptedString\:\:get\(\) expects Illuminate\\Database\\Eloquent\\Model, null given\.$#'
+			identifier: argument.type
+			count: 4
+			path: app/Console/Commands/TestEncryption.php
+
+		-
+			message: '#^Parameter \#1 \$model of method App\\Casts\\EncryptedString\:\:set\(\) expects Illuminate\\Database\\Eloquent\\Model, null given\.$#'
+			identifier: argument.type
+			count: 3
+			path: app/Console/Commands/TestEncryption.php
+
+		-
+			message: '#^Call to an undefined method App\\Services\\TenantContextService\:\:currentOrgId\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Http/Controllers/Api/Admin/ConsentExtractController.php
+
+		-
+			message: '#^Relation ''initiator'' is not found in App\\Models\\ExtractRun model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/Admin/ConsentExtractController.php
+
+		-
+			message: '#^Call to an undefined method App\\Services\\TenantContextService\:\:currentOrgId\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: app/Http/Controllers/Api/Admin/CookieLogAdminController.php
+
+		-
+			message: '#^Call to an undefined method App\\Services\\TenantContextService\:\:currentOrgId\(\)\.$#'
+			identifier: method.notFound
+			count: 5
+			path: app/Http/Controllers/Api/Admin/CrmCredentialController.php
+
+		-
+			message: '#^Relation ''messages'' is not found in App\\Models\\ChatConversation model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/AiAgentController.php
+
+		-
+			message: '#^Right side of && is always true\.$#'
+			identifier: booleanAnd.rightAlwaysTrue
+			count: 1
+			path: app/Http/Controllers/Api/AiAgentController.php
+
+		-
+			message: '#^Relation ''messages'' is not found in App\\Models\\ChatConversation model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/AiChatController.php
+
+		-
+			message: '#^Access to protected property Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\ConsentCollectionPoint\>\:\:\$items\.$#'
+			identifier: property.protected
+			count: 1
+			path: app/Http/Controllers/Api/AiFeatureController.php
+
+		-
+			message: '#^Call to function is_null\(\) with array will always evaluate to false\.$#'
+			identifier: function.impossibleType
+			count: 1
+			path: app/Http/Controllers/Api/AiFeatureController.php
+
+		-
+			message: '#^Call to function is_string\(\) with array will always evaluate to false\.$#'
+			identifier: function.impossibleType
+			count: 1
+			path: app/Http/Controllers/Api/AiFeatureController.php
+
+		-
+			message: '#^Cannot call method map\(\) on array\<int, App\\Models\\ConsentCollectionPoint\>\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Api/AiFeatureController.php
+
+		-
+			message: '#^Match expression does not handle remaining value\: string$#'
+			identifier: match.unhandled
+			count: 1
+			path: app/Http/Controllers/Api/AiFeatureController.php
+
+		-
+			message: '#^Relation ''items'' is not found in App\\Models\\ConsentCollectionPoint model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/AiFeatureController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>credits_used" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/AiFeatureController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Organization\:\:\$tier\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/AiJobController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>tier" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/AiJobController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\AiModel\:\:\$provider\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/AiProviderController.php
+
+		-
+			message: '#^Match expression does not handle remaining value\: mixed$#'
+			identifier: match.unhandled
+			count: 2
+			path: app/Http/Controllers/Api/AiProviderController.php
+
+		-
+			message: '#^Relation ''models'' is not found in App\\Models\\AiProvider model\.$#'
+			identifier: larastan.relationExistence
+			count: 2
+			path: app/Http/Controllers/Api/AiProviderController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>model_id" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/AiProviderController.php
+
+		-
+			message: '#^Call to an undefined method App\\Http\\Controllers\\Api\\ApiHubController\:\:middleware\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Http/Controllers/Api/ApiHubController.php
+
+		-
+			message: '#^Relation ''creator'' is not found in App\\Models\\PartnerApiKey model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/ApiHubController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>enabled" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Http/Controllers/Api/ApprovalConfigController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>steps" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Http/Controllers/Api/ApprovalConfigController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ApprovalWorkflow\:\:\$related_record\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/ApprovalController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$tenantRole\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Http/Controllers/Api/ApprovalController.php
+
+		-
+			message: '#^Parameter \#4 \$changes of static method App\\Models\\AuditLog\:\:log\(\) expects array\|null, string given\.$#'
+			identifier: argument.type
+			count: 2
+			path: app/Http/Controllers/Api/ApprovalController.php
+
+		-
+			message: '#^Static method App\\Models\\AuditLog\:\:log\(\) invoked with 6 parameters, 3\-5 required\.$#'
+			identifier: arguments.count
+			count: 2
+			path: app/Http/Controllers/Api/ApprovalController.php
+
+		-
+			message: '#^Cannot call method diffInDays\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Api/AuthController.php
+
+		-
+			message: '#^Cannot call method toISOString\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: app/Http/Controllers/Api/AuthController.php
+
+		-
+			message: '#^Left side of && is always true\.$#'
+			identifier: booleanAnd.leftAlwaysTrue
+			count: 1
+			path: app/Http/Controllers/Api/AuthController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Api\\AuthController\:\:verifyEmail\(\) should return Illuminate\\Http\\JsonResponse but returns Illuminate\\Http\\RedirectResponse\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/Api/AuthController.php
+
+		-
+			message: '#^Offset ''document_footer'' on array\{\}\|string on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/BreachReportController.php
+
+		-
+			message: '#^Offset ''document_header'' on array\{\}\|string on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/BreachReportController.php
+
+		-
+			message: '#^Offset ''logo_url'' on array\{\}\|string on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/BreachReportController.php
+
+		-
+			message: '#^Offset ''watermark'' on array\{\}\|string on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/BreachReportController.php
+
+		-
+			message: '#^Regex pattern is invalid\: Unknown modifier ''\]'' in pattern\: \#\(tenants/\[a\-f0\-9\-\]\+/\[\^\?\#\]\+\)\#i$#'
+			identifier: regexp.pattern
+			count: 1
+			path: app/Http/Controllers/Api/BreachReportController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ConsentCollectionPoint\:\:\$api_keys_last_rotated_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/ConsentCollectionController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ConsentCollectionPoint\:\:\$client_key\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/ConsentCollectionController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ConsentCollectionPoint\:\:\$embed_token\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Api/ConsentCollectionController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ConsentItem\:\:\$collectionPoint\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Api/ConsentItemController.php
+
+		-
+			message: '#^Relation ''collectionPoint'' is not found in App\\Models\\ConsentItem model\.$#'
+			identifier: larastan.relationExistence
+			count: 2
+			path: app/Http/Controllers/Api/ConsentItemController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ConsentCollectionPoint\:\:\$audience\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/ConsentLogController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ConsentCollectionPoint\:\:\$captcha_provider\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Api/ConsentLogController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ConsentCollectionPoint\:\:\$captcha_site_key\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/ConsentLogController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ConsentCollectionPoint\:\:\$display_frequency\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/ConsentLogController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ConsentCollectionPoint\:\:\$display_mode\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/ConsentLogController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ConsentCollectionPoint\:\:\$items\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/ConsentLogController.php
+
+		-
+			message: '#^Empty array passed to foreach\.$#'
+			identifier: foreach.emptyArray
+			count: 1
+			path: app/Http/Controllers/Api/ConsentLogController.php
+
+		-
+			message: '#^Offset ''crm_connections'' on string\|null on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/ConsentLogController.php
+
+		-
+			message: '#^Parameter \#3 \$callback of static method Illuminate\\Cache\\Repository\:\:remember\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Api/ConsentLogController.php
+
+		-
+			message: '#^Relation ''collectionPoint'' is not found in App\\Models\\ConsentLog model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/ConsentLogController.php
+
+		-
+			message: '#^Relation ''items'' is not found in App\\Models\\ConsentCollectionPoint model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/ConsentLogController.php
+
+		-
+			message: '#^Call to function is_array\(\) with array will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: app/Http/Controllers/Api/ContainmentController.php
+
+		-
+			message: '#^Call to function is_array\(\) with null will always evaluate to false\.$#'
+			identifier: function.impossibleType
+			count: 1
+			path: app/Http/Controllers/Api/ContainmentController.php
+
+		-
+			message: '#^Offset ''raci_matrix'' on string\|null on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: app/Http/Controllers/Api/ContainmentController.php
+
+		-
+			message: '#^Property App\\Models\\Organization\:\:\$settings \(string\|null\) does not accept array\<string, mixed\>\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Http/Controllers/Api/ContainmentController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$organization\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/CrossBorderController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>permissions" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/CustomFieldController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>permissions" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/CustomSectionController.php
+
+		-
+			message: '#^Variable \$avg on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.variable
+			count: 1
+			path: app/Http/Controllers/Api/DashboardController.php
+
+		-
+			message: '#^Offset ''host'' on non\-empty\-array on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/DataDiscoveryController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$hit_count\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/DataDiscoveryScanController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/DataDiscoveryScanController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$status\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/DataDiscoveryScanController.php
+
+		-
+			message: '#^Call to function is_array\(\) with array will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Http/Controllers/Api/DataDiscoveryScanController.php
+
+		-
+			message: '#^Offset ''hits'' on array\{hits\: int, tokens\: int, status\: string, error\?\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/DataDiscoveryScanController.php
+
+		-
+			message: '#^Offset ''status'' on array\{hits\: int, tokens\: int, status\: string, error\?\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/DataDiscoveryScanController.php
+
+		-
+			message: '#^Parameter \#1 \$ps of method App\\Http\\Controllers\\Api\\DataDiscoveryScanController\:\:serializeSystem\(\) expects App\\Models\\DataDiscoveryScanPlanSystem, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 2
+			path: app/Http/Controllers/Api/DataDiscoveryScanController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/DataDiscoveryScanController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>role" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/DataDiscoveryScanController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DatabasePool\:\:\$ca_cert\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Api/DatabasePoolController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DatabasePool\:\:\$provisioner_password\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Api/DatabasePoolController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DatabasePool\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\DatabasePool\>\:\:\$provisioner_password\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/DatabasePoolController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\InformationSystem\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\InformationSystem\>\:\:\$settings\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/DiscoveryChangelogController.php
+
+		-
+			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
+			identifier: larastan.noEnvCallsOutsideOfConfig
+			count: 1
+			path: app/Http/Controllers/Api/DocumentImportController.php
+
+		-
+			message: '#^Relation ''creator'' is not found in App\\Models\\DocumentImportBatch model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/DocumentImportController.php
+
+		-
+			message: '#^Relation ''imports'' is not found in App\\Models\\DocumentImportBatch model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/DocumentImportController.php
+
+		-
+			message: '#^Relation ''uploader'' is not found in App\\Models\\DocumentImport model\.$#'
+			identifier: larastan.relationExistence
+			count: 2
+			path: app/Http/Controllers/Api/DocumentImportController.php
+
+		-
+			message: '#^Call to function is_array\(\) with array will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: app/Http/Controllers/Api/DocumentMakerController.php
+
+		-
+			message: '#^Regex pattern is invalid\: Unknown modifier ''\]'' in pattern\: \#\(tenants/\[a\-f0\-9\-\]\+/\[\^\?\#\]\+\)\#i$#'
+			identifier: regexp.pattern
+			count: 1
+			path: app/Http/Controllers/Api/DocumentTemplateController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>address" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/DocumentTemplateController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>logo_url" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/DocumentTemplateController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/DocumentTemplateController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>website" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/DocumentTemplateController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DpiaCategory\:\:\$risks\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/DpiaAssessmentFrameworkController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$tenantRole\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/DpiaAssessmentFrameworkController.php
+
+		-
+			message: '#^Relation ''risks'' is not found in App\\Models\\DpiaCategory model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/DpiaAssessmentFrameworkController.php
+
+		-
+			message: '#^Anonymous function should return array\{key\: string, label\: string, risks\: Illuminate\\Support\\Collection\<int, array\{id\: mixed, risk_event\: mixed, sequence\: mixed, default_description\: mixed\}\>\} but returns array\{key\: string, label\: string, risks\: Illuminate\\Support\\Collection\<int, array\{id\: mixed, risk_event\: mixed, sequence\: mixed, default_description\: mixed\}\>\}\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/Api/DpiaRiskEventTemplateController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrApp\:\:\$api_keys_last_rotated_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/DsrAppController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrApp\:\:\$client_key\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/DsrAppController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$internal_certificate_doc_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/DsrExecutionController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$subject_certificate_doc_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/DsrExecutionController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrApp\:\:\$captcha_provider\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Api/DsrPublicController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrApp\:\:\$captcha_site_key\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/DsrPublicController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$app\.$#'
+			identifier: property.notFound
+			count: 5
+			path: app/Http/Controllers/Api/DsrPublicController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$nda_signed_at\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Http/Controllers/Api/DsrPublicController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$verification_expires_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/DsrPublicController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$verification_token\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/DsrPublicController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\InformationSystem\:\:\$is_sharded\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/DsrPublicController.php
+
+		-
+			message: '#^Relation ''app'' is not found in App\\Models\\DsrRequest model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/DsrPublicController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>branding" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/DsrPublicController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/DsrPublicController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$app_id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Api/DsrRequestScopeController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\InformationSystem\:\:\$code\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/DsrRequestScopeController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\InformationSystem\:\:\$connection_type\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/DsrRequestScopeController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\InformationSystem\:\:\$description\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/DsrRequestScopeController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\InformationSystem\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Api/DsrRequestScopeController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$scopes\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Api/DsrSqlPackController.php
+
+		-
+			message: '#^Relation ''scopes'' is not found in App\\Models\\DsrRequest model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/DsrSqlPackController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$app\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/DsrVerificationController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$verification_expires_at\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Api/DsrVerificationController.php
+
+		-
+			message: '#^Relation ''app'' is not found in App\\Models\\DsrRequest model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/DsrVerificationController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ConsentRecord\:\:\$cp_name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/ExportController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ConsentRecord\:\:\$item_title\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/ExportController.php
+
+		-
+			message: '#^Called ''pluck'' on Laravel collection, but could have been retrieved as a query\.$#'
+			identifier: larastan.noUnnecessaryCollectionCall
+			count: 1
+			path: app/Http/Controllers/Api/ExportController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\ConsentRecord\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Api/ExportController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>processing_activity" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/ExportController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>registration_number" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/ExportController.php
+
+		-
+			message: '#^Relation ''user'' is not found in App\\Models\\FeatureRequest model\.$#'
+			identifier: larastan.relationExistence
+			count: 3
+			path: app/Http/Controllers/Api/FeatureRequestController.php
+
+		-
+			message: '#^Relation ''descendants'' is not found in App\\Models\\Organization model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/HoldingDashboardController.php
+
+		-
+			message: '#^Offset ''siem_webhook_url'' on array\{\}\|string in empty\(\) does not exist\.$#'
+			identifier: empty.offset
+			count: 1
+			path: app/Http/Controllers/Api/IntegrationController.php
+
+		-
+			message: '#^Offset ''siem_webhook_url'' on array\{\}\|string on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/IntegrationController.php
+
+		-
+			message: '#^Offset ''telegram_bot_token'' on array\{\}\|string in empty\(\) does not exist\.$#'
+			identifier: empty.offset
+			count: 1
+			path: app/Http/Controllers/Api/IntegrationController.php
+
+		-
+			message: '#^Offset ''telegram_bot_token'' on array\{\}\|string on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/IntegrationController.php
+
+		-
+			message: '#^Offset ''telegram_chat_id'' on array\{\}\|string on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/IntegrationController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Ropa\:\:\$organization\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/LiaController.php
+
+		-
+			message: '#^Relation ''approver'' is not found in App\\Models\\LiaAssessment model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/LiaController.php
+
+		-
+			message: '#^Relation ''checker'' is not found in App\\Models\\LiaAssessment model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/LiaController.php
+
+		-
+			message: '#^Relation ''dpia'' is not found in App\\Models\\LiaAssessment model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/LiaController.php
+
+		-
+			message: '#^Relation ''maker'' is not found in App\\Models\\LiaAssessment model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/LiaController.php
+
+		-
+			message: '#^Relation ''ropa'' is not found in App\\Models\\LiaAssessment model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/LiaController.php
+
+		-
+			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
+			identifier: larastan.noEnvCallsOutsideOfConfig
+			count: 2
+			path: app/Http/Controllers/Api/LicenseController.php
+
+		-
+			message: '#^Relation ''activations'' is not found in App\\Models\\License model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/LicenseController.php
+
+		-
+			message: '#^Variable \$lmUrl on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.variable
+			count: 1
+			path: app/Http/Controllers/Api/LicenseController.php
+
+		-
+			message: '#^Relation ''user'' is not found in App\\Models\\SystemLogAnalysis model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/LogAnalyzerController.php
+
+		-
+			message: '#^Relation ''responses'' is not found in App\\Models\\MaturityAssessment model\.$#'
+			identifier: larastan.relationExistence
+			count: 2
+			path: app/Http/Controllers/Api/MaturityController.php
+
+		-
+			message: '#^Relation ''submitter'' is not found in App\\Models\\MaturityAssessment model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/MaturityController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\TenantMenuOverride\:\:\$c\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/MenuRegistryController.php
+
+		-
+			message: '#^Parameter \#2 \$recordId of static method App\\Models\\AuditLog\:\:log\(\) expects string, null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/Api/MenuRegistryController.php
+
+		-
+			message: '#^Relation ''menu'' is not found in App\\Models\\RoleMenuWhitelist model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/MenuRegistryController.php
+
+		-
+			message: '#^Relation ''user'' is not found in App\\Models\\AuditLog model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/MenuRegistryController.php
+
+		-
+			message: '#^Relation ''children'' is not found in App\\Models\\ModuleComment model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/ModuleCommentController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\InformationSystem\:\:\$is_sharded\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/ModuleCrudController.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Http/Controllers/Api/ModuleCrudController.php
+
+		-
+			message: '#^Call to function is_array\(\) with null will always evaluate to false\.$#'
+			identifier: function.impossibleType
+			count: 1
+			path: app/Http/Controllers/Api/ModuleCrudController.php
+
+		-
+			message: '#^Offset ''raci_matrix'' does not exist on string\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: app/Http/Controllers/Api/ModuleCrudController.php
+
+		-
+			message: '#^Offset ''raci_matrix'' on string\|null on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/ModuleCrudController.php
+
+		-
+			message: '#^Parameter \#1 \$string of function str_pad expects string, int\<1, max\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/Api/ModuleCrudController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>default_information_system_ids" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/ModuleCrudController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>permissions" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/ModuleCrudController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Organization\:\:\$active_license\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/OrganizationController.php
+
+		-
+			message: '#^Cannot unset offset mixed on array\{\}\.$#'
+			identifier: unset.offset
+			count: 2
+			path: app/Http/Controllers/Api/OrganizationController.php
+
+		-
+			message: '#^Offset ''crm_connections'' on array\{\}\|string on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 4
+			path: app/Http/Controllers/Api/OrganizationController.php
+
+		-
+			message: '#^Offset ''crm_syncs'' on array\{crm_connections\: array\{\}\} on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/OrganizationController.php
+
+		-
+			message: '#^Offset mixed on array\{\} in isset\(\) does not exist\.$#'
+			identifier: isset.offset
+			count: 1
+			path: app/Http/Controllers/Api/OrganizationController.php
+
+		-
+			message: '#^Relation ''parent'' is not found in App\\Models\\Organization model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/OrganizationController.php
+
+		-
+			message: '#^Result of \|\| is always true\.$#'
+			identifier: booleanOr.alwaysTrue
+			count: 1
+			path: app/Http/Controllers/Api/OrganizationController.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 2
+			path: app/Http/Controllers/Api/OrganizationController.php
+
+		-
+			message: '#^Variable \$connections in empty\(\) always exists and is always falsy\.$#'
+			identifier: empty.variable
+			count: 1
+			path: app/Http/Controllers/Api/OrganizationController.php
+
+		-
+			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
+			identifier: larastan.noEnvCallsOutsideOfConfig
+			count: 9
+			path: app/Http/Controllers/Api/PlatformConfigController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>org_id" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/PlatformStorageSettingsController.php
+
+		-
+			message: '#^Relation ''assignee'' is not found in App\\Models\\PostureFinding model\.$#'
+			identifier: larastan.relationExistence
+			count: 2
+			path: app/Http/Controllers/Api/PostureFindingController.php
+
+		-
+			message: '#^Relation ''resolver'' is not found in App\\Models\\PostureFinding model\.$#'
+			identifier: larastan.relationExistence
+			count: 2
+			path: app/Http/Controllers/Api/PostureFindingController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ConsentCollectionPoint\:\:\$embed_token\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/PreviewController.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type App\\Models\\Landing\\LandingSetting\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/PublicLandingController.php
+
+		-
+			message: '#^Offset ''_dpia_id'' on non\-empty\-array on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/RiskTreatmentPlanController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\QaTestResult\:\:\$cnt\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/Root/QaCenterController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\QaTestResult\:\:\$module\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/Root/QaCenterController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\QaTestResult\:\:\$testCase\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/Root/QaCenterController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\QaTestResult\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Api/Root/QaCenterController.php
+
+		-
+			message: '#^Relation ''bugs'' is not found in App\\Models\\QaTestResult model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/Root/QaCenterController.php
+
+		-
+			message: '#^Relation ''testCase'' is not found in App\\Models\\QaTestResult model\.$#'
+			identifier: larastan.relationExistence
+			count: 5
+			path: app/Http/Controllers/Api/Root/QaCenterController.php
+
+		-
+			message: '#^Relation ''testResult'' is not found in App\\Models\\QaBugReport model\.$#'
+			identifier: larastan.relationExistence
+			count: 6
+			path: app/Http/Controllers/Api/Root/QaCenterController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>module" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Http/Controllers/Api/Root/QaCenterController.php
+
+		-
+			message: '#^Relation ''user'' is not found in App\\Models\\AuditLog model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/RootDashboardController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$scopes\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/RopaLinkController.php
+
+		-
+			message: '#^Relation ''scopes'' is not found in App\\Models\\DsrRequest model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/RopaLinkController.php
+
+		-
+			message: '#^Anonymous function should return array\{industry\: \(int\|string\), label\: string, templates\: Illuminate\\Support\\Collection\<int, array\{id\: mixed, name\: mixed, activity_code\: mixed, description\: mixed, usage_count\: mixed\}\>\} but returns array\{industry\: \(int\|string\), label\: string, templates\: Illuminate\\Support\\Collection\<int, array\{id\: mixed, name\: mixed, activity_code\: mixed, description\: mixed, usage_count\: mixed\}\>\}\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/Api/RopaTemplateController.php
+
+		-
+			message: '#^Call to an undefined method Laravel\\Socialite\\Contracts\\Provider\:\:stateless\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: app/Http/Controllers/Api/SsoLoginController.php
+
+		-
+			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
+			identifier: larastan.noEnvCallsOutsideOfConfig
+			count: 2
+			path: app/Http/Controllers/Api/SsoLoginController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\StoragePool\:\:\$access_key\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Api/StoragePoolController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\StoragePool\:\:\$secret_key\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Api/StoragePoolController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\StoragePool\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\StoragePool\>\:\:\$access_key\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/StoragePoolController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\StoragePool\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\StoragePool\>\:\:\$secret_key\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/StoragePoolController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\AuditLog\:\:\$org_name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/SuperadminDashboardController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\AuditLog\:\:\$user\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/SuperadminDashboardController.php
+
+		-
+			message: '#^Relation ''organization'' is not found in App\\Models\\BreachIncident model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/SuperadminDashboardController.php
+
+		-
+			message: '#^Relation ''organization'' is not found in App\\Models\\DsrRequest model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/SuperadminDashboardController.php
+
+		-
+			message: '#^Relation ''organization'' is not found in App\\Models\\License model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/SuperadminDashboardController.php
+
+		-
+			message: '#^Relation ''user'' is not found in App\\Models\\AuditLog model\.$#'
+			identifier: larastan.relationExistence
+			count: 2
+			path: app/Http/Controllers/Api/SuperadminDashboardController.php
+
+		-
+			message: '#^Call to an undefined method Symfony\\Component\\Mailer\\Transport\\TransportInterface\:\:start\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Http/Controllers/Api/SystemSettingsController.php
+
+		-
+			message: '#^Call to an undefined method Symfony\\Component\\Mailer\\Transport\\TransportInterface\:\:stop\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Http/Controllers/Api/SystemSettingsController.php
+
+		-
+			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
+			identifier: larastan.noEnvCallsOutsideOfConfig
+			count: 13
+			path: app/Http/Controllers/Api/SystemUpdateController.php
+
+		-
+			message: '#^Offset ''git_repo'' on array\{path_configured\: bool, path_exists\: bool, git_repo\: bool, npm_available\: bool, reload_cmd_configured\: bool\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/SystemUpdateController.php
+
+		-
+			message: '#^Offset ''npm_available'' on array\{path_configured\: bool, path_exists\: bool, git_repo\: bool, npm_available\: bool, reload_cmd_configured\: bool\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/SystemUpdateController.php
+
+		-
+			message: '#^Offset ''path_exists'' on array\{path_configured\: bool, path_exists\: bool\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/SystemUpdateController.php
+
+		-
+			message: '#^Variable \$npmOut on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.variable
+			count: 1
+			path: app/Http/Controllers/Api/SystemUpdateController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Dpia\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\Dpia\>\:\:\$ropa\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/TemplateExportController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$organization\.$#'
+			identifier: property.notFound
+			count: 4
+			path: app/Http/Controllers/Api/TemplateExportController.php
+
+		-
+			message: '#^Match arm comparison between ''Rekomendasi'' and ''Rekomendasi'' is always true\.$#'
+			identifier: match.alwaysTrue
+			count: 2
+			path: app/Http/Controllers/Api/TemplateExportController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Api\\TemplateExportController\:\:addBadge\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: app/Http/Controllers/Api/TemplateExportController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Api\\TemplateExportController\:\:addDataTable\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: app/Http/Controllers/Api/TemplateExportController.php
+
+		-
+			message: '#^Relation ''ropa'' is not found in App\\Models\\Dpia model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/TemplateExportController.php
+
+		-
+			message: '#^Result of \|\| is always false\.$#'
+			identifier: booleanOr.alwaysFalse
+			count: 1
+			path: app/Http/Controllers/Api/TemplateExportController.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between non\-empty\-string\|false and '''' will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Http/Controllers/Api/TemplateExportController.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between non\-empty\-string\|false and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Http/Controllers/Api/TemplateExportController.php
+
+		-
+			message: '#^Ternary operator condition is always true\.$#'
+			identifier: ternary.alwaysTrue
+			count: 2
+			path: app/Http/Controllers/Api/TemplateExportController.php
+
+		-
+			message: '#^Relation ''organization'' is not found in App\\Models\\TenantChangeRequest model\.$#'
+			identifier: larastan.relationExistence
+			count: 2
+			path: app/Http/Controllers/Api/TenantChangeRequestController.php
+
+		-
+			message: '#^Relation ''requester'' is not found in App\\Models\\TenantChangeRequest model\.$#'
+			identifier: larastan.relationExistence
+			count: 2
+			path: app/Http/Controllers/Api/TenantChangeRequestController.php
+
+		-
+			message: '#^Relation ''reviewer'' is not found in App\\Models\\TenantChangeRequest model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/TenantChangeRequestController.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Api/TenantOffboardController.php
+
+		-
+			message: '#^Relation ''organization'' is not found in App\\Models\\TenantRole model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/TenantRoleController.php
+
+		-
+			message: '#^Call to function is_array\(\) with string\|null will always evaluate to false\.$#'
+			identifier: function.impossibleType
+			count: 2
+			path: app/Http/Controllers/Api/TenantThemeController.php
+
+		-
+			message: '#^Comparison operation "\>" between \*NEVER\* and 0 results in an error\.$#'
+			identifier: greater.invalid
+			count: 2
+			path: app/Http/Controllers/Api/TenantThemeController.php
+
+		-
+			message: '#^Result of && is always false\.$#'
+			identifier: booleanAnd.alwaysFalse
+			count: 2
+			path: app/Http/Controllers/Api/TenantThemeController.php
+
+		-
+			message: '#^Parameter \#1 \$string of function str_pad expects string, int\<1, max\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/Api/ThreatIntelController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Vendor\:\:\$vendor_name\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Api/TiaController.php
+
+		-
+			message: '#^Relation ''approver'' is not found in App\\Models\\TiaAssessment model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/TiaController.php
+
+		-
+			message: '#^Relation ''checker'' is not found in App\\Models\\TiaAssessment model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/TiaController.php
+
+		-
+			message: '#^Relation ''crossBorder'' is not found in App\\Models\\TiaAssessment model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/TiaController.php
+
+		-
+			message: '#^Relation ''maker'' is not found in App\\Models\\TiaAssessment model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/TiaController.php
+
+		-
+			message: '#^Relation ''ropa'' is not found in App\\Models\\CrossBorderTransfer model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/TiaController.php
+
+		-
+			message: '#^Relation ''ropa'' is not found in App\\Models\\TiaAssessment model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/TiaController.php
+
+		-
+			message: '#^Relation ''vendor'' is not found in App\\Models\\TiaAssessment model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/TiaController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>division" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/TiaController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>processing_activity" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/TiaController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$organization\.$#'
+			identifier: property.notFound
+			count: 6
+			path: app/Http/Controllers/Api/UserController.php
+
+		-
+			message: '#^Relation ''department'' is not found in App\\Models\\User model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/UserController.php
+
+		-
+			message: '#^Relation ''organization'' is not found in App\\Models\\User model\.$#'
+			identifier: larastan.relationExistence
+			count: 2
+			path: app/Http/Controllers/Api/UserController.php
+
+		-
+			message: '#^Relation ''tenantRole'' is not found in App\\Models\\User model\.$#'
+			identifier: larastan.relationExistence
+			count: 2
+			path: app/Http/Controllers/Api/UserController.php
+
+		-
+			message: '#^Result of \|\| is always true\.$#'
+			identifier: booleanOr.alwaysTrue
+			count: 1
+			path: app/Http/Controllers/Api/UserController.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between ''admin'' and ''admin'' will always evaluate to true\.$#'
+			identifier: identical.alwaysTrue
+			count: 2
+			path: app/Http/Controllers/Api/UserController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>permissions" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/UserController.php
+
+		-
+			message: '#^Parameter \#1 \$string of function str_pad expects string, int\<1, max\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/Api/V1/BreachApiController.php
+
+		-
+			message: '#^Empty array passed to foreach\.$#'
+			identifier: foreach.emptyArray
+			count: 1
+			path: app/Http/Controllers/Api/V1/ConsentApiV1Controller.php
+
+		-
+			message: '#^Offset ''crm_connections'' on string\|null on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/V1/ConsentApiV1Controller.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>consented_items" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/V1/ConsentApiV1Controller.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$executions\.$#'
+			identifier: property.notFound
+			count: 5
+			path: app/Http/Controllers/Api/V1/DsrApiV1Controller.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$scopes\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/V1/DsrApiV1Controller.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$verified_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/V1/DsrApiV1Controller.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\InformationSystem\:\:\$is_sharded\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/V1/DsrApiV1Controller.php
+
+		-
+			message: '#^Relation ''executions'' is not found in App\\Models\\DsrRequest model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/V1/DsrApiV1Controller.php
+
+		-
+			message: '#^Relation ''scopes'' is not found in App\\Models\\DsrRequest model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Http/Controllers/Api/V1/DsrApiV1Controller.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$organization\.$#'
+			identifier: property.notFound
+			count: 4
+			path: app/Http/Controllers/Api/VendorRiskController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Vendor\:\:\$assessments\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/VendorRiskController.php
+
+		-
+			message: '#^Offset ''cloud_infrastructure''\|''data_processor''\|''saas'' on array\{cloud_infrastructure\: ''Cloud…'', saas\: ''SaaS Application'', data_processor\: ''Data Processor …''\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/VendorRiskController.php
+
+		-
+			message: '#^Offset ''cloud_infrastructure''\|''data_processor''\|''saas'' on array\{cloud_infrastructure\: ''Penyedia…'', saas\: ''Aplikasi software…'', data_processor\: ''Pihak ketiga yang…''\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/VendorRiskController.php
+
+		-
+			message: '#^Relation ''assessments'' is not found in App\\Models\\Vendor model\.$#'
+			identifier: larastan.relationExistence
+			count: 2
+			path: app/Http/Controllers/Api/VendorRiskController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$organization\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/GapComparisonController.php
+
+		-
+			message: '#^Comparison operation "\>" between int\<1, max\> and 0 is always true\.$#'
+			identifier: greater.alwaysTrue
+			count: 1
+			path: app/Http/Middleware/AuthenticatePartnerApi.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>permissions" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Middleware/CheckPermission.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$organization\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Middleware/EnforceTenantReadOnly.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$organization\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Middleware/InitializeTenantDatabase.php
+
+		-
+			message: '#^Call to function method_exists\(\) with Laravel\\Sanctum\\PersonalAccessToken and ''getKey'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Http/Middleware/SanctumTokenRefresh.php
+
+		-
+			message: '#^Negated boolean expression is always false\.$#'
+			identifier: booleanNot.alwaysFalse
+			count: 1
+			path: app/Http/Middleware/SanctumTokenRefresh.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DocumentImport\:\:\$batch\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Jobs/ImportDocumentJob.php
+
+		-
+			message: '#^Parameter \#1 \$string of function str_pad expects string, int\<1, max\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Jobs/ImportDocumentJob.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between int and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Jobs/ImportDocumentJob.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\AiJob\:\:\$user\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Jobs/ProcessAiJob.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$verification_expires_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Mail/DsrVerificationMail.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>branding" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Mail/DsrVerificationMail.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/AiCreditLog.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/AiResult.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/ApprovalWorkflow.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Models/AuditLog.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>role" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Models/AuditLog.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/AutomationRule.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/BreachIncident.php
+
+		-
+			message: '#^Call to function is_array\(\) with non\-empty\-array will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Models/BreachIncident.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/BreachSimulation.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/ChatConversation.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ConsentCollectionPoint\:\:\$client_key\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/ConsentCollectionPoint.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ConsentCollectionPoint\:\:\$embed_token\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Models/ConsentCollectionPoint.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/ConsentLog.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/CrossBorderTransfer.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/Department.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/DiscoveryChangelog.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/Document.php
+
+		-
+			message: '#^Invalid array key type float\.$#'
+			identifier: offsetAccess.invalidOffset
+			count: 1
+			path: app/Models/DocumentImport.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/DocumentTemplate.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/Dpia.php
+
+		-
+			message: '#^Static method App\\Models\\Dpia\:\:mapPenangananToTreatmentType\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: app/Models/Dpia.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/DsrApp.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/DsrRequest.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/GapAssessment.php
+
+		-
+			message: '#^Offset ''critical''\|''high''\|''medium'' on array\{critical\: 0, high\: 1, medium\: 2\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: app/Models/GapAssessment.php
+
+		-
+			message: '#^Ternary operator condition is always true\.$#'
+			identifier: ternary.alwaysTrue
+			count: 1
+			path: app/Models/GapAssessment.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/GeneratedDocument.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/InformationSystem.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/LiaAssessment.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/MaturityAssessment.php
+
+		-
+			message: '#^Relation ''children'' is not found in App\\Models\\ModuleComment model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Models/ModuleComment.php
+
+		-
+			message: '#^Relation ''user'' is not found in App\\Models\\ModuleComment model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Models/ModuleComment.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/ModuleCustomSection.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/PostureFinding.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/PostureSnapshot.php
+
+		-
+			message: '#^Call to function is_array\(\) with array will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Models/RaciTemplate.php
+
+		-
+			message: '#^Variable \$categories in empty\(\) always exists and is not falsy\.$#'
+			identifier: empty.variable
+			count: 1
+			path: app/Models/RaciTemplate.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/Ropa.php
+
+		-
+			message: '#^Comparison operation "\>" between 26 and 0 is always true\.$#'
+			identifier: greater.alwaysTrue
+			count: 1
+			path: app/Models/Ropa.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Models/Ropa.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\StoragePool\:\:\$access_key\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Models/StoragePool.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\StoragePool\:\:\$secret_key\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/StoragePool.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$org_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/TiaAssessment.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>id" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Providers/AppServiceProvider.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>org_id" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Providers/AppServiceProvider.php
+
+		-
+			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
+			identifier: larastan.noEnvCallsOutsideOfConfig
+			count: 1
+			path: app/Providers/SettingsServiceProvider.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ChatConversation\:\:\$messages_count\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/AiAgentToolExecutor.php
+
+		-
+			message: '#^Call to function is_array\(\) with array will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Services/AiAgentToolExecutor.php
+
+		-
+			message: '#^Call to function method_exists\(\) with App\\Models\\Ropa and ''calculateProgress'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Services/AiAgentToolExecutor.php
+
+		-
+			message: '#^Offset ''fields'' on array\{key\: ''detail_pemrosesan'', label\: ''Detail Pemrosesan'', fields\: array\{''processing_activity'', ''entity'', ''division'', ''work_unit'', ''description'', ''risk_level''\}\}\|array\{key\: ''dpo_team'', label\: ''Data Protection…'', fields\: array\{''kategori_pemrosesan'', ''dpo_name'', ''dpo_email'', ''dpo_phone''\}\}\|array\{key\: ''informasi_pemrosesan'', label\: ''Informasi Pemrosesan'', fields\: array\{''purpose'', ''jenis_pemrosesan'', ''sistem_terkait'', ''legal_basis''\}\}\|array\{key\: ''penggunaan…'', label\: ''Penggunaan dan…'', fields\: array\{''cara_pemrosesan'', ''lokasi_penyimpanan''\}\}\|array\{key\: ''pengiriman_data'', label\: ''Pengiriman Data'', fields\: array\{''transfer_domestik'', ''transfer…'', ''negara_tujuan'', ''safeguards''\}\}\|array\{key\: ''pengumpulan_data'', label\: ''Pengumpulan Data'', fields\: array\{''sumber_data'', ''kategori_subjek'', ''jenis_data''\}\}\|array\{key\: ''retensi_keamanan'', label\: ''Retensi dan…'', fields\: array\{''retention_period'', ''prosedur_pemusnahan'', ''langkah_keamanan''\}\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Services/AiAgentToolExecutor.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\ChatConversation\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Services/AiAgentToolExecutor.php
+
+		-
+			message: '#^Relation ''ropa'' is not found in App\\Models\\Dpia model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Services/AiAgentToolExecutor.php
+
+		-
+			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
+			identifier: larastan.noEnvCallsOutsideOfConfig
+			count: 1
+			path: app/Services/AiService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$reference_number\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Services/AlertEngineService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Ropa\:\:\$processing_activity_name\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Services/AlertEngineService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Vendor\:\:\$dpa_expiry\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/AlertEngineService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\MaturityAssessment\:\:\$responses\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/AssessmentPdfService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Ropa\:\:\$processing_activity_name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/AutomationEngineService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ConsentCollectionPoint\:\:\$captcha_provider\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/CaptchaVerifier.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\ConsentCollectionPoint\:\:\$captcha_secret\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/CaptchaVerifier.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrApp\:\:\$captcha_provider\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/CaptchaVerifier.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrApp\:\:\$captcha_secret\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/CaptchaVerifier.php
+
+		-
+			message: '#^If condition is always false\.$#'
+			identifier: if.alwaysFalse
+			count: 1
+			path: app/Services/CloudStorageScanner.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between ''credit_card_numbers…''\|''email_addresses …''\|''full_names \(Shadow\)''\|''nik_ktp_patterns …''\|''phone_numbers …'' and ''credit_card_numbers''\|''email_addresses''\|''full_names''\|''nik_ktp_patterns''\|''phone_numbers'' will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Services/CloudStorageScanner.php
+
+		-
+			message: '#^Offset 1 on array\{non\-falsy\-string, non\-empty\-string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Services/Consent/UserAgentParser.php
+
+		-
+			message: '#^Cannot call method isPast\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Services/CreditService.php
+
+		-
+			message: '#^Cannot call method toISOString\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Services/CreditService.php
+
+		-
+			message: '#^Comparison operation "\>" between 0\.25\|0\.5\|1\.0\|2\.0 and 0 is always true\.$#'
+			identifier: greater.alwaysTrue
+			count: 1
+			path: app/Services/CreditService.php
+
+		-
+			message: '#^Relation ''user'' is not found in App\\Models\\AiCreditLog model\.$#'
+			identifier: larastan.relationExistence
+			count: 1
+			path: app/Services/CreditService.php
+
+		-
+			message: '#^Access to an undefined property Throwable\:\:\$response\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/Crm/HubspotConnector.php
+
+		-
+			message: '#^Access to an undefined property Throwable\:\:\$response\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/Crm/MailchimpConnector.php
+
+		-
+			message: '#^Parameter \#1 \$array \(array\<non\-falsy\-string\>\) to function array_filter does not contain falsy values, the array will always stay the same\.$#'
+			identifier: arrayFilter.same
+			count: 1
+			path: app/Services/Crm/MailchimpConnector.php
+
+		-
+			message: '#^Access to an undefined property Throwable\:\:\$response\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/Crm/WebhookConnector.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Organization\:\:\$tier\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/DataDiscoveryExecuteOrchestrator.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>tier" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Services/DataDiscoveryExecuteOrchestrator.php
+
+		-
+			message: '#^Property App\\Services\\DataDiscoveryScanGeneratorService\:\:\$masker is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: app/Services/DataDiscoveryScanGeneratorService.php
+
+		-
+			message: '#^Comparison operation "\>" between int\<1, max\> and 0 is always true\.$#'
+			identifier: greater.alwaysTrue
+			count: 2
+			path: app/Services/DatabaseScanner.php
+
+		-
+			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
+			identifier: larastan.noEnvCallsOutsideOfConfig
+			count: 1
+			path: app/Services/DecryptService.php
+
+		-
+			message: '#^Call to function is_array\(\) with array will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 3
+			path: app/Services/DocumentMakerService.php
+
+		-
+			message: '#^Offset ''not_applicable'' on array\{core\: array\<int, string\>, conditional_pii\: array\<int, string\>, not_applicable\: array\<int, string\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Services/DocumentMakerService.php
+
+		-
+			message: '#^Ternary operator condition is always true\.$#'
+			identifier: ternary.alwaysTrue
+			count: 1
+			path: app/Services/DocumentMakerService.php
+
+		-
+			message: '#^Instanceof between PhpOffice\\PhpWord\\Element\\AbstractElement and PhpOffice\\PhpWord\\Element\\ListItemRun will always evaluate to false\.$#'
+			identifier: instanceof.alwaysFalse
+			count: 1
+			path: app/Services/DocumentParserService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Dpia\:\:\$mitigation_plan\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/DocxTemplateService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Dpia\:\:\$ropa\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Services/DocxTemplateService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\GapAssessment\:\:\$assessment_date\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/DocxTemplateService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\GapAssessment\:\:\$creator\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/DocxTemplateService.php
+
+		-
+			message: '#^Offset ''category'' on array\{name\: mixed, organization_name\: string, ropa_number\: string, division\: mixed, work_unit\: mixed, entity\: mixed, description\: mixed, category\: mixed, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Services/DocxTemplateService.php
+
+		-
+			message: '#^Offset ''name'' on array\{name\: mixed, organization_name\: string, ropa_number\: string, division\: mixed, work_unit\: mixed, entity\: mixed, description\: mixed, category\: mixed, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: app/Services/DocxTemplateService.php
+
+		-
+			message: '#^Offset ''tujuan'' on array\{name\: mixed, organization_name\: string, ropa_number\: string, division\: mixed, work_unit\: mixed, entity\: mixed, description\: mixed, category\: mixed, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Services/DocxTemplateService.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>pic_list" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Services/DocxTemplateService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$assignee\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Services/DsrCertificateService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$executions\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Services/DsrCertificateService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$scopes\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/DsrCertificateService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$app\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Services/DsrEventBroadcaster.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$verified_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/DsrEventBroadcaster.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$app\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Services/DsrSqlGeneratorService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DsrRequest\:\:\$scopes\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/DsrSqlGeneratorService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\InformationSystem\:\:\$code\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/DsrSqlGeneratorService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\InformationSystem\:\:\$is_sharded\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/DsrSqlGeneratorService.php
+
+		-
+			message: '#^Method App\\Services\\DsrSqlGeneratorService\:\:generatePack\(\) should return array\{url\: string, manifest\: array, file_count\: int, total_size\: int\} but returns array\{storage_path\: string, manifest\: array\{dsr_request_id\: string, dsr_uuid\: string, app_name\: mixed, app_code\: mixed, subject_email_hash\: non\-falsy\-string, request_type\: string, generated_at\: string, deadline_at\: string\|null, \.\.\.\}, file_count\: int\<2, max\>, total_size\: int\<0, max\>\}\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Services/DsrSqlGeneratorService.php
+
+		-
+			message: '#^Parameter \#1 \$array \(array\{''banking'', ''finance'', ''fintech'', ''insurance'', ''healthcare'', ''pharmaceutical'', ''telecommunications'', ''government'', \.\.\.\}\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Services/GapBenchmarkService.php
+
+		-
+			message: '#^Offset ''digest'' on array\{kind\: ''alert''\|''info''\|''warning'', module\: ''approval''\|''breach''\|''consent''\|''dpia''\|''dsr''\|''license''\|''ropa''\|''system''\|''tenant'', channel\: ''in_app'', enabled\: false\} on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Services/NotificationPreferenceDefaults.php
+
+		-
+			message: '#^Call to function array_key_exists\(\) with ''notifications…'' and array\{\} will always evaluate to false\.$#'
+			identifier: function.impossibleType
+			count: 1
+			path: app/Services/NotificationService.php
+
+		-
+			message: '#^Match arm comparison between ''info'' and ''info'' is always true\.$#'
+			identifier: match.alwaysTrue
+			count: 1
+			path: app/Services/NotificationService.php
+
+		-
+			message: '#^Offset ''bot_token'' on array\{\} in empty\(\) does not exist\.$#'
+			identifier: empty.offset
+			count: 1
+			path: app/Services/NotificationService.php
+
+		-
+			message: '#^Offset ''chat_id'' on array\{\} in empty\(\) does not exist\.$#'
+			identifier: empty.offset
+			count: 1
+			path: app/Services/NotificationService.php
+
+		-
+			message: '#^Offset ''telegram'' on string\|null on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Services/NotificationService.php
+
+		-
+			message: '#^Result of && is always false\.$#'
+			identifier: booleanAnd.alwaysFalse
+			count: 1
+			path: app/Services/NotificationService.php
+
+		-
+			message: '#^Result of \|\| is always true\.$#'
+			identifier: booleanOr.alwaysTrue
+			count: 1
+			path: app/Services/NotificationService.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between string and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Services/NotificationService.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: app/Services/NotificationService.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>digest" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Services/NotificationService.php
+
+		-
+			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
+			identifier: larastan.noEnvCallsOutsideOfConfig
+			count: 1
+			path: app/Services/OcrScannerService.php
+
+		-
+			message: '#^Match arm comparison between ''bmp'' and ''bmp'' is always true\.$#'
+			identifier: match.alwaysTrue
+			count: 1
+			path: app/Services/OcrScannerService.php
+
+		-
+			message: '#^Offset ''pages_processed'' on array\{text\: non\-falsy\-string, pages_processed\: int\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: app/Services/OcrScannerService.php
+
+		-
+			message: '#^Cannot call method diffInDays\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Services/PasswordPolicyService.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>pillar_breakdown" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Services/PostureScoreService.php
+
+		-
+			message: '#^If condition is always false\.$#'
+			identifier: if.alwaysFalse
+			count: 1
+			path: app/Services/SaasScanner.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between ''credit_card_numbers…''\|''email_addresses …''\|''financial_salary …''\|''full_names \(Shadow\)''\|''nik_ktp_patterns …''\|''phone_numbers …'' and ''credit_card_numbers''\|''email_addresses''\|''financial_salary''\|''full_names''\|''nik_ktp_patterns''\|''phone_numbers'' will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Services/SaasScanner.php
+
+		-
+			message: '#^Call to function is_array\(\) with array will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Services/TenantContextService.php
+
+		-
+			message: '#^Called ''take'' on Laravel collection, but could have been retrieved as a query\.$#'
+			identifier: larastan.noUnnecessaryCollectionCall
+			count: 1
+			path: app/Services/TenantContextService.php
+
+		-
+			message: '#^Parameter \#2 \$array of function implode expects array, string given\.$#'
+			identifier: argument.type
+			count: 3
+			path: app/Services/TenantContextService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DatabasePool\:\:\$ca_cert\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/TenantDb/DatabasePoolRegistry.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\DatabasePool\:\:\$provisioner_password\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/TenantDb/DatabasePoolRegistry.php
+
+		-
+			message: '#^PHPDoc tag @return has invalid value \(array\[''summary'' \=\> \[\.\.\.per\-table\.\.\.\], ''total_rows'' \=\> int, ''errors'' \=\> string\[\]\]\)\: Unexpected token "\[", expected TOKEN_HORIZONTAL_WS at offset 415 on line 8$#'
+			identifier: phpDoc.parseError
+			count: 1
+			path: app/Services/TenantDb/TenantDataMigrator.php
+
+		-
+			message: '#^Invalid array key type float\.$#'
+			identifier: offsetAccess.invalidOffset
+			count: 1
+			path: app/Services/TenantStorageService.php
+
+		-
+			message: '#^Method App\\Services\\TenantStorageService\:\:buildDisk\(\) should return Illuminate\\Filesystem\\FilesystemAdapter\|null but returns Illuminate\\Contracts\\Filesystem\\Filesystem\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Services/TenantStorageService.php
+
+		-
+			message: '#^Method App\\Services\\TenantStorageService\:\:resolveDefaultPoolDisk\(\) should return Illuminate\\Filesystem\\FilesystemAdapter\|null but returns Illuminate\\Contracts\\Filesystem\\Filesystem\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Services/TenantStorageService.php
+
+		-
+			message: '#^Method App\\Services\\TenantStorageService\:\:resolvePoolDisk\(\) should return Illuminate\\Filesystem\\FilesystemAdapter\|null but returns Illuminate\\Contracts\\Filesystem\\Filesystem\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Services/TenantStorageService.php
+
+		-
+			message: '#^Constant App\\Services\\TwoFactorAuthService\:\:RECOVERY_CODE_LENGTH is unused\.$#'
+			identifier: classConstant.unused
+			count: 1
+			path: app/Services/TwoFactorAuthService.php
+
+		-
+			message: '#^Offset ''dpia''\|''ropa'' on array\{ropa\: array\{''detail_pemrosesan'', ''dpo_team'', ''informasi_pemrosesan'', ''pengumpulan_data'', ''penggunaan…'', ''pengiriman_data'', ''retensi_keamanan''\}, dpia\: array\{''informasi_dpia'', ''koneksi_ropa'', ''potensi_risiko''\}\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Services/WizardSchemaService.php
+
+		-
+			message: '#^Offset ''sort_order'' on array\{source\: ''built_in'', id\: null, section_key\: ''detail_pemrosesan''\|''informasi_dpia'', label\: null, description\: null, sort_order\: 0, fields\: array\<int, array\<string, mixed\>\>\}\|array\{source\: ''built_in'', id\: null, section_key\: ''dpo_team''\|''koneksi_ropa'', label\: null, description\: null, sort_order\: 1, fields\: array\<int, array\<string, mixed\>\>\}\|array\{source\: ''built_in'', id\: null, section_key\: ''informasi_pemrosesan''\|''potensi_risiko'', label\: null, description\: null, sort_order\: 2, fields\: array\<int, array\<string, mixed\>\>\}\|array\{source\: ''built_in'', id\: null, section_key\: ''penggunaan…'', label\: null, description\: null, sort_order\: 4, fields\: array\<int, array\<string, mixed\>\>\}\|array\{source\: ''built_in'', id\: null, section_key\: ''pengiriman_data'', label\: null, description\: null, sort_order\: 5, fields\: array\<int, array\<string, mixed\>\>\}\|array\{source\: ''built_in'', id\: null, section_key\: ''pengumpulan_data'', label\: null, description\: null, sort_order\: 3, fields\: array\<int, array\<string, mixed\>\>\}\|array\{source\: ''built_in'', id\: null, section_key\: ''retensi_keamanan'', label\: null, description\: null, sort_order\: 6, fields\: array\<int, array\<string, mixed\>\>\}\|array\{source\: ''org_custom'', id\: string, section_key\: string, label\: string, description\: string\|null, sort_order\: int, fields\: array\<int, array\<string, mixed\>\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 2
+			path: app/Services/WizardSchemaService.php

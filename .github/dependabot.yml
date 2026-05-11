@@ -1,0 +1,40 @@
+version: 2
+
+# Auto-create PR untuk update dependency yang punya CVE atau patch baru.
+# Composer untuk PHP packages, GitHub Actions untuk pin SHA workflow.
+# Open-PR limit dijaga supaya gak banjirin PR queue saat banyak update.
+
+updates:
+  - package-ecosystem: "composer"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Jakarta"
+    open-pull-requests-limit: 8
+    labels:
+      - "deps"
+      - "security"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+    # Group patch + minor updates dari Laravel core supaya gak ada banyak
+    # PR kecil-kecil. Major harus tetap di-review terpisah.
+    groups:
+      laravel-minor:
+        applies-to: version-updates
+        patterns:
+          - "laravel/*"
+        update-types:
+          - "patch"
+          - "minor"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    labels:
+      - "ci"
+      - "deps"
