@@ -117,6 +117,8 @@ class SystemSettingsController extends Controller
             'security.headers_frame_options',
             'security.headers_referrer_policy',
             'security.headers_permissions_policy',
+            'security.headers_csp_html_enabled',
+            'security.headers_csp_html_value',
             // CORS allowlist
             'security.cors_allowed_origins',
             'security.cors_allow_credentials',
@@ -496,6 +498,8 @@ class SystemSettingsController extends Controller
                 'security.headers_frame_options',
                 'security.headers_referrer_policy',
                 'security.headers_permissions_policy',
+                'security.headers_csp_html_enabled',
+                'security.headers_csp_html_value',
                 'security.cors_allowed_origins',
                 'security.cors_allow_credentials',
                 'security.cors_max_age_seconds',

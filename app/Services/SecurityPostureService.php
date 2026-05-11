@@ -163,9 +163,10 @@ class SecurityPostureService
     private function groupHeaders(): array
     {
         $on = (bool) config('security.headers.enabled', true);
+        $cspOn = (bool) config('security.headers.csp_html_enabled', true);
         return [
             'name' => 'Response Headers',
-            'description' => 'HSTS, X-Frame-Options, Referrer-Policy, Permissions-Policy di-stamp ke setiap response.',
+            'description' => 'HSTS, X-Frame-Options, Referrer-Policy, Permissions-Policy di-stamp ke setiap response. CSP hanya untuk Content-Type: text/html.',
             'master_status' => $on ? 'enabled' : 'disabled',
             'items' => [
                 $this->boolItem('headers.enabled', 'Stamping security headers', $on),
@@ -173,6 +174,7 @@ class SecurityPostureService
                 $this->item('headers.hsts_max_age', 'HSTS max-age (detik)', config('security.headers.hsts_max_age'), 31536000, 'configured'),
                 $this->item('headers.frame_options', 'X-Frame-Options', config('security.headers.frame_options'), 'SAMEORIGIN', 'configured'),
                 $this->item('headers.referrer_policy', 'Referrer-Policy', config('security.headers.referrer_policy'), 'strict-origin-when-cross-origin', 'configured'),
+                $this->boolItem('headers.csp_html_enabled', 'Content-Security-Policy (HTML response only)', $cspOn),
             ],
         ];
     }

@@ -69,6 +69,23 @@ class SecurityHeaders
             $response->headers->set('Permissions-Policy', $permissions);
         }
 
+        // Content-Security-Policy — HANYA untuk HTML response. JSON response
+        // tidak butuh CSP (browser gak execute JSON), dan strict CSP di JSON
+        // bisa break debugging tools.
+        //
+        // Detection: cek Content-Type response. Backend Privasimu serve mostly
+        // JSON, dengan beberapa HTML untuk preview pages (DSR verify, NDA,
+        // consent banner preview). CSP di HTML response = XSS mitigation.
+        if ((bool) config('security.headers.csp_html_enabled', true)) {
+            $contentType = (string) $response->headers->get('Content-Type', '');
+            if (stripos($contentType, 'text/html') !== false) {
+                $cspValue = (string) config('security.headers.csp_html_value', '');
+                if ($cspValue !== '') {
+                    $response->headers->set('Content-Security-Policy', $cspValue);
+                }
+            }
+        }
+
         return $response;
     }
 }

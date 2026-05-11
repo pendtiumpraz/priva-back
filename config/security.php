@@ -95,6 +95,20 @@ return [
         'frame_options' => 'SAMEORIGIN',
         'referrer_policy' => 'strict-origin-when-cross-origin',
         'permissions_policy' => 'camera=(), microphone=(), geolocation=(), payment=()',
+        // CSP hanya di-stamp untuk Content-Type: text/html response (preview
+        // pages, DSR verify, NDA, dst). JSON response gak ke-stamp.
+        'csp_html_enabled' => true,
+        'csp_html_value' =>
+            "default-src 'self'; "
+            ."script-src 'self' 'unsafe-inline'; "
+            ."style-src 'self' 'unsafe-inline'; "
+            ."img-src 'self' data: blob:; "
+            ."font-src 'self' data:; "
+            ."connect-src 'self'; "
+            ."frame-ancestors 'self'; "
+            ."base-uri 'self'; "
+            ."form-action 'self'; "
+            ."object-src 'none'",
     ],
 
     /**

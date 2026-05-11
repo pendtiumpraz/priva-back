@@ -187,6 +187,8 @@ class SettingsServiceProvider extends ServiceProvider
             'security.headers_frame_options' => 'security.headers.frame_options',
             'security.headers_referrer_policy' => 'security.headers.referrer_policy',
             'security.headers_permissions_policy' => 'security.headers.permissions_policy',
+            'security.headers_csp_html_enabled' => 'security.headers.csp_html_enabled',
+            'security.headers_csp_html_value' => 'security.headers.csp_html_value',
 
             // Security — CORS. Hydrate cors.allowed_origins dst dari settings.
             // `cors.allowed_origins` adalah array — applyToConfig() akan set

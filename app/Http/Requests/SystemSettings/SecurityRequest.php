@@ -68,6 +68,8 @@ class SecurityRequest extends FormRequest
             'headers_frame_options' => 'sometimes|string|in:DENY,SAMEORIGIN',
             'headers_referrer_policy' => 'sometimes|string|max:255',
             'headers_permissions_policy' => 'sometimes|string|max:1024',
+            'headers_csp_html_enabled' => 'sometimes|boolean',
+            'headers_csp_html_value' => 'sometimes|string|max:2048',
 
             // CORS allowlist — array of origin strings. Setiap entry harus
             // valid URL (http/https + host). Array kosong = tolak semua
