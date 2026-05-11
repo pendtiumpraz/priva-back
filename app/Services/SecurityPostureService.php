@@ -37,6 +37,8 @@ class SecurityPostureService
             $this->groupAiLimits(),
             $this->groupPlatform(),
             $this->groupSessions(),
+            $this->groupFileUpload(),
+            $this->groupSsrf(),
         ];
 
         $total = 0; $enabled = 0; $disabled = 0;
@@ -263,6 +265,76 @@ class SecurityPostureService
         ];
     }
 
+    private function groupFileUpload(): array
+    {
+        return [
+            'name' => 'File Upload Validation',
+            'description' => 'Validasi MIME real (magic bytes via finfo) + cross-check extension + block dangerous extension absolut. '
+                . 'Mencegah file rename attack (mis. evil.php → evil.pdf).',
+            'master_status' => 'enabled',
+            'items' => [
+                $this->item('file_upload.validator', 'FileUploadValidator service', 'Aktif (always-on)', 'always-on', 'enabled'),
+                $this->item('file_upload.real_mime', 'Real MIME via finfo (bukan extension)', 'AKTIF', 'AKTIF', 'enabled'),
+                $this->item('file_upload.cross_check', 'Cross-check extension vs MIME real', 'AKTIF', 'AKTIF', 'enabled'),
+                $this->item('file_upload.dangerous_blocked',
+                    'Block dangerous extension',
+                    '.php, .phtml, .sh, .exe, .bat, .vbs, .html, .svg, .js, dll (40+ ext)',
+                    'List default',
+                    'enabled'),
+                $this->item('file_upload.integration',
+                    'Diintegrasikan ke endpoint',
+                    'AiAgentController::chat, PentestReportController::attachFile',
+                    'AiAgent + PentestReport',
+                    'enabled'),
+            ],
+        ];
+    }
+
+    private function groupSsrf(): array
+    {
+        $allowPrivate = (bool) config('security.ssrf_allow_private', false);
+        return [
+            'name' => 'SSRF Protection',
+            'description' => 'Block outbound HTTP request ke private IP / loopback / metadata endpoint. Mencegah eksploitasi '
+                . 'Server-Side Request Forgery via URL user-supplied.',
+            'master_status' => $allowPrivate ? 'disabled' : 'enabled',
+            'items' => [
+                $this->item('ssrf.validator', 'OutboundUrlValidator service', $allowPrivate ? 'BYPASS (dev mode)' : 'Aktif',
+                    'enabled di production', $allowPrivate ? 'disabled' : 'enabled'),
+                $this->item('ssrf.block_rfc1918',
+                    'Block RFC1918 private IP (10.x, 172.16-31.x, 192.168.x)',
+                    $allowPrivate ? 'BYPASS' : 'AKTIF',
+                    'AKTIF',
+                    $allowPrivate ? 'disabled' : 'enabled'),
+                $this->item('ssrf.block_loopback',
+                    'Block loopback (127.x, ::1, 0.0.0.0)',
+                    $allowPrivate ? 'BYPASS' : 'AKTIF',
+                    'AKTIF',
+                    $allowPrivate ? 'disabled' : 'enabled'),
+                $this->item('ssrf.block_link_local',
+                    'Block link-local (169.254.x — AWS/Azure/GCP metadata endpoint)',
+                    $allowPrivate ? 'BYPASS' : 'AKTIF',
+                    'AKTIF',
+                    $allowPrivate ? 'disabled' : 'enabled'),
+                $this->item('ssrf.dns_rebinding',
+                    'DNS rebinding protection (resolve semua A+AAAA record)',
+                    'AKTIF',
+                    'AKTIF',
+                    'enabled'),
+                $this->item('ssrf.allow_private_override',
+                    'Override allow private (env SECURITY_SSRF_ALLOW_PRIVATE)',
+                    $allowPrivate ? 'TRUE (dev only — bahaya di prod)' : 'FALSE (default, aman)',
+                    'FALSE',
+                    $allowPrivate ? 'disabled' : 'enabled'),
+                $this->item('ssrf.integration',
+                    'Diintegrasikan ke endpoint',
+                    'IntegrationController::update (save URL CRM/webhook)',
+                    'Integration save flow',
+                    'enabled'),
+            ],
+        ];
+    }
+
     private function item(string $key, string $label, mixed $value, mixed $default, string $status): array
     {
         return compact('key', 'label', 'value', 'default', 'status');
@@ -291,8 +363,13 @@ class SecurityPostureService
                 . 'SettingsServiceProvider → service code baca via `config()` helper.',
             'CI SAST: Dependabot, composer audit, npm audit, Larastan level 5, ESLint, '
                 . 'build verification — jalan di setiap push/PR + weekly schedule.',
+            'CI DAST: OWASP ZAP Baseline scan terhadap staging URL (configured via '
+                . 'GitHub secret ZAP_TARGET_URL), scheduled weekly + manual dispatch.',
+            'File upload + SSRF guard: always-on (bukan setting toggle) — selalu '
+                . 'aktif di endpoint upload + integration URL save. SSRF override hanya '
+                . 'lewat env untuk dev environment.',
             'Audit log mencatat semua perubahan setting + semua action security-relevant '
-                . '(login, logout, 2FA setup/verify, password change, dst).',
+                . '(login, logout, 2FA setup/verify, password change, file upload, dst).',
         ];
     }
 }
