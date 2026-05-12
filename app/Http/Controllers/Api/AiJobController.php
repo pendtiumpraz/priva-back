@@ -110,6 +110,12 @@ class AiJobController extends Controller
     public function active(Request $req): JsonResponse
     {
         $user = $req->user();
+        // Guard: root / superadmin tanpa tenant context (org_id null) tidak
+        // punya AI jobs per-org. Skip query — scopeForOrg type-hints non-null
+        // string supaya tidak ada query leak lintas tenant.
+        if (empty($user?->org_id)) {
+            return response()->json([]);
+        }
         $jobs = AiJob::forOrg($user->org_id)
             ->where('user_id', $user->id)
             ->active()
@@ -130,6 +136,9 @@ class AiJobController extends Controller
     public function history(Request $req): JsonResponse
     {
         $user = $req->user();
+        if (empty($user?->org_id)) {
+            return response()->json(['data' => [], 'current_page' => 1, 'last_page' => 1, 'per_page' => 20, 'total' => 0]);
+        }
         $jobs = AiJob::forOrg($user->org_id)
             ->whereIn('status', AiJob::TERMINAL_STATUSES)
             ->orderByDesc('finished_at')
@@ -145,6 +154,9 @@ class AiJobController extends Controller
     public function show(Request $req, string $id): JsonResponse
     {
         $user = $req->user();
+        if (empty($user?->org_id)) {
+            return response()->json(['error' => 'Not found'], 404);
+        }
         $job = AiJob::forOrg($user->org_id)->find($id);
 
         if (! $job) {
