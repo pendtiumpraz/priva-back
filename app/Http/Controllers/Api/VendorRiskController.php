@@ -88,7 +88,24 @@ class VendorRiskController extends Controller
     {
         $vendor = Vendor::where('org_id', $request->user()->org_id)->with('assessments')->findOrFail($id);
 
-        return response()->json(['data' => $vendor]);
+        // Sertakan token publik aktif (kalau ada) di response root supaya
+        // frontend bisa langsung tampilkan tautan share tanpa generate ulang.
+        // Pilih assessment terbaru yang token belum expired dan belum di-consume.
+        $activeAssessment = $vendor->assessments
+            ->filter(function ($a) {
+                $hasToken = ! empty($a->assessment_token);
+                $notExpired = empty($a->token_expires_at) || $a->token_expires_at->isFuture();
+                $notConsumed = empty($a->token_consumed_at);
+                return $hasToken && $notExpired && $notConsumed;
+            })
+            ->sortByDesc('created_at')
+            ->first();
+
+        $data = $vendor->toArray();
+        $data['active_assessment_token'] = $activeAssessment?->assessment_token;
+        $data['active_token_expires_at'] = $activeAssessment?->token_expires_at;
+
+        return response()->json(['data' => $data]);
     }
 
     public function update(Request $request, $id)
