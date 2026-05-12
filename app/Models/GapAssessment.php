@@ -13,12 +13,13 @@ class GapAssessment extends Model
 
     protected $fillable = [
         'org_id', 'regulation_code', 'version', 'overall_score', 'compliance_level',
-        'progress', 'answers', 'attachments', 'recommendations', 'created_by',
+        'progress', 'answers', 'attachments', 'ai_analyses', 'recommendations', 'created_by',
     ];
 
     protected $casts = [
         'answers' => 'array',
         'attachments' => 'array',
+        'ai_analyses' => 'array',
         'recommendations' => 'array',
         'overall_score' => 'decimal:2',
     ];

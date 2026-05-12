@@ -10,6 +10,7 @@ use App\Models\VendorQuestionnaire;
 use App\Services\AssessmentTokenService;
 use App\Services\FileUploadValidator;
 use App\Services\TenantStorageService;
+use App\Services\ThirdPartyAssessmentScorer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -51,16 +52,29 @@ class AsesmenPublikController extends Controller
         $assessment = $request->get('_assessment');
         $vendor = Vendor::withTrashed()->find($assessment->vendor_id);
 
-        // Question bank — landlord pinned (sama untuk semua tenant). Filter
-        // category sesuai snapshot di assessment, fallback ke vendor.category.
+        // Question bank — effective per org (landlord defaults + tenant
+        // overrides + tenant custom). Filter ke versi v2_2026 (versi publik)
+        // + hanya yang aktif. Sort manual di-PHP karena effectiveForOrg
+        // return collection sudah di-merge.
         $category = $assessment->category ?: ($vendor?->category ?? VendorQuestionnaire::CATEGORY_CLOUD);
-        $questions = VendorQuestionnaire::where('category', $category)
-            ->where('is_active', true)
-            ->orderBy('section')
-            ->orderBy('sort_order')
-            ->get([
-                'id', 'question_code', 'section', 'question_text', 'description',
-                'regulation_ref', 'answer_type', 'answer_options', 'weight', 'sort_order',
+        $questions = VendorQuestionnaire::effectiveForOrg($assessment->org_id)
+            ->filter(fn ($q) => $q->is_active && $q->version === ThirdPartyAssessmentScorer::VERSION)
+            ->sortBy([
+                ['section', 'asc'],
+                ['sort_order', 'asc'],
+            ])
+            ->values()
+            ->map(fn ($q) => [
+                'id' => $q->id,
+                'question_code' => $q->question_code,
+                'section' => $q->section,
+                'question_text' => $q->question_text,
+                'description' => $q->description,
+                'regulation_ref' => $q->regulation_ref,
+                'recommendation_if_no' => $q->recommendation_if_no,
+                'requires_evidence_upload' => (bool) $q->requires_evidence_upload,
+                'answer_type' => $q->answer_type,
+                'sort_order' => $q->sort_order,
             ]);
 
         // Branding minimal — UI publik harus menampilkan logo + nama tenant,
@@ -228,8 +242,12 @@ class AsesmenPublikController extends Controller
      *
      * Pakai DB transaction supaya update assessment + audit log atomic.
      */
-    public function submit(Request $request, string $token, AssessmentTokenService $tokens)
-    {
+    public function submit(
+        Request $request,
+        string $token,
+        AssessmentTokenService $tokens,
+        ThirdPartyAssessmentScorer $scorer,
+    ) {
         /** @var VendorAssessment $assessment */
         $assessment = $request->get('_assessment');
 
@@ -240,7 +258,29 @@ class AsesmenPublikController extends Controller
             ], 410);
         }
 
-        DB::transaction(function () use ($assessment, $request, $tokens) {
+        // Hitung skor dulu di luar transaction supaya kalau scorer error,
+        // status assessment tidak terlanjur ke 'submitted'.
+        $result = $scorer->compute($assessment);
+
+        DB::transaction(function () use ($assessment, $request, $tokens, $result) {
+            // Persist skor + risk_level + rekomendasi sebelum markConsumed,
+            // supaya audit trail di markConsumed bisa reflect state final.
+            $assessment->forceFill([
+                'score' => (int) round($result['score']),
+                'risk_level' => $result['risk_level'],
+                'recommendations' => $result['recommendations'],
+                'score_breakdown' => [
+                    'total_aktif' => $result['total_aktif'],
+                    'jawab_ya' => $result['jawab_ya'],
+                    'jawab_tidak' => $result['jawab_tidak'],
+                    'jawab_kosong' => $result['jawab_kosong'],
+                    'score' => $result['score'],
+                    'version' => $result['version'],
+                ],
+                'questionnaire_version' => $result['version'],
+                'source' => VendorAssessment::SOURCE_DETERMINISTIC,
+            ])->save();
+
             $tokens->markConsumed($assessment, $request);
         });
 
@@ -271,6 +311,13 @@ class AsesmenPublikController extends Controller
         }
 
         $vendor = Vendor::withTrashed()->find($assessment->vendor_id);
+        $org = Organization::find($assessment->org_id);
+
+        // Sprint G.6 — expose score + risk_level + rekomendasi ke pihak ketiga.
+        // Rationale: spec Step 4 hasil mengharuskan tampil skor, badge level
+        // risiko, dan daftar rekomendasi (collapsible) supaya pihak ketiga
+        // dapat insight aksi perbaikan. Tetap tidak expose breakdown internal.
+        $breakdown = is_array($assessment->score_breakdown) ? $assessment->score_breakdown : [];
 
         return response()->json([
             'data' => [
@@ -278,9 +325,20 @@ class AsesmenPublikController extends Controller
                 'status' => $assessment->status,
                 'submitted_at' => optional($assessment->submitted_at)->toIso8601String(),
                 'vendor_name' => $vendor?->name,
+                'organization' => $org ? [
+                    'name' => $org->name ?? null,
+                    'logo_url' => $org->logo_url ?? null,
+                ] : null,
                 'answer_count' => is_array($assessment->answers) ? count($assessment->answers) : 0,
-                // Jangan expose score / risk_level di sini — penilaian internal tenant,
-                // bukan info yang relevan untuk pihak ketiga.
+                'score' => $assessment->score,
+                'risk_level' => $assessment->risk_level,
+                'recommendations' => is_array($assessment->recommendations) ? $assessment->recommendations : [],
+                'summary' => [
+                    'total_aktif' => $breakdown['total_aktif'] ?? null,
+                    'jawab_ya' => $breakdown['jawab_ya'] ?? null,
+                    'jawab_tidak' => $breakdown['jawab_tidak'] ?? null,
+                    'jawab_kosong' => $breakdown['jawab_kosong'] ?? null,
+                ],
                 'message' => 'Asesmen Anda telah diterima dan akan ditinjau oleh tim terkait.',
             ],
         ]);

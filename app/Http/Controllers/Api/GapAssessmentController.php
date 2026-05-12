@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\GapAssessment;
 use App\Models\CustomGapQuestion;
 use App\Models\Organization;
+use App\Services\AiDocumentAnalyzer;
+use App\Services\CreditService;
 use App\Services\FileUploadValidator;
 use App\Services\TenantStorageService;
 use Illuminate\Http\Request;
@@ -368,6 +370,139 @@ class GapAssessmentController extends Controller
             'data' => end($attachments[$qId]),
             'attachments' => $attachments,
         ]);
+    }
+
+    // =============================================
+    // AI Evidence Analysis (Sprint G.9)
+    // =============================================
+
+    /**
+     * Analyze an uploaded evidence file against the compliance question
+     * using AiDocumentAnalyzer. Result is cached on the assessment row
+     * (ai_analyses JSON, keyed by question_id) so it's returned together
+     * with the assessment detail on next load.
+     *
+     * Charges 1 credit (ai_doc_analyze) via CreditService, deducted inside
+     * AiDocumentAnalyzer on a successful, non-cached call. We gate the
+     * endpoint with hasCredit() up-front so the operator sees the formal
+     * "kredit habis" message before the worker starts text extraction.
+     */
+    public function analyzeEvidence(Request $request, string $id, AiDocumentAnalyzer $analyzer)
+    {
+        $request->validate([
+            'question_id' => 'required|string|max:128',
+            'attachment_path' => 'required|string|max:1024',
+        ]);
+
+        $assessment = GapAssessment::where('org_id', $request->user()->org_id)
+            ->findOrFail($id);
+
+        // Resolve the question text + regulation_ref. Search both the
+        // platform question bank and the tenant's custom questions —
+        // operators may attach evidence to either.
+        $regCode = $assessment->regulation_code ?? 'uupdp';
+        $question = collect(GapAssessment::getQuestionBank($regCode))
+            ->firstWhere('id', $request->question_id);
+
+        if (! $question) {
+            // Custom question IDs are prefixed with "custom_" by
+            // CustomGapQuestion::toQuestionFormat().
+            $customId = str_starts_with($request->question_id, 'custom_')
+                ? substr($request->question_id, 7)
+                : $request->question_id;
+            $custom = CustomGapQuestion::forOrg($assessment->org_id)
+                ->forRegulation($regCode)
+                ->active()
+                ->where('id', $customId)
+                ->first();
+            if ($custom) {
+                $question = $custom->toQuestionFormat();
+            }
+        }
+
+        if (! $question) {
+            return response()->json(['message' => 'Pertanyaan tidak ditemukan.'], 404);
+        }
+
+        // Verify the attachment_path actually belongs to this assessment
+        // (per-question attachments map) — defence against tampering.
+        $attachments = $assessment->attachments ?? [];
+        $questionAttachments = $attachments[$request->question_id] ?? [];
+        $matched = collect($questionAttachments)->first(function ($att) use ($request) {
+            $path = is_array($att) ? ($att['path'] ?? null) : $att;
+            return $path === $request->attachment_path;
+        });
+
+        if (! $matched) {
+            return response()->json([
+                'message' => 'Lampiran tidak ditemukan pada pertanyaan ini.',
+            ], 404);
+        }
+
+        // Resolve to a local readable path. TenantStorageService stores files
+        // on either the local public disk or the tenant's own disk; we feed
+        // AiDocumentAnalyzer an absolute filesystem path because the analyzer
+        // reads via fopen/PdfParser, not via Storage::get.
+        $localPath = $this->resolveAttachmentPath($assessment, $request->attachment_path);
+        if (! $localPath || ! is_file($localPath)) {
+            return response()->json([
+                'message' => 'File tidak ditemukan pada penyimpanan.',
+            ], 404);
+        }
+
+        // Credit gate (skip for superadmin / on-prem).
+        $orgId = $request->user()->org_id;
+        if ($orgId) {
+            CreditService::resetIfNeeded($orgId);
+            if (! CreditService::hasCredit($orgId, 'ai_doc_analyze')) {
+                $cost = CreditService::getCost('ai_doc_analyze');
+                return response()->json([
+                    'message' => "Kredit AI Anda habis. Dibutuhkan {$cost} kredit untuk analisis ini. Silakan top up kredit melalui menu Konfigurasi Platform.",
+                    'credits_exhausted' => true,
+                ], 402);
+            }
+        }
+
+        $result = $analyzer->analyze(
+            documentPath: $localPath,
+            question: $question['question'] ?? '',
+            regulationRef: $question['article'] ?? ($question['regulation_ref'] ?? ''),
+            orgId: $orgId,
+        );
+
+        // Cache the result on the assessment row (keyed by question_id).
+        $analyses = $assessment->ai_analyses ?? [];
+        $analyses[$request->question_id] = array_merge($result->toArray(), [
+            'analyzed_at' => now()->toIso8601String(),
+            'attachment_path' => $request->attachment_path,
+        ]);
+        $assessment->update(['ai_analyses' => $analyses]);
+
+        return response()->json($analyses[$request->question_id]);
+    }
+
+    /**
+     * Resolve the attachment relative path to an absolute filesystem path.
+     *
+     * TenantStorageService stores via either the local public disk
+     * (storage/app/public/...) or the tenant's own disk. Both surface as
+     * storage_path('app/public/...') OR storage_path('app/...') depending on
+     * the driver. We try the most common locations in order.
+     */
+    private function resolveAttachmentPath(GapAssessment $assessment, string $relativePath): ?string
+    {
+        $candidates = [
+            storage_path('app/public/'.ltrim($relativePath, '/')),
+            storage_path('app/'.ltrim($relativePath, '/')),
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_file($candidate) && is_readable($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 
     // =============================================

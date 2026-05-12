@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\Organization;
 use App\Models\Vendor;
 use App\Models\VendorAssessment;
@@ -10,7 +11,9 @@ use App\Models\VendorQuestionnaire;
 use App\Services\AiService;
 use App\Services\ApprovalWorkflowDispatcher;
 use App\Services\AssessmentAutoTriggerService;
+use App\Services\AssessmentTokenService;
 use App\Services\DocumentParserService;
+use App\Services\FileUploadValidator;
 use App\Services\TenantStorageService;
 use App\Services\VendorRiskScoreService;
 use Illuminate\Http\Request;
@@ -718,5 +721,150 @@ class VendorRiskController extends Controller
 
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
         }
+    }
+
+    // =========================================================
+    //  Sprint G — Public assessment link + typed intake documents
+    // =========================================================
+
+    /**
+     * Sprint G.6 — Generate public assessment link untuk dikirim ke pihak ketiga.
+     *
+     * Reuse VendorAssessment draft kalau ada (status='draft'), kalau tidak bikin
+     * baru. AssessmentTokenService yang men-set token + token_expires_at + status.
+     * Setelah generate, status di-flip ke 'sent' (idempotent kalau dipanggil
+     * ulang — service akan re-generate token baru dengan expiry baru).
+     *
+     * Audit log: module=tprm.send_assessment, action=generate_token, supaya
+     * tim compliance bisa trace siapa kirim ke vendor mana dan kapan.
+     */
+    public function generatePublicLink(Request $request, string $vendorId, AssessmentTokenService $tokenSvc)
+    {
+        $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($vendorId);
+
+        // firstOrCreate dengan attributes search-only + values default supaya
+        // record baru di-stamp dengan questionnaire_version + answers kosong.
+        $assessment = VendorAssessment::firstOrCreate(
+            [
+                'vendor_id' => $vendor->id,
+                'org_id' => $vendor->org_id,
+                'status' => 'draft',
+            ],
+            [
+                'questionnaire_version' => 'v2_2026',
+                'answers' => [],
+            ]
+        );
+
+        // Generate token (default expiry 30 hari, configurable via
+        // system_settings tprm_public_link_expiry_days). Service set status='sent'.
+        $token = $tokenSvc->generate($assessment);
+        $assessment->refresh();
+
+        // Build public URL — frontend_url fallback ke app.url biar konsisten
+        // dengan controller lain (Auth/Notification/Dsr broadcaster).
+        $baseUrl = config('app.frontend_url', config('app.url', 'http://localhost:3000'));
+        $publicUrl = rtrim((string) $baseUrl, '/').'/asesmen-pihak-ketiga/'.$token;
+
+        // Audit log — token disimpan prefix-only supaya kalau leak tidak
+        // langsung pakai. Investigator bisa rekonstruksi full token dari DB.
+        AuditLog::create([
+            'org_id' => $vendor->org_id,
+            'user_id' => $request->user()->id,
+            'user_name' => $request->user()->name ?? 'System',
+            'user_role' => $request->user()->role ?? 'user',
+            'module' => 'tprm.send_assessment',
+            'action' => 'generate_token',
+            'record_id' => $assessment->id,
+            'section' => 'vendor_assessment',
+            'changes' => [
+                'vendor' => $vendor->name,
+                'token_prefix' => substr($token, 0, 8),
+                'expires_at' => optional($assessment->token_expires_at)->toIso8601String(),
+            ],
+            'ip_address' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => 'Tautan asesmen berhasil dibuat. Bagikan URL berikut kepada pihak ketiga.',
+            'assessment_id' => $assessment->id,
+            'token' => $token,
+            'public_url' => $publicUrl,
+            'expires_at' => $assessment->token_expires_at,
+        ]);
+    }
+
+    /**
+     * Sprint G.2 — Upload dokumen vendor typed (intake form).
+     *
+     * Berbeda dengan uploadDocument() yang menerima dokumen bebas dan menyimpan
+     * sebagai array list, endpoint ini meng-keyed berdasarkan jenis dokumen
+     * (akta_notaris/ktp/kontrak_kerjasama/company_profile) sehingga upload
+     * berikutnya untuk kind yang sama akan menimpa entri sebelumnya — sesuai
+     * UX intake form di frontend.
+     *
+     * File divalidasi via FileUploadValidator (magic-byte check, not just MIME)
+     * supaya tidak bisa upload file berbahaya yang diberi ekstensi .pdf.
+     */
+    public function uploadIntakeDocument(Request $request, string $vendorId, TenantStorageService $storage, FileUploadValidator $validator)
+    {
+        $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($vendorId);
+
+        $request->validate([
+            'kind' => 'required|in:akta_notaris,ktp,kontrak_kerjasama,company_profile',
+            'file' => 'required|file|max:10240', // 10MB
+        ]);
+
+        try {
+            $validator->validate($request->file('file'), FileUploadValidator::PRESET_DOCUMENT);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        $org = $request->user()->organization;
+        $result = $storage->storeTenantPrivateFile(
+            $org,
+            $request->file('file'),
+            "vendors/{$vendor->id}/documents"
+        );
+
+        // Keyed-by-kind: timpa entri sebelumnya untuk kind yang sama supaya
+        // user bisa re-upload dokumen yang salah tanpa duplikasi. Existing
+        // free-form documents (array list dari uploadDocument lama) tetap
+        // dipertahankan dengan key numerik — kita hanya set key string.
+        $documents = $vendor->documents ?? [];
+        $documents[$request->kind] = [
+            'path' => $result['path'],
+            'driver' => $result['driver'],
+            'filename' => $request->file('file')->getClientOriginalName(),
+            'size' => $request->file('file')->getSize(),
+            'uploaded_at' => now()->toIso8601String(),
+            'uploaded_by' => $request->user()->id,
+        ];
+        $vendor->update(['documents' => $documents]);
+
+        AuditLog::create([
+            'org_id' => $vendor->org_id,
+            'user_id' => $request->user()->id,
+            'user_name' => $request->user()->name ?? 'System',
+            'user_role' => $request->user()->role ?? 'user',
+            'module' => 'tprm.intake_document',
+            'action' => 'upload',
+            'record_id' => $vendor->id,
+            'section' => 'vendor_documents',
+            'field' => $request->kind,
+            'changes' => [
+                'kind' => $request->kind,
+                'filename' => $request->file('file')->getClientOriginalName(),
+                'size' => $request->file('file')->getSize(),
+            ],
+            'ip_address' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => 'Dokumen berhasil diunggah.',
+            'kind' => $request->kind,
+            'document' => $documents[$request->kind],
+        ]);
     }
 }

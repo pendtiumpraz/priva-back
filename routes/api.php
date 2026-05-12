@@ -95,6 +95,7 @@ use App\Http\Controllers\Api\TenantOffboardController;
 use App\Http\Controllers\Api\TenantRoleController;
 use App\Http\Controllers\Api\TenantSsoController;
 use App\Http\Controllers\Api\TenantThemeController;
+use App\Http\Controllers\Api\ThirdPartyQuestionController;
 use App\Http\Controllers\Api\ThreatIntelController;
 use App\Http\Controllers\Api\TiaController;
 use App\Http\Controllers\Api\UserController;
@@ -308,6 +309,8 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
             Route::post('/{id}/restore', [GapAssessmentController::class, 'restore'])->middleware('permission:gap_assessment,write');
             Route::delete('/{id}/force', [GapAssessmentController::class, 'forceDelete'])->middleware('permission:gap_assessment,write');
             Route::post('/{id}/upload-evidence', [GapAssessmentController::class, 'uploadEvidence'])->middleware('permission:gap_assessment,write');
+            // Sprint G.9: AI evidence analyzer (per-question, charges 1 credit)
+            Route::post('/{id}/analyze-evidence', [GapAssessmentController::class, 'analyzeEvidence'])->middleware('permission:gap_assessment,write');
         }
     );
 
@@ -601,6 +604,30 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::post('/{id}/screen-documents', [VendorRiskController::class, 'screenDocuments']);
         // Re-assessment (manual override atau AI re-run) — legacy path
         Route::post('/{id}/reassess', [VendorRiskController::class, 'reassess']);
+
+        // Sprint G.6 — Generate public assessment link untuk pihak ketiga
+        Route::post('/{id}/generate-public-link', [VendorRiskController::class, 'generatePublicLink'])
+            ->middleware('permission:vendor_risk,write');
+        // Sprint G.2 — Upload dokumen intake typed (akta/ktp/kontrak/CP)
+        Route::post('/{id}/intake-documents', [VendorRiskController::class, 'uploadIntakeDocument'])
+            ->middleware('permission:vendor_risk,write');
+    });
+
+    // =============================================
+    // Sprint G.4 — Customisasi pertanyaan TPRM per-tenant
+    // Tenant admin bisa tambah / edit / nonaktifkan pertanyaan default
+    // (56 baseline) plus tambah pertanyaan custom. Permission slug: vendor_risk
+    // (modul TPRM tidak punya slug terpisah; lihat CheckPermission middleware).
+    // =============================================
+    Route::prefix('third-party/questions')->group(function () {
+        Route::get('/', [ThirdPartyQuestionController::class, 'index'])
+            ->middleware('permission:vendor_risk,read');
+        Route::post('/', [ThirdPartyQuestionController::class, 'store'])
+            ->middleware('permission:vendor_risk,write');
+        Route::put('/{id}', [ThirdPartyQuestionController::class, 'update'])
+            ->middleware('permission:vendor_risk,write');
+        Route::delete('/{id}', [ThirdPartyQuestionController::class, 'destroy'])
+            ->middleware('permission:vendor_risk,write');
     });
 
     // =============================================

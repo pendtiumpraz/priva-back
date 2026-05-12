@@ -25,6 +25,7 @@ class CreditService
         'dashboard_summary'  => 1.0,
         'drill_scenario'     => 2.0,
         'chat'               => 0.25,
+        'ai_doc_analyze'     => 1.0,  // Sprint G.9 — AiDocumentAnalyzer per-evidence call
     ];
 
     /**
