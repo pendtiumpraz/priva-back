@@ -14,10 +14,13 @@ use App\Models\DsrRequest;
 use App\Models\GapAssessment;
 use App\Models\InformationSystem;
 use App\Models\ModuleCustomSection;
+use App\Models\Organization;
 use App\Models\Ropa;
+use App\Services\BrandedXlsxExporter;
 use App\Services\WizardSchemaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ExportController extends Controller
@@ -1387,6 +1390,386 @@ class ExportController extends Controller
         }, "ai_result_{$result->feature_type}_{$id}.json", [
             'Content-Type' => 'application/json',
         ]);
+    }
+
+    // =============================================
+    // Branded XLSX — shared helpers
+    // =============================================
+
+    /**
+     * Resolve which Organization should brand the export. Tenant users always
+     * brand from their own org; superadmin can pass ?org_id= to target a tenant.
+     * Returns null only when there's truly no org context (rare — exports are
+     * authenticated under auth:sanctum so this is mostly defensive).
+     */
+    private function resolveBrandingOrg(Request $request): ?Organization
+    {
+        $user = $request->user();
+        $orgId = $user && $user->role !== 'superadmin'
+            ? $user->org_id
+            : ($request->filled('org_id') ? (string) $request->org_id : ($user->org_id ?? null));
+        if (! $orgId) {
+            return null;
+        }
+
+        return Organization::find($orgId);
+    }
+
+    /**
+     * Collect ?filter[*] / known list filters from the request for cover-sheet
+     * display. Falls back to an empty array.
+     */
+    private function summarizeFilters(Request $request): array
+    {
+        $known = ['status', 'risk_level', 'severity', 'request_type', 'org_id', 'q', 'search', 'feature_type'];
+        $out = [];
+        foreach ($known as $key) {
+            if ($request->filled($key)) {
+                $out[ucfirst(str_replace('_', ' ', $key))] = (string) $request->get($key);
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Stream a branded XLSX file. Builds via BrandedXlsxExporter to a temp
+     * file, then returns a BinaryFileResponse that auto-deletes after send.
+     */
+    private function streamBrandedXlsx(
+        Request $request,
+        string $title,
+        string $module,
+        array $rows,
+        array $columnConfig,
+        ?string $explicitFilename = null,
+    ): BinaryFileResponse|StreamedResponse {
+        $org = $this->resolveBrandingOrg($request);
+        if (! $org) {
+            // Fall back to a tiny CSV with a helpful message — keep response
+            // type recognisable even in the edge case.
+            return $this->streamCsv("{$module}_export_".date('Y-m-d').'.csv', ['Error'], [['Org tidak ditemukan untuk branding export.']]);
+        }
+
+        $exporter = app(BrandedXlsxExporter::class);
+        $filters = $this->summarizeFilters($request);
+        $tmpPath = $exporter->export(
+            org: $org,
+            title: $title,
+            module: $module,
+            rows: $rows,
+            columnConfig: $columnConfig,
+            filters: $filters,
+            user: $request->user(),
+        );
+
+        $moduleName = preg_replace('/\s+/', '', ucwords(str_replace(['-', '_'], ' ', $module)));
+        $filename = $explicitFilename ?: $exporter->suggestedFilename($moduleName, $org);
+
+        return response()->download($tmpPath, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Cache-Control' => 'max-age=0',
+        ])->deleteFileAfterSend(true);
+    }
+
+    // =============================================
+    // RoPA XLSX — Branded
+    // =============================================
+    public function ropaXlsx(Request $request)
+    {
+        $items = $this->getQuery($request, Ropa::class)
+            ->whereNull('deleted_at')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $columnConfig = [
+            ['key' => 'registration_number', 'label' => 'No. Registrasi', 'width' => 18],
+            ['key' => 'processing_activity', 'label' => 'Aktivitas Pemrosesan', 'width' => 32],
+            ['key' => 'purpose', 'label' => 'Tujuan', 'width' => 32],
+            ['key' => 'legal_basis', 'label' => 'Dasar Hukum', 'width' => 22],
+            ['key' => 'division', 'label' => 'Divisi', 'width' => 22],
+            ['key' => 'unit_kerja', 'label' => 'Unit Kerja', 'width' => 22],
+            ['key' => 'dpo_name', 'label' => 'Nama DPO', 'width' => 22],
+            ['key' => 'dpo_email', 'label' => 'Email DPO', 'width' => 26],
+            ['key' => 'data_categories', 'label' => 'Kategori Data', 'format' => 'array', 'width' => 28],
+            ['key' => 'data_subjects', 'label' => 'Subjek Data', 'format' => 'array', 'width' => 28],
+            ['key' => 'transfer_luar', 'label' => 'Transfer Luar Negeri', 'format' => 'boolean', 'width' => 16],
+            ['key' => 'retention_period', 'label' => 'Masa Retensi', 'width' => 18],
+            ['key' => 'retention_due_date', 'label' => 'Retensi Due Date', 'format' => 'date', 'width' => 18],
+            ['key' => 'risk_level', 'label' => 'Level Risiko', 'width' => 14],
+            ['key' => 'progress', 'label' => 'Progress (%)', 'format' => 'number', 'width' => 12],
+            ['key' => 'status', 'label' => 'Status', 'width' => 16],
+            ['key' => 'created_at', 'label' => 'Dibuat', 'format' => 'datetime', 'width' => 20],
+            ['key' => 'updated_at', 'label' => 'Diperbarui', 'format' => 'datetime', 'width' => 20],
+        ];
+
+        $rows = $items->map(function ($r) {
+            $w = $r->wizard_data ?? [];
+            $s1 = $w['detail_pemrosesan'] ?? [];
+            $s2 = $w['dpo_team'] ?? [];
+            $s6 = $w['pengiriman_data'] ?? [];
+
+            return [
+                'registration_number' => $r->registration_number,
+                'processing_activity' => $r->processing_activity,
+                'purpose' => $r->purpose,
+                'legal_basis' => $r->legal_basis,
+                'division' => $r->division ?? $s1['divisi'] ?? '',
+                'unit_kerja' => $s1['unit_kerja'] ?? '',
+                'dpo_name' => $s2['dpo_name'] ?? '',
+                'dpo_email' => $s2['dpo_email'] ?? '',
+                'data_categories' => is_array($r->data_categories) ? $r->data_categories : ($r->data_categories ?? ''),
+                'data_subjects' => is_array($r->data_subjects) ? $r->data_subjects : ($r->data_subjects ?? ''),
+                'transfer_luar' => $s6['transfer_luar'] ?? '',
+                'retention_period' => $r->retention_period ?? '',
+                'retention_due_date' => $r->retention_due_date ? (string) $r->retention_due_date : '',
+                'risk_level' => strtoupper((string) $r->risk_level),
+                'progress' => $r->progress ?? 0,
+                'status' => $r->status,
+                'created_at' => $r->created_at?->toIso8601String(),
+                'updated_at' => $r->updated_at?->toIso8601String(),
+            ];
+        })->all();
+
+        return $this->streamBrandedXlsx($request, 'Export Data RoPA', 'RoPA', $rows, $columnConfig);
+    }
+
+    // =============================================
+    // DPIA XLSX — Branded
+    // =============================================
+    public function dpiaXlsx(Request $request)
+    {
+        $items = $this->getQuery($request, Dpia::class)
+            ->whereNull('deleted_at')
+            ->with('ropa:id,registration_number,processing_activity')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $columnConfig = [
+            ['key' => 'registration_number', 'label' => 'No. Registrasi', 'width' => 18],
+            ['key' => 'description', 'label' => 'Deskripsi', 'width' => 38],
+            ['key' => 'ropa_no', 'label' => 'RoPA Terkait', 'width' => 18],
+            ['key' => 'ropa_activity', 'label' => 'Aktivitas RoPA', 'width' => 32],
+            ['key' => 'risk_level', 'label' => 'Level Risiko', 'width' => 14],
+            ['key' => 'likelihood', 'label' => 'Likelihood', 'format' => 'number', 'width' => 12],
+            ['key' => 'impact', 'label' => 'Impact', 'format' => 'number', 'width' => 12],
+            ['key' => 'risk_score', 'label' => 'Risk Score', 'format' => 'number', 'width' => 12],
+            ['key' => 'status', 'label' => 'Status', 'width' => 16],
+            ['key' => 'approved_at', 'label' => 'Tanggal Approval', 'format' => 'datetime', 'width' => 22],
+            ['key' => 'created_at', 'label' => 'Dibuat', 'format' => 'datetime', 'width' => 20],
+            ['key' => 'updated_at', 'label' => 'Diperbarui', 'format' => 'datetime', 'width' => 20],
+        ];
+
+        $rows = $items->map(function ($d) {
+            $ra = $d->risk_assessment ?? [];
+
+            return [
+                'registration_number' => $d->registration_number,
+                'description' => $d->description,
+                'ropa_no' => $d->ropa?->registration_number ?? '-',
+                'ropa_activity' => $d->ropa?->processing_activity ?? '-',
+                'risk_level' => strtoupper((string) $d->risk_level),
+                'likelihood' => $ra['likelihood'] ?? '',
+                'impact' => $ra['impact'] ?? '',
+                'risk_score' => isset($ra['likelihood'], $ra['impact']) ? ($ra['likelihood'] * $ra['impact']) : '',
+                'status' => $d->status,
+                'approved_at' => $d->approved_at?->toIso8601String(),
+                'created_at' => $d->created_at?->toIso8601String(),
+                'updated_at' => $d->updated_at?->toIso8601String(),
+            ];
+        })->all();
+
+        return $this->streamBrandedXlsx($request, 'Export Data DPIA', 'DPIA', $rows, $columnConfig);
+    }
+
+    // =============================================
+    // Breach XLSX — Branded
+    // =============================================
+    public function breachXlsx(Request $request)
+    {
+        $items = $this->getQuery($request, BreachIncident::class)
+            ->whereNull('deleted_at')
+            ->where('is_simulation', false)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $columnConfig = [
+            ['key' => 'incident_code', 'label' => 'Kode Insiden', 'width' => 18],
+            ['key' => 'title', 'label' => 'Judul', 'width' => 32],
+            ['key' => 'description', 'label' => 'Deskripsi', 'width' => 38],
+            ['key' => 'severity', 'label' => 'Severity', 'width' => 14],
+            ['key' => 'status', 'label' => 'Status', 'width' => 16],
+            ['key' => 'source', 'label' => 'Sumber', 'width' => 18],
+            ['key' => 'affected_data_types', 'label' => 'Tipe Data Terdampak', 'format' => 'array', 'width' => 28],
+            ['key' => 'affected_subjects_count', 'label' => 'Jumlah Subjek', 'format' => 'number', 'width' => 14],
+            ['key' => 'notification_required', 'label' => 'Wajib Notif KOMDIGI', 'format' => 'boolean', 'width' => 18],
+            ['key' => 'notification_deadline', 'label' => 'Deadline Notifikasi', 'format' => 'datetime', 'width' => 22],
+            ['key' => 'containment_status', 'label' => 'Containment (Selesai/Total)', 'width' => 18],
+            ['key' => 'detected_at', 'label' => 'Terdeteksi', 'format' => 'datetime', 'width' => 22],
+            ['key' => 'contained_at', 'label' => 'Contained', 'format' => 'datetime', 'width' => 22],
+            ['key' => 'closed_at', 'label' => 'Ditutup', 'format' => 'datetime', 'width' => 22],
+            ['key' => 'root_cause', 'label' => 'Root Cause', 'width' => 36],
+        ];
+
+        $rows = $items->map(function ($b) {
+            $checklist = $b->containment_checklist ?? [];
+            $done = collect($checklist)->filter(fn ($c) => ($c['completed'] ?? false))->count();
+            $total = count($checklist);
+
+            return [
+                'incident_code' => $b->incident_code,
+                'title' => $b->title,
+                'description' => $b->description,
+                'severity' => strtoupper((string) $b->severity),
+                'status' => $b->status,
+                'source' => $b->source,
+                'affected_data_types' => is_array($b->affected_data_types) ? $b->affected_data_types : ($b->affected_data_types ?? ''),
+                'affected_subjects_count' => $b->affected_subjects_count ?? 0,
+                'notification_required' => (bool) $b->notification_required,
+                'notification_deadline' => $b->notification_deadline?->toIso8601String(),
+                'containment_status' => "{$done}/{$total}",
+                'detected_at' => $b->detected_at?->toIso8601String(),
+                'contained_at' => $b->contained_at?->toIso8601String(),
+                'closed_at' => $b->closed_at?->toIso8601String(),
+                'root_cause' => $b->root_cause ?? '-',
+            ];
+        })->all();
+
+        return $this->streamBrandedXlsx($request, 'Export Data Insiden Pelanggaran', 'Breach', $rows, $columnConfig);
+    }
+
+    // =============================================
+    // DSR XLSX — Branded
+    // =============================================
+    public function dsrXlsx(Request $request)
+    {
+        $items = $this->getQuery($request, DsrRequest::class)
+            ->whereNull('deleted_at')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $columnConfig = [
+            ['key' => 'request_id', 'label' => 'Request ID', 'width' => 18],
+            ['key' => 'request_type', 'label' => 'Tipe Permintaan', 'width' => 20],
+            ['key' => 'requester_name', 'label' => 'Nama Pemohon', 'width' => 24],
+            ['key' => 'requester_email', 'label' => 'Email Pemohon', 'width' => 28],
+            ['key' => 'description', 'label' => 'Deskripsi', 'width' => 38],
+            ['key' => 'status', 'label' => 'Status', 'width' => 16],
+            ['key' => 'verification_status', 'label' => 'Verifikasi', 'width' => 16],
+            ['key' => 'deadline_at', 'label' => 'Deadline (3x24 jam)', 'format' => 'datetime', 'width' => 22],
+            ['key' => 'responded_at', 'label' => 'Direspon Pada', 'format' => 'datetime', 'width' => 22],
+            ['key' => 'closed_at', 'label' => 'Ditutup Pada', 'format' => 'datetime', 'width' => 22],
+            ['key' => 'created_at', 'label' => 'Dibuat', 'format' => 'datetime', 'width' => 22],
+        ];
+
+        $rows = $items->map(fn ($d) => [
+            'request_id' => $d->request_id,
+            'request_type' => $d->request_type,
+            'requester_name' => $d->requester_name,
+            'requester_email' => $d->requester_email,
+            'description' => $d->description,
+            'status' => $d->status,
+            'verification_status' => $d->verification_status ?? 'pending',
+            'deadline_at' => $d->deadline_at?->toIso8601String(),
+            'responded_at' => $d->responded_at?->toIso8601String(),
+            'closed_at' => $d->closed_at?->toIso8601String(),
+            'created_at' => $d->created_at?->toIso8601String(),
+        ])->all();
+
+        return $this->streamBrandedXlsx($request, 'Export Permintaan Subjek Data (DSR)', 'DSR', $rows, $columnConfig);
+    }
+
+    // =============================================
+    // Consent XLSX — Branded
+    // =============================================
+    public function consentXlsx(Request $request)
+    {
+        $items = $this->getQuery($request, ConsentCollectionPoint::class)
+            ->whereNull('deleted_at')
+            ->withCount(['items', 'records'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $columnConfig = [
+            ['key' => 'collection_id', 'label' => 'Collection ID', 'width' => 22],
+            ['key' => 'name', 'label' => 'Nama', 'width' => 30],
+            ['key' => 'domain', 'label' => 'Domain', 'width' => 28],
+            ['key' => 'redirect_url', 'label' => 'Redirect URL', 'width' => 30],
+            ['key' => 'guardian_mode', 'label' => 'Mode Wali', 'format' => 'boolean', 'width' => 14],
+            ['key' => 'items_count', 'label' => 'Jumlah Items', 'format' => 'number', 'width' => 14],
+            ['key' => 'records_count', 'label' => 'Jumlah Records', 'format' => 'number', 'width' => 14],
+            ['key' => 'created_at', 'label' => 'Dibuat', 'format' => 'datetime', 'width' => 22],
+            ['key' => 'updated_at', 'label' => 'Diperbarui', 'format' => 'datetime', 'width' => 22],
+        ];
+
+        $rows = $items->map(function ($c) {
+            $settings = $c->settings ?? [];
+
+            return [
+                'collection_id' => $c->collection_id,
+                'name' => $c->name,
+                'domain' => $c->domain,
+                'redirect_url' => $c->redirect_url ?? '-',
+                'guardian_mode' => (bool) ($settings['guardian_mode'] ?? false),
+                'items_count' => $c->items_count ?? 0,
+                'records_count' => $c->records_count ?? 0,
+                'created_at' => $c->created_at?->toIso8601String(),
+                'updated_at' => $c->updated_at?->toIso8601String(),
+            ];
+        })->all();
+
+        return $this->streamBrandedXlsx($request, 'Export Titik Pengumpulan Persetujuan', 'Consent', $rows, $columnConfig);
+    }
+
+    // =============================================
+    // Data Discovery XLSX — Branded
+    // =============================================
+    public function dataDiscoveryXlsx(Request $request)
+    {
+        $items = $this->getQuery($request, InformationSystem::class)
+            ->whereNull('deleted_at')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $columnConfig = [
+            ['key' => 'name', 'label' => 'Nama Sistem', 'width' => 26],
+            ['key' => 'source_type', 'label' => 'Tipe Sumber', 'width' => 18],
+            ['key' => 'owner', 'label' => 'Owner', 'width' => 20],
+            ['key' => 'scanning_status', 'label' => 'Status Scan', 'width' => 14],
+            ['key' => 'scanning_progress', 'label' => 'Progress (%)', 'format' => 'number', 'width' => 12],
+            ['key' => 'pdp_alert_count', 'label' => 'PDP Alerts', 'format' => 'number', 'width' => 12],
+            ['key' => 'pii_alert_count', 'label' => 'PII Alerts', 'format' => 'number', 'width' => 12],
+            ['key' => 'table_count', 'label' => 'Jumlah Tabel', 'format' => 'number', 'width' => 14],
+            ['key' => 'column_count', 'label' => 'Total Kolom', 'format' => 'number', 'width' => 14],
+            ['key' => 'pii_column_count', 'label' => 'Kolom PII', 'format' => 'number', 'width' => 14],
+            ['key' => 'encryption_column_count', 'label' => 'Perlu Enkripsi', 'format' => 'number', 'width' => 14],
+            ['key' => 'last_scanned_at', 'label' => 'Last Scanned', 'format' => 'datetime', 'width' => 22],
+            ['key' => 'created_at', 'label' => 'Dibuat', 'format' => 'datetime', 'width' => 22],
+        ];
+
+        $rows = $items->map(function ($s) {
+            $results = $s->scan_results ?? [];
+            $tables = $results['tables'] ?? [];
+            $allCols = collect($tables)->flatMap(fn ($t) => $t['columns'] ?? []);
+
+            return [
+                'name' => $s->name,
+                'source_type' => $s->source_type,
+                'owner' => $s->owner ?? '-',
+                'scanning_status' => $s->scanning_status,
+                'scanning_progress' => $s->scanning_progress ?? 0,
+                'pdp_alert_count' => $s->pdp_alert_count ?? 0,
+                'pii_alert_count' => $s->pii_alert_count ?? 0,
+                'table_count' => count($tables),
+                'column_count' => $allCols->count(),
+                'pii_column_count' => $allCols->filter(fn ($c) => $c['pii_detected'] ?? false)->count(),
+                'encryption_column_count' => $allCols->filter(fn ($c) => $c['encryption_required'] ?? false)->count(),
+                'last_scanned_at' => $s->last_scanned_at?->toIso8601String(),
+                'created_at' => $s->created_at?->toIso8601String(),
+            ];
+        })->all();
+
+        return $this->streamBrandedXlsx($request, 'Export Data Discovery', 'DataDiscovery', $rows, $columnConfig);
     }
 
     // =============================================

@@ -1291,15 +1291,21 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // =============================================
     Route::prefix('export')->group(function () {
         Route::get('/ropa', [ExportController::class, 'ropa']);
+        Route::get('/ropa/xlsx', [ExportController::class, 'ropaXlsx']);
         Route::get('/dpia', [ExportController::class, 'dpia']);
+        Route::get('/dpia/xlsx', [ExportController::class, 'dpiaXlsx']);
         Route::get('/dpia-risks', [ExportController::class, 'dpiaRisks']);
         Route::get('/breach', [ExportController::class, 'breach']);
+        Route::get('/breach/xlsx', [ExportController::class, 'breachXlsx']);
         Route::get('/dsr', [ExportController::class, 'dsr']);
+        Route::get('/dsr/xlsx', [ExportController::class, 'dsrXlsx']);
         Route::get('/consent', [ExportController::class, 'consent']);
+        Route::get('/consent/xlsx', [ExportController::class, 'consentXlsx']);
         Route::get('/consent-records', [ExportController::class, 'consentRecords']);
         Route::get('/gap-assessment', [ExportController::class, 'gapAssessment']);
         Route::get('/gap-assessment/xlsx', [ExportController::class, 'gapAssessmentXlsx']);
         Route::get('/data-discovery', [ExportController::class, 'dataDiscovery']);
+        Route::get('/data-discovery/xlsx', [ExportController::class, 'dataDiscoveryXlsx']);
         Route::get('/data-discovery-columns', [ExportController::class, 'dataDiscoveryColumns']);
         Route::get('/simulation', [ExportController::class, 'simulation']);
         Route::get('/ai-results', [ExportController::class, 'aiResults']);
