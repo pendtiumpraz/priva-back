@@ -268,6 +268,23 @@ class DataDiscoveryController extends Controller
         $results = $system->scan_results ?? ['tables' => []];
         $tables = $results['tables'] ?? [];
 
+        // Derivasi applied_status dari classification + pdp_category yang
+        // user pilih di modal Classify. Ini menggantikan tombol Apply terpisah
+        // — user satu-langkah mengubah klasifikasi sekaligus menandai keputusan
+        // sebagai keputusan manual (applied_by = user.id), sehingga scan ulang
+        // tidak akan menimpa.
+        $cls = strtolower((string) $classification);
+        if ($cls === 'sensitive') {
+            $appliedStatus = 'applied_sensitive';
+            $appliedClassification = 'sensitif';
+        } elseif ($cls === 'pii' || $pdpCategory) {
+            $appliedStatus = 'applied_pribadi';
+            $appliedClassification = 'pribadi';
+        } else {
+            $appliedStatus = 'not_pii';
+            $appliedClassification = null;
+        }
+
         foreach ($tables as &$table) {
             if ($table['name'] === $tableName) {
                 foreach ($table['columns'] as &$col) {
@@ -277,6 +294,14 @@ class DataDiscoveryController extends Controller
                         $col['retention_days'] = $retentionDays;
                         $col['encryption_required'] = $encryptionRequired;
                         $col['manually_classified'] = true;
+                        // Manual classify juga menjadi keputusan applied — tandai
+                        // user UUID supaya merge logic di scan ulang tidak
+                        // menimpa keputusan ini.
+                        $col['applied_status'] = $appliedStatus;
+                        $col['applied_classification'] = $appliedClassification;
+                        $col['applied_at'] = now()->toIso8601String();
+                        $col['applied_by'] = $request->user()->id;
+                        $col['applied_note'] = 'manual_classify';
                         break;
                     }
                 }
