@@ -145,7 +145,12 @@ class VendorRiskController extends Controller
         if (! in_array($category, VendorQuestionnaire::ALL_CATEGORIES, true)) {
             return response()->json(['message' => 'Unknown vendor category'], 422);
         }
-        $version = $request->get('version', 'v1');
+        // Default version: v2_2026 (56 pertanyaan PDP) untuk pdp_compliance,
+        // v1 untuk kategori lama (cloud/saas/data_processor).
+        $defaultVersion = $category === VendorQuestionnaire::CATEGORY_PDP_COMPLIANCE
+            ? 'v2_2026'
+            : 'v1';
+        $version = $request->get('version', $defaultVersion);
 
         $questions = VendorQuestionnaire::query()
             ->where('category', $category)

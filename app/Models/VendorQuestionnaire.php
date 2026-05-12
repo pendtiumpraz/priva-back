@@ -25,20 +25,30 @@ class VendorQuestionnaire extends Model
     public const CATEGORY_CLOUD = 'cloud_infrastructure';
     public const CATEGORY_SAAS = 'saas';
     public const CATEGORY_DATA_PROCESSOR = 'data_processor';
+    /**
+     * Default category untuk semua pihak ketiga sejak Sprint G revisi:
+     * 56 pertanyaan PDP komprehensif yang berlaku untuk SEMUA bidang vendor
+     * (IT, Legal, HR, Procurement, dst), bukan hanya IT. Tenant boleh
+     * disable/edit per kolom via customization endpoint.
+     */
+    public const CATEGORY_PDP_COMPLIANCE = 'pdp_compliance';
 
     public const ALL_CATEGORIES = [
+        self::CATEGORY_PDP_COMPLIANCE,
         self::CATEGORY_CLOUD,
         self::CATEGORY_SAAS,
         self::CATEGORY_DATA_PROCESSOR,
     ];
 
     public const CATEGORY_LABELS = [
+        self::CATEGORY_PDP_COMPLIANCE => 'Kepatuhan PDP — Pihak Ketiga (Default)',
         self::CATEGORY_CLOUD => 'Cloud Infrastructure / IaaS',
         self::CATEGORY_SAAS => 'SaaS Application',
         self::CATEGORY_DATA_PROCESSOR => 'Data Processor (manual handling)',
     ];
 
     public const CATEGORY_DESCRIPTIONS = [
+        self::CATEGORY_PDP_COMPLIANCE => 'Default untuk semua pihak ketiga — 56 pertanyaan komprehensif tata kelola, operasi, SDM, dan teknologi sesuai UU PDP. Berlaku lintas bidang.',
         self::CATEGORY_CLOUD => 'Penyedia infrastruktur (AWS, GCP, Azure, Alibaba Cloud, Lintasarta) — host data atau aplikasi.',
         self::CATEGORY_SAAS => 'Aplikasi software-as-a-service (Salesforce, HubSpot, Zoom, Mailchimp) — proses data via fitur produk.',
         self::CATEGORY_DATA_PROCESSOR => 'Pihak ketiga yang memproses data subjek atas nama pengendali (KYC vendor, call center BPO, payment processor).',
