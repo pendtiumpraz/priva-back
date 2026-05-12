@@ -372,15 +372,33 @@ class ModuleCrudController extends Controller
 
         $query->orderBy('created_at', 'desc');
 
+        // Untuk modul yang punya kolom JSON besar (scan_results, ai_scan_results,
+        // protection_assessments di information_systems), select kolom KECIL saja
+        // untuk list view. Detail page (show) tetap fetch full row.
+        // Alasan: MySQL shared hosting punya sort_buffer_size sangat kecil
+        // (default 256KB); SELECT * + ORDER BY pada row dengan JSON multi-MB
+        // memicu error 1038 "Out of sort memory".
+        $listColumns = match ($module) {
+            'data-discovery' => [
+                'id', 'org_id', 'name', 'code', 'description', 'owner', 'owner_id',
+                'source_type', 'connection_type',
+                'scanning_status', 'scanning_progress',
+                'pdp_alert_count', 'pii_alert_count',
+                'last_scanned_at', 'is_sharded',
+                'created_at', 'updated_at', 'deleted_at',
+            ],
+            default => ['*'],
+        };
+
         // Pagination
         if ($request->filled('per_page')) {
             $perPage = (int) $request->get('per_page', 25);
-            $paginated = $query->cursorPaginate($perPage);
+            $paginated = $query->cursorPaginate($perPage, $listColumns);
 
             return response()->json($paginated);
         }
 
-        return response()->json(['data' => $query->get()]);
+        return response()->json(['data' => $query->get($listColumns)]);
     }
 
     /**
