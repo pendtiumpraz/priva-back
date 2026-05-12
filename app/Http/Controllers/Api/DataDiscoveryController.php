@@ -10,6 +10,7 @@ use App\Models\Organization;
 use App\Models\OrganizationApp;
 use App\Models\Ropa;
 use App\Services\AiService;
+use App\Services\AiSpecificSearchService;
 use App\Services\DatabaseScanner;
 use App\Services\NotificationService;
 use App\Services\OcrScannerService;
@@ -282,6 +283,225 @@ class DataDiscoveryController extends Controller
         ], 'manual');
 
         return response()->json(['message' => 'Column classification updated']);
+    }
+
+    /**
+     * Apply scan recommendation (standard/deep) to a column's final status.
+     *
+     * Scan hasil dari standard/deep scan adalah REKOMENDASI — kolom belum
+     * "diterima" sebagai pribadi/sensitif sampai user eksplisit memutuskan.
+     * Endpoint ini menulis `applied_status` ke entry kolom di JSON `scan_results`.
+     *
+     * Body:
+     *   - table (string)   : nama tabel
+     *   - column (string)  : nama kolom
+     *   - action (string)  : apply_pribadi | apply_sensitive | reject
+     *   - note (string?)   : catatan opsional dari user
+     */
+    public function applyColumn(Request $request, string $id)
+    {
+        $request->validate([
+            'table' => ['required', 'string', 'min:1'],
+            'column' => ['required', 'string', 'min:1'],
+            'action' => ['required', 'in:apply_pribadi,apply_sensitive,reject'],
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+
+        $tableName = $request->input('table');
+        $columnName = $request->input('column');
+        $action = $request->input('action');
+        $note = $request->input('note');
+
+        $results = $system->scan_results ?? ['tables' => []];
+        $tables = $results['tables'] ?? [];
+
+        $updatedColumn = null;
+        $found = false;
+
+        foreach ($tables as &$table) {
+            $tName = $table['name'] ?? $table['table_name'] ?? null;
+            if ($tName !== $tableName) {
+                continue;
+            }
+            foreach ($table['columns'] as &$col) {
+                $cName = $col['name'] ?? $col['column_name'] ?? null;
+                if ($cName !== $columnName) {
+                    continue;
+                }
+                $col = self::applyActionToColumn($col, $action, $note, $request->user()->id);
+                $updatedColumn = $col;
+                $found = true;
+                break;
+            }
+            unset($col);
+            break;
+        }
+        unset($table);
+
+        if (! $found) {
+            return response()->json([
+                'error' => "Kolom '{$columnName}' di tabel '{$tableName}' tidak ditemukan di hasil scan.",
+            ], 404);
+        }
+
+        $results['tables'] = $tables;
+        $system->update(['scan_results' => $results]);
+
+        AuditLog::log('data-discovery', $system->id, 'column_apply', [
+            'table' => $tableName,
+            'column' => $columnName,
+            'action' => $action,
+            'applied_status' => $updatedColumn['applied_status'] ?? null,
+            'applied_classification' => $updatedColumn['applied_classification'] ?? null,
+            'note' => $note,
+        ], 'manual');
+
+        return response()->json([
+            'message' => 'OK',
+            'column' => $updatedColumn,
+        ]);
+    }
+
+    /**
+     * Bulk variant of applyColumn — apply rekomendasi untuk banyak kolom sekaligus.
+     *
+     * Body:
+     *   - items: array (max 200)
+     *     - table (string)
+     *     - column (string)
+     *     - action (apply_pribadi | apply_sensitive | reject)
+     *     - note (string?)
+     */
+    public function applyColumnBulk(Request $request, string $id)
+    {
+        $request->validate([
+            'items' => ['required', 'array', 'min:1', 'max:200'],
+            'items.*.table' => ['required', 'string', 'min:1'],
+            'items.*.column' => ['required', 'string', 'min:1'],
+            'items.*.action' => ['required', 'in:apply_pribadi,apply_sensitive,reject'],
+            'items.*.note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $userId = $request->user()->id;
+
+        $results = $system->scan_results ?? ['tables' => []];
+        $tables = $results['tables'] ?? [];
+
+        // Index tables by name for O(1) lookup; build a mutable map keyed by name.
+        $tableIndex = [];
+        foreach ($tables as $idx => $t) {
+            $tName = $t['name'] ?? $t['table_name'] ?? null;
+            if ($tName !== null) {
+                $tableIndex[$tName] = $idx;
+            }
+        }
+
+        $items = $request->input('items', []);
+        $appliedCount = 0;
+        $failed = [];
+
+        foreach ($items as $i => $item) {
+            $tableName = $item['table'] ?? null;
+            $columnName = $item['column'] ?? null;
+            $action = $item['action'] ?? null;
+            $note = $item['note'] ?? null;
+
+            if (! isset($tableIndex[$tableName])) {
+                $failed[] = [
+                    'index' => $i,
+                    'table' => $tableName,
+                    'column' => $columnName,
+                    'reason' => 'Tabel tidak ditemukan di hasil scan.',
+                ];
+                continue;
+            }
+
+            $tIdx = $tableIndex[$tableName];
+            $foundCol = false;
+            foreach ($tables[$tIdx]['columns'] as $cIdx => $col) {
+                $cName = $col['name'] ?? $col['column_name'] ?? null;
+                if ($cName === $columnName) {
+                    $tables[$tIdx]['columns'][$cIdx] = self::applyActionToColumn($col, $action, $note, $userId);
+                    $foundCol = true;
+                    $appliedCount++;
+                    break;
+                }
+            }
+
+            if (! $foundCol) {
+                $failed[] = [
+                    'index' => $i,
+                    'table' => $tableName,
+                    'column' => $columnName,
+                    'reason' => 'Kolom tidak ditemukan di tabel.',
+                ];
+            }
+        }
+
+        $results['tables'] = $tables;
+        $system->update(['scan_results' => $results]);
+
+        AuditLog::log('data-discovery', $system->id, 'column_apply_bulk', [
+            'requested' => count($items),
+            'applied_count' => $appliedCount,
+            'failed_count' => count($failed),
+        ], 'manual');
+
+        return response()->json([
+            'message' => 'OK',
+            'applied_count' => $appliedCount,
+            'failed' => $failed,
+        ]);
+    }
+
+    /**
+     * Apply a single action to a column array (in-memory), returning the
+     * mutated copy. Centralises the field-setting rules used by both the
+     * single and bulk apply endpoints so they stay in sync.
+     */
+    private static function applyActionToColumn(array $col, string $action, ?string $note, string $userId): array
+    {
+        $now = now()->toIso8601String();
+
+        if ($action === 'apply_pribadi') {
+            $col['applied_status'] = 'applied_pribadi';
+            $col['applied_classification'] = 'pribadi';
+            $col['applied_at'] = $now;
+            $col['applied_by'] = $userId;
+            $col['applied_note'] = $note;
+
+            // Sensible defaults — user can override via classify-column endpoint.
+            if (empty($col['classification'])) {
+                $col['classification'] = 'confidential';
+            }
+            if (empty($col['pdp_category'])) {
+                $col['pdp_category'] = 'umum';
+            }
+        } elseif ($action === 'apply_sensitive') {
+            $col['applied_status'] = 'applied_sensitive';
+            $col['applied_classification'] = 'sensitif';
+            $col['applied_at'] = $now;
+            $col['applied_by'] = $userId;
+            $col['applied_note'] = $note;
+
+            if (empty($col['classification'])) {
+                $col['classification'] = 'confidential';
+            }
+            if (empty($col['pdp_category'])) {
+                $col['pdp_category'] = 'spesifik';
+            }
+        } elseif ($action === 'reject') {
+            $col['applied_status'] = 'rejected';
+            $col['applied_classification'] = null;
+            $col['applied_at'] = $now;
+            $col['applied_by'] = $userId;
+            $col['applied_note'] = $note;
+        }
+
+        return $col;
     }
 
     /**
@@ -1298,5 +1518,224 @@ class DataDiscoveryController extends Controller
                 'executed' => $execution,
             ],
         ]);
+    }
+
+    // =========================================================
+    //  Agent #7 — Ephemeral AI Search Execute (no persistence)
+    // =========================================================
+    /**
+     * POST /api/data-discovery/{id}/ai-search/execute
+     *
+     * Menerima daftar kasus pencarian natural-language (max 5), generate
+     * SELECT-only SQL via AiSpecificSearchService (Agent #6), eksekusi di
+     * koneksi DB tenant (read-only, dengan statement timeout), dan kembalikan
+     * hasil sebagai response ephemeral. Hasil TIDAK pernah dipersist ke DB.
+     *
+     * Privacy guarantee: hanya schema (table + column names) yang dikirim ke
+     * AI saat generate SQL — sample value tidak pernah keluar dari backend.
+     * Setiap baris hasil di-cap maksimum 100 rows.
+     */
+    public function aiSearchExecute(Request $request, string $id, AiSpecificSearchService $service)
+    {
+        $request->validate([
+            'cases' => ['required', 'array', 'min:1', 'max:5'],
+            'cases.*.id' => ['required', 'string'],
+            'cases.*.query_text' => ['required', 'string', 'min:5', 'max:500'],
+            'date_context' => ['nullable', 'array'],
+            'date_context.kind' => ['nullable', 'in:today,yesterday,last_7d,custom'],
+            'date_context.date' => ['nullable', 'date_format:Y-m-d', 'required_if:date_context.kind,custom'],
+        ]);
+
+        $user = $request->user();
+        $system = InformationSystem::where('org_id', $user->org_id)->findOrFail($id);
+
+        // Defensive: butuh hasil scan untuk generate SQL aman
+        $tables = $system->scan_results['tables'] ?? [];
+        if (empty($tables)) {
+            return response()->json([
+                'error' => 'Sistem belum di-scan. Jalankan scan terlebih dahulu.',
+            ], 422);
+        }
+
+        $cases = $request->input('cases');
+        $dateContext = $request->input('date_context', ['kind' => 'today', 'date' => null]);
+
+        // Step 1 — minta Agent #6 service untuk generate SQL per case.
+        $generated = $service->generateSqls($user->org_id, $id, $cases, $dateContext);
+
+        // Step 2 — resolve koneksi DB tenant.
+        // InformationSystem tidak punya `connection_name` / `db_credentials` field;
+        // pakai `connection_config` (existing). Bila kosong → koneksi default Laravel.
+        $config = $system->connection_config ?? [];
+        $connectionName = $this->resolveTenantConnection($system, $config);
+
+        $results = [];
+        $successCount = 0;
+        $totalDurationMs = 0;
+
+        foreach ($generated as $row) {
+            $caseId = $row['case_id'] ?? null;
+            $queryText = $row['query_text'] ?? null;
+            $sql = $row['generated_sql'] ?? null;
+            $genError = $row['error'] ?? null;
+
+            // Skip case yang gagal di-generate.
+            if ($sql === null || $genError !== null) {
+                $results[] = [
+                    'case_id' => $caseId,
+                    'query_text' => $queryText,
+                    'generated_sql' => null,
+                    'row_count' => 0,
+                    'sample_rows' => [],
+                    'executed_at' => null,
+                    'duration_ms' => 0,
+                    'error' => $genError ?? 'SQL generation failed',
+                ];
+                continue;
+            }
+
+            // Defense in depth — Agent #6 sudah validate, kita re-validate.
+            $validationError = $service->validateSqlIsSelectOnly($sql);
+            if ($validationError !== null) {
+                $results[] = [
+                    'case_id' => $caseId,
+                    'query_text' => $queryText,
+                    'generated_sql' => $sql,
+                    'row_count' => 0,
+                    'sample_rows' => [],
+                    'executed_at' => null,
+                    'duration_ms' => 0,
+                    'error' => 'SQL validation failed: '.$validationError,
+                ];
+                continue;
+            }
+
+            $startedAt = microtime(true);
+            $executedAtIso = now()->toIso8601String();
+
+            try {
+                // Pasang statement timeout 5 detik bila driver support.
+                $this->applyReadOnlyTimeout($connectionName);
+
+                $rows = DB::connection($connectionName)->select($sql);
+
+                // Cast hasil ke array of associative & cap 100 rows.
+                $assoc = array_map(fn ($r) => (array) $r, $rows);
+                $rowCount = count($assoc);
+                $sample = array_slice($assoc, 0, 100);
+                $durationMs = (int) round((microtime(true) - $startedAt) * 1000);
+
+                $results[] = [
+                    'case_id' => $caseId,
+                    'query_text' => $queryText,
+                    'generated_sql' => $sql,
+                    'row_count' => $rowCount,
+                    'sample_rows' => $sample,
+                    'executed_at' => $executedAtIso,
+                    'duration_ms' => $durationMs,
+                    'error' => null,
+                ];
+                $successCount++;
+                $totalDurationMs += $durationMs;
+            } catch (\Throwable $e) {
+                $durationMs = (int) round((microtime(true) - $startedAt) * 1000);
+                $totalDurationMs += $durationMs;
+                $results[] = [
+                    'case_id' => $caseId,
+                    'query_text' => $queryText,
+                    'generated_sql' => $sql,
+                    'row_count' => 0,
+                    'sample_rows' => [],
+                    'executed_at' => $executedAtIso,
+                    'duration_ms' => $durationMs,
+                    'error' => self::humanizeDbError($e->getMessage()),
+                ];
+            }
+        }
+
+        // Step 4 — audit (metadata only, tidak ada raw SQL/result).
+        AuditLog::log('data-discovery', $system->id, 'ai_search.executed', [
+            'cases_count' => count($cases),
+            'success_count' => $successCount,
+            'total_duration_ms' => $totalDurationMs,
+        ], 'user');
+
+        // Step 5 — response ephemeral. JANGAN persist ke DB manapun.
+        return response()->json(['results' => $results]);
+    }
+
+    /**
+     * Resolve which Laravel DB connection to use for executing AI-generated
+     * SQL against the tenant's information system. Falls back to the default
+     * application connection bila system tidak punya connection_config
+     * (mock / dev case).
+     */
+    private function resolveTenantConnection(InformationSystem $system, array $config): ?string
+    {
+        // Bila system tidak punya host config sama sekali → pakai default Laravel.
+        if (empty($config) || empty($config['host'] ?? null)) {
+            return null; // null = default connection
+        }
+
+        $sourceType = $system->source_type;
+        $driver = match ($sourceType) {
+            'postgresql', 'postgres', 'pgsql' => 'pgsql',
+            'mysql', 'mariadb' => 'mysql',
+            default => null,
+        };
+        if ($driver === null) {
+            return null; // unsupported driver → biar Laravel default yang handle
+        }
+
+        // Bikin connection name unik per system supaya tidak konflik antar tenant.
+        $connName = 'ds_ai_search_'.$system->id;
+        $existing = config('database.connections.'.$connName);
+        if ($existing) {
+            return $connName;
+        }
+
+        // Register dynamic read-only connection. Tidak persist ke file config.
+        config([
+            'database.connections.'.$connName => [
+                'driver' => $driver,
+                'host' => $config['host'] ?? '127.0.0.1',
+                'port' => $config['port'] ?? ($driver === 'pgsql' ? 5432 : 3306),
+                'database' => $config['database'] ?? '',
+                'username' => $config['username'] ?? '',
+                'password' => $config['password'] ?? '',
+                'charset' => $driver === 'pgsql' ? 'utf8' : 'utf8mb4',
+                'collation' => $driver === 'pgsql' ? null : 'utf8mb4_unicode_ci',
+                'prefix' => '',
+                'strict' => false,
+                'sslmode' => $config['sslmode'] ?? 'prefer',
+                'options' => [
+                    \PDO::ATTR_TIMEOUT => 5,
+                ],
+            ],
+        ]);
+
+        return $connName;
+    }
+
+    /**
+     * Set a session-level statement timeout (5s) on the given connection so
+     * a runaway AI-generated query can't pin the tenant DB. Silently no-op
+     * on drivers that don't support the directive (SQLite, MSSQL, etc.).
+     */
+    private function applyReadOnlyTimeout(?string $connectionName): void
+    {
+        try {
+            $conn = DB::connection($connectionName);
+            $driver = $conn->getDriverName();
+            if ($driver === 'pgsql') {
+                $conn->statement("SET statement_timeout TO 5000");
+            } elseif ($driver === 'mysql' || $driver === 'mariadb') {
+                $conn->statement('SET SESSION MAX_EXECUTION_TIME = 5000');
+            }
+            // SQLite/other → no-op
+        } catch (\Throwable $e) {
+            // Driver tidak support → biarkan, tidak fatal.
+            Log::info('AI search statement_timeout skipped: '.$e->getMessage());
+        }
     }
 }

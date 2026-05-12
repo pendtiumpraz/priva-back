@@ -675,6 +675,9 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::post('/{id}/scan-ai', [DataDiscoveryController::class, 'scanAi'])->middleware('permission:data_discovery,write');
         Route::get('/{id}/scan-details', [DataDiscoveryController::class, 'scanDetails'])->middleware('permission:data_discovery,read');
         Route::put('/{id}/classify-column', [DataDiscoveryController::class, 'updateColumnClassification'])->middleware('permission:data_discovery,write');
+        // Apply scan recommendation to a column's final status (terima/tolak rekomendasi)
+        Route::post('/{id}/columns/apply', [DataDiscoveryController::class, 'applyColumn'])->middleware('permission:data_discovery,write');
+        Route::post('/{id}/columns/apply-bulk', [DataDiscoveryController::class, 'applyColumnBulk'])->middleware('permission:data_discovery,write');
         Route::get('/{id}/ropa-links', [DataDiscoveryController::class, 'ropaLinks'])->middleware('permission:data_discovery,read');
 
         // Many-to-many RoPA pivot management
@@ -690,6 +693,12 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         //   POST /search-ai/execute → user explicitly runs the SQL (no AI involved)
         Route::post('/{id}/search-ai', [DataDiscoveryController::class, 'specificSearchAi'])->middleware('permission:data_discovery,read');
         Route::post('/{id}/search-ai/execute', [DataDiscoveryController::class, 'specificSearchExecute'])->middleware('permission:data_discovery,read');
+
+        // Agent #7 — Ephemeral AI Search Execute (multi-case, no persistence)
+        //   POST /ai-search/execute → batch text-to-SQL + execute + cap 100 rows per case
+        //   Rate-limited 5 req/min (AI calls + DB queries are expensive).
+        Route::post('/{id}/ai-search/execute', [DataDiscoveryController::class, 'aiSearchExecute'])
+            ->middleware(['permission:data_discovery,write', 'throttle:5,1']);
 
         // Decryptor Profiles (per-system tenant encryption keys, wrapped at rest)
         //   GET    /decryptor-profiles       → list (metadata only, key hidden)
