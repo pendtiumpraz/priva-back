@@ -110,21 +110,35 @@ class VendorRiskController extends Controller
         // Pilih assessment terbaru yang token belum expired dan belum di-consume.
         // Wrap try/catch supaya kalau data assessment ter-malformed (mis. carbon
         // cast gagal), endpoint show TIDAK 500 — basic vendor data tetap balik.
+        // Pilih assessment dengan token yang masih bisa dipakai untuk SHARE
+        // (belum expired, belum consumed). Kalau tidak ada, fall-through ke
+        // assessment terbaru yang punya token APAPUN (consumed/expired) untuk
+        // ditampilkan READ-ONLY supaya tenant tetap bisa lihat URL hasil.
         try {
-            $activeAssessment = $vendor->assessments
-                ->filter(function ($a) {
-                    $hasToken = ! empty($a->assessment_token);
-                    $expiresAt = $a->token_expires_at;
-                    $notExpired = empty($expiresAt) || (is_object($expiresAt) && method_exists($expiresAt, 'isFuture') && $expiresAt->isFuture());
-                    $notConsumed = empty($a->token_consumed_at);
+            $assessments = $vendor->assessments
+                ->filter(fn ($a) => ! empty($a->assessment_token))
+                ->sortByDesc('created_at');
 
-                    return $hasToken && $notExpired && $notConsumed;
-                })
-                ->sortByDesc('created_at')
-                ->first();
-            if ($activeAssessment) {
-                $data['active_assessment_token'] = $activeAssessment->assessment_token;
-                $data['active_token_expires_at'] = $activeAssessment->token_expires_at;
+            $shareable = $assessments->first(function ($a) {
+                $expiresAt = $a->token_expires_at;
+                $notExpired = empty($expiresAt) || (is_object($expiresAt) && method_exists($expiresAt, 'isFuture') && $expiresAt->isFuture());
+                $notConsumed = empty($a->token_consumed_at);
+
+                return $notExpired && $notConsumed;
+            });
+
+            $latestAny = $assessments->first();
+
+            $token = $shareable?->assessment_token ?? $latestAny?->assessment_token;
+            $expires = $shareable?->token_expires_at ?? $latestAny?->token_expires_at;
+            $consumed = $shareable ? false : ! empty($latestAny?->token_consumed_at);
+
+            if ($token) {
+                $data['active_assessment_token'] = $token;
+                $data['active_token_expires_at'] = $expires;
+                // Hint untuk frontend bedakan mode: shareable (kirim ke vendor)
+                // vs read-only (vendor sudah submit, hanya untuk preview hasil).
+                $data['active_token_consumed'] = $consumed;
             }
         } catch (\Throwable $e) {
             \Log::warning('vendor.show active_assessment computation failed: '.$e->getMessage());
