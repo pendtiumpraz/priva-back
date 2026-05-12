@@ -27,6 +27,13 @@ class VendorAssessment extends Model
         'category',
         'score_breakdown',
         'questionnaire_version',
+        'assessment_token',
+        'token_expires_at',
+        'token_consumed_at',
+        'status',
+        'submitted_at',
+        'submitted_ip',
+        'submitted_user_agent',
     ];
 
     protected $casts = [
@@ -34,6 +41,9 @@ class VendorAssessment extends Model
         'recommendations' => 'array',
         'score_breakdown' => 'array',
         'score' => 'integer',
+        'token_expires_at' => 'datetime',
+        'token_consumed_at' => 'datetime',
+        'submitted_at' => 'datetime',
     ];
 
     public function vendor()

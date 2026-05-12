@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\ApiHubController;
 use App\Http\Controllers\Api\ApiKeyController;
 use App\Http\Controllers\Api\ApprovalConfigController;
 use App\Http\Controllers\Api\ApprovalController;
+use App\Http\Controllers\Api\AsesmenPublikController;
 use App\Http\Controllers\Api\AssessmentsController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AutomationController;
@@ -156,6 +157,23 @@ Route::middleware('throttle:api')->group(function () {
     Route::post('/public/dsr/submit/{embed_token}', [DsrPublicController::class, 'submit'])
         ->middleware('throttle:30,1');  // 30 req/min per IP
     Route::get('/public/dsr/verify/{token}', [DsrPublicController::class, 'verify']);
+
+    // =============================================
+    // Asesmen Publik — TPRM (Sprint G)
+    // Pihak ketiga isi vendor questionnaire tanpa login, akses via UUID token.
+    // Middleware `public-assessment-token` handle: resolve assessment dari
+    // token, validasi expiry, single-use guard untuk write, set tenant
+    // context, rate-limit 30 RPM per token.
+    // =============================================
+    Route::prefix('asesmen-publik/{token}')
+        ->middleware('public-assessment-token')
+        ->group(function () {
+            Route::get('/', [AsesmenPublikController::class, 'show']);
+            Route::post('/jawaban', [AsesmenPublikController::class, 'saveDraft']);
+            Route::post('/upload', [AsesmenPublikController::class, 'uploadEvidence']);
+            Route::post('/submit', [AsesmenPublikController::class, 'submit']);
+            Route::get('/result', [AsesmenPublikController::class, 'result']);
+        });
 
     // SSO Public Routes
     Route::get('/sso/redirect', [SsoLoginController::class, 'redirect']);

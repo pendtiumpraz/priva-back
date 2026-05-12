@@ -32,6 +32,13 @@ class FileUploadValidator
     public const PRESET_DOCUMENT_OR_ARCHIVE = 'document_or_archive';
     /** Chat attachment — dokumen + image. */
     public const PRESET_CHAT_ATTACHMENT = 'chat_attachment';
+    /**
+     * Maturity Level Assessment + GAP Assessment evidence — Office docs
+     * (PDF/Word/Excel) + screenshot evidence (JPG/PNG/GIF/WEBP). Same set
+     * as PRESET_CHAT_ATTACHMENT minus CSV/TXT (evidence is rarely a raw
+     * spreadsheet export; keep the surface tight).
+     */
+    public const PRESET_MATURITY_EVIDENCE = 'maturity_evidence';
 
     private const ALLOWED_MIMES = [
         self::PRESET_DOCUMENT => [
@@ -159,6 +166,17 @@ class FileUploadValidator
                 self::ALLOWED_MIMES[self::PRESET_DOCUMENT],
                 self::ALLOWED_MIMES[self::PRESET_IMAGE],
             ),
+            self::PRESET_MATURITY_EVIDENCE => [
+                'application/pdf' => ['pdf'],
+                'application/msword' => ['doc'],
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => ['docx'],
+                'application/vnd.ms-excel' => ['xls'],
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => ['xlsx'],
+                'image/jpeg' => ['jpg', 'jpeg'],
+                'image/png' => ['png'],
+                'image/gif' => ['gif'],
+                'image/webp' => ['webp'],
+            ],
             default => throw new RuntimeException("Unknown file upload preset: {$preset}"),
         };
     }

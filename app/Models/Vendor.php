@@ -20,6 +20,9 @@ class Vendor extends Model
         'country',
         'contact_name',
         'contact_email',
+        'departemen_kontak',
+        'bidang',
+        'jenis_entitas',
         'website',
         'description',
         'dpa_status',
@@ -42,6 +45,7 @@ class Vendor extends Model
         'data_shared' => 'array',
         'services_provided' => 'array',
         'documents' => 'array',
+        'bidang' => 'array',
         'risk_score' => 'integer',
         // PII Encryption — AES-256-CBC
         'contact_name' => EncryptedString::class,

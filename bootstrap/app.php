@@ -5,6 +5,7 @@ use App\Http\Middleware\AuthenticateDsrApiKey;
 use App\Http\Middleware\CheckPermission;
 use App\Http\Middleware\EnforceTenantReadOnly;
 use App\Http\Middleware\InitializeTenantDatabase;
+use App\Http\Middleware\PublicAssessmentTokenMiddleware;
 use App\Http\Middleware\RootOnly;
 use App\Http\Middleware\RootOrSuperadmin;
 use App\Http\Middleware\SanctumTokenRefresh;
@@ -33,6 +34,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant.context' => SetCurrentOrgContext::class,
             'tenant.db' => InitializeTenantDatabase::class,
             'tenant.readonly' => EnforceTenantReadOnly::class,
+            // Public TPRM assessment — resolve token, set tenant context, rate-limit.
+            'public-assessment-token' => PublicAssessmentTokenMiddleware::class,
         ]);
 
         // Stamp security headers (HSTS, frame-options, referrer-policy, dst)

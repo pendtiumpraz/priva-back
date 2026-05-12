@@ -320,7 +320,7 @@ class GapAssessmentController extends Controller
         $file = $request->file('file');
 
         try {
-            $validator->validate($file, FileUploadValidator::PRESET_CHAT_ATTACHMENT);
+            $validator->validate($file, FileUploadValidator::PRESET_MATURITY_EVIDENCE);
         } catch (RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }

@@ -55,6 +55,17 @@ class AppServiceProvider extends ServiceProvider
         // Limit + master enabled configurable via security.tenant_rate_limit_*.
         // Default 300/menit cukup untuk dashboard yang load 10+ widget per
         // user di tenant dengan 30+ user aktif simultan.
+        // 2b. Public TPRM assessment — 30 RPM per token. Bucket key dari
+        // segment route `token` supaya rate-limit terikat ke link share,
+        // bukan per-IP (banyak pihak ketiga di belakang NAT/proxy). Middleware
+        // PublicAssessmentTokenMiddleware juga punya guard sendiri pakai
+        // RateLimiter::tooManyAttempts — definisi di sini berguna kalau ada
+        // route yang ingin pakai sintaks `throttle:public-assessment-token`.
+        \Illuminate\Support\Facades\RateLimiter::for('public-assessment-token', function (\Illuminate\Http\Request $request) {
+            $token = (string) ($request->route('token') ?? $request->ip());
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute(30)->by('public-asmt:' . sha1($token));
+        });
+
         \Illuminate\Support\Facades\RateLimiter::for('tenant-api', function (\Illuminate\Http\Request $request) {
             $enabled = (bool) config('security.tenant_rate_limit_enabled', true);
             if (! $enabled) {

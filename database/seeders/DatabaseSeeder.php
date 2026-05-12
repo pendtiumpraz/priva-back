@@ -22,6 +22,10 @@ class DatabaseSeeder extends Seeder
             // Both are idempotent via updateOrCreate so re-running db:seed
             // refreshes config/docx paths without duplicating rows.
             DocumentTemplateSeeder::class,
+            // Sprint G — Third-party PDP questionnaire bank (v2_2026, 56 items
+            // berstandar UU PDP 27/2022). System-level (org_id = NULL) supaya
+            // semua tenant inherit; tenant boleh override via parent_id.
+            ThirdPartyQuestionnaireSeeder::class,
             NexusCanonicalDocxSeeder::class,
             // RACI template presets for breach containment matrix editor.
             RaciTemplateSeeder::class,

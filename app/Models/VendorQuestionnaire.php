@@ -63,9 +63,13 @@ class VendorQuestionnaire extends Model
     public const ANSWER_SCALE_1_5 = 'scale_1_5';
 
     protected $fillable = [
+        'org_id',
+        'parent_id',
         'category', 'version', 'question_code', 'section',
         'question_text', 'description', 'regulation_ref',
         'answer_type', 'answer_options', 'weight', 'direction',
+        'recommendation_if_no',
+        'requires_evidence_upload',
         'is_active', 'sort_order',
     ];
 
@@ -76,4 +80,54 @@ class VendorQuestionnaire extends Model
         'is_active' => 'boolean',
         'sort_order' => 'integer',
     ];
+
+    /**
+     * Merge system defaults with tenant overrides + tenant custom questions.
+     *
+     * Resolution order:
+     *   - System default: org_id IS NULL (active, current version)
+     *   - Tenant override: org_id = $orgId AND parent_id IS NOT NULL → replaces matching default
+     *   - Tenant custom:   org_id = $orgId AND parent_id IS NULL    → appended
+     *
+     * De-activated overrides remove the default from the effective set.
+     */
+    public static function effectiveForOrg(?string $orgId): \Illuminate\Support\Collection
+    {
+        $defaults = self::query()
+            ->withoutGlobalScope('org')
+            ->whereNull('org_id')
+            ->where('is_active', true)
+            ->where('version', 'v2_2026')
+            ->get()
+            ->keyBy('id');
+
+        if ($orgId) {
+            $overrides = self::query()
+                ->withoutGlobalScope('org')
+                ->where('org_id', $orgId)
+                ->whereNotNull('parent_id')
+                ->get()
+                ->keyBy('parent_id');
+
+            foreach ($overrides as $parentId => $override) {
+                if (isset($defaults[$parentId])) {
+                    // Replace default with override
+                    $defaults[$parentId] = $override;
+                }
+            }
+
+            $customs = self::query()
+                ->withoutGlobalScope('org')
+                ->where('org_id', $orgId)
+                ->whereNull('parent_id')
+                ->get();
+
+            // Filter out de-activated defaults
+            $defaults = $defaults->filter(fn ($q) => $q->is_active);
+
+            return $defaults->values()->merge($customs);
+        }
+
+        return $defaults->values();
+    }
 }
