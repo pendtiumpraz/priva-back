@@ -359,8 +359,14 @@ PROMPT;
         app(\App\Services\AiPromptGuard::class)
             ->assertPromptSize(json_encode($messages, JSON_UNESCAPED_UNICODE) ?: '');
 
+        // Clamp max_tokens via output guard supaya tidak melewati hard cap
+        // (default 4000). 3000 di bawah cap default, tapi clamp jaga
+        // konsistensi kalau admin set cap lebih ketat.
+        $outputGuard = app(\App\Services\AiOutputGuard::class);
+        $agentMaxTokens = $outputGuard->clampMaxTokens(3000);
+
         // Function calling loop
-        return response()->stream(function () use ($messages, $tools, $apiKey, $agentModel, $agentBaseUrl, $agentAuthHeader, $agentAuthPrefix, $executor, $conversation, $user, $orgId, $isSuperAdmin) {
+        return response()->stream(function () use ($messages, $tools, $apiKey, $agentModel, $agentBaseUrl, $agentAuthHeader, $agentAuthPrefix, $executor, $conversation, $user, $orgId, $isSuperAdmin, $outputGuard, $agentMaxTokens) {
             $steps = [];
             $iteration = 0;
 
@@ -373,7 +379,7 @@ PROMPT;
                         'messages' => $messages,
                         'tools' => $tools,
                         'temperature' => 0.2,
-                        'max_tokens' => 3000,
+                        'max_tokens' => $agentMaxTokens,
                     ];
 
                     $headers = ['Content-Type' => 'application/json'];
@@ -503,6 +509,34 @@ PROMPT;
 
                     // AI finished — get final reply
                     $reply = $assistantMessage['content'] ?? '';
+
+                    // Output safety guard — tolak respons yang melewati batas
+                    // total karakter, mengandung pola berulang, atau baris
+                    // tunggal terlalu panjang. Cegah penyalahgunaan kuota.
+                    if (! $outputGuard->isSafe($reply)) {
+                        \Log::warning('AI Agent Output Guard rejected response', [
+                            'length' => mb_strlen($reply),
+                            'conversation_id' => $conversation->id,
+                        ]);
+
+                        $reply = 'Maaf, respons AI ditolak karena melebihi batas atau mengandung pola tidak wajar. Silakan coba pertanyaan yang lebih spesifik.';
+
+                        echo json_encode([
+                            'type' => 'error',
+                            'message' => $reply,
+                            'output_rejected' => true,
+                        ]) . "\n";
+                        if (ob_get_level() > 0) ob_flush(); flush();
+
+                        ChatMessage::create([
+                            'conversation_id' => $conversation->id,
+                            'role' => 'assistant',
+                            'content' => $reply,
+                            'sender_name' => 'PRIVASIMU AI Agent',
+                        ]);
+                        $conversation->update(['last_message_at' => now()]);
+                        break;
+                    }
 
                     // Save AI reply
                     ChatMessage::create([

@@ -209,6 +209,13 @@ class SettingsServiceProvider extends ServiceProvider
             'security.ai_max_message_chars' => 'security.ai.max_message_chars',
             'security.ai_max_attachment_chars' => 'security.ai.max_attachment_chars',
 
+            // Security — AI output safety + rate limit. Dibaca oleh
+            // App\Services\AiOutputGuard + App\Http\Middleware\AiCallRateLimit.
+            'security.ai_max_output_chars' => 'security.ai.max_output_chars',
+            'security.ai_max_output_tokens' => 'security.ai.max_output_tokens',
+            'security.ai_repetition_detection_enabled' => 'security.ai.repetition_detection_enabled',
+            'security.ai_max_calls_per_minute_per_user' => 'security.ai.max_calls_per_minute_per_user',
+
             // Security — 2FA TOTP. Dibaca oleh App\Services\TwoFactorAuthService
             // dan AuthController.
             'security.2fa_enabled' => 'security.2fa_enabled',

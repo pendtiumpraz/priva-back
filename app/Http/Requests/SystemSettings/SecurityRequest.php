@@ -98,6 +98,23 @@ class SecurityRequest extends FormRequest
             'ai_max_message_chars' => 'sometimes|integer|min:100|max:200000',
             'ai_max_attachment_chars' => 'sometimes|integer|min:500|max:200000',
 
+            // AI output safety guard.
+            // output_chars: min 1000 (sangat ketat, hanya untuk JSON kecil),
+            //   max 500_000 (500K char ≈ 125K token — di atas itu hampir
+            //   pasti penyalahgunaan).
+            // output_tokens: min 100, max 32000 (sesuai cap kontekstual
+            //   provider mainstream).
+            // repetition_detection_enabled: toggle untuk matikan pattern
+            //   detection bila terlalu sensitif untuk use case spesifik.
+            'ai_max_output_chars' => 'sometimes|integer|min:1000|max:500000',
+            'ai_max_output_tokens' => 'sometimes|integer|min:100|max:32000',
+            'ai_repetition_detection_enabled' => 'sometimes|boolean',
+
+            // Per-user rate limit untuk panggilan AI.
+            // 0 = disabled (admin bisa matikan sepenuhnya bila perlu).
+            // Max 1000/menit = 1 request tiap 60ms — defensif upper bound.
+            'ai_max_calls_per_minute_per_user' => 'sometimes|integer|min:0|max:1000',
+
             // 2FA toggles — semua boolean.
             '2fa_enabled' => 'sometimes|boolean',
             '2fa_required_for_root' => 'sometimes|boolean',

@@ -92,6 +92,13 @@ class AiService
         $combined = $this->getLanguageDirective().$systemPrompt."\n\n".$userPrompt;
         app(\App\Services\AiPromptGuard::class)->assertPromptSize($combined);
 
+        // Output guard — clamp max_tokens ke hard cap supaya caller tidak
+        // bisa minta output 100000 token (drain kuota). Hard cap di
+        // config('security.ai.max_output_tokens', default 4000). Caller
+        // tetap boleh minta kurang (mis. 2000 untuk JSON kecil); guard
+        // hanya menurunkan, tidak menaikkan.
+        $maxTokens = app(\App\Services\AiOutputGuard::class)->clampMaxTokens($maxTokens);
+
         // Generate a unique cache key based on the model, prompts and language
         $cacheKey = 'ai_resp_'.md5($this->model.$systemPrompt.$userPrompt.$this->locale);
 
@@ -133,6 +140,20 @@ class AiService
 
             $data = $response->json();
             $content = $data['choices'][0]['message']['content'] ?? '';
+
+            // Output guard — provider sometimes ignore max_tokens kalau
+            // user paksa output repetitive ("AAAA..."). Reject di sini
+            // dengan exception jelas, daripada return chunk sampah ke
+            // caller. Catch + log; return null supaya caller bisa fallback.
+            try {
+                app(\App\Services\AiOutputGuard::class)->assert($content);
+            } catch (\RuntimeException $e) {
+                Log::warning('AI Output Guard rejected response ['.$this->model.']: '.$e->getMessage(), [
+                    'output_length' => mb_strlen($content),
+                ]);
+
+                return null;
+            }
 
             // Extract JSON block aggressively
             $cleaned = trim($content);

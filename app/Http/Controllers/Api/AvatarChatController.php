@@ -86,19 +86,41 @@ class AvatarChatController extends Controller
         }
 
         try {
+            // Clamp max_tokens via output guard supaya tidak bisa over-ride
+            // hard cap dari settings (default 4000). 2048 < cap dalam kondisi
+            // default, tapi clamp jaga konsistensi kalau admin set cap lebih
+            // ketat.
+            $outputGuard = app(\App\Services\AiOutputGuard::class);
+            $maxTokens = $outputGuard->clampMaxTokens(2048);
+
             $response = Http::timeout(30)
                 ->withoutVerifying()
                 ->withHeaders($headers)
                 ->post($baseUrl.'/chat/completions', [
                     'model' => $model,
                     'messages' => $messages,
-                    'max_tokens' => 2048,
+                    'max_tokens' => $maxTokens,
                     'temperature' => 0.7,
                 ]);
 
             if ($response->successful()) {
                 $data = $response->json();
                 $reply = $data['choices'][0]['message']['content'] ?? 'Maaf, saya tidak bisa menjawab saat ini.';
+
+                // Output safety guard — tolak respons yang melewati batas
+                // karakter, mengandung pola berulang, atau baris terlalu
+                // panjang. Cegah skenario "tulis A 1jt baris" yang lolos
+                // dari max_tokens.
+                if (! $outputGuard->isSafe($reply)) {
+                    Log::warning('Avatar Chat AI Output Guard rejected response', [
+                        'length' => mb_strlen($reply),
+                    ]);
+
+                    return response()->json([
+                        'reply' => 'Maaf, respons AI ditolak karena melebihi batas atau mengandung pola tidak wajar. Silakan coba pertanyaan yang lebih spesifik.',
+                        'error' => true,
+                    ]);
+                }
 
                 // Clean response — strip all markdown formatting
                 $reply = preg_replace('/```[\s\S]*?```/', '', $reply);  // code blocks

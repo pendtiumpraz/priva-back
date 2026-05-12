@@ -130,6 +130,11 @@ class SystemSettingsController extends Controller
             'security.ai_max_prompt_chars',
             'security.ai_max_message_chars',
             'security.ai_max_attachment_chars',
+            // AI output safety + per-user rate limit
+            'security.ai_max_output_chars',
+            'security.ai_max_output_tokens',
+            'security.ai_repetition_detection_enabled',
+            'security.ai_max_calls_per_minute_per_user',
             // 2FA
             'security.2fa_enabled',
             'security.2fa_required_for_root',
@@ -508,6 +513,10 @@ class SystemSettingsController extends Controller
                 'security.ai_max_prompt_chars',
                 'security.ai_max_message_chars',
                 'security.ai_max_attachment_chars',
+                'security.ai_max_output_chars',
+                'security.ai_max_output_tokens',
+                'security.ai_repetition_detection_enabled',
+                'security.ai_max_calls_per_minute_per_user',
                 'security.2fa_enabled',
                 'security.2fa_required_for_root',
                 'security.2fa_required_for_superadmin',

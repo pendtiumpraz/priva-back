@@ -1000,7 +1000,10 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // =============================================
     // AI Chat Assistant (Knowledge Base)
     // =============================================
-    Route::post('/ai/chat', [AiChatController::class, 'chat']);
+    // ai-throttle: per-user rate limit panggilan AI (default 20/menit).
+    // Cegah single user spam request / drain kuota tenant. Settings di
+    // /platform-admin/system-settings → Security → AI Limits.
+    Route::post('/ai/chat', [AiChatController::class, 'chat'])->middleware('ai-throttle');
     Route::match(['get', 'put'], '/ai/knowledge-base', [AiChatController::class, 'knowledgeBase']);
     Route::match(['get', 'put'], '/ai/settings', [AiChatController::class, 'apiSettings']);
     Route::post('/ai/test-connection', [AiChatController::class, 'testConnection']);
@@ -1014,7 +1017,9 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // =============================================
     // AI Features (License-Gated)
     // =============================================
-    Route::prefix('ai-features')->group(function () {
+    // ai-throttle: per-user rate limit (default 20/menit) untuk semua
+    // endpoint AI feature — analisis, autofill, drill scenario, dst.
+    Route::prefix('ai-features')->middleware('ai-throttle')->group(function () {
         Route::post('/gap_comparison/{id}/generate', [AiFeatureController::class, 'gapComparisonGenerate']);
         Route::post('/gap/{id}/remediation', [AiFeatureController::class, 'gapRemediation']);
         Route::post('/ropa/{id}/analysis', [AiFeatureController::class, 'ropaAnalysis']);
@@ -1344,7 +1349,9 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // AI Agent (Enterprise only — function calling)
     // =============================================
     Route::prefix('ai-agent')->group(function () {
-        Route::post('/chat', [AiAgentController::class, 'chat']);
+        // ai-throttle hanya di endpoint chat (yang panggil provider AI).
+        // Approve/reject/mentions/history murni DB — tidak perlu di-throttle.
+        Route::post('/chat', [AiAgentController::class, 'chat'])->middleware('ai-throttle');
         Route::post('/approve-action', [AiAgentController::class, 'approveAction']);
         Route::post('/reject-action', [AiAgentController::class, 'rejectAction']);
         Route::get('/mentions/{type}', [AiAgentController::class, 'mentions']);
@@ -1355,7 +1362,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // =============================================
     // Avatar 3D Chat (Platform Q&A with Knowledge Base)
     // =============================================
-    Route::post('/avatar/chat', [AvatarChatController::class, 'chat']);
+    Route::post('/avatar/chat', [AvatarChatController::class, 'chat'])->middleware('ai-throttle');
 
     // =============================================
     // Voice TTS Synthesis (AI-powered text-to-speech)

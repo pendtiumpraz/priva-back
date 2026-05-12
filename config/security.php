@@ -64,6 +64,21 @@ return [
         'max_prompt_chars' => 24000,        // ≈ 6000 token (system + user combined)
         'max_message_chars' => 4000,        // single user message field di chat
         'max_attachment_chars' => 12000,    // parsed text dari file upload
+
+        // OUTPUT safety guard. Tier defensif kedua kalau prompt size sudah
+        // di-validate tapi user paksa output repetitive (mis. "tulis A
+        // sebanyak 1jt baris"). Provider kadang abaikan max_tokens untuk
+        // pola single-char repetitive — guard ini reject di sisi response.
+        // Service: App\Services\AiOutputGuard. Disetel via UI superadmin.
+        'max_output_chars' => 50_000,        // total karakter response (~ 12.5k token)
+        'max_output_tokens' => 4000,         // hard cap untuk parameter max_tokens
+        'repetition_detection_enabled' => true, // false untuk skip pattern detection
+
+        // Per-user rate limit untuk endpoint AI. Mencegah single user spam
+        // request (bahkan dengan prompt kecil). Middleware:
+        // App\Http\Middleware\AiCallRateLimit. Apply ke route lewat alias
+        // 'ai-throttle' di routes/api.php.
+        'max_calls_per_minute_per_user' => 20,
     ],
 
     /**

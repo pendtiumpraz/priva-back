@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\AiCallRateLimit;
 use App\Http\Middleware\AuthenticateConsentApiKey;
 use App\Http\Middleware\AuthenticateDsrApiKey;
 use App\Http\Middleware\CheckPermission;
@@ -36,6 +37,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant.readonly' => EnforceTenantReadOnly::class,
             // Public TPRM assessment — resolve token, set tenant context, rate-limit.
             'public-assessment-token' => PublicAssessmentTokenMiddleware::class,
+            // Per-user rate limit khusus endpoint AI — N panggilan per menit
+            // per user (default 20, configurable di system_settings).
+            'ai-throttle' => AiCallRateLimit::class,
         ]);
 
         // Stamp security headers (HSTS, frame-options, referrer-policy, dst)

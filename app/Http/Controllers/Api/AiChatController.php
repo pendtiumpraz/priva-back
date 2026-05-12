@@ -170,6 +170,12 @@ PROMPT;
                 $headers[$chatAuthHeader] = $apiKey;
             }
 
+            // Clamp max_tokens via output guard supaya tidak bisa over-ride
+            // hard cap (default 4000). 1500 di bawah cap default, tapi clamp
+            // jaga konsistensi kalau admin set cap lebih ketat.
+            $outputGuard = app(\App\Services\AiOutputGuard::class);
+            $maxTokens = $outputGuard->clampMaxTokens(1500);
+
             $response = Http::withOptions([
                 'timeout' => 60,
                 'connect_timeout' => 15,
@@ -180,7 +186,7 @@ PROMPT;
                     'model' => $chatModel,
                     'messages' => $messages,
                     'temperature' => 0.3,
-                    'max_tokens' => 1500,
+                    'max_tokens' => $maxTokens,
                 ]);
 
             if ($response->failed()) {
@@ -191,6 +197,21 @@ PROMPT;
 
             $data = $response->json();
             $reply = $data['choices'][0]['message']['content'] ?? 'Maaf, tidak ada respons.';
+
+            // Output safety guard — tolak respons yang melewati batas total,
+            // mengandung pola berulang, atau baris terlalu panjang. Mencegah
+            // skenario user paksa AI tulis "AAA..." 1jt baris.
+            if (! $outputGuard->isSafe($reply)) {
+                \Log::warning('AI Chat Output Guard rejected response ['.$chatModel.']', [
+                    'length' => mb_strlen($reply),
+                ]);
+
+                return response()->json([
+                    'message' => 'Respons AI ditolak karena melebihi batas atau mengandung pola tidak wajar. Silakan coba pertanyaan yang lebih spesifik.',
+                    'conversation_id' => $conversation->id,
+                    'output_rejected' => true,
+                ], 422);
+            }
 
             // Save AI reply
             ChatMessage::create([
