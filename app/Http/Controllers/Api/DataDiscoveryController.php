@@ -11,6 +11,7 @@ use App\Models\OrganizationApp;
 use App\Models\Ropa;
 use App\Services\AiService;
 use App\Services\AiSpecificSearchService;
+use App\Services\ColumnAutoAssigner;
 use App\Services\DatabaseScanner;
 use App\Services\NotificationService;
 use App\Services\OcrScannerService;
@@ -115,6 +116,17 @@ class DataDiscoveryController extends Controller
 
         $tables = $scanResult['tables'] ?? [];
         $engine = $scanResult['engine'] ?? 'unknown';
+
+        // Pertahankan keputusan user manual (kolom yang sudah di-Edit user via
+        // tombol Edit di tab Columns) — keputusan tersebut tidak boleh hilang
+        // saat scan ulang. Hanya kolom yang masih auto_scan yang akan di-reset.
+        $prevTables = $system->scan_results['tables'] ?? [];
+        $tables = ColumnAutoAssigner::mergePreserveUserEdits($tables, $prevTables);
+
+        // Auto-assign applied_status (data pribadi / data sensitif / data umum)
+        // berdasar hasil klasifikasi scanner. User hanya perlu klik "Edit"
+        // bila ingin mengubah keputusan otomatis ini.
+        $tables = ColumnAutoAssigner::autoAssignTables($tables);
 
         $piiCount = 0;
         $pdpCount = 0;
@@ -303,7 +315,7 @@ class DataDiscoveryController extends Controller
         $request->validate([
             'table' => ['required', 'string', 'min:1'],
             'column' => ['required', 'string', 'min:1'],
-            'action' => ['required', 'in:apply_pribadi,apply_sensitive,reject'],
+            'action' => ['required', 'in:apply_pribadi,apply_sensitive,apply_not_pii,reject'],
             'note' => ['nullable', 'string', 'max:500'],
         ]);
 
@@ -493,6 +505,15 @@ class DataDiscoveryController extends Controller
             if (empty($col['pdp_category'])) {
                 $col['pdp_category'] = 'spesifik';
             }
+        } elseif ($action === 'apply_not_pii') {
+            // User secara eksplisit menandai kolom sebagai bukan data pribadi.
+            // Berbeda dengan 'reject' yang konteksnya menolak rekomendasi —
+            // 'apply_not_pii' adalah keputusan affirmatif "kolom ini bukan PII".
+            $col['applied_status'] = 'not_pii';
+            $col['applied_classification'] = null;
+            $col['applied_at'] = $now;
+            $col['applied_by'] = $userId;
+            $col['applied_note'] = $note;
         } elseif ($action === 'reject') {
             $col['applied_status'] = 'rejected';
             $col['applied_classification'] = null;
@@ -694,10 +715,29 @@ class DataDiscoveryController extends Controller
             }
         }
 
+        // Deep scan dapat mengubah klasifikasi (mis. menaikkan PII jadi sensitif
+        // setelah content sampling). Reset applied_status untuk kolom AUTO
+        // (applied_by NULL) supaya hasil deep scan jadi keputusan baru. Kolom
+        // yang user sudah Edit manual (applied_by = user UUID) di-preserve.
+        foreach ($originalSchema as &$tbl) {
+            foreach ($tbl['columns'] as &$c) {
+                if (empty($c['applied_by'])) {
+                    unset($c['applied_status'], $c['applied_classification']);
+                }
+            }
+            unset($c);
+        }
+        unset($tbl);
+        $originalSchema = ColumnAutoAssigner::autoAssignTables($originalSchema);
+
         // Put merged tables back into AI result map, preserving global_recommendation
         $aiResult['tables'] = $originalSchema;
 
-        $system->update(['ai_scan_results' => $aiResult]);
+        // Sync `scan_results` juga supaya tab Columns membaca applied_status
+        // yang terbaru (sumber tampilan tab Columns adalah scan_results).
+        $system->scan_results = array_merge($system->scan_results ?? [], ['tables' => $originalSchema]);
+        $system->ai_scan_results = $aiResult;
+        $system->save();
 
         AuditLog::log('data-discovery', $system->id, 'ai_scan_completed', [], 'system');
 
