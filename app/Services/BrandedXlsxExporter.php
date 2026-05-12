@@ -116,7 +116,9 @@ class BrandedXlsxExporter
     ): void {
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Cover');
-        $sheet->getSheetView()->setShowGridLines(false);
+        // PhpSpreadsheet 5.x menghapus SheetView::setShowGridLines — gunakan
+        // Worksheet::setShowGridlines (huruf 'l' lowercase) langsung di sheet.
+        $sheet->setShowGridlines(false);
 
         // Page columns A..F (B is the content column, with a left margin).
         $sheet->getColumnDimension('A')->setWidth(3);
