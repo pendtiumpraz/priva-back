@@ -56,6 +56,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Frontend URL
+    |--------------------------------------------------------------------------
+    |
+    | URL host frontend Next.js (terpisah dari backend Laravel — frontend
+    | biasanya di Vercel/Netlify, backend di shared hosting). Dipakai oleh
+    | controller yang menyusun tautan publik untuk dibagikan ke pihak
+    | eksternal, mis. asesmen TPRM (/asesmen-pihak-ketiga/{token}), reset
+    | password link, email verification link. Set di .env:
+    |   FRONTEND_URL=https://your-app.vercel.app
+    | (tanpa trailing slash). Fallback ke app.url bila tidak di-set.
+    |
+    */
+
+    'frontend_url' => env('FRONTEND_URL', env('APP_URL', 'http://localhost:3000')),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |
