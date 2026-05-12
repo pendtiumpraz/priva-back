@@ -86,7 +86,20 @@ class VendorRiskController extends Controller
 
     public function show(Request $request, $id)
     {
-        $vendor = Vendor::where('org_id', $request->user()->org_id)->with('assessments')->findOrFail($id);
+        // Lean eager-load: hanya kolom yang dibutuhkan UI untuk hindari
+        // mengangkat seluruh row vendor_assessments yang punya JSON columns
+        // besar (answers, recommendations, score_breakdown) — pernah memicu
+        // MySQL sort_buffer overflow di shared hosting.
+        $vendor = Vendor::where('org_id', $request->user()->org_id)
+            ->with(['assessments' => function ($q) {
+                $q->select([
+                    'id', 'vendor_id', 'org_id', 'status',
+                    'assessment_token', 'token_expires_at', 'token_consumed_at',
+                    'score', 'risk_level', 'submitted_at', 'created_at',
+                    'recommendations', 'notes',
+                ])->orderBy('created_at', 'desc')->limit(20);
+            }])
+            ->findOrFail($id);
 
         $data = $vendor->toArray();
         $data['active_assessment_token'] = null;
