@@ -88,22 +88,34 @@ class VendorRiskController extends Controller
     {
         $vendor = Vendor::where('org_id', $request->user()->org_id)->with('assessments')->findOrFail($id);
 
+        $data = $vendor->toArray();
+        $data['active_assessment_token'] = null;
+        $data['active_token_expires_at'] = null;
+
         // Sertakan token publik aktif (kalau ada) di response root supaya
         // frontend bisa langsung tampilkan tautan share tanpa generate ulang.
         // Pilih assessment terbaru yang token belum expired dan belum di-consume.
-        $activeAssessment = $vendor->assessments
-            ->filter(function ($a) {
-                $hasToken = ! empty($a->assessment_token);
-                $notExpired = empty($a->token_expires_at) || $a->token_expires_at->isFuture();
-                $notConsumed = empty($a->token_consumed_at);
-                return $hasToken && $notExpired && $notConsumed;
-            })
-            ->sortByDesc('created_at')
-            ->first();
+        // Wrap try/catch supaya kalau data assessment ter-malformed (mis. carbon
+        // cast gagal), endpoint show TIDAK 500 — basic vendor data tetap balik.
+        try {
+            $activeAssessment = $vendor->assessments
+                ->filter(function ($a) {
+                    $hasToken = ! empty($a->assessment_token);
+                    $expiresAt = $a->token_expires_at;
+                    $notExpired = empty($expiresAt) || (is_object($expiresAt) && method_exists($expiresAt, 'isFuture') && $expiresAt->isFuture());
+                    $notConsumed = empty($a->token_consumed_at);
 
-        $data = $vendor->toArray();
-        $data['active_assessment_token'] = $activeAssessment?->assessment_token;
-        $data['active_token_expires_at'] = $activeAssessment?->token_expires_at;
+                    return $hasToken && $notExpired && $notConsumed;
+                })
+                ->sortByDesc('created_at')
+                ->first();
+            if ($activeAssessment) {
+                $data['active_assessment_token'] = $activeAssessment->assessment_token;
+                $data['active_token_expires_at'] = $activeAssessment->token_expires_at;
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('vendor.show active_assessment computation failed: '.$e->getMessage());
+        }
 
         return response()->json(['data' => $data]);
     }

@@ -281,6 +281,19 @@ class AsesmenPublikController extends Controller
                 'source' => VendorAssessment::SOURCE_DETERMINISTIC,
             ])->save();
 
+            // Sync skor & risk_level ke vendor record supaya muncul di TPRM
+            // list table. Frontend tampilkan vendor.risk_score (bukan
+            // assessment.score) sebagai cache value. Tanpa sync ini, vendor
+            // table tampil 0 padahal asesmen sudah dapat nilai final.
+            $vendor = Vendor::find($assessment->vendor_id);
+            if ($vendor) {
+                $vendor->forceFill([
+                    'risk_score' => (int) round($result['score']),
+                    'risk_level' => $result['risk_level'],
+                    'last_assessed_at' => now(),
+                ])->save();
+            }
+
             $tokens->markConsumed($assessment, $request);
         });
 
