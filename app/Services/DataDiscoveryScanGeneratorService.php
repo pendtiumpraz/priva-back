@@ -245,19 +245,25 @@ class DataDiscoveryScanGeneratorService
     /**
      * Build the natural-language identifier prompt for AI Text-to-SQL.
      *
-     * Strategy: search by NAME using fuzzy / LIKE pattern. Pakai SELECT *
-     * untuk hindari hallucinated column projection — AI sering invent
-     * kolom 'email' walaupun tabel target gak punya, hasilnya error
-     * "Unknown column 'email'". SELECT * juga lebih simple dan rows
-     * tetap bisa di-filter di frontend (kolom apapun yang ada).
+     * **Strategy (revisi v2):**
+     *   - PRIMARY filter: EMAIL eksak (`LOWER(email_col) = LOWER('value')`).
+     *     Email biasanya ter-index, jadi lookup O(log n) bukan O(n).
+     *   - SECONDARY filter: NAMA eksak (`=`) bila diisi. JANGAN LIKE — tabel
+     *     tenant client bisa ter-tabyte, `LIKE '%X%'` full-table-scan sangat
+     *     mahal. NAMA dipakai sebagai pelengkap saat email tidak ditemukan
+     *     atau sebagai konfirmasi tambahan, bukan filter utama.
+     *   - SKIP tabel yang TIDAK punya kolom email orang (kecuali kalau nama
+     *     juga diisi DAN tabel punya kolom nama eksak).
+     *
+     * Pakai SELECT * untuk hindari hallucinated column projection — AI
+     * sering invent kolom 'email' walaupun tabel target tidak punya;
+     * SELECT * + filter di frontend lebih aman.
      */
     private function buildPrompt(array $n): string
     {
+        $email = $n['email'] ?? '';
         $name = $n['name'] ?? '';
         $hints = [];
-        if (! empty($n['email'])) {
-            $hints[] = "email yang mungkin dipakai: \"{$n['email']}\"";
-        }
         if (! empty($n['nik'])) {
             $hints[] = "NIK: \"{$n['nik']}\"";
         }
@@ -270,14 +276,25 @@ class DataDiscoveryScanGeneratorService
 
         $hintsLine = $hints === [] ? '' : ('Hint identifier tambahan: '.implode(', ', $hints).' (sebagai context, BUKAN filter wajib). ');
 
-        return 'Cari semua baris orang dengan nama mirip "'.$name.'" di setiap tabel yang punya kolom nama. '
+        $hasName = $name !== '';
+        $nameClauseSpec = $hasName
+            ? 'Bila tabel JUGA punya kolom yang terlihat sebagai kolom nama orang '
+                .'(name, full_name, nama, nama_lengkap, customer_name, applicant_name, dst.), '
+                .'tambahkan klausa AND dengan EQUALITY (`=`), BUKAN LIKE: '
+                .'`AND LOWER(<name_col>) = LOWER(\''.$name.'\')`. '
+                .'**JANGAN PERNAH pakai LIKE / ILIKE / partial match untuk kolom nama.** '
+                .'Alasan: tabel client bisa berisi miliaran baris; LIKE memicu full-table-scan. '
+            : 'Nama tidak disediakan — cukup filter berdasarkan email saja. ';
+
+        return 'Cari semua baris milik orang dengan email "'.$email.'" di setiap tabel yang punya kolom email orang. '
             .'WAJIB pakai `SELECT *` — proyeksikan SEMUA kolom dari tabel apa adanya. '
             .'JANGAN sebutkan nama kolom tertentu di SELECT (hindari error "unknown column" kalau kolom tidak ada di tabel itu). '
-            .'WHERE clause: pakai fuzzy / partial match pada kolom yang nama-nya kelihatan seperti name field '
-            .'(misal: name, full_name, nama, nama_lengkap, customer_name, applicant_name, dst.) — '
-            .'`LOWER(<col>) LIKE LOWER(\'%'.$name.'%\')` (MySQL/Postgres) atau gunakan ILIKE di Postgres. '
-            .'Boleh per-token LIKE untuk handle urutan nama yang dibalik. '
-            .'Skip tabel yang tidak punya kolom nama orang (misal cuma punya id+timestamp). '
+            .'WHERE clause PRIMARY: pakai EQUALITY eksak (`=`) pada kolom email — '
+            .'`LOWER(<email_col>) = LOWER(\''.$email.'\')` (MySQL/Postgres). '
+            .'Identifikasi kolom email berdasarkan nama kolom yang umum: email, email_address, '
+            .'mail, user_email, customer_email, applicant_email, contact_email, dst. '
+            .$nameClauseSpec
+            .'SKIP tabel yang tidak punya kolom email (kecuali tabel itu punya kolom nama dan nama disediakan). '
             .$hintsLine
             .'Output WAJIB SELECT only (no DELETE/UPDATE/INSERT). Batasi setiap query dengan LIMIT 100.';
     }

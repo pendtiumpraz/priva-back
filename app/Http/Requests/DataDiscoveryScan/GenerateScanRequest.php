@@ -7,9 +7,13 @@ use Illuminate\Foundation\Http\FormRequest;
 /**
  * Validates the body of POST /api/data-discovery/scan/generate.
  *
- * Hanya `name` yang wajib — AI generator pakai fuzzy/LIKE matching pada
- * kolom nama. Email/NIK/phone/dob optional, dipakai sebagai filter di
- * frontend results (untuk narrow down kandidat dengan nama mirip).
+ * **Email wajib, nama opsional** (perubahan dari versi sebelumnya yang
+ * menjadikan nama sebagai filter utama via LIKE). Alasan: tabel tenant
+ * client bisa ter-tabyte; `LIKE '%nama%'` memicu full table scan tanpa
+ * memanfaatkan index, sangat mahal. Email biasanya stored exact &
+ * ter-index, jadi dipakai sebagai filter utama eksak. Nama dipakai
+ * sebagai filter sekunder bila diisi — juga eksak (no LIKE), karena
+ * jarang nama disimpan dengan variasi format yang konsisten cross-tabel.
  */
 class GenerateScanRequest extends FormRequest
 {
@@ -21,8 +25,13 @@ class GenerateScanRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'min:3', 'max:191'],
-            'email' => ['nullable', 'email', 'max:191'],
+            // Email primary identifier — exact match di SQL, biasanya
+            // ter-index. Wajib supaya scan tidak men-degenerate jadi
+            // full-table-scan via LIKE.
+            'email' => ['required', 'email', 'max:191'],
+            // Nama opsional. Bila diisi minimal 3 karakter. Saat scan
+            // berjalan, klausa filter nama memakai equality (=), bukan LIKE.
+            'name' => ['nullable', 'string', 'min:3', 'max:191'],
             'nik' => ['nullable', 'digits:16'],
             'phone' => ['nullable', 'string', 'max:20'],
             'dob' => ['nullable', 'date_format:Y-m-d'],
