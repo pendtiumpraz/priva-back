@@ -174,14 +174,32 @@ class VendorRiskController extends Controller
      */
     public function listCategories()
     {
-        $list = collect(VendorQuestionnaire::ALL_CATEGORIES)
-            ->map(fn ($c) => [
-                'value' => $c,
-                'label' => VendorQuestionnaire::CATEGORY_LABELS[$c] ?? $c,
-                'description' => VendorQuestionnaire::CATEGORY_DESCRIPTIONS[$c] ?? null,
-                'question_count' => VendorQuestionnaire::query()
-                    ->where('category', $c)->where('version', 'v1')->where('is_active', true)->count(),
-            ])->values();
+        // Hide kategori legacy (cloud_infrastructure / saas / data_processor)
+        // dari picker UI. Hanya pdp_compliance (56 pertanyaan komprehensif
+        // lintas bidang) yang dipakai sebagai default. Kategori legacy tetap
+        // ada di model untuk backward-compat data lama, tapi tidak di-expose
+        // ke wizard baru.
+        $visible = [VendorQuestionnaire::CATEGORY_PDP_COMPLIANCE];
+
+        $list = collect($visible)
+            ->map(function ($c) {
+                // pdp_compliance dipakai v2_2026 (56 PDP), kategori lama v1.
+                $version = $c === VendorQuestionnaire::CATEGORY_PDP_COMPLIANCE
+                    ? 'v2_2026'
+                    : 'v1';
+
+                return [
+                    'value' => $c,
+                    'label' => VendorQuestionnaire::CATEGORY_LABELS[$c] ?? $c,
+                    'description' => VendorQuestionnaire::CATEGORY_DESCRIPTIONS[$c] ?? null,
+                    'version' => $version,
+                    'question_count' => VendorQuestionnaire::query()
+                        ->where('category', $c)
+                        ->where('version', $version)
+                        ->where('is_active', true)
+                        ->count(),
+                ];
+            })->values();
 
         return response()->json(['data' => $list]);
     }
