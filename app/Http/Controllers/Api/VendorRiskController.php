@@ -782,6 +782,19 @@ class VendorRiskController extends Controller
     {
         $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($vendorId);
 
+        // GUARD: tolak generate tautan baru bila ada assessment yang sudah
+        // ter-submit. Skor sudah final — re-share tautan justru membingungkan
+        // vendor (kuesioner lock). Frontend juga punya guard sama, tapi
+        // backend tetap defensif terhadap bypass / direct API call.
+        $hasSubmitted = $vendor->assessments()
+            ->where('status', 'submitted')
+            ->exists();
+        if ($hasSubmitted) {
+            return response()->json([
+                'message' => 'Asesmen sudah selesai diisi oleh pihak ketiga. Tautan baru tidak dapat dibuat. Untuk mengulang penilaian, hubungi superadmin.',
+            ], 422);
+        }
+
         // firstOrCreate dengan attributes search-only + values default supaya
         // record baru di-stamp dengan questionnaire_version + answers kosong.
         $assessment = VendorAssessment::firstOrCreate(
