@@ -166,8 +166,17 @@ class AiService
             $parsed = json_decode($cleaned, true);
             $result = $parsed !== null ? $parsed : ['raw' => $content];
 
-            // Store in cache for 24 hours
-            Cache::put($cacheKey, $result, now()->addHours(24));
+            // Hanya cache kalau JSON berhasil di-parse. Kalau parse gagal
+            // (response terpotong / bukan JSON), caller bisa retry langsung
+            // ke provider tanpa "stuck" di failed cache selama 24 jam.
+            if ($parsed !== null) {
+                Cache::put($cacheKey, $result, now()->addHours(24));
+            } else {
+                Log::warning("AI JSON parse failed, skipping cache [{$this->model}]", [
+                    'content_length' => mb_strlen($content),
+                    'preview' => mb_substr($content, 0, 200),
+                ]);
+            }
 
             return $result;
         } catch (\Exception $e) {
