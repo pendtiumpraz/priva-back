@@ -706,7 +706,26 @@ class DataDiscoveryController extends Controller
 
         $aiResult = $aiService->dataDiscoveryAiDeepScan($compactSchema);
         if (! $aiResult || ! isset($aiResult['tables'])) {
-            return response()->json(['error' => 'AI analysis failed to return valid JSON. Please try again.'], 500);
+            // Expose detail untuk debugging — apakah AI return null (provider error)
+            // atau return raw text (JSON parse failed). Tail log untuk detail
+            // lengkap (model name, finish_reason, raw content). User lihat
+            // ringkasan + diarahkan ke log.
+            $rawPreview = is_array($aiResult) && isset($aiResult['raw'])
+                ? mb_substr((string) $aiResult['raw'], 0, 500)
+                : null;
+            $reason = $aiResult === null
+                ? 'AI provider unreachable atau dijepit guard (lihat storage/logs/laravel.log)'
+                : 'AI mengembalikan teks yang bukan JSON valid (lihat storage/logs/laravel.log untuk raw response)';
+
+            return response()->json([
+                'error' => 'AI analysis failed to return valid JSON.',
+                'reason' => $reason,
+                'debug' => [
+                    'tables_in_compact_schema' => count($compactSchema),
+                    'columns_total' => array_sum(array_map(fn ($t) => count($t['columns'] ?? []), $compactSchema)),
+                    'raw_preview' => $rawPreview,
+                ],
+            ], 500);
         }
 
         // Reload model dengan koneksi fresh — instance lama bisa kehilangan binding

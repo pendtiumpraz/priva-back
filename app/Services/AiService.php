@@ -133,20 +133,43 @@ class AiService
                 'response_format' => ['type' => 'json_object'],
             ];
 
+            Log::info('AI Request DISPATCH', [
+                'model' => $this->model,
+                'base_url' => $this->baseUrl,
+                'system_chars' => mb_strlen($systemPrompt),
+                'user_chars' => mb_strlen($userPrompt),
+                'max_tokens' => $maxTokens,
+                'locale' => $this->locale,
+            ]);
+
+            $t0 = microtime(true);
             $response = Http::timeout($timeout)
                 ->withoutVerifying()
                 ->withHeaders($headers)
                 ->post($this->baseUrl.'/chat/completions', $payload);
+            $elapsed = round(microtime(true) - $t0, 2);
 
             // Beberapa provider tolak `response_format` (HTTP 400). Retry
             // tanpa flag itu supaya tetap dapat response.
             if ($response->status() === 400 && str_contains((string) $response->body(), 'response_format')) {
+                Log::warning("AI provider rejected response_format flag [{$this->model}], retrying without it", [
+                    'body_preview' => mb_substr((string) $response->body(), 0, 300),
+                ]);
                 unset($payload['response_format']);
+                $t0 = microtime(true);
                 $response = Http::timeout($timeout)
                     ->withoutVerifying()
                     ->withHeaders($headers)
                     ->post($this->baseUrl.'/chat/completions', $payload);
+                $elapsed = round(microtime(true) - $t0, 2);
             }
+
+            Log::info('AI Response RECEIVED', [
+                'model' => $this->model,
+                'status' => $response->status(),
+                'elapsed_sec' => $elapsed,
+                'body_bytes' => strlen((string) $response->body()),
+            ]);
 
             if ($response->failed()) {
                 Log::error('AI Provider API error ['.$this->model.']: '.$response->body());
@@ -156,6 +179,26 @@ class AiService
 
             $data = $response->json();
             $content = $data['choices'][0]['message']['content'] ?? '';
+            $finishReason = $data['choices'][0]['finish_reason'] ?? null;
+            $usage = $data['usage'] ?? null;
+
+            Log::info('AI Content EXTRACTED', [
+                'model' => $this->model,
+                'content_chars' => mb_strlen($content),
+                'finish_reason' => $finishReason,
+                'usage' => $usage,
+                'first_120_chars' => mb_substr($content, 0, 120),
+                'last_120_chars' => mb_substr($content, max(0, mb_strlen($content) - 120)),
+            ]);
+
+            // Provider menandakan output ter-truncate karena max_tokens habis.
+            // Tetap lanjut, tapi log keras supaya user tahu harus naikkan cap.
+            if ($finishReason === 'length') {
+                Log::warning("AI response TRUNCATED (finish_reason=length) [{$this->model}] — naikkan max_output_tokens", [
+                    'content_chars' => mb_strlen($content),
+                    'requested_max_tokens' => $maxTokens,
+                ]);
+            }
 
             // Output guard — provider sometimes ignore max_tokens kalau
             // user paksa output repetitive ("AAAA..."). Reject di sini
@@ -176,26 +219,43 @@ class AiService
             // (2) balanced-brace scan ambil first complete object/array
             // (3) fallback ke trim-only kalau scanner tidak ketemu pasangan
             $cleaned = trim($content);
+            $hadFence = (bool) preg_match('/```/m', $cleaned);
             $cleaned = preg_replace('/^\s*```(?:json)?\s*|\s*```\s*$/m', '', $cleaned) ?? $cleaned;
             $cleaned = trim($cleaned);
 
             $extracted = $this->extractBalancedJson($cleaned);
-            if ($extracted !== null) {
+            $balancedFound = $extracted !== null;
+            if ($balancedFound) {
                 $cleaned = $extracted;
             }
 
             $parsed = json_decode($cleaned, true);
+            $jsonErr = json_last_error_msg();
             $result = $parsed !== null ? $parsed : ['raw' => $content];
 
             // Hanya cache kalau JSON berhasil di-parse. Kalau parse gagal
             // (response terpotong / bukan JSON), caller bisa retry langsung
             // ke provider tanpa "stuck" di failed cache selama 24 jam.
             if ($parsed !== null) {
+                Log::info("AI JSON parse OK [{$this->model}]", [
+                    'parsed_keys' => is_array($parsed) ? array_keys($parsed) : [],
+                    'had_markdown_fence' => $hadFence,
+                    'balanced_extractor_used' => $balancedFound,
+                ]);
                 Cache::put($cacheKey, $result, now()->addHours(24));
             } else {
-                Log::warning("AI JSON parse failed, skipping cache [{$this->model}]", [
-                    'content_length' => mb_strlen($content),
-                    'preview' => mb_substr($content, 0, 200),
+                // Hard log — capture seluruh konteks supaya bisa debug remote
+                // tanpa harus tambah log statement lagi.
+                Log::error("AI JSON PARSE FAILED [{$this->model}]", [
+                    'json_error' => $jsonErr,
+                    'finish_reason' => $finishReason,
+                    'usage' => $usage,
+                    'content_chars' => mb_strlen($content),
+                    'cleaned_chars' => mb_strlen($cleaned),
+                    'had_markdown_fence' => $hadFence,
+                    'balanced_extractor_used' => $balancedFound,
+                    'raw_full' => mb_substr($content, 0, 8000),
+                    'cleaned_full' => mb_substr($cleaned, 0, 8000),
                 ]);
             }
 
