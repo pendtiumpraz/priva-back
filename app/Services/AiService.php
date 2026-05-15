@@ -119,18 +119,34 @@ class AiService
 
             $timeout = (int) env('AI_TIMEOUT', 180);
 
+            $payload = [
+                'model' => $this->model,
+                'messages' => [
+                    ['role' => 'system', 'content' => $this->getLanguageDirective().$systemPrompt],
+                    ['role' => 'user', 'content' => $userPrompt],
+                ],
+                'temperature' => 0.3,
+                'max_tokens' => $maxTokens,
+                // Force JSON-only output. Sebagian besar provider modern
+                // (OpenAI / OpenRouter / DeepSeek) support flag ini dan akan
+                // menjamin model tidak menambah teks penjelasan di luar JSON.
+                'response_format' => ['type' => 'json_object'],
+            ];
+
             $response = Http::timeout($timeout)
                 ->withoutVerifying()
                 ->withHeaders($headers)
-                ->post($this->baseUrl.'/chat/completions', [
-                    'model' => $this->model,
-                    'messages' => [
-                        ['role' => 'system', 'content' => $this->getLanguageDirective().$systemPrompt],
-                        ['role' => 'user', 'content' => $userPrompt],
-                    ],
-                    'temperature' => 0.3,
-                    'max_tokens' => $maxTokens,
-                ]);
+                ->post($this->baseUrl.'/chat/completions', $payload);
+
+            // Beberapa provider tolak `response_format` (HTTP 400). Retry
+            // tanpa flag itu supaya tetap dapat response.
+            if ($response->status() === 400 && str_contains((string) $response->body(), 'response_format')) {
+                unset($payload['response_format']);
+                $response = Http::timeout($timeout)
+                    ->withoutVerifying()
+                    ->withHeaders($headers)
+                    ->post($this->baseUrl.'/chat/completions', $payload);
+            }
 
             if ($response->failed()) {
                 Log::error('AI Provider API error ['.$this->model.']: '.$response->body());
@@ -155,12 +171,17 @@ class AiService
                 return null;
             }
 
-            // Extract JSON block aggressively
+            // Robust JSON extraction:
+            // (1) trim + strip markdown code fences (```json ... ```)
+            // (2) balanced-brace scan ambil first complete object/array
+            // (3) fallback ke trim-only kalau scanner tidak ketemu pasangan
             $cleaned = trim($content);
-            if (preg_match('/\{.*\}/s', $cleaned, $matches)) {
-                $cleaned = $matches[0];
-            } elseif (preg_match('/\[.*\]/s', $cleaned, $matches)) {
-                $cleaned = $matches[0];
+            $cleaned = preg_replace('/^\s*```(?:json)?\s*|\s*```\s*$/m', '', $cleaned) ?? $cleaned;
+            $cleaned = trim($cleaned);
+
+            $extracted = $this->extractBalancedJson($cleaned);
+            if ($extracted !== null) {
+                $cleaned = $extracted;
             }
 
             $parsed = json_decode($cleaned, true);
@@ -184,6 +205,78 @@ class AiService
 
             return null;
         }
+    }
+
+    /**
+     * Extract first balanced JSON object atau array dari teks bebas.
+     *
+     * Lebih aman daripada regex greedy `/\{.*\}/s` yang sering tertangkap
+     * placeholder `{var}` di teks penjelasan setelah JSON utama. Scanner
+     * ini menghitung kedalaman brace dengan awareness terhadap string
+     * dan escape sequences sehingga "{" di dalam string value tidak
+     * mengacaukan pairing.
+     *
+     * Return null kalau tidak ada open-brace atau pairing tidak lengkap
+     * (response truncated). Caller bisa fallback ke teks asli.
+     */
+    private function extractBalancedJson(string $text): ?string
+    {
+        $firstObj = strpos($text, '{');
+        $firstArr = strpos($text, '[');
+
+        if ($firstObj === false && $firstArr === false) {
+            return null;
+        }
+
+        if ($firstObj === false) {
+            $start = $firstArr;
+            $open = '['; $close = ']';
+        } elseif ($firstArr === false) {
+            $start = $firstObj;
+            $open = '{'; $close = '}';
+        } else {
+            if ($firstObj < $firstArr) {
+                $start = $firstObj; $open = '{'; $close = '}';
+            } else {
+                $start = $firstArr; $open = '['; $close = ']';
+            }
+        }
+
+        $depth = 0;
+        $inString = false;
+        $escape = false;
+        $len = strlen($text);
+
+        for ($i = $start; $i < $len; $i++) {
+            $ch = $text[$i];
+
+            if ($escape) {
+                $escape = false;
+                continue;
+            }
+            if ($inString) {
+                if ($ch === '\\') {
+                    $escape = true;
+                } elseif ($ch === '"') {
+                    $inString = false;
+                }
+                continue;
+            }
+            if ($ch === '"') {
+                $inString = true;
+                continue;
+            }
+            if ($ch === $open) {
+                $depth++;
+            } elseif ($ch === $close) {
+                $depth--;
+                if ($depth === 0) {
+                    return substr($text, $start, $i - $start + 1);
+                }
+            }
+        }
+
+        return null; // truncated atau unbalanced
     }
 
     // =============================================
@@ -1109,38 +1202,42 @@ class AiService
      */
     public function dataDiscoveryAiDeepScan(array $schema): ?array
     {
+        $schemaCompact = json_encode($schema, JSON_UNESCAPED_UNICODE);
+        $formatCompact = json_encode([
+            'tables' => [[
+                'name' => 'nama_tabel',
+                'columns' => [[
+                    'name' => 'nama_kolom',
+                    'pii_detected' => true,
+                    'pdp_category' => 'umum',
+                    'classification' => 'pii',
+                    'encryption_required' => true,
+                    'ai_recommendation' => 'Rekomendasi proteksi singkat',
+                ]],
+            ]],
+            'global_recommendation' => 'Rangkuman 1-2 kalimat',
+        ], JSON_UNESCAPED_UNICODE);
+
         $system = "Kamu adalah Auditor Data Privacy & Cybersecurity spesialis UU PDP Indonesia.\n"
-                ."Tugasmu menganalisis skema database dan mengklasifikasikan PII untuk tiap kolom.\n"
-                ."Output WAJIB berupa JSON valid.\n\n"
-                ."FORMAT OUTPUT JSON:\n"
-                .json_encode([
-                    'tables' => [
-                        [
-                            'name' => 'nama_tabel',
-                            'columns' => [
-                                [
-                                    'name' => 'nama_kolom',
-                                    'pii_detected' => true,
-                                    'pdp_category' => 'umum | spesifik',
-                                    'classification' => 'pii | sensitive',
-                                    'encryption_required' => true,
-                                    'ai_recommendation' => 'Rekomendasi proteksi spesifik',
-                                ],
-                            ],
-                        ],
-                    ],
-                    'global_recommendation' => 'Rangkuman risiko database secara keseluruhan (2 kalimat)',
-                ], JSON_PRETTY_PRINT);
+                ."Tugasmu menganalisis skema database dan mengklasifikasikan PII per kolom.\n\n"
+                ."ATURAN OUTPUT MUTLAK:\n"
+                ."- Output HANYA JSON valid satu objek tunggal. TIDAK ADA teks sebelum/sesudah.\n"
+                ."- JANGAN gunakan markdown code fences (tidak ada ```).\n"
+                ."- JANGAN tulis kata pengantar (\"Berikut\", \"Tentu\", dst) atau catatan setelah JSON.\n"
+                ."- Nilai field `pdp_category` hanya boleh: 'umum' atau 'spesifik'.\n"
+                ."- Nilai field `classification` hanya boleh: 'pii' atau 'sensitive'.\n"
+                ."- Field `pii_detected` dan `encryption_required` boolean true/false.\n\n"
+                ."Struktur output:\n{$formatCompact}";
 
-        $dataStr = json_encode($schema, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-        $user = "Analisis skema tabel berikut:\n{$dataStr}\n\n"
-              ."PENTING: HANYA kembalikan tabel dan kolom yang MENGANDUNG data pribadi (PII/PDP). \n"
-              ."TIDAK PERLU mengembalikan kolom seperti id, created_at, status, fk_id, dll yang bukan PII.\n"
-              ."Jika suatu tabel tidak memiliki kolom PII satupun, JANGAN masukkan tabel tersebut ke dalam JSON response.\n"
-              ."Berikan juga rekomendasi proteksi ditiap kolom PII tersebut.\n"
-              .'Keluarkan HANYA output JSON valid.';
+        $user = "Skema (compact JSON):\n{$schemaCompact}\n\n"
+              ."Instruksi:\n"
+              ."1. Kembalikan HANYA tabel dan kolom yang MENGANDUNG data pribadi (PII/PDP).\n"
+              ."2. Skip kolom non-PII (id, created_at, status, foreign keys, dll).\n"
+              ."3. Skip seluruh tabel jika tidak ada kolom PII di dalamnya.\n"
+              ."4. Beri rekomendasi proteksi singkat (1 kalimat) per kolom PII.\n"
+              .'5. Mulai response langsung dengan karakter `{` — JANGAN ada apapun sebelumnya.';
 
-        return $this->ask($system, $user, 4000); // Increased back to 4000 to prevent JSON truncation
+        return $this->ask($system, $user, 4000);
     }
 
     /**
