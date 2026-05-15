@@ -750,12 +750,19 @@ class DataDiscoveryController extends Controller
                         $col['classification'] = $aiCol['classification'] ?? $col['classification'];
                         $col['encryption_required'] = $aiCol['encryption_required'] ?? $col['encryption_required'];
                         $col['ai_recommendation'] = $aiCol['ai_recommendation'] ?? null;
+                        // Tandai sumber klasifikasi: AI sudah me-review kolom ini.
+                        // UI akan exclude kolom ber-note 'ai_scan' dari counter
+                        // "Otomatis (belum direview)" karena AI sudah memutuskan.
+                        $col['applied_note'] = 'ai_scan';
                     } else {
                         // Ensure omitted columns are marked as non-PII
                         $col['pii_detected'] = false;
                         $col['pdp_category'] = null;
                         $col['classification'] = 'internal';
                         $col['encryption_required'] = false;
+                        // AI eksplisit menyatakan kolom ini bukan PII — counted
+                        // sebagai sudah direview AI, bukan auto-scan regex saja.
+                        $col['applied_note'] = 'ai_scan';
                     }
                 }
             } else {
@@ -765,6 +772,7 @@ class DataDiscoveryController extends Controller
                     $col['pdp_category'] = null;
                     $col['classification'] = 'internal';
                     $col['encryption_required'] = false;
+                    $col['applied_note'] = 'ai_scan';
                 }
             }
         }
