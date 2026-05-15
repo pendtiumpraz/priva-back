@@ -698,10 +698,20 @@ class DataDiscoveryController extends Controller
             return response()->json(['error' => 'Tidak ada kolom yang berpotensi PII dari Standard Scan. AI Deep Scan tidak diperlukan.'], 400);
         }
 
+        // Shared hosting MySQL `max_connections` biasanya rendah (25-30). Panggilan
+        // AI bisa menahan koneksi DB idle 30-180 detik dan menyebabkan error
+        // "Too many connections" untuk request lain. Lepas koneksi default sebelum
+        // call AI; Laravel akan reconnect otomatis pada query berikutnya.
+        DB::disconnect();
+
         $aiResult = $aiService->dataDiscoveryAiDeepScan($compactSchema);
         if (! $aiResult || ! isset($aiResult['tables'])) {
             return response()->json(['error' => 'AI analysis failed to return valid JSON. Please try again.'], 500);
         }
+
+        // Reload model dengan koneksi fresh — instance lama bisa kehilangan binding
+        // setelah disconnect, jadi fetch ulang sebelum lanjut save.
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
 
         // Merge AI PII flags INTO the original schema so we don't lose non-PII columns
         $originalSchema = $schema['tables'];
