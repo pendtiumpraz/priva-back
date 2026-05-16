@@ -75,6 +75,7 @@ class VendorQuestionnaire extends Model
     protected $fillable = [
         'org_id',
         'parent_id',
+        'library_id', 'library_segment_id',
         'category', 'version', 'question_code', 'section',
         'question_text', 'description', 'regulation_ref',
         'answer_type', 'answer_options', 'weight', 'direction',
@@ -82,6 +83,16 @@ class VendorQuestionnaire extends Model
         'requires_evidence_upload',
         'is_active', 'sort_order',
     ];
+
+    public function library()
+    {
+        return $this->belongsTo(QuestionLibrary::class, 'library_id');
+    }
+
+    public function librarySegment()
+    {
+        return $this->belongsTo(QuestionLibrarySegment::class, 'library_segment_id');
+    }
 
     protected $casts = [
         'answer_options' => 'array',
