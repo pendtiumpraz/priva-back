@@ -96,7 +96,9 @@ use App\Http\Controllers\Api\TenantRoleController;
 use App\Http\Controllers\Api\TenantSsoController;
 use App\Http\Controllers\Api\TenantThemeController;
 use App\Http\Controllers\Api\ThirdPartyQuestionController;
+use App\Http\Controllers\Api\TprmApprovalController;
 use App\Http\Controllers\Api\TprmLibraryController;
+use App\Http\Controllers\Api\TprmReviewController;
 use App\Http\Controllers\Api\ThreatIntelController;
 use App\Http\Controllers\Api\TiaController;
 use App\Http\Controllers\Api\UserController;
@@ -674,6 +676,40 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::delete('/{id}/questions/{questionId}', [TprmLibraryController::class, 'destroyQuestion'])
             ->middleware('permission:vendor_risk,write');
         Route::post('/{id}/questions/reorder', [TprmLibraryController::class, 'reorderQuestions'])
+            ->middleware('permission:vendor_risk,write');
+    });
+
+    // =============================================
+    // TPRM Phase 2 — Workflow Review (stage Maker→Reviewer)
+    // =============================================
+    Route::prefix('tprm/review')->group(function () {
+        Route::get('/inbox', [TprmReviewController::class, 'inbox'])
+            ->middleware('permission:vendor_risk,read');
+        Route::get('/{id}', [TprmReviewController::class, 'show'])
+            ->middleware('permission:vendor_risk,read');
+        Route::post('/{id}/start', [TprmReviewController::class, 'start'])
+            ->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/adjust', [TprmReviewController::class, 'adjust'])
+            ->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/submit-to-approver', [TprmReviewController::class, 'submitToApprover'])
+            ->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/reject-to-vendor', [TprmReviewController::class, 'rejectToVendor'])
+            ->middleware('permission:vendor_risk,write');
+    });
+
+    // =============================================
+    // TPRM Phase 2 — Workflow Approval (stage Reviewer→Approver)
+    // =============================================
+    Route::prefix('tprm/approval')->group(function () {
+        Route::get('/inbox', [TprmApprovalController::class, 'inbox'])
+            ->middleware('permission:vendor_risk,read');
+        Route::post('/{id}/approve', [TprmApprovalController::class, 'approve'])
+            ->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/reject', [TprmApprovalController::class, 'reject'])
+            ->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/return-to-reviewer', [TprmApprovalController::class, 'returnToReviewer'])
+            ->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/reopen', [TprmApprovalController::class, 'reopen'])
             ->middleware('permission:vendor_risk,write');
     });
 

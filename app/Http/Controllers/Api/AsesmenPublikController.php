@@ -253,6 +253,33 @@ class AsesmenPublikController extends Controller
 
         $assessment->forceFill(['answers' => $answers])->save();
 
+        // Phase 2 — ALSO write to vendor_assessment_evidence table sebagai
+        // source of truth baru. JSON-embed di atas tetap dipertahankan untuk
+        // backward compat existing public page logic. Reviewer/Approver UI
+        // baca dari tabel ini supaya bisa query terpisah + soft-delete.
+        try {
+            \App\Models\VendorAssessmentEvidence::create([
+                'id' => $entry['id'],
+                'org_id' => $assessment->org_id,
+                'assessment_id' => $assessment->id,
+                'question_id' => $qId,
+                'file_path' => $entry['path'],
+                'original_name' => $entry['original_name'],
+                'mime_type' => $entry['mime'],
+                'file_size' => $entry['size'] ?? 0,
+                'uploaded_by_user_id' => null,
+                'uploaded_by_token' => true,
+                'uploaded_ip' => $request->ip(),
+                'is_active' => true,
+            ]);
+        } catch (\Throwable $e) {
+            // JSON-embed sudah tersimpan; mirror ke tabel best-effort.
+            \Log::warning('TPRM evidence mirror to table failed: '.$e->getMessage(), [
+                'assessment_id' => $assessment->id,
+                'question_id' => $qId,
+            ]);
+        }
+
         return response()->json([
             'message' => 'Bukti berhasil diunggah.',
             'data' => $entry,
