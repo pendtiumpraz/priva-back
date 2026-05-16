@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Vendor;
 use App\Models\VendorAssessment;
+use App\Models\VendorMonitoring;
 use Illuminate\Http\Request;
 
 /**
@@ -127,9 +128,21 @@ class TprmApprovalController extends Controller
             'record_id' => $assessment->id,
         ]);
 
+        // Phase 4 — Suggest set monitoring schedule kalau vendor belum punya
+        // schedule aktif. FE auto-prompt modal "Set jadwal monitoring?"
+        $hasMonitoring = VendorMonitoring::query()
+            ->where('vendor_id', $assessment->vendor_id)
+            ->where('org_id', $assessment->org_id)
+            ->where('is_active', true)
+            ->exists();
+
         return response()->json([
             'message' => 'Assessment disetujui. Status final.',
             'data' => ['status' => $assessment->status, 'score' => $assessment->score],
+            'suggestions' => [
+                'set_monitoring_schedule' => ! $hasMonitoring,
+                'vendor_id' => $assessment->vendor_id,
+            ],
         ]);
     }
 

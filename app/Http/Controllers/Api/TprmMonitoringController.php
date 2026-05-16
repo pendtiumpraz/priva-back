@@ -149,6 +149,35 @@ class TprmMonitoringController extends Controller
     }
 
     /**
+     * GET /api/tprm/monitoring/by-vendor/{vendorId}
+     *
+     * Return schedule aktif untuk vendor tertentu (null kalau belum di-set).
+     * Dipakai oleh detail modal vendor-risk + screening page untuk render
+     * tombol "Set Jadwal" vs "Edit Jadwal" + status info.
+     */
+    public function byVendor(Request $request, string $vendorId)
+    {
+        $orgId = $request->user()->org_id;
+        $vendor = Vendor::where('org_id', $orgId)->findOrFail($vendorId);
+
+        $monitoring = VendorMonitoring::query()
+            ->where('vendor_id', $vendor->id)
+            ->where('org_id', $orgId)
+            ->where('is_active', true)
+            ->first();
+
+        if (! $monitoring) {
+            return response()->json(['data' => null]);
+        }
+
+        return response()->json([
+            'data' => array_merge($monitoring->toArray(), [
+                'derive_status' => $monitoring->derive_status,
+            ]),
+        ]);
+    }
+
+    /**
      * GET /api/tprm/monitoring/{id}
      */
     public function show(Request $request, string $id)

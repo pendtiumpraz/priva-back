@@ -722,6 +722,8 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     Route::prefix('tprm/monitoring')->group(function () {
         Route::get('/inbox', [TprmMonitoringController::class, 'inbox'])
             ->middleware('permission:vendor_risk,read');
+        Route::get('/by-vendor/{vendorId}', [TprmMonitoringController::class, 'byVendor'])
+            ->middleware('permission:vendor_risk,read');
         Route::post('/', [TprmMonitoringController::class, 'store'])
             ->middleware('permission:vendor_risk,write');
         Route::get('/{id}', [TprmMonitoringController::class, 'show'])
