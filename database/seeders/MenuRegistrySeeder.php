@@ -76,6 +76,8 @@ class MenuRegistrySeeder extends Seeder
             ['menu_key' => 'tprm-libraries', 'label' => 'Bank Pertanyaan TPRM', 'href' => '/vendor-risk/libraries', 'icon' => 'Library', 'section' => 'Data Management', 'sort' => 235, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'tprm-inbox-review', 'label' => 'Antrian Review', 'href' => '/vendor-risk/inbox-review', 'icon' => 'Inbox', 'section' => 'Data Management', 'sort' => 236, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'tprm-inbox-approval', 'label' => 'Antrian Persetujuan', 'href' => '/vendor-risk/inbox-approval', 'icon' => 'ShieldCheck', 'section' => 'Data Management', 'sort' => 237, 'roles' => array_merge(['root'], self::COMPLIANCE)],
+            ['menu_key' => 'tprm-monitoring', 'label' => 'Monitoring Berkala', 'href' => '/vendor-risk/monitoring', 'icon' => 'CalendarClock', 'section' => 'Data Management', 'sort' => 238, 'roles' => array_merge(['root'], self::COMPLIANCE)],
+            ['menu_key' => 'tprm-incidents', 'label' => 'Insiden Pihak Ketiga', 'href' => '/vendor-risk/incidents', 'icon' => 'AlertTriangle', 'section' => 'Data Management', 'sort' => 239, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'cross-border', 'label' => 'Cross Border Data Transfer', 'href' => '/cross-border', 'icon' => 'Globe', 'section' => 'Data Management', 'sort' => 240, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'document-import', 'label' => 'Document Import', 'href' => '/document-import', 'icon' => 'FolderUp', 'section' => 'Data Management', 'sort' => 250, 'roles' => array_merge(['root'], self::EDITOR)],
 
