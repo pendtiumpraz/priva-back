@@ -170,6 +170,7 @@ class VendorRiskController extends Controller
             'name' => "{$req}|string|max:255",
             'description' => "{$opt}|string|max:2000",
             'website' => "{$opt}|url|max:500",
+            'privacy_policy_url' => "{$opt}|url|max:500",
             'country' => "{$opt}|string|max:100",
             'services_provided' => "{$opt}|array",
             'services_provided.*' => 'string|max:200',
