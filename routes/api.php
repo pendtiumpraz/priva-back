@@ -97,7 +97,9 @@ use App\Http\Controllers\Api\TenantSsoController;
 use App\Http\Controllers\Api\TenantThemeController;
 use App\Http\Controllers\Api\ThirdPartyQuestionController;
 use App\Http\Controllers\Api\TprmApprovalController;
+use App\Http\Controllers\Api\TprmIncidentController;
 use App\Http\Controllers\Api\TprmLibraryController;
+use App\Http\Controllers\Api\TprmMonitoringController;
 use App\Http\Controllers\Api\TprmReviewController;
 use App\Http\Controllers\Api\VendorScreeningController;
 use App\Http\Controllers\Api\ThreatIntelController;
@@ -711,6 +713,39 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::post('/{id}/submit-to-approver', [TprmReviewController::class, 'submitToApprover'])
             ->middleware('permission:vendor_risk,write');
         Route::post('/{id}/reject-to-vendor', [TprmReviewController::class, 'rejectToVendor'])
+            ->middleware('permission:vendor_risk,write');
+    });
+
+    // =============================================
+    // TPRM Phase 4 — Monitoring berkala vendor + Incident report
+    // =============================================
+    Route::prefix('tprm/monitoring')->group(function () {
+        Route::get('/inbox', [TprmMonitoringController::class, 'inbox'])
+            ->middleware('permission:vendor_risk,read');
+        Route::post('/', [TprmMonitoringController::class, 'store'])
+            ->middleware('permission:vendor_risk,write');
+        Route::get('/{id}', [TprmMonitoringController::class, 'show'])
+            ->middleware('permission:vendor_risk,read');
+        Route::post('/{id}/complete', [TprmMonitoringController::class, 'complete'])
+            ->middleware('permission:vendor_risk,write');
+        Route::delete('/{id}', [TprmMonitoringController::class, 'destroy'])
+            ->middleware('permission:vendor_risk,write');
+    });
+
+    Route::prefix('tprm/incidents')->group(function () {
+        Route::get('/meta', [TprmIncidentController::class, 'meta'])
+            ->middleware('permission:vendor_risk,read');
+        Route::get('/', [TprmIncidentController::class, 'index'])
+            ->middleware('permission:vendor_risk,read');
+        Route::post('/', [TprmIncidentController::class, 'store'])
+            ->middleware('permission:vendor_risk,write');
+        Route::get('/{id}', [TprmIncidentController::class, 'show'])
+            ->middleware('permission:vendor_risk,read');
+        Route::patch('/{id}', [TprmIncidentController::class, 'update'])
+            ->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/apply-risk', [TprmIncidentController::class, 'applyRisk'])
+            ->middleware('permission:vendor_risk,write');
+        Route::delete('/{id}', [TprmIncidentController::class, 'destroy'])
             ->middleware('permission:vendor_risk,write');
     });
 
