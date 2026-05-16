@@ -73,6 +73,7 @@ class MenuRegistrySeeder extends Seeder
             ['menu_key' => 'data-discovery', 'label' => 'Data Discovery', 'href' => '/data-discovery', 'icon' => 'Scan', 'section' => 'Data Management', 'sort' => 210, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'contract-review', 'label' => 'Contract Review', 'href' => '/contract-review', 'icon' => 'FileSearch', 'section' => 'Data Management', 'sort' => 220, 'roles' => array_merge(['root'], self::EDITOR)],
             ['menu_key' => 'vendor-risk', 'label' => 'Third Party Management', 'href' => '/vendor-risk', 'icon' => 'Building2', 'section' => 'Data Management', 'sort' => 230, 'roles' => array_merge(['root'], self::COMPLIANCE)],
+            ['menu_key' => 'tprm-libraries', 'label' => 'Bank Pertanyaan TPRM', 'href' => '/vendor-risk/libraries', 'icon' => 'Library', 'section' => 'Data Management', 'sort' => 235, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'cross-border', 'label' => 'Cross Border Data Transfer', 'href' => '/cross-border', 'icon' => 'Globe', 'section' => 'Data Management', 'sort' => 240, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'document-import', 'label' => 'Document Import', 'href' => '/document-import', 'icon' => 'FolderUp', 'section' => 'Data Management', 'sort' => 250, 'roles' => array_merge(['root'], self::EDITOR)],
 
