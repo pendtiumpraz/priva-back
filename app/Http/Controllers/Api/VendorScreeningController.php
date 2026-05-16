@@ -3,10 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ProcessVendorScreeningJob;
 use App\Models\Vendor;
 use App\Models\VendorScreening;
+use App\Services\VendorScreening\AiContextPresets;
 use App\Services\VendorScreening\VendorScreeningService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 /**
  * TPRM Phase 3 — AI Vendor Screening endpoints.
@@ -23,9 +26,13 @@ class VendorScreeningController extends Controller
      * POST /api/vendor-risk/{id}/screen
      *
      * Sources opsional (default semua yang available):
-     *   { "sources": ["web_search", "privacy_policy", "documents", "sanctions"] }
+     *   { "sources": ["web_search", "privacy_policy", "documents", "sanctions"],
+     *     "context_preset": "perbankan",
+     *     "async": true }
      *
-     * Sinkron — user blocking sampai selesai (10-30 detik biasanya).
+     * Mode default Phase 3.5: ASYNC via queue. Return 202 + screening_id
+     * yang client polling sampai status=completed/failed. Client boleh
+     * pass async=false untuk legacy sinkron mode.
      */
     public function run(Request $request, string $vendorId, VendorScreeningService $service)
     {
@@ -35,23 +42,134 @@ class VendorScreeningController extends Controller
         $data = $request->validate([
             'sources' => 'nullable|array',
             'sources.*' => 'string|in:web_search,privacy_policy,documents,sanctions',
+            'context_preset' => 'nullable|string|in:'.implode(',', AiContextPresets::ALL_KEYS),
+            'async' => 'nullable|boolean',
         ]);
 
         $sources = $data['sources'] ?? ['web_search', 'privacy_policy', 'documents', 'sanctions'];
+        $preset = $data['context_preset'] ?? null;
+        $async = $data['async'] ?? true; // default async
 
-        $screening = $service->run($vendor, $sources, $request->user()->id);
+        if (! $async) {
+            // Sinkron legacy mode — untuk klien yang prefer wait
+            $screening = $service->run($vendor, $sources, $request->user()->id, $preset);
 
-        if ($screening->status === VendorScreening::STATUS_FAILED) {
+            if ($screening->status === VendorScreening::STATUS_FAILED) {
+                return response()->json([
+                    'message' => 'Screening selesai dengan error.',
+                    'error' => $screening->error_message,
+                    'data' => $this->present($screening),
+                ], 500);
+            }
             return response()->json([
-                'message' => 'Screening selesai dengan error.',
-                'error' => $screening->error_message,
+                'message' => 'Screening selesai.',
                 'data' => $this->present($screening),
-            ], 500);
+            ]);
+        }
+
+        // Async mode — bikin row pending, dispatch job, return 202
+        $screening = VendorScreening::create([
+            'id' => (string) Str::uuid(),
+            'org_id' => $orgId,
+            'vendor_id' => $vendor->id,
+            'triggered_by_user_id' => $request->user()->id,
+            'sources_used' => $sources,
+            'status' => VendorScreening::STATUS_PENDING,
+        ]);
+
+        ProcessVendorScreeningJob::dispatch(
+            $screening->id,
+            $vendor->id,
+            $orgId,
+            $sources,
+            $request->user()->id,
+            $preset,
+        );
+
+        return response()->json([
+            'message' => 'Screening dijadwalkan, status akan diperbarui di background.',
+            'data' => $this->presentBrief($screening),
+        ], 202);
+    }
+
+    /**
+     * POST /api/vendor-risk/bulk-screen
+     * Bulk schedule screening untuk N vendor sekaligus. Selalu async.
+     *
+     * Body: { vendor_ids: [...], sources: [...], context_preset: '...' }
+     */
+    public function bulkScreen(Request $request)
+    {
+        $orgId = $request->user()->org_id;
+
+        $data = $request->validate([
+            'vendor_ids' => 'required|array|min:1|max:50',
+            'vendor_ids.*' => 'required|string',
+            'sources' => 'nullable|array',
+            'sources.*' => 'string|in:web_search,privacy_policy,documents,sanctions',
+            'context_preset' => 'nullable|string|in:'.implode(',', AiContextPresets::ALL_KEYS),
+        ]);
+
+        $sources = $data['sources'] ?? ['web_search', 'privacy_policy', 'documents', 'sanctions'];
+        $preset = $data['context_preset'] ?? null;
+
+        // Filter vendor yang valid (milik org ini)
+        $vendors = Vendor::query()
+            ->where('org_id', $orgId)
+            ->whereIn('id', $data['vendor_ids'])
+            ->get(['id', 'name']);
+
+        $dispatched = [];
+        foreach ($vendors as $vendor) {
+            $screening = VendorScreening::create([
+                'id' => (string) Str::uuid(),
+                'org_id' => $orgId,
+                'vendor_id' => $vendor->id,
+                'triggered_by_user_id' => $request->user()->id,
+                'sources_used' => $sources,
+                'status' => VendorScreening::STATUS_PENDING,
+            ]);
+
+            ProcessVendorScreeningJob::dispatch(
+                $screening->id,
+                $vendor->id,
+                $orgId,
+                $sources,
+                $request->user()->id,
+                $preset,
+            );
+
+            $dispatched[] = [
+                'vendor_id' => $vendor->id,
+                'vendor_name' => $vendor->name,
+                'screening_id' => $screening->id,
+            ];
         }
 
         return response()->json([
-            'message' => 'Screening selesai.',
-            'data' => $this->present($screening),
+            'message' => count($dispatched).' screening dijadwalkan.',
+            'data' => [
+                'requested' => count($data['vendor_ids']),
+                'dispatched' => count($dispatched),
+                'skipped' => count($data['vendor_ids']) - count($dispatched),
+                'items' => $dispatched,
+            ],
+        ], 202);
+    }
+
+    /**
+     * GET /api/tprm/context-presets
+     * List preset konteks AI untuk dropdown FE.
+     */
+    public function listPresets()
+    {
+        $options = AiContextPresets::options();
+        return response()->json([
+            'data' => collect($options)->map(fn ($v, $k) => [
+                'key' => $k,
+                'label' => $v['label'],
+                'has_paragraph' => ! empty($v['paragraph']),
+            ])->values(),
         ]);
     }
 

@@ -617,6 +617,8 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
             ->middleware('permission:vendor_risk,write');
 
         // TPRM Phase 3 — AI Vendor Screening
+        Route::post('/bulk-screen', [VendorScreeningController::class, 'bulkScreen'])
+            ->middleware('permission:vendor_risk,write');
         Route::post('/{id}/screen', [VendorScreeningController::class, 'run'])
             ->middleware('permission:vendor_risk,write');
         Route::get('/{id}/screenings', [VendorScreeningController::class, 'index'])
@@ -687,6 +689,12 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::post('/{id}/questions/reorder', [TprmLibraryController::class, 'reorderQuestions'])
             ->middleware('permission:vendor_risk,write');
     });
+
+    // =============================================
+    // TPRM Phase 3.5 — Helper endpoints
+    // =============================================
+    Route::get('tprm/context-presets', [VendorScreeningController::class, 'listPresets'])
+        ->middleware('permission:vendor_risk,read');
 
     // =============================================
     // TPRM Phase 2 — Workflow Review (stage Maker→Reviewer)
