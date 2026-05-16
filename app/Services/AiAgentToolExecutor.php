@@ -39,9 +39,64 @@ class AiAgentToolExecutor
 
     private string $orgId;
 
+    /** UUID user yang me-trigger AI Agent (initiator chat). */
+    private ?string $initiatorUserId = null;
+
+    /** Nama user untuk audit trail (mis. "Budi Santoso"). */
+    private ?string $initiatorUserName = null;
+
+    /** UUID ChatConversation yang sedang aktif. */
+    private ?string $conversationId = null;
+
     public function __construct(string $orgId)
     {
         $this->orgId = $orgId;
+    }
+
+    /**
+     * Inject context user + conversation supaya AuditLog yang ditulis oleh
+     * executor bisa di-trace ke siapa yang me-trigger AI Agent. Sebelumnya
+     * audit log hanya menulis user_name='PRIVASIMU AI Agent' yang opak.
+     * Sekarang user_id terisi user asli, user_name mention "(via AI Agent)",
+     * dan meta tool/conversation masuk ke field `changes` untuk forensik.
+     */
+    public function withContext(?string $userId, ?string $userName, ?string $conversationId): self
+    {
+        $this->initiatorUserId = $userId;
+        $this->initiatorUserName = $userName;
+        $this->conversationId = $conversationId;
+
+        return $this;
+    }
+
+    /**
+     * Build payload dasar AuditLog dengan initiator context. Caller add
+     * module/record_id/action/section/changes mereka sendiri lalu spread
+     * ke AuditLog::create(). Memastikan setiap AI-driven mutation tercatat
+     * dengan siapa initiator + conversation id-nya.
+     */
+    private function auditPayload(string $module, string $recordId, string $action, string $section, array $extraChanges = []): array
+    {
+        $name = $this->initiatorUserName
+            ? "{$this->initiatorUserName} (via AI Agent)"
+            : '✨ PRIVASIMU AI Agent';
+
+        $meta = ['_ai_meta' => array_filter([
+            'conversation_id' => $this->conversationId,
+            'initiator_user_id' => $this->initiatorUserId,
+            'triggered_at' => now()->toIso8601String(),
+        ])];
+
+        return [
+            'module' => $module,
+            'record_id' => $recordId,
+            'action' => $action,
+            'user_id' => $this->initiatorUserId,
+            'user_name' => $name,
+            'user_role' => 'ai-agent',
+            'section' => $section,
+            'changes' => array_merge($meta, $extraChanges),
+        ];
     }
 
     /**
@@ -223,12 +278,115 @@ class AiAgentToolExecutor
             return self::maskString($value, 2);
         }
 
+        // Free-text fields (description, notes, response, dll) — neutralisasi
+        // pola prompt-injection sebelum di-include ke konteks AI. Ini lapis
+        // pertahanan terhadap konten DB yang user-controlled. Lihat
+        // neutralizePromptInjection() untuk pola yang di-strip.
+        $value = self::neutralizePromptInjection($value);
+
         // Long narrative text — truncate so LLM sees context but not full body
         if (strlen($value) > 200) {
             return substr($value, 0, 200).'… [truncated for privacy]';
         }
 
         return $value;
+    }
+
+    /**
+     * Anti-prompt-injection sanitizer untuk field bebas (description, notes,
+     * response, narrative) yang user-controlled di DB. Strip pola yang sering
+     * dipakai jailbreak / obfuscated injection sehingga AI tidak akan obey
+     * instruksi yang muncul di dalam DATA.
+     *
+     * Lapisan yang di-strip:
+     *  1. Encoded blobs: morse, base64, hex panjang, ROT13 all-caps blok besar
+     *  2. Zero-width / invisible Unicode (steganografi)
+     *  3. Role-tokens: SYSTEM:/ASSISTANT:/USER:/TOOL: di awal kalimat
+     *  4. Markdown system fences: ```system, ```role
+     *  5. Custom marker: `===END===`, `=== AKHIR DOKUMEN ===` (mencegah marker spoofing)
+     *  6. Control chars (kecuali \n, \t) — strip semua
+     *  7. Newline berlebih (>2 berurutan) → di-collapse
+     *
+     * NB: ini destructive — kalau ada user sah simpan base64 hash (mis. file
+     * checksum) di field bebas, juga ke-strip. Trade-off keamanan vs UX yang
+     * kami ambil: tampilkan placeholder ⟦encoded⟧ + log warning.
+     */
+    private static function neutralizePromptInjection(string $text): string
+    {
+        if ($text === '') {
+            return $text;
+        }
+        $original = $text;
+        $stripCount = 0;
+
+        // (1) Strip control chars kecuali tab/newline/CR
+        $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $text) ?? $text;
+
+        // (2) Zero-width chars / BOM / right-to-left override / invisible separators
+        $text = preg_replace('/[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{206F}\x{FEFF}]/u', '', $text) ?? $text;
+
+        // (3) Morse code — sequence panjang dot/dash/slash/spasi
+        $text = preg_replace_callback('/(?:[.\-]{1,8}[\s\/]){6,}[.\-]{1,8}/u', function ($m) use (&$stripCount) {
+            $stripCount++;
+            return '⟦encoded:morse⟧';
+        }, $text) ?? $text;
+
+        // (4) Base64 blob — 60+ char Base64-alphabet
+        $text = preg_replace_callback('/[A-Za-z0-9+\/]{60,}={0,2}/', function ($m) use (&$stripCount) {
+            $stripCount++;
+            return '⟦encoded:base64⟧';
+        }, $text) ?? $text;
+
+        // (5) Hex blob — 40+ char hex murni
+        $text = preg_replace_callback('/\b[0-9a-fA-F]{40,}\b/', function ($m) use (&$stripCount) {
+            $stripCount++;
+            return '⟦encoded:hex⟧';
+        }, $text) ?? $text;
+
+        // (6) ROT13-like — all-caps tanpa spasi panjang (heuristik)
+        $text = preg_replace_callback('/\b[A-Z]{30,}\b/', function ($m) use (&$stripCount) {
+            $stripCount++;
+            return '⟦encoded:caps-blob⟧';
+        }, $text) ?? $text;
+
+        // (7) Role-token impersonation pada awal baris atau setelah newline
+        $text = preg_replace('/(^|\n)\s*(SYSTEM|ASSISTANT|USER|TOOL|FUNCTION)\s*:\s*/i', '$1[role-strip] ', $text) ?? $text;
+
+        // (8) Markdown fenced with system/role tag
+        $text = preg_replace('/```\s*(?:system|role|instruction|prompt)\b/i', '[fence-strip]', $text) ?? $text;
+
+        // (9) Custom delimiters yang dipakai di file upload context (mencegah
+        // attacker palsu `=== AKHIR DOKUMEN ===` lalu inject instruction)
+        $text = preg_replace('/(===\s*(?:END|AKHIR|BEGIN|MULAI)\b[^\n]*===)/iu', '⟦marker-strip⟧', $text) ?? $text;
+
+        // (10) Common jailbreak phrases (lowercase-match supaya simple)
+        $jailbreakPhrases = [
+            '/ignore (?:all )?(?:previous|prior|above) (?:instructions?|prompts?|rules?)/i',
+            '/disregard (?:all )?(?:previous|prior|above)/i',
+            '/abaikan (?:semua )?(?:instruksi|perintah|aturan) (?:sebelumnya|di atas)/i',
+            '/lupakan (?:semua )?(?:instruksi|perintah|aturan) (?:sebelumnya|di atas)/i',
+            '/forget (?:all )?(?:previous|prior|earlier)/i',
+            '/you are (?:now )?(?:a )?(?:new|different|jailbroken)/i',
+            '/act as (?:a )?(?:DAN|developer mode|unrestricted)/i',
+            '/(?:bypass|override) (?:safety|guardrail|filter|approval)/i',
+        ];
+        foreach ($jailbreakPhrases as $p) {
+            $text = preg_replace($p, '[jailbreak-strip]', $text) ?? $text;
+        }
+
+        // (11) Collapse 3+ consecutive newlines (sering dipakai memisahkan
+        // "data" dari "instruction" di prompt injection)
+        $text = preg_replace('/\n{3,}/', "\n\n", $text) ?? $text;
+
+        if ($stripCount > 0 || $text !== $original) {
+            \Log::warning('AI sanitizer neutralized suspicious content in tool result', [
+                'strip_count' => $stripCount,
+                'orig_len' => strlen($original),
+                'after_len' => strlen($text),
+            ]);
+        }
+
+        return $text;
     }
 
     private static function maskDigits(string $value, int $keepStart, int $keepEnd): string
@@ -328,7 +486,7 @@ class AiAgentToolExecutor
         $this->applyAutoRisk($r);
 
         try {
-            AuditLog::create(['module' => 'ropa', 'record_id' => $r->id, 'action' => 'created', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'Automated AI Creation']);
+            AuditLog::create($this->auditPayload('ropa', $r->id, 'created', 'Automated AI Creation'));
         } catch (\Exception $e) {
         }
 
@@ -363,7 +521,7 @@ class AiAgentToolExecutor
         $this->applyAutoRisk($r);
 
         try {
-            AuditLog::create(['module' => 'ropa', 'record_id' => $r->id, 'action' => 'updated', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'AI Automated Edit', 'changes' => array_keys($data)]);
+            AuditLog::create($this->auditPayload('ropa', $r->id, 'updated', 'AI Automated Edit', ['changed_fields' => array_keys($data)]));
         } catch (\Exception $e) {
         }
 
@@ -461,7 +619,7 @@ class AiAgentToolExecutor
         }
 
         try {
-            AuditLog::create(['module' => 'dpia', 'record_id' => $r->id, 'action' => 'created', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'Automated AI Creation']);
+            AuditLog::create($this->auditPayload('dpia', $r->id, 'created', 'Automated AI Creation'));
         } catch (\Exception $e) {
         }
 
@@ -492,7 +650,7 @@ class AiAgentToolExecutor
         }
 
         try {
-            AuditLog::create(['module' => 'dpia', 'record_id' => $r->id, 'action' => 'updated', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'AI Automated Edit', 'changes' => array_keys($data)]);
+            AuditLog::create($this->auditPayload('dpia', $r->id, 'updated', 'AI Automated Edit', ['changed_fields' => array_keys($data)]));
         } catch (\Exception $e) {
         }
 
@@ -600,7 +758,7 @@ class AiAgentToolExecutor
         $r->update($data);
 
         try {
-            AuditLog::create(['module' => 'dsr', 'record_id' => $r->id, 'action' => 'updated', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'AI Automated Edit', 'changes' => array_keys($data)]);
+            AuditLog::create($this->auditPayload('dsr', $r->id, 'updated', 'AI Automated Edit', ['changed_fields' => array_keys($data)]));
         } catch (\Exception $e) {
         }
 
@@ -637,7 +795,7 @@ class AiAgentToolExecutor
         $r = BreachIncident::create($data);
 
         try {
-            AuditLog::create(['module' => 'breach', 'record_id' => $r->id, 'action' => 'created', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'Automated AI Creation']);
+            AuditLog::create($this->auditPayload('breach', $r->id, 'created', 'Automated AI Creation'));
         } catch (\Exception $e) {
         }
 
@@ -692,7 +850,7 @@ class AiAgentToolExecutor
         $org->update($data);
 
         try {
-            AuditLog::create(['module' => 'organization', 'record_id' => $org->id, 'action' => 'updated', 'user_name' => '✨ PRIVASIMU AI Agent', 'user_role' => 'system', 'section' => 'AI Automated Edit', 'changes' => array_keys($data)]);
+            AuditLog::create($this->auditPayload('organization', $org->id, 'updated', 'AI Automated Edit', ['changed_fields' => array_keys($data)]));
         } catch (\Exception $e) {
         }
 
