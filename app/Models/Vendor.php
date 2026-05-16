@@ -24,6 +24,7 @@ class Vendor extends Model
         'bidang',
         'jenis_entitas',
         'website',
+        'privacy_policy_url',
         'description',
         'dpa_status',
         'dpa_signed_at',

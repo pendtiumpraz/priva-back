@@ -99,6 +99,7 @@ use App\Http\Controllers\Api\ThirdPartyQuestionController;
 use App\Http\Controllers\Api\TprmApprovalController;
 use App\Http\Controllers\Api\TprmLibraryController;
 use App\Http\Controllers\Api\TprmReviewController;
+use App\Http\Controllers\Api\VendorScreeningController;
 use App\Http\Controllers\Api\ThreatIntelController;
 use App\Http\Controllers\Api\TiaController;
 use App\Http\Controllers\Api\UserController;
@@ -614,6 +615,14 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         // Sprint G.2 — Upload dokumen intake typed (akta/ktp/kontrak/CP)
         Route::post('/{id}/intake-documents', [VendorRiskController::class, 'uploadIntakeDocument'])
             ->middleware('permission:vendor_risk,write');
+
+        // TPRM Phase 3 — AI Vendor Screening
+        Route::post('/{id}/screen', [VendorScreeningController::class, 'run'])
+            ->middleware('permission:vendor_risk,write');
+        Route::get('/{id}/screenings', [VendorScreeningController::class, 'index'])
+            ->middleware('permission:vendor_risk,read');
+        Route::get('/{id}/screenings/{sid}', [VendorScreeningController::class, 'show'])
+            ->middleware('permission:vendor_risk,read');
     });
 
     // =============================================

@@ -19,6 +19,22 @@ class AppServiceProvider extends ServiceProvider
         // connection caches that must be shared across the request.
         $this->app->singleton(\App\Services\TenantDb\TenantDatabaseService::class);
         $this->app->singleton(\App\Services\TenantDb\DatabasePoolRegistry::class);
+
+        // TPRM Phase 3 — Vendor screening search provider abstraction.
+        // Pilihan provider via config('vendor_screening.search_provider').
+        // Default DuckDuckGo (gratis scrape). Production swap ke Brave dengan
+        // API key di system_settings.
+        $this->app->bind(\App\Services\VendorScreening\SearchProviderInterface::class, function ($app) {
+            $provider = config('vendor_screening.search_provider', 'duckduckgo');
+            if ($provider === 'brave') {
+                $brave = new \App\Services\VendorScreening\BraveSearchProvider();
+                if ($brave->isAvailable()) {
+                    return $brave;
+                }
+                // Fall back kalau Brave tidak available (no API key)
+            }
+            return new \App\Services\VendorScreening\DuckDuckGoHtmlSearchProvider();
+        });
     }
 
     /**
