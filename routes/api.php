@@ -96,6 +96,7 @@ use App\Http\Controllers\Api\TenantRoleController;
 use App\Http\Controllers\Api\TenantSsoController;
 use App\Http\Controllers\Api\TenantThemeController;
 use App\Http\Controllers\Api\ThirdPartyQuestionController;
+use App\Http\Controllers\Api\TprmLibraryController;
 use App\Http\Controllers\Api\ThreatIntelController;
 use App\Http\Controllers\Api\TiaController;
 use App\Http\Controllers\Api\UserController;
@@ -627,6 +628,52 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::put('/{id}', [ThirdPartyQuestionController::class, 'update'])
             ->middleware('permission:vendor_risk,write');
         Route::delete('/{id}', [ThirdPartyQuestionController::class, 'destroy'])
+            ->middleware('permission:vendor_risk,write');
+    });
+
+    // =============================================
+    // TPRM Phase 1 — Question Library + Segment + Question Builder
+    // Library wrapper untuk customisasi pertanyaan TPRM per use case
+    // (mis. PDP, ISO 27001, Custom Vendor Cloud). Tenant boleh clone
+    // template global, edit segment + question. Permission slug: vendor_risk.
+    // =============================================
+    Route::prefix('tprm/libraries')->group(function () {
+        // Library CRUD
+        Route::get('/', [TprmLibraryController::class, 'index'])
+            ->middleware('permission:vendor_risk,read');
+        Route::post('/', [TprmLibraryController::class, 'store'])
+            ->middleware('permission:vendor_risk,write');
+        Route::get('/{id}', [TprmLibraryController::class, 'show'])
+            ->middleware('permission:vendor_risk,read');
+        Route::patch('/{id}', [TprmLibraryController::class, 'update'])
+            ->middleware('permission:vendor_risk,write');
+        Route::delete('/{id}', [TprmLibraryController::class, 'destroy'])
+            ->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/clone', [TprmLibraryController::class, 'clone'])
+            ->middleware('permission:vendor_risk,write');
+
+        // Segment CRUD (nested)
+        Route::post('/{id}/segments', [TprmLibraryController::class, 'storeSegment'])
+            ->middleware('permission:vendor_risk,write');
+        Route::patch('/{id}/segments/{segmentId}', [TprmLibraryController::class, 'updateSegment'])
+            ->middleware('permission:vendor_risk,write');
+        Route::delete('/{id}/segments/{segmentId}', [TprmLibraryController::class, 'destroySegment'])
+            ->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/segments/reorder', [TprmLibraryController::class, 'reorderSegments'])
+            ->middleware('permission:vendor_risk,write');
+
+        // Question CRUD (nested)
+        Route::get('/{id}/questions', [TprmLibraryController::class, 'listQuestions'])
+            ->middleware('permission:vendor_risk,read');
+        Route::post('/{id}/questions', [TprmLibraryController::class, 'storeQuestion'])
+            ->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/questions/bulk', [TprmLibraryController::class, 'bulkStoreQuestions'])
+            ->middleware('permission:vendor_risk,write');
+        Route::patch('/{id}/questions/{questionId}', [TprmLibraryController::class, 'updateQuestion'])
+            ->middleware('permission:vendor_risk,write');
+        Route::delete('/{id}/questions/{questionId}', [TprmLibraryController::class, 'destroyQuestion'])
+            ->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/questions/reorder', [TprmLibraryController::class, 'reorderQuestions'])
             ->middleware('permission:vendor_risk,write');
     });
 
