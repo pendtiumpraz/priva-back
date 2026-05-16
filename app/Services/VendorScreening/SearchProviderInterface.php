@@ -6,10 +6,8 @@ namespace App\Services\VendorScreening;
  * Abstraksi search provider untuk vendor screening.
  *
  * Implementasi default: DuckDuckGoHtmlSearchProvider (free, no API key,
- * tapi scrape HTML). Production-grade: BraveSearchProvider (paid, JSON API).
- *
- * Provider dipilih runtime via config('vendor_screening.search_provider')
- * yang di-hidrate dari system_settings.
+ * tapi scrape HTML). Tambah provider lain dengan implement interface ini
+ * lalu ganti binding di AppServiceProvider.
  */
 interface SearchProviderInterface
 {

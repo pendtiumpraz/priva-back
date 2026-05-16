@@ -12,8 +12,9 @@ use Illuminate\Support\Facades\Log;
  * Pros: gratis, tidak perlu API key, langsung jalan
  * Cons: rapuh (rate limit + parsing breaking), against ToS technically
  *
- * Untuk production BUMN sebaiknya swap ke BraveSearchProvider (API key di
- * system_settings). Provider ini cocok untuk PoC / dev environment.
+ * Untuk production scale yang lebih besar, bisa swap ke implementasi
+ * SearchProviderInterface lain (tambah class baru + ganti binding di
+ * AppServiceProvider).
  *
  * Parsing pakai PHP built-in DOMDocument supaya tidak butuh dependency
  * tambahan (composer.json tidak ada Symfony DomCrawler).
