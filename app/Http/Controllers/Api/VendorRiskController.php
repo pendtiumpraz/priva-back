@@ -157,6 +157,65 @@ class VendorRiskController extends Controller
     }
 
     /**
+     * GET /api/vendor-risk/{id}/assessment-history
+     *
+     * Phase 4 — list semua VendorAssessment row untuk vendor ini (history).
+     * Filter org_id. Plus return reminder flag kalau last_approved > X months
+     * (X dari system_settings 'tprm_full_assessment_frequency_months', default 12).
+     */
+    public function assessmentHistory(Request $request, string $id)
+    {
+        $orgId = $request->user()->org_id;
+        $vendor = \App\Models\Vendor::where('org_id', $orgId)->findOrFail($id);
+
+        $assessments = \App\Models\VendorAssessment::query()
+            ->where('vendor_id', $vendor->id)
+            ->where('org_id', $orgId)
+            ->orderByDesc('created_at')
+            ->limit(50)
+            ->get([
+                'id', 'status', 'score', 'risk_level', 'category',
+                'questionnaire_version', 'library_id',
+                'source', 'submitted_at', 'created_at',
+                'reviewer_id', 'reviewer_actioned_at',
+                'approver_id', 'approver_actioned_at',
+                'rejection_reason',
+            ]);
+
+        // Reminder logic: cek kapan assessment approved terakhir kali
+        $lastApproved = $assessments
+            ->where('status', \App\Models\VendorAssessment::STATUS_APPROVED)
+            ->sortByDesc('approver_actioned_at')
+            ->first();
+
+        $frequencyMonths = (int) config('vendor_screening.full_assessment_frequency_months', 12);
+        // Fallback hardcoded 12 kalau config tidak ada
+        if ($frequencyMonths <= 0) $frequencyMonths = 12;
+
+        $needReassessment = false;
+        $monthsSinceLastApproval = null;
+        if ($lastApproved && $lastApproved->approver_actioned_at) {
+            $monthsSince = now()->diffInMonths($lastApproved->approver_actioned_at);
+            $monthsSinceLastApproval = $monthsSince;
+            $needReassessment = $monthsSince >= $frequencyMonths;
+        } elseif ($assessments->count() === 0) {
+            $needReassessment = true;
+        }
+
+        return response()->json([
+            'data' => [
+                'history' => $assessments,
+                'reminder' => [
+                    'frequency_months' => $frequencyMonths,
+                    'months_since_last_approval' => $monthsSinceLastApproval,
+                    'need_reassessment' => $needReassessment,
+                    'last_approved_at' => $lastApproved?->approver_actioned_at?->toIso8601String(),
+                ],
+            ],
+        ]);
+    }
+
+    /**
      * Validation rules shared by store + update.
      * Critical: risk_level + risk_score validated against enum/range — sebelumnya
      * frontend bisa kirim risk_level apa saja dan backend menerima begitu saja.

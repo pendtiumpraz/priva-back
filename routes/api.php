@@ -618,6 +618,10 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::post('/{id}/intake-documents', [VendorRiskController::class, 'uploadIntakeDocument'])
             ->middleware('permission:vendor_risk,write');
 
+        // TPRM Phase 4 — Assessment history per vendor
+        Route::get('/{id}/assessment-history', [VendorRiskController::class, 'assessmentHistory'])
+            ->middleware('permission:vendor_risk,read');
+
         // TPRM Phase 3 — AI Vendor Screening
         Route::post('/bulk-screen', [VendorScreeningController::class, 'bulkScreen'])
             ->middleware('permission:vendor_risk,write');
