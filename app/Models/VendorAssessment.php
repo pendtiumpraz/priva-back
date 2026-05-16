@@ -17,6 +17,7 @@ class VendorAssessment extends Model
     protected $fillable = [
         'vendor_id',
         'org_id',
+        'library_id',
         'assessed_by',
         'answers',
         'score',

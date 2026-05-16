@@ -52,30 +52,55 @@ class AsesmenPublikController extends Controller
         $assessment = $request->get('_assessment');
         $vendor = Vendor::withTrashed()->find($assessment->vendor_id);
 
-        // Question bank — effective per org (landlord defaults + tenant
-        // overrides + tenant custom). Filter ke versi v2_2026 (versi publik)
-        // + hanya yang aktif. Sort manual di-PHP karena effectiveForOrg
-        // return collection sudah di-merge.
+        // Question bank — 2 jalur load:
+        // (a) Kalau assessment terkait ke library tertentu (TPRM Phase 1+),
+        //     load semua active question dari library tsb. Library bisa
+        //     milik tenant atau template global.
+        // (b) Legacy: kalau library_id null, pakai logic lama
+        //     effectiveForOrg + category + filter v2_2026.
         $category = $assessment->category ?: ($vendor?->category ?? VendorQuestionnaire::CATEGORY_CLOUD);
-        $questions = VendorQuestionnaire::effectiveForOrg($assessment->org_id)
-            ->filter(fn ($q) => $q->is_active && $q->version === ThirdPartyAssessmentScorer::VERSION)
-            ->sortBy([
-                ['section', 'asc'],
-                ['sort_order', 'asc'],
-            ])
-            ->values()
-            ->map(fn ($q) => [
-                'id' => $q->id,
-                'question_code' => $q->question_code,
-                'section' => $q->section,
-                'question_text' => $q->question_text,
-                'description' => $q->description,
-                'regulation_ref' => $q->regulation_ref,
-                'recommendation_if_no' => $q->recommendation_if_no,
-                'requires_evidence_upload' => (bool) $q->requires_evidence_upload,
-                'answer_type' => $q->answer_type,
-                'sort_order' => $q->sort_order,
-            ]);
+
+        if (! empty($assessment->library_id)) {
+            $questions = VendorQuestionnaire::query()
+                ->withoutGlobalScope('org')
+                ->where('library_id', $assessment->library_id)
+                ->where('is_active', true)
+                ->orderBy('section')
+                ->orderBy('sort_order')
+                ->get()
+                ->map(fn ($q) => [
+                    'id' => $q->id,
+                    'question_code' => $q->question_code,
+                    'section' => $q->section,
+                    'question_text' => $q->question_text,
+                    'description' => $q->description,
+                    'regulation_ref' => $q->regulation_ref,
+                    'recommendation_if_no' => $q->recommendation_if_no,
+                    'requires_evidence_upload' => (bool) $q->requires_evidence_upload,
+                    'answer_type' => $q->answer_type,
+                    'sort_order' => $q->sort_order,
+                ]);
+        } else {
+            $questions = VendorQuestionnaire::effectiveForOrg($assessment->org_id)
+                ->filter(fn ($q) => $q->is_active && $q->version === ThirdPartyAssessmentScorer::VERSION)
+                ->sortBy([
+                    ['section', 'asc'],
+                    ['sort_order', 'asc'],
+                ])
+                ->values()
+                ->map(fn ($q) => [
+                    'id' => $q->id,
+                    'question_code' => $q->question_code,
+                    'section' => $q->section,
+                    'question_text' => $q->question_text,
+                    'description' => $q->description,
+                    'regulation_ref' => $q->regulation_ref,
+                    'recommendation_if_no' => $q->recommendation_if_no,
+                    'requires_evidence_upload' => (bool) $q->requires_evidence_upload,
+                    'answer_type' => $q->answer_type,
+                    'sort_order' => $q->sort_order,
+                ]);
+        }
 
         // Branding minimal — UI publik harus menampilkan logo + nama tenant,
         // bukan logo Privasimu. Ambil tenant identity tanpa expose konfigurasi internal.

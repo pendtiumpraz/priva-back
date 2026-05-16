@@ -834,6 +834,24 @@ class VendorRiskController extends Controller
             ], 422);
         }
 
+        // TPRM Phase 1: terima library_id opsional dari client supaya
+        // pertanyaan yang dirender di public page mengikuti library yang
+        // dipilih. Validasi library visible untuk org ini.
+        $libraryId = $request->input('library_id');
+        if ($libraryId) {
+            $lib = \App\Models\QuestionLibrary::query()
+                ->withoutGlobalScope('org')
+                ->visibleTo($vendor->org_id)
+                ->where('id', $libraryId)
+                ->where('is_active', true)
+                ->first();
+            if (! $lib) {
+                return response()->json([
+                    'message' => 'Library yang dipilih tidak valid atau tidak dapat diakses.',
+                ], 422);
+            }
+        }
+
         // firstOrCreate dengan attributes search-only + values default supaya
         // record baru di-stamp dengan questionnaire_version + answers kosong.
         $assessment = VendorAssessment::firstOrCreate(
@@ -845,8 +863,15 @@ class VendorRiskController extends Controller
             [
                 'questionnaire_version' => 'v2_2026',
                 'answers' => [],
+                'library_id' => $libraryId,
             ]
         );
+
+        // Kalau row existing (firstOrCreate hit lama) dan client kirim library
+        // berbeda, update supaya pertanyaan yang dirender konsisten.
+        if ($libraryId && $assessment->library_id !== $libraryId) {
+            $assessment->update(['library_id' => $libraryId]);
+        }
 
         // Generate token (default expiry 30 hari, configurable via
         // system_settings tprm_public_link_expiry_days). Service set status='sent'.
