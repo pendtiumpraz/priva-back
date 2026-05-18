@@ -683,7 +683,10 @@ class AuthController extends Controller
     }
 
     /**
-     * Update user-specific settings (e.g. idle timeout for SA).
+     * Update user-specific settings (e.g. idle timeout for SA, AI toggle).
+     *
+     * Settings disimpan di kolom JSON `users.settings`. Merge-patch — field
+     * yang tidak dikirim tidak ter-overwrite.
      */
     public function updateSettings(Request $request): JsonResponse
     {
@@ -691,11 +694,17 @@ class AuthController extends Controller
         $fields = $request->validate([
             'idle_timeout_enabled' => 'nullable|boolean',
             'idle_timeout_minutes' => 'nullable|integer|min:1',
+            // Per-user AI toggle. Saat false: FE hide semua AI affordance
+            // (sidebar items, tombol AI, modal intent skip ke manual). Backend
+            // endpoint AI tetap aktif (toggle adalah UI preference, bukan
+            // policy — user mungkin re-enable sebentar lagi).
+            'ai_enabled' => 'nullable|boolean',
         ]);
 
         $settings = $user->settings ?? [];
         if (isset($fields['idle_timeout_enabled'])) $settings['idle_timeout_enabled'] = (bool) $fields['idle_timeout_enabled'];
         if (isset($fields['idle_timeout_minutes'])) $settings['idle_timeout_minutes'] = (int) $fields['idle_timeout_minutes'];
+        if (array_key_exists('ai_enabled', $fields)) $settings['ai_enabled'] = (bool) $fields['ai_enabled'];
 
         $user->update(['settings' => $settings]);
 
