@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * UX cleanup — hapus 4 sub-feature TPRM dari sidebar:
@@ -19,10 +20,15 @@ use Illuminate\Support\Facades\DB;
 return new class extends Migration {
     public function up(): void
     {
+        if (! Schema::hasTable('menu_items')) {
+            return;
+        }
         $keys = ['tprm-inbox-review', 'tprm-inbox-approval', 'tprm-monitoring', 'tprm-incidents'];
         $menuIds = DB::table('menu_items')->whereIn('menu_key', $keys)->pluck('id');
         if ($menuIds->isNotEmpty()) {
-            DB::table('role_menu_whitelists')->whereIn('menu_id', $menuIds)->delete();
+            if (Schema::hasTable('role_menu_whitelists')) {
+                DB::table('role_menu_whitelists')->whereIn('menu_id', $menuIds)->delete();
+            }
             DB::table('menu_items')->whereIn('id', $menuIds)->delete();
         }
     }

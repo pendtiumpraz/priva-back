@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * UX cleanup — hapus menu "Bank Pertanyaan TPRM" dari sidebar.
@@ -17,9 +18,18 @@ use Illuminate\Support\Facades\DB;
 return new class extends Migration {
     public function up(): void
     {
+        // Defensive: table `menu_items` mungkin tidak ada di env tertentu
+        // (test/sandbox). Skip kalau begitu.
+        if (! Schema::hasTable('menu_items')) {
+            return;
+        }
         $menuId = DB::table('menu_items')->where('menu_key', 'tprm-libraries')->value('id');
         if ($menuId) {
-            DB::table('role_menu_whitelists')->where('menu_id', $menuId)->delete();
+            // `role_menu_whitelists` belum ada migration di codebase — di-create
+            // manual di env dev. Skip cleanup whitelist kalau table tidak ada.
+            if (Schema::hasTable('role_menu_whitelists')) {
+                DB::table('role_menu_whitelists')->where('menu_id', $menuId)->delete();
+            }
             DB::table('menu_items')->where('id', $menuId)->delete();
         }
     }
