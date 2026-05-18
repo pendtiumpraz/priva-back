@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
+        if (Schema::hasTable('question_libraries')) return;
         Schema::create('question_libraries', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('org_id')->nullable()->index();    // NULL = global template

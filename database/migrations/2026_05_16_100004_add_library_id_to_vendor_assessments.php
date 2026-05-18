@@ -17,6 +17,8 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
+        if (! Schema::hasTable('vendor_assessments')) return;
+        if (Schema::hasColumn('vendor_assessments', 'library_id')) return;
         Schema::table('vendor_assessments', function (Blueprint $table) {
             $table->uuid('library_id')->nullable()->after('id')->index();
         });

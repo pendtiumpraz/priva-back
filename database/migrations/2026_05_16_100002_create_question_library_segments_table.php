@@ -26,6 +26,7 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
+        if (Schema::hasTable('question_library_segments')) return;
         Schema::create('question_library_segments', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('library_id')->index();

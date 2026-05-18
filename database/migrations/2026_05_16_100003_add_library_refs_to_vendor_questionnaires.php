@@ -17,9 +17,14 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
+        if (! Schema::hasTable('vendor_questionnaires')) return;
         Schema::table('vendor_questionnaires', function (Blueprint $table) {
-            $table->uuid('library_id')->nullable()->after('id')->index();
-            $table->uuid('library_segment_id')->nullable()->after('library_id')->index();
+            if (! Schema::hasColumn('vendor_questionnaires', 'library_id')) {
+                $table->uuid('library_id')->nullable()->after('id')->index();
+            }
+            if (! Schema::hasColumn('vendor_questionnaires', 'library_segment_id')) {
+                $table->uuid('library_segment_id')->nullable()->after('library_id')->index();
+            }
         });
     }
 

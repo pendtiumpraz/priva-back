@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
+        if (! Schema::hasTable('vendors')) return;
+        if (Schema::hasColumn('vendors', 'privacy_policy_url')) return;
         Schema::table('vendors', function (Blueprint $table) {
             $table->string('privacy_policy_url', 500)->nullable()->after('website');
         });

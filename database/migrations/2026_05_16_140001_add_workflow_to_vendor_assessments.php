@@ -30,20 +30,38 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
+        if (! Schema::hasTable('vendor_assessments')) return;
         Schema::table('vendor_assessments', function (Blueprint $table) {
-            $table->uuid('assigned_reviewer_id')->nullable()->after('assessed_by')->index();
-            $table->uuid('assigned_approver_id')->nullable()->after('assigned_reviewer_id')->index();
-
-            $table->uuid('reviewer_id')->nullable()->after('assigned_approver_id');
-            $table->timestamp('reviewer_actioned_at')->nullable();
-            $table->text('reviewer_note')->nullable();
-
-            $table->uuid('approver_id')->nullable();
-            $table->timestamp('approver_actioned_at')->nullable();
-            $table->text('approver_note')->nullable();
-
-            $table->text('rejection_reason')->nullable();
-            $table->boolean('workflow_locked')->default(false);
+            if (! Schema::hasColumn('vendor_assessments', 'assigned_reviewer_id')) {
+                $table->uuid('assigned_reviewer_id')->nullable()->after('assessed_by')->index();
+            }
+            if (! Schema::hasColumn('vendor_assessments', 'assigned_approver_id')) {
+                $table->uuid('assigned_approver_id')->nullable()->after('assigned_reviewer_id')->index();
+            }
+            if (! Schema::hasColumn('vendor_assessments', 'reviewer_id')) {
+                $table->uuid('reviewer_id')->nullable()->after('assigned_approver_id');
+            }
+            if (! Schema::hasColumn('vendor_assessments', 'reviewer_actioned_at')) {
+                $table->timestamp('reviewer_actioned_at')->nullable();
+            }
+            if (! Schema::hasColumn('vendor_assessments', 'reviewer_note')) {
+                $table->text('reviewer_note')->nullable();
+            }
+            if (! Schema::hasColumn('vendor_assessments', 'approver_id')) {
+                $table->uuid('approver_id')->nullable();
+            }
+            if (! Schema::hasColumn('vendor_assessments', 'approver_actioned_at')) {
+                $table->timestamp('approver_actioned_at')->nullable();
+            }
+            if (! Schema::hasColumn('vendor_assessments', 'approver_note')) {
+                $table->text('approver_note')->nullable();
+            }
+            if (! Schema::hasColumn('vendor_assessments', 'rejection_reason')) {
+                $table->text('rejection_reason')->nullable();
+            }
+            if (! Schema::hasColumn('vendor_assessments', 'workflow_locked')) {
+                $table->boolean('workflow_locked')->default(false);
+            }
         });
     }
 

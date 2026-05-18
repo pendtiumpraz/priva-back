@@ -31,6 +31,7 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
+        if (Schema::hasTable('vendor_incidents')) return;
         Schema::create('vendor_incidents', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('org_id')->index();
