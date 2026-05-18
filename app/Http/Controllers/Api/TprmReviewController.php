@@ -67,7 +67,7 @@ class TprmReviewController extends Controller
             ->keyBy('id');
 
         return response()->json([
-            'data' => $rows->map(function ($a) use ($vendors) {
+            'data' => $rows->map(function ($a) use ($vendors, $userId) {
                 $v = $vendors->get($a->vendor_id);
                 return [
                     'id' => $a->id,
@@ -79,10 +79,10 @@ class TprmReviewController extends Controller
                     'risk_level' => $a->risk_level,
                     'submitted_at' => $a->submitted_at?->toIso8601String(),
                     'assigned_reviewer_id' => $a->assigned_reviewer_id,
-                    'is_assigned_to_me' => $a->assigned_reviewer_id === request()->user()->id,
+                    'is_assigned_to_me' => $a->assigned_reviewer_id === $userId,
                     'library_id' => $a->library_id,
                 ];
-            }),
+            })->values(),
         ]);
     }
 
@@ -93,6 +93,24 @@ class TprmReviewController extends Controller
      * halaman review side-by-side.
      */
     public function show(Request $request, string $id)
+    {
+        try {
+            return $this->doShow($request, $id);
+        } catch (\Throwable $e) {
+            \Log::error('TprmReviewController::show failed', [
+                'id' => $id,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile().':'.$e->getLine(),
+            ]);
+            return response()->json([
+                'message' => 'Gagal memuat detail review.',
+                'error' => $e->getMessage(),
+                'hint' => 'Pastikan migration Phase 2 sudah dijalankan: workflow_locked, reviewer_id, assigned_reviewer_id columns ada di vendor_assessments + tabel vendor_assessment_evidence + vendor_assessment_adjustments.',
+            ], 500);
+        }
+    }
+
+    private function doShow(Request $request, string $id)
     {
         $assessment = $this->findInOrg($id, $request->user()->org_id);
         $vendor = Vendor::find($assessment->vendor_id);

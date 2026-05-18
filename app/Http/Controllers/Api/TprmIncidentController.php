@@ -79,6 +79,25 @@ class TprmIncidentController extends Controller
 
     public function store(Request $request)
     {
+        try {
+            return $this->doStore($request);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            \Log::error('TprmIncidentController::store failed', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile().':'.$e->getLine(),
+            ]);
+            return response()->json([
+                'message' => 'Gagal menyimpan insiden.',
+                'error' => $e->getMessage(),
+                'hint' => 'Pastikan migration Phase 4 sudah dijalankan: vendor_incidents table harus ada (migration 2026_05_16_180003).',
+            ], 500);
+        }
+    }
+
+    private function doStore(Request $request)
+    {
         $orgId = $request->user()->org_id;
 
         $data = $request->validate([

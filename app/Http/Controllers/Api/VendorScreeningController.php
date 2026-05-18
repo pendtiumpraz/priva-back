@@ -36,6 +36,26 @@ class VendorScreeningController extends Controller
      */
     public function run(Request $request, string $vendorId, VendorScreeningService $service)
     {
+        try {
+            return $this->doRun($request, $vendorId, $service);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            \Log::error('VendorScreeningController::run failed', [
+                'vendor_id' => $vendorId,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile().':'.$e->getLine(),
+            ]);
+            return response()->json([
+                'message' => 'Gagal menjalankan screening.',
+                'error' => $e->getMessage(),
+                'hint' => 'Pastikan migration Phase 3 sudah jalan: vendor_screenings table + vendors.privacy_policy_url column (migration 2026_05_16_160001 & 160002).',
+            ], 500);
+        }
+    }
+
+    private function doRun(Request $request, string $vendorId, VendorScreeningService $service)
+    {
         $orgId = $request->user()->org_id;
         $vendor = Vendor::where('org_id', $orgId)->findOrFail($vendorId);
 
