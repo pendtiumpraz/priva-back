@@ -73,14 +73,10 @@ class MenuRegistrySeeder extends Seeder
             ['menu_key' => 'data-discovery', 'label' => 'Data Discovery', 'href' => '/data-discovery', 'icon' => 'Scan', 'section' => 'Data Management', 'sort' => 210, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'contract-review', 'label' => 'Contract Review', 'href' => '/contract-review', 'icon' => 'FileSearch', 'section' => 'Data Management', 'sort' => 220, 'roles' => array_merge(['root'], self::EDITOR)],
             ['menu_key' => 'vendor-risk', 'label' => 'Third Party Management', 'href' => '/vendor-risk', 'icon' => 'Building2', 'section' => 'Data Management', 'sort' => 230, 'roles' => array_merge(['root'], self::COMPLIANCE)],
-            // Bank Pertanyaan TPRM dihapus dari sidebar — akses lewat tombol
-            // di dalam halaman /vendor-risk (lebih natural sebagai sub-feature
-            // dari TPRM, bukan menu terpisah). Route /vendor-risk/libraries
-            // tetap aktif dan accessible via link button.
-            ['menu_key' => 'tprm-inbox-review', 'label' => 'Antrian Review', 'href' => '/vendor-risk/inbox-review', 'icon' => 'Inbox', 'section' => 'Data Management', 'sort' => 236, 'roles' => array_merge(['root'], self::COMPLIANCE)],
-            ['menu_key' => 'tprm-inbox-approval', 'label' => 'Antrian Persetujuan', 'href' => '/vendor-risk/inbox-approval', 'icon' => 'ShieldCheck', 'section' => 'Data Management', 'sort' => 237, 'roles' => array_merge(['root'], self::COMPLIANCE)],
-            ['menu_key' => 'tprm-monitoring', 'label' => 'Monitoring Berkala', 'href' => '/vendor-risk/monitoring', 'icon' => 'CalendarClock', 'section' => 'Data Management', 'sort' => 238, 'roles' => array_merge(['root'], self::COMPLIANCE)],
-            ['menu_key' => 'tprm-incidents', 'label' => 'Insiden Pihak Ketiga', 'href' => '/vendor-risk/incidents', 'icon' => 'AlertTriangle', 'section' => 'Data Management', 'sort' => 239, 'roles' => array_merge(['root'], self::COMPLIANCE)],
+            // Sub-feature TPRM (Bank Pertanyaan, Antrian Review, Antrian Approval,
+            // Monitoring, Insiden) DIHAPUS dari sidebar — sekarang navigate lewat
+            // TprmSubNav pill bar di top setiap halaman TPRM. Route-route tetap
+            // aktif. Lihat migration 2026_05_18_100002 untuk pembersihan menu lama.
             ['menu_key' => 'cross-border', 'label' => 'Cross Border Data Transfer', 'href' => '/cross-border', 'icon' => 'Globe', 'section' => 'Data Management', 'sort' => 240, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'document-import', 'label' => 'Document Import', 'href' => '/document-import', 'icon' => 'FolderUp', 'section' => 'Data Management', 'sort' => 250, 'roles' => array_merge(['root'], self::EDITOR)],
 
