@@ -14,6 +14,7 @@ use App\Models\BreachSimulation;
 use App\Models\DsrRequest;
 use App\Models\ConsentCollectionPoint;
 use App\Models\InformationSystem;
+use App\Models\License;
 use App\Models\Organization;
 use App\Services\AiAgentToolExecutor;
 use App\Services\CreditService;
@@ -29,11 +30,48 @@ class AiAgentController extends Controller
     private const MAX_TOOL_ITERATIONS = 5;
 
     /**
+     * License gate for AI Agent endpoints. SuperAdmin (no org) bypasses.
+     * Returns null if access denied (caller should return $this->denyBasic()).
+     */
+    private function checkAiAgentLicense(Request $request): bool
+    {
+        $user = $request->user();
+
+        // SuperAdmin / root tidak terikat license tenant (tidak punya org_id)
+        if (!$user || !$user->org_id || in_array($user->role, ['root', 'superadmin'], true)) {
+            return true;
+        }
+
+        $license = License::where('org_id', $user->org_id)
+            ->where('status', 'active')
+            ->first();
+
+        // AI Agent butuh paket pro_ai atau enterprise (basic tidak boleh)
+        if (!$license || $license->package_type === 'basic') {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function denyBasic()
+    {
+        return response()->json([
+            'message' => 'Fitur AI Agent hanya tersedia untuk paket Pro AI dan Enterprise.',
+            'upgrade_required' => true,
+        ], 403);
+    }
+
+    /**
      * Main AI Agent chat endpoint with function calling.
      * Only for ai_agent package users.
      */
     public function chat(Request $request)
     {
+        if (!$this->checkAiAgentLicense($request)) {
+            return $this->denyBasic();
+        }
+
         // Pakai limit dari setting (default 4000) supaya admin bisa tighten /
         // longgarkan tanpa redeploy. Validator harus pakai integer literal,
         // jadi kita bind ke dalam string rule via concat.
@@ -628,6 +666,10 @@ PROMPT;
      */
     public function approveAction(Request $request)
     {
+        if (!$this->checkAiAgentLicense($request)) {
+            return $this->denyBasic();
+        }
+
         $request->validate([
             'conversation_id' => 'required|string',
             'tool' => 'required|string',
@@ -677,6 +719,10 @@ PROMPT;
      */
     public function rejectAction(Request $request)
     {
+        if (!$this->checkAiAgentLicense($request)) {
+            return $this->denyBasic();
+        }
+
         $request->validate([
             'conversation_id' => 'required|string',
             'tool' => 'required|string',

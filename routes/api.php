@@ -141,6 +141,13 @@ Route::middleware('throttle:api')->group(function () {
     Route::post('/auth/email/resend', [AuthController::class, 'resendEmailVerification'])
         ->middleware('throttle:3,5'); // 3 per 5 menit per IP — anti spam
 
+    // Password reset flow — public, throttled berat anti brute-force /
+    // enumeration. Token expired 60 menit (config/auth.php).
+    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])
+        ->middleware('throttle:5,15'); // 5 per 15 menit per IP — anti spam + enumeration
+    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])
+        ->middleware('throttle:5,15'); // 5 per 15 menit per IP — anti token brute-force
+
     // Public Feature Requests (read-only + upvote)
     Route::get('/public/feature-requests', [FeatureRequestController::class, 'publicIndex']);
     Route::post('/public/feature-requests', [FeatureRequestController::class, 'publicStore']);

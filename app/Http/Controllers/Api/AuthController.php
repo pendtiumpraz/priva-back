@@ -11,6 +11,8 @@ use App\Services\TwoFactorAuthService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -458,6 +460,104 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Apabila email tersebut terdaftar dan belum diverifikasi, link verifikasi telah dikirim.',
+        ]);
+    }
+
+    /**
+     * Forgot password — kirim link reset ke email user.
+     *
+     * Pakai Laravel Password broker (config/auth.php): token disimpan di
+     * password_reset_tokens table, expired 60 menit, throttled 60 detik
+     * antar request (broker level).
+     *
+     * Response selalu generic — JANGAN bocor apakah email terdaftar
+     * (enumeration attack prevention). User dengan akun terkunci /
+     * soft-deleted juga tidak kebagian token (Password broker handle).
+     */
+    public function forgotPassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'email' => 'required|email',
+        ]);
+
+        $status = Password::broker()->sendResetLink(
+            ['email' => $request->email]
+        );
+
+        // Log untuk audit — tidak bocor apakah email match atau tidak
+        \Log::info('Password reset requested', [
+            'email_hash' => hash('sha256', strtolower(trim($request->email))),
+            'status' => $status,
+            'ip' => $request->ip(),
+        ]);
+
+        // Generic response — jangan bocor email enumeration
+        return response()->json([
+            'message' => 'Apabila email tersebut terdaftar, link reset password telah dikirim. Periksa kotak masuk Anda.',
+        ]);
+    }
+
+    /**
+     * Reset password — terima token + email + password baru, validate, set.
+     *
+     * Token sumber: email link yang dikirim forgotPassword(). Expired 60
+     * menit (config/auth.php passwords.users.expire). Setelah berhasil,
+     * token di-delete oleh Password broker.
+     *
+     * Password policy: enforce via PasswordPolicyService biar konsisten
+     * dengan register/change-password (history check, length, character set,
+     * common password blocklist).
+     *
+     * Side-effect: revoke semua Sanctum token user supaya semua sesi lama
+     * logged out (security best practice setelah password change).
+     */
+    public function resetPassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'token' => 'required|string',
+            'email' => 'required|email',
+            'password' => 'required|string|confirmed|min:8',
+        ]);
+
+        // Password policy — separate dari format validation
+        $violations = $this->passwordPolicy->validate($request->password, $request->email);
+        if (! empty($violations)) {
+            throw ValidationException::withMessages([
+                'password' => array_column($violations, 'message'),
+            ]);
+        }
+
+        $status = Password::broker()->reset(
+            $request->only('email', 'password', 'password_confirmation', 'token'),
+            function (User $user, string $password) use ($request) {
+                $user->forceFill([
+                    'password' => $password, // hashed by User cast / mutator
+                    'remember_token' => Str::random(60),
+                    'password_changed_at' => now(),
+                ])->save();
+
+                // Revoke semua Sanctum token — force logout all sessions
+                if (method_exists($user, 'tokens')) {
+                    $user->tokens()->delete();
+                }
+
+                \Log::info('Password reset successful', [
+                    'user_id' => $user->id,
+                    'ip' => $request->ip(),
+                ]);
+            }
+        );
+
+        if ($status !== Password::PASSWORD_RESET) {
+            // Token tidak valid / expired / user tidak ada — pesan generic
+            throw ValidationException::withMessages([
+                'email' => [trans($status)],
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Password berhasil direset. Silakan login dengan password baru Anda.',
+            'reset' => true,
         ]);
     }
 

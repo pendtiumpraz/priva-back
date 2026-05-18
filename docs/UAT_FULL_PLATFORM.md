@@ -1072,11 +1072,21 @@ php artisan queue:work --queue=default --tries=1 --timeout=200
 **Acceptance Criteria:**
 - [ ] All 6 risk metrics 1-10 validated
 - [ ] Both security metrics 1-10 validated
-- [ ] `overall_risk_score = (avg(risk) - avg(security)) / 2` rounded 2 decimals
+- [ ] Residual risk formula (rumus produksi, lihat note di bawah):
+  - `raw_risk = avg(risk_metrics)` — rentang 1-10
+  - `mitigation = avg(security_metrics) / 10` — rentang 0.1-1.0
+  - `overall_risk_score = raw_risk * (1 - mitigation * 0.5)` rounded 2 decimals
 - [ ] `overall_risk_level = scoreToLevel(overall_risk_score)`
 - [ ] Persist to `tia.risk_*`, `tia.security_*` fields
 
-**Code Audit:** `TiaAssessment::RISK_METRIC_KEYS` line 65-72; SECURITY_METRIC_KEYS line 75-80
+**Note rumus:** Versi awal spec memakai `(avg(risk) - avg(security)) / 2` yang
+bisa menghasilkan nilai negatif. Implementasi produksi memakai residual risk
+classic (raw_risk × mitigation_factor) yang non-negative, bounded `[0.5, 10]`,
+dan mengikuti pola ISO 31000 / NIST RMF. Mitigation factor 0.5 berarti
+security control yang sempurna (avg=10) mengurangi 50% dari raw risk,
+sesuai konvensi konservatif untuk TIA UU PDP Pasal 56.
+
+**Code Audit:** `TiaAssessment::RISK_METRIC_KEYS` line 65-72; SECURITY_METRIC_KEYS line 75-80; formula line 225-236
 
 **Pass/Fail:** [ ]
 

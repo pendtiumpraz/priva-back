@@ -96,5 +96,14 @@ class AppServiceProvider extends ServiceProvider
                 $event->extendSocialite('keycloak', \SocialiteProviders\Keycloak\Provider::class);
             }
         );
+
+        // 4. Password reset link → frontend URL. Default Laravel pakai
+        // route('password.reset') yang generate URL backend; user-facing
+        // link harus ke FE page yang punya form input password baru.
+        // FE route: /reset-password?token=...&email=...
+        \Illuminate\Auth\Notifications\ResetPassword::createUrlUsing(function ($user, string $token) {
+            $frontend = rtrim(config('app.frontend_url', config('app.url')), '/');
+            return $frontend.'/reset-password?token='.urlencode($token).'&email='.urlencode($user->getEmailForPasswordReset());
+        });
     }
 }
