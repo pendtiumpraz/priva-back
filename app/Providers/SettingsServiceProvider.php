@@ -149,6 +149,24 @@ class SettingsServiceProvider extends ServiceProvider
             // Deployment mode.
             'deployment.mode' => 'ai.deployment_mode',
 
+            // RAG (Retrieval-Augmented Generation) — toggle + provider config.
+            // Master switch di superadmin UI. Saat enabled=false: observer skip,
+            // AI Agent search_similar_* tools return disabled message, service
+            // throw exception. Default false sampai admin explicit enable.
+            'ai_embedding.enabled' => 'ai_embedding.enabled',
+            'ai_embedding.provider' => 'ai_embedding.provider',
+            'ai_embedding.tei_base_url' => 'ai_embedding.tei.base_url',
+            'ai_embedding.tei_model' => 'ai_embedding.tei.model',
+            'ai_embedding.openai_api_key' => 'ai_embedding.openai.api_key',
+            'ai_embedding.openai_base_url' => 'ai_embedding.openai.base_url',
+            'ai_embedding.openai_model' => 'ai_embedding.openai.model',
+            'ai_embedding.cohere_api_key' => 'ai_embedding.cohere.api_key',
+            'ai_embedding.cohere_model' => 'ai_embedding.cohere.model',
+            'ai_embedding.cache_ttl_seconds' => 'ai_embedding.cache_ttl_seconds',
+            'ai_embedding.chunk_size_chars' => 'ai_embedding.chunk_size_chars',
+            'ai_embedding.chunk_overlap_chars' => 'ai_embedding.chunk_overlap_chars',
+            'ai_embedding.rate_limit_per_minute' => 'ai_embedding.rate_limit_per_minute',
+
             // Security — login lockout. DB key flat (security.lockout_*),
             // dimapping ke nested config path supaya app code pakai
             // config('security.login_lockout.tier1_attempts') yang readable.

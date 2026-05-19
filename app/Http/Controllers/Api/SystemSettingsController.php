@@ -48,6 +48,9 @@ class SystemSettingsController extends Controller
         'mail.smtp_password',
         'infrastructure.sqs_access_key',
         'infrastructure.sqs_secret_key',
+        // RAG embedding cloud provider credentials
+        'ai_embedding.openai_api_key',
+        'ai_embedding.cohere_api_key',
     ];
 
     /** Section → list of setting keys (single source of truth for save/read). */
@@ -82,6 +85,21 @@ class SystemSettingsController extends Controller
         ],
         'deployment' => [
             'deployment.mode',
+        ],
+        'ai_embedding' => [
+            'ai_embedding.enabled',
+            'ai_embedding.provider',
+            'ai_embedding.tei_base_url',
+            'ai_embedding.tei_model',
+            'ai_embedding.openai_api_key',
+            'ai_embedding.openai_base_url',
+            'ai_embedding.openai_model',
+            'ai_embedding.cohere_api_key',
+            'ai_embedding.cohere_model',
+            'ai_embedding.cache_ttl_seconds',
+            'ai_embedding.chunk_size_chars',
+            'ai_embedding.chunk_overlap_chars',
+            'ai_embedding.rate_limit_per_minute',
         ],
         'security' => [
             // Login lockout
@@ -235,6 +253,20 @@ class SystemSettingsController extends Controller
         $validated = $validator->validated();
         $userId = $request->user()->id;
         $diff = [];
+
+        // RAG butuh Postgres + pgvector. Reject enable=true di driver lain
+        // supaya admin tidak nyalakan fitur yang akan silent-fail di prod.
+        if ($section === 'ai_embedding'
+            && ($validated['enabled'] ?? false) === true
+            && DB::connection()->getDriverName() !== 'pgsql'
+        ) {
+            return response()->json([
+                'error' => 'RAG_REQUIRES_POSTGRES',
+                'message' => 'Fitur RAG butuh PostgreSQL dengan extension pgvector. Database aktif saat ini: '
+                    . DB::connection()->getDriverName()
+                    . '. Migrasi ke Postgres dulu, atau biarkan ai_embedding.enabled=false.',
+            ], 422);
+        }
 
         DB::transaction(function () use ($section, $validated, $userId, &$diff) {
             foreach (self::SECTION_KEYS[$section] as $fullKey) {
@@ -420,6 +452,7 @@ class SystemSettingsController extends Controller
             'infrastructure' => InfrastructureRequest::class,
             'redis' => RedisRequest::class,
             'ai' => AiRequest::class,
+            'ai_embedding' => \App\Http\Requests\SystemSettings\AiEmbeddingRequest::class,
             'mail' => MailRequest::class,
             'deployment' => DeploymentRequest::class,
             'security' => SecurityRequest::class,
@@ -471,6 +504,9 @@ class SystemSettingsController extends Controller
             // AI provider creds are managed via ai_providers table; this
             // section's only required toggles are the operational ones.
             'ai' => ['ai.jobs_enabled', 'ai.max_concurrent_per_user', 'ai.history_retention_days'],
+            // RAG section — cuma master toggle + provider yang required.
+            // Provider creds optional sampai user enable cloud provider.
+            'ai_embedding' => ['ai_embedding.enabled', 'ai_embedding.provider'],
             'deployment' => ['deployment.mode'],
             'security' => [
                 'security.lockout_enabled',
