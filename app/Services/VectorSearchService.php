@@ -63,6 +63,11 @@ class VectorSearchService
             return [];
         }
 
+        // Defensive: set RLS context kalau dipanggil di luar HTTP request
+        // (queue worker, console command). Saat di HTTP, middleware
+        // SetCurrentOrgContext sudah set; SET ulang aman dan idempotent.
+        $this->setRlsContext($orgId);
+
         $vec = $this->embedding->embed($query, $orgId);
         $vecStr = '['.implode(',', $vec).']';
 
@@ -123,6 +128,9 @@ class VectorSearchService
 
             return [];
         }
+
+        // Defensive: set RLS context (sama alasan dengan search()).
+        $this->setRlsContext($orgId);
 
         // Ambil embedding row sumber. WHERE org_id WAJIB supaya tenant tidak
         // bisa probe embedding dari org lain via crafted source_id.
@@ -191,5 +199,26 @@ class VectorSearchService
     private function isPostgres(): bool
     {
         return DB::getDriverName() === 'pgsql';
+    }
+
+    /**
+     * Set Postgres RLS session variable supaya policy
+     * `vector_embeddings_tenant_isolation` punya konteks. Idempotent —
+     * aman dipanggil meski HTTP middleware sudah set sebelumnya.
+     *
+     * Kalau service dipanggil dari queue worker / console command /
+     * scheduled task yang tidak lewat SetCurrentOrgContext middleware,
+     * helper ini guarantee RLS aktif.
+     */
+    private function setRlsContext(string $orgId): void
+    {
+        try {
+            DB::statement("SELECT set_config('app.current_org_id', ?, false)", [$orgId]);
+        } catch (\Throwable $e) {
+            Log::warning('VectorSearchService: failed to set RLS context', [
+                'org_id' => $orgId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

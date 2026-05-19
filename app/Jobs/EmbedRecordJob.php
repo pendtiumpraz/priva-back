@@ -67,6 +67,19 @@ class EmbedRecordJob implements ShouldQueue
             return;
         }
 
+        // Set RLS context — queue worker tidak lewat HTTP middleware, jadi
+        // SetCurrentOrgContext middleware tidak fire. Tanpa SET ini, RLS
+        // policy vector_embeddings_tenant_isolation reject INSERT (org_id::text
+        // tidak match current_setting('app.current_org_id', true) yang null).
+        try {
+            DB::statement("SELECT set_config('app.current_org_id', ?, false)", [$this->orgId]);
+        } catch (\Throwable $e) {
+            Log::warning('EmbedRecordJob: failed to set RLS context', [
+                'org_id' => $this->orgId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         $content = trim($this->content);
         if ($content === '') {
             return;

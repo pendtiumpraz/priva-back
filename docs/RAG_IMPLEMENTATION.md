@@ -157,9 +157,29 @@ CREATE POLICY tenant_isolation_policy ON vector_embeddings
     USING (org_id::text = current_setting('app.current_org_id', true));
 ```
 
-**Catatan kritis**: RLS aktif setelah migration `2026_05_19_120002_enable_rls_on_vector_embeddings`. Aplikasi **wajib** set `SET LOCAL app.current_org_id = '<uuid>'` di awal setiap request (atau koneksi DB). Kalau tidak diset, **semua row akan ditolak** dan search return 0 results. Lihat section [Migration Steps](#6-migration-steps) untuk detail middleware yang menanganinya.
+**Catatan kritis**: RLS aktif setelah migration `2026_05_19_120002_enable_rls_on_vector_embeddings` + `2026_05_19_120004_force_rls_on_vector_embeddings`. Middleware `SetCurrentOrgContext` set `app.current_org_id` per HTTP request, `EmbedRecordJob` + `VectorSearchService` set di queue/CLI context. Tanpa SET, RLS reject semua row.
 
-> **Audit takeaway**: Untuk pass SOC 2 / ISO 27001 / POJK 11 audit, presentasikan 5 layer ini sebagai *defense in depth*. Layer 5 (RLS) khususnya powerful untuk meyakinkan auditor karena enforcement-nya terjadi di **storage engine** — di luar kontrol kode aplikasi.
+### Caveat: RLS bypass via `BYPASSRLS` role attribute
+
+Postgres punya attribute role-level `BYPASSRLS` (selain `SUPERUSER`) yang membuat role melewati semua RLS policy. **Cek role app sebelum klaim RLS sebagai enforcement layer:**
+
+```sql
+SELECT rolname, rolsuper, rolbypassrls
+FROM pg_roles WHERE rolname = current_user;
+```
+
+- **Neon free tier** (`neondb_owner`): `rolbypassrls = true` → **RLS tidak enforce**. Cocok untuk dev/staging, tapi layer 5 jadi decorative.
+- **On-prem self-host**: setup dedicated app role tanpa BYPASSRLS:
+  ```sql
+  CREATE ROLE privasimu_app WITH LOGIN PASSWORD 'xxx' NOBYPASSRLS;
+  GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO privasimu_app;
+  -- Set di DB_USERNAME aplikasi
+  ```
+- **AWS RDS / Cloud SQL**: master user biasanya BYPASSRLS. Provision app role terpisah.
+
+**Tanpa proper role config**, layer 5 cuma documentation. Layer 1-4 tetap real defense (mandatory `WHERE org_id`, service signature, BelongsToOrg, AiAgentToolExecutor scope). Untuk klien yang butuh strict audit, mereka tinggal flip role attribute di DB mereka sendiri — code sudah ready.
+
+> **Audit takeaway**: Untuk pass SOC 2 / ISO 27001 / POJK 11 audit, presentasikan 5 layer ini sebagai *defense in depth*. Layer 5 (RLS) khususnya powerful — tapi butuh role config yang benar di DB target. Layer 1-4 di code level tidak tergantung Postgres role.
 
 ---
 
