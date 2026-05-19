@@ -27,3 +27,9 @@ Artisan::command('inspire', function () {
 // Kalau chain disabled, command no-op (langsung exit). Kalau enabled +
 // chain rusak, log warning level (akan muncul di alert dashboard).
 \Illuminate\Support\Facades\Schedule::command('audit-logs:chain verify')->dailyAt('04:30');
+
+// Sanctum — prune expired personal access tokens (24+ jam past expiry).
+// SanctumTokenRefresh tidak delete old token saat rotate (cegah race condition
+// dengan in-flight parallel requests), jadi cleanup happens here. Built-in
+// Sanctum command pakai sanctum.expiration config (10080 menit = 7 hari).
+\Illuminate\Support\Facades\Schedule::command('sanctum:prune-expired --hours=24')->dailyAt('05:30');

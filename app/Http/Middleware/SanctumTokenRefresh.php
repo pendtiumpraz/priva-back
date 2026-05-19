@@ -4,7 +4,6 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -66,30 +65,39 @@ class SanctumTokenRefresh
         if ($ageSeconds < $thresholdSeconds) return $response;
 
         // Issue token baru — pakai nama yang sama supaya audit trail
-        // konsisten. Lalu delete yang lama dengan locking untuk minimalisir
-        // race antar request paralel.
+        // konsisten. Token LAMA TIDAK langsung di-delete supaya in-flight
+        // parallel requests (yang sudah lewat auth tapi belum lewat refresh)
+        // tidak kena 401 di backend berikutnya. Old token akan jalan natural
+        // ke hard expiry-nya dan di-cleanup oleh scheduled command
+        // `sanctum:prune-stale-tokens` (jika ter-register).
+        //
+        // Trade-off: 1 token extra per refresh, accumulate hingga hard expiry.
+        // Untuk lifetime 7 hari + refresh 50% threshold, max ~2-3 token per
+        // user (current + 1-2 baru-baru di-rotate). Manageable di DB.
+        //
+        // Refresh juga di-guard dengan transient cache lock supaya hanya 1
+        // dari N parallel requests yang trigger rotation — sisanya skip dan
+        // return response normal pakai token mereka (yang masih valid).
+        $lockKey = 'sanctum_refresh_lock:' . $token->getKey();
+        $lock = \Illuminate\Support\Facades\Cache::lock($lockKey, 10); // 10 detik lock
+        if (! $lock->get()) {
+            // Request lain udah refresh barusan — skip, biarkan client
+            // pakai token sekarang. Akan auto-refresh di request berikutnya
+            // kalau threshold masih relevant.
+            return $response;
+        }
+
         $newPlain = null;
         try {
-            DB::transaction(function () use ($user, $token, &$newPlain) {
-                // Lock & cek ulang — kalau request paralel udah delete duluan,
-                // skip refresh (frontend akan dapat token baru dari request
-                // yang udah jalan duluan).
-                $stillExists = DB::table('personal_access_tokens')
-                    ->where('id', $token->getKey())
-                    ->lockForUpdate()
-                    ->exists();
-                if (! $stillExists) return;
-
-                $newToken = $user->createToken($token->name ?? 'auth-token');
-                $newPlain = $newToken->plainTextToken;
-
-                DB::table('personal_access_tokens')->where('id', $token->getKey())->delete();
-            });
+            $newToken = $user->createToken($token->name ?? 'auth-token');
+            $newPlain = $newToken->plainTextToken;
         } catch (\Throwable $e) {
             // Refresh gagal bukan reason untuk kill request — log doang,
             // user tetap dapat response normal pakai token lama.
             \Log::warning('SanctumTokenRefresh failed', ['error' => $e->getMessage()]);
             return $response;
+        } finally {
+            $lock->release();
         }
 
         if ($newPlain) {
