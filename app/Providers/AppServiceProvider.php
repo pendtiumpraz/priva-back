@@ -28,6 +28,10 @@ class AppServiceProvider extends ServiceProvider
             \App\Services\VendorScreening\SearchProviderInterface::class,
             \App\Services\VendorScreening\DuckDuckGoHtmlSearchProvider::class,
         );
+
+        // RAG services — singleton karena holds HTTP client + cache state
+        $this->app->singleton(\App\Services\EmbeddingService::class);
+        $this->app->singleton(\App\Services\VectorSearchService::class);
     }
 
     /**
@@ -105,5 +109,27 @@ class AppServiceProvider extends ServiceProvider
             $frontend = rtrim(config('app.frontend_url', config('app.url')), '/');
             return $frontend.'/reset-password?token='.urlencode($token).'&email='.urlencode($user->getEmailForPasswordReset());
         });
+
+        // 5. RAG (Retrieval-Augmented Generation) observers.
+        //    Auto-embed RoPA/DPIA/Breach/Vendor/KB ke vector_embeddings saat
+        //    create/update. Skip kalau ai_embedding.enabled=false (default).
+        //    Implementation di app/Observers/*EmbeddingObserver.php
+        if (config('ai_embedding.enabled')) {
+            try {
+                \App\Models\Ropa::observe(\App\Observers\RopaEmbeddingObserver::class);
+                \App\Models\Dpia::observe(\App\Observers\DpiaEmbeddingObserver::class);
+                if (class_exists(\App\Models\BreachIncident::class)) {
+                    \App\Models\BreachIncident::observe(\App\Observers\BreachEmbeddingObserver::class);
+                }
+                if (class_exists(\App\Models\VendorAssessment::class) && class_exists(\App\Observers\VendorEmbeddingObserver::class)) {
+                    \App\Models\VendorAssessment::observe(\App\Observers\VendorEmbeddingObserver::class);
+                }
+                if (class_exists(\App\Models\KnowledgeBaseSection::class) && class_exists(\App\Observers\KbEmbeddingObserver::class)) {
+                    \App\Models\KnowledgeBaseSection::observe(\App\Observers\KbEmbeddingObserver::class);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Failed registering embedding observers: ' . $e->getMessage());
+            }
+        }
     }
 }

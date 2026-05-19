@@ -198,6 +198,13 @@ class AiAgentToolExecutor
             'list_licenses' => $this->listLicenses($args),
             'list_chat_history' => $this->listChatHistory($args),
 
+            // RAG / Semantic Search (read-only)
+            'search_similar_ropa' => $this->searchSimilarRopa($args),
+            'search_similar_dpia' => $this->searchSimilarDpia($args),
+            'search_similar_breach' => $this->searchSimilarBreach($args),
+            'search_knowledge_base' => $this->searchKb($args),
+            'find_related_records' => $this->findRelatedRecords($args),
+
             default => [['error' => "Tool '{$tool}' tidak dikenali."], "❌ Tool tidak dikenali: {$tool}"],
         };
 
@@ -915,6 +922,110 @@ class AiAgentToolExecutor
     }
 
     // =============================================
+    // RAG / Semantic Search (read-only, no mutations)
+    // =============================================
+    private function searchSimilarRopa(array $args): array
+    {
+        $query = trim((string) ($args['query'] ?? ''));
+        $topK = min(10, max(1, (int) ($args['top_k'] ?? 5)));
+        if ($query === '') {
+            return [['error' => 'query kosong'], '❌ Parameter query wajib diisi'];
+        }
+        if (! config('ai_embedding.enabled')) {
+            return [['error' => 'RAG nonaktif di config sistem'], '⚠️ Semantic search nonaktif (config ai_embedding.enabled=false)'];
+        }
+        try {
+            $results = app(\App\Services\VectorSearchService::class)
+                ->search($this->orgId, $query, $topK, ['ropa']);
+
+            return [['results' => $results], "🔎 Mencari RoPA mirip secara semantik... (".count($results)." hasil)"];
+        } catch (\Throwable $e) {
+            return [['error' => 'Vector search gagal: '.$e->getMessage()], '❌ Vector search gagal'];
+        }
+    }
+
+    private function searchSimilarDpia(array $args): array
+    {
+        $query = trim((string) ($args['query'] ?? ''));
+        $topK = min(10, max(1, (int) ($args['top_k'] ?? 5)));
+        if ($query === '') {
+            return [['error' => 'query kosong'], '❌ Parameter query wajib diisi'];
+        }
+        if (! config('ai_embedding.enabled')) {
+            return [['error' => 'RAG nonaktif di config sistem'], '⚠️ Semantic search nonaktif (config ai_embedding.enabled=false)'];
+        }
+        try {
+            $results = app(\App\Services\VectorSearchService::class)
+                ->search($this->orgId, $query, $topK, ['dpia']);
+
+            return [['results' => $results], "🔎 Mencari DPIA mirip secara semantik... (".count($results)." hasil)"];
+        } catch (\Throwable $e) {
+            return [['error' => 'Vector search gagal: '.$e->getMessage()], '❌ Vector search gagal'];
+        }
+    }
+
+    private function searchSimilarBreach(array $args): array
+    {
+        $query = trim((string) ($args['query'] ?? ''));
+        $topK = min(10, max(1, (int) ($args['top_k'] ?? 5)));
+        if ($query === '') {
+            return [['error' => 'query kosong'], '❌ Parameter query wajib diisi'];
+        }
+        if (! config('ai_embedding.enabled')) {
+            return [['error' => 'RAG nonaktif di config sistem'], '⚠️ Semantic search nonaktif (config ai_embedding.enabled=false)'];
+        }
+        try {
+            $results = app(\App\Services\VectorSearchService::class)
+                ->search($this->orgId, $query, $topK, ['breach']);
+
+            return [['results' => $results], "🔎 Mencari Breach mirip secara semantik... (".count($results)." hasil)"];
+        } catch (\Throwable $e) {
+            return [['error' => 'Vector search gagal: '.$e->getMessage()], '❌ Vector search gagal'];
+        }
+    }
+
+    private function searchKb(array $args): array
+    {
+        $query = trim((string) ($args['query'] ?? ''));
+        $topK = min(10, max(1, (int) ($args['top_k'] ?? 5)));
+        if ($query === '') {
+            return [['error' => 'query kosong'], '❌ Parameter query wajib diisi'];
+        }
+        if (! config('ai_embedding.enabled')) {
+            return [['error' => 'RAG nonaktif di config sistem'], '⚠️ Semantic search nonaktif (config ai_embedding.enabled=false)'];
+        }
+        try {
+            $results = app(\App\Services\VectorSearchService::class)
+                ->search($this->orgId, $query, $topK, ['kb', 'kb_shared', 'pasal_uu_pdp']);
+
+            return [['results' => $results], "📚 Mencari knowledge base & Pasal UU PDP... (".count($results)." hasil)"];
+        } catch (\Throwable $e) {
+            return [['error' => 'Vector search gagal: '.$e->getMessage()], '❌ Knowledge base search gagal'];
+        }
+    }
+
+    private function findRelatedRecords(array $args): array
+    {
+        $sourceType = trim((string) ($args['source_type'] ?? ''));
+        $sourceId = trim((string) ($args['source_id'] ?? ''));
+        $topK = min(10, max(1, (int) ($args['top_k'] ?? 5)));
+        if ($sourceType === '' || $sourceId === '') {
+            return [['error' => 'source_type dan source_id wajib'], '❌ source_type dan source_id wajib diisi'];
+        }
+        if (! config('ai_embedding.enabled')) {
+            return [['error' => 'RAG nonaktif'], '⚠️ Semantic search nonaktif (config ai_embedding.enabled=false)'];
+        }
+        try {
+            $results = app(\App\Services\VectorSearchService::class)
+                ->findRelated($this->orgId, $sourceType, $sourceId, $topK);
+
+            return [['results' => $results], "🔗 Mencari record terkait dengan {$sourceType}... (".count($results)." hasil)"];
+        } catch (\Throwable $e) {
+            return [['error' => 'Find related gagal: '.$e->getMessage()], '❌ Find related gagal'];
+        }
+    }
+
+    // =============================================
     // Tool Definitions for regular users (compliance tools)
     // =============================================
     public static function getToolDefinitions(): array
@@ -993,6 +1104,71 @@ class AiAgentToolExecutor
 
             // Summary
             ['type' => 'function', 'function' => ['name' => 'get_compliance_summary', 'description' => 'Ringkasan compliance seluruh modul: jumlah RoPA, DPIA, Breach, DSR, GAP score, dll.', 'parameters' => ['type' => 'object', 'properties' => (object) [], 'required' => []]]],
+
+            // RAG / Semantic Search (read-only) — PRIORITAS dipakai untuk pertanyaan
+            // "mirip apa", "ada yang serupa", "kasus sejenis" — lebih relevan
+            // daripada exact filter list_*. Hasil disertai source_id untuk verifikasi.
+            ['type' => 'function', 'function' => [
+                'name' => 'search_similar_ropa',
+                'description' => 'Cari RoPA milik organisasi yang mirip secara semantik dengan query. Gunakan untuk pertanyaan "RoPA mirip apa", "ada yang serupa dengan X", "cari pemrosesan data karyawan". Lebih relevan daripada list_ropa untuk pencarian konseptual.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'query' => ['type' => 'string', 'description' => 'Deskripsi atau keyword pencarian semantik (bukan exact match)'],
+                        'top_k' => ['type' => 'integer', 'description' => 'Maksimal hasil (default 5, max 10)'],
+                    ],
+                    'required' => ['query'],
+                ],
+            ]],
+            ['type' => 'function', 'function' => [
+                'name' => 'search_similar_dpia',
+                'description' => 'Cari DPIA milik organisasi yang mirip secara semantik. Gunakan untuk "DPIA serupa", "kasus risiko sejenis", atau ketika user ingin reference DPIA lama untuk konteks DPIA baru.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'query' => ['type' => 'string', 'description' => 'Deskripsi atau keyword pencarian semantik'],
+                        'top_k' => ['type' => 'integer', 'description' => 'Maksimal hasil (default 5, max 10)'],
+                    ],
+                    'required' => ['query'],
+                ],
+            ]],
+            ['type' => 'function', 'function' => [
+                'name' => 'search_similar_breach',
+                'description' => 'Cari Breach Incident milik organisasi yang mirip secara semantik. Gunakan untuk "insiden serupa", "breach sejenis dengan X", lessons learned dari kasus lampau.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'query' => ['type' => 'string', 'description' => 'Deskripsi atau keyword pencarian semantik'],
+                        'top_k' => ['type' => 'integer', 'description' => 'Maksimal hasil (default 5, max 10)'],
+                    ],
+                    'required' => ['query'],
+                ],
+            ]],
+            ['type' => 'function', 'function' => [
+                'name' => 'search_knowledge_base',
+                'description' => 'Cari di knowledge base internal organisasi, KB shared, dan Pasal UU PDP. Gunakan untuk pertanyaan regulasi ("Pasal berapa", "apa kata UU PDP tentang"), best practices, atau referensi compliance. PRIORITAS gunakan ini sebelum jawab dari memori untuk pertanyaan regulasi.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'query' => ['type' => 'string', 'description' => 'Pertanyaan atau topik yang dicari (mis. "hak subjek data akses", "Pasal transfer data luar negeri")'],
+                        'top_k' => ['type' => 'integer', 'description' => 'Maksimal hasil (default 5, max 10)'],
+                    ],
+                    'required' => ['query'],
+                ],
+            ]],
+            ['type' => 'function', 'function' => [
+                'name' => 'find_related_records',
+                'description' => 'Cari record lain (RoPA/DPIA/Breach/dll) yang terkait secara semantik dengan satu record sumber. Gunakan setelah get_*_detail untuk eksplorasi konteks: "tampilkan yang terkait dengan RoPA X", "DPIA lain yang relevan".',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'source_type' => ['type' => 'string', 'description' => 'HARUS: ropa | dpia | breach | vendor | kb | pasal_uu_pdp | contract | policy'],
+                        'source_id' => ['type' => 'string', 'description' => 'UUID record sumber'],
+                        'top_k' => ['type' => 'integer', 'description' => 'Maksimal hasil (default 5, max 10)'],
+                    ],
+                    'required' => ['source_type', 'source_id'],
+                ],
+            ]],
         ];
     }
 

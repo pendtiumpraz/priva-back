@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\Admin\ConsentExtractController;
 use App\Http\Controllers\Api\Admin\CookieLogAdminController;
 use App\Http\Controllers\Api\Admin\CrmCredentialController;
+use App\Http\Controllers\Api\Admin\EmbeddingStatsController;
 use App\Http\Controllers\Api\Admin\LandingAdminController;
 use App\Http\Controllers\Api\AiAgentController;
 use App\Http\Controllers\Api\AiChatController;
@@ -991,6 +992,15 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     Route::get('/cookie-logs/stats', [CookieLogAdminController::class, 'stats'])->middleware('permission:consent,read');
     Route::get('/cookie-logs/{id}', [CookieLogAdminController::class, 'show'])->middleware('permission:consent,read')->where('id', '[0-9a-fA-F-]{36}');
     Route::delete('/cookie-logs/{id}', [CookieLogAdminController::class, 'destroy'])->middleware('permission:consent,write')->where('id', '[0-9a-fA-F-]{36}');
+
+    // RAG infra — vector embedding stats & control plane (admin/superadmin only).
+    // Role check di dalam controller (root|superadmin|admin) supaya tenant
+    // admin tetap bisa monitor scope org-nya sendiri.
+    Route::prefix('admin/embeddings')->group(function () {
+        Route::get('/stats', [EmbeddingStatsController::class, 'stats']);
+        Route::post('/reembed', [EmbeddingStatsController::class, 'reembedAll']);
+        Route::get('/health', [EmbeddingStatsController::class, 'health']);
+    });
 
     // Phase B — Consent Extract (CRM extractor wizard backbone)
     Route::post('/consent-extract/preview', [ConsentExtractController::class, 'preview'])->middleware('permission:consent,read');
