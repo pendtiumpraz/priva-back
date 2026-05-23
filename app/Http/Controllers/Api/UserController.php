@@ -160,6 +160,8 @@ class UserController extends Controller
             'tenant_role_id' => 'required|exists:tenant_roles,id',
             'phone' => 'nullable|string|max:20',
             'position' => 'nullable|string|max:255',
+            'position_id' => 'nullable|uuid|exists:positions,id',
+            'department_id' => 'nullable|uuid|exists:departments,id',
         ];
 
         // Role restriction modification
@@ -316,6 +318,8 @@ class UserController extends Controller
             'tenant_role_id' => 'sometimes|nullable|exists:tenant_roles,id',
             'phone' => 'nullable|string|max:20',
             'position' => 'nullable|string|max:255',
+            'position_id' => 'nullable|uuid|exists:positions,id',
+            'department_id' => 'nullable|uuid|exists:departments,id',
             'is_active' => 'sometimes|boolean',
         ];
 
