@@ -25,16 +25,22 @@ namespace App\Services;
 class ColumnAutoAssigner
 {
     /**
-     * Pertahankan keputusan user manual saat scan ulang.
+     * Pertahankan keputusan user manual + hasil AI deep scan saat scan ulang.
      *
      * Saat standar/deep scan dijalankan kembali, hasil scanner baru otomatis
-     * meng-overwrite `scan_results`. Tanpa merge ini, kolom yang user sudah
-     * Edit manual (mis. user override Data Pribadi → Data Umum) akan
-     * kehilangan keputusan tersebut.
+     * meng-overwrite `scan_results`. Tanpa merge ini, kedua kelas keputusan
+     * berikut akan hilang:
+     *   1. Override manual user (mis. user ubah Data Pribadi → Data Umum).
+     *   2. Hasil AI deep scan (applied_note='ai_scan' + ai_recommendation).
      *
-     * Aturan: copy field `applied_*` dari kolom lama (matching table.column
-     * by name) ke kolom baru BILA `applied_note` lama BUKAN `'auto_scan'`.
-     * Itu berarti user sudah melakukan override manual; harus dipertahankan.
+     * Aturan preservasi (matching table.column by name):
+     *   - User manual edit  → applied_by NON-NULL. Copy semua `applied_*`.
+     *   - AI deep scan      → applied_note === 'ai_scan' (applied_by null).
+     *                         Copy `applied_*` + AI metadata (ai_recommendation,
+     *                         classification, pdp_category, pii_detected,
+     *                         encryption_required) supaya tab Columns tetap
+     *                         memunculkan hasil AI walau standar rescan
+     *                         dijalankan setelahnya.
      *
      * @param  array<int,array<string,mixed>>  $newTables
      * @param  array<int,array<string,mixed>>  $oldTables
@@ -71,16 +77,26 @@ class ColumnAutoAssigner
                 if (! $old) {
                     continue;
                 }
-                // Indikator user manual edit = applied_by NON-NULL (user UUID).
-                // Auto-assign dari scanner selalu set applied_by=null.
-                if (empty($old['applied_by']) || empty($old['applied_status'])) {
+                $isUserEdited = ! empty($old['applied_by']) && ! empty($old['applied_status']);
+                $isAiReviewed = ($old['applied_note'] ?? null) === 'ai_scan';
+                if (! $isUserEdited && ! $isAiReviewed) {
                     continue;
                 }
-                $col['applied_status'] = $old['applied_status'];
-                $col['applied_classification'] = $old['applied_classification'] ?? null;
-                $col['applied_at'] = $old['applied_at'] ?? null;
-                $col['applied_by'] = $old['applied_by'];
-                $col['applied_note'] = $old['applied_note'] ?? null;
+                if (! empty($old['applied_status'])) {
+                    $col['applied_status'] = $old['applied_status'];
+                    $col['applied_classification'] = $old['applied_classification'] ?? null;
+                    $col['applied_at'] = $old['applied_at'] ?? null;
+                    $col['applied_by'] = $old['applied_by'] ?? null;
+                    $col['applied_note'] = $old['applied_note'] ?? null;
+                }
+                if ($isAiReviewed && ! $isUserEdited) {
+                    // AI metadata fields — keep AI's decision over regex rescan.
+                    foreach (['ai_recommendation', 'pdp_category', 'classification', 'pii_detected', 'encryption_required'] as $field) {
+                        if (array_key_exists($field, $old)) {
+                            $col[$field] = $old[$field];
+                        }
+                    }
+                }
             }
             unset($col);
         }
