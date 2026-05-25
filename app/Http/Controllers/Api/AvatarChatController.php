@@ -88,16 +88,17 @@ class AvatarChatController extends Controller
             ['role' => 'system', 'content' => $systemPrompt],
         ];
 
-        // Add conversation history (max 10 messages)
+        // Add conversation history (max 10 messages).
+        // P1 security: re-sanitize tiap content — history poisoning protection.
         foreach (array_slice($history, -10) as $msg) {
             $messages[] = [
                 'role' => $msg['role'] ?? 'user',
-                'content' => $msg['content'] ?? '',
+                'content' => AiContentSanitizer::neutralize((string) ($msg['content'] ?? '')),
             ];
         }
 
-        // Add current message
-        $messages[] = ['role' => 'user', 'content' => $userMessage];
+        // Add current message — also sanitize defensively
+        $messages[] = ['role' => 'user', 'content' => AiContentSanitizer::neutralize($userMessage)];
 
         // Call AI
         $apiKey = $providerConfig['api_key'];

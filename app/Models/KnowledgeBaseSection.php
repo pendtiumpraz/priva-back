@@ -20,10 +20,22 @@ class KnowledgeBaseSection extends Model
     /**
      * Scope: sections visible to a given tenant — includes rows with this
      * org_id AND the shared system rows where org_id IS NULL.
+     *
+     * P1 security fix: kalau $orgId null (SuperAdmin atau caller tanpa
+     * org context), HANYA return shared rows (org_id IS NULL). Sebelumnya
+     * return semua (no filter) yang berisiko cross-tenant leak — SuperAdmin
+     * yang minta KB context bisa accidentally include private tenant KB
+     * di prompt mereka.
+     *
+     * Untuk eksplisit cross-tenant view (mis. SuperAdmin manage all KB),
+     * caller harus pakai `withoutGlobalScope` atau query langsung tanpa scope.
      */
     public function scopeVisibleTo($query, ?string $orgId)
     {
-        if (!$orgId) return $query;
+        if (!$orgId) {
+            // Fail-closed: cuma shared platform-level KB yang visible
+            return $query->whereNull('org_id');
+        }
         return $query->where(function ($q) use ($orgId) {
             $q->where('org_id', $orgId)->orWhereNull('org_id');
         });

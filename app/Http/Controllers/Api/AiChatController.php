@@ -193,15 +193,27 @@ PROMPT;
         ];
 
         // Add conversation history (max last 10)
+        // P1 security: re-sanitize tiap message dari history. Conversation
+        // bisa berisi prompt injection lama dari user yang sengaja inject
+        // 1 minggu lalu — tanpa re-sanitize, attack persist setiap load.
         $historySlice = array_slice($history, -10);
         foreach ($historySlice as $msg) {
             if (isset($msg['role']) && isset($msg['content'])) {
                 $role = $msg['role'] === 'admin' ? 'assistant' : $msg['role'];
-                $messages[] = ['role' => $role, 'content' => $msg['content']];
+                $messages[] = [
+                    'role' => $role,
+                    'content' => AiContentSanitizer::neutralize((string) $msg['content']),
+                ];
             }
         }
 
-        $messages[] = ['role' => 'user', 'content' => $userMessage];
+        // User message current request — juga sanitize defensively.
+        // (Server-authoritative: client-side guard ai-input-guard.ts hanya
+        // early UX warn, backend tetap final enforcement.)
+        $messages[] = [
+            'role' => 'user',
+            'content' => AiContentSanitizer::neutralize($userMessage),
+        ];
 
         try {
             $headers = ['Content-Type' => 'application/json'];

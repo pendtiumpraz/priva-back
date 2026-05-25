@@ -751,6 +751,32 @@ class AiAgentToolExecutor
     // =============================================
     // RAG / Semantic Search (read-only, no mutations)
     // =============================================
+    /**
+     * P1 security: sanitize RAG result chunks sebelum return ke AI.
+     * Vector store bisa berisi DB content yang user-controlled (RoPA
+     * description, KB content) — kalau attacker inject `SYSTEM: jailbreak`
+     * di field tersebut, similarity search return raw → AI execute.
+     *
+     * Apply neutralize ke content_excerpt + summary + content field di
+     * setiap result row.
+     */
+    private static function sanitizeRagResults(array $results): array
+    {
+        return array_map(function ($row) {
+            if (! is_array($row)) return $row;
+            foreach (['content_excerpt', 'content', 'summary', 'description', 'notes'] as $field) {
+                if (isset($row[$field]) && is_string($row[$field])) {
+                    $row[$field] = \App\Services\AiContentSanitizer::neutralize($row[$field]);
+                }
+            }
+            // metadata array can also contain injected fields
+            if (isset($row['metadata']) && is_array($row['metadata'])) {
+                $row['metadata'] = \App\Services\AiContentSanitizer::sanitizeForAi($row['metadata']);
+            }
+            return $row;
+        }, $results);
+    }
+
     private function searchSimilarRopa(array $args): array
     {
         $query = trim((string) ($args['query'] ?? ''));
@@ -764,6 +790,7 @@ class AiAgentToolExecutor
         try {
             $results = app(\App\Services\VectorSearchService::class)
                 ->search($this->orgId, $query, $topK, ['ropa']);
+            $results = self::sanitizeRagResults($results);
 
             return [['results' => $results], "🔎 Mencari RoPA mirip secara semantik... (".count($results)." hasil)"];
         } catch (\Throwable $e) {
@@ -784,6 +811,7 @@ class AiAgentToolExecutor
         try {
             $results = app(\App\Services\VectorSearchService::class)
                 ->search($this->orgId, $query, $topK, ['dpia']);
+            $results = self::sanitizeRagResults($results);
 
             return [['results' => $results], "🔎 Mencari DPIA mirip secara semantik... (".count($results)." hasil)"];
         } catch (\Throwable $e) {
@@ -804,6 +832,7 @@ class AiAgentToolExecutor
         try {
             $results = app(\App\Services\VectorSearchService::class)
                 ->search($this->orgId, $query, $topK, ['breach']);
+            $results = self::sanitizeRagResults($results);
 
             return [['results' => $results], "🔎 Mencari Breach mirip secara semantik... (".count($results)." hasil)"];
         } catch (\Throwable $e) {
@@ -824,6 +853,7 @@ class AiAgentToolExecutor
         try {
             $results = app(\App\Services\VectorSearchService::class)
                 ->search($this->orgId, $query, $topK, ['kb', 'kb_shared', 'pasal_uu_pdp']);
+            $results = self::sanitizeRagResults($results);
 
             return [['results' => $results], "📚 Mencari knowledge base & Pasal UU PDP... (".count($results)." hasil)"];
         } catch (\Throwable $e) {
@@ -845,6 +875,7 @@ class AiAgentToolExecutor
         try {
             $results = app(\App\Services\VectorSearchService::class)
                 ->findRelated($this->orgId, $sourceType, $sourceId, $topK);
+            $results = self::sanitizeRagResults($results);
 
             return [['results' => $results], "🔗 Mencari record terkait dengan {$sourceType}... (".count($results)." hasil)"];
         } catch (\Throwable $e) {
