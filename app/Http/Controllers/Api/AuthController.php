@@ -699,12 +699,17 @@ class AuthController extends Controller
             // endpoint AI tetap aktif (toggle adalah UI preference, bukan
             // policy — user mungkin re-enable sebentar lagi).
             'ai_enabled' => 'nullable|boolean',
+            // Show AI token usage tooltip di /chat-history Master AI Audit
+            // page. Default false (hide). Toggle untuk superadmin yang audit
+            // cost analysis per conversation. Per-user preference, sync via DB.
+            'show_ai_tokens' => 'nullable|boolean',
         ]);
 
         $settings = $user->settings ?? [];
         if (isset($fields['idle_timeout_enabled'])) $settings['idle_timeout_enabled'] = (bool) $fields['idle_timeout_enabled'];
         if (isset($fields['idle_timeout_minutes'])) $settings['idle_timeout_minutes'] = (int) $fields['idle_timeout_minutes'];
         if (array_key_exists('ai_enabled', $fields)) $settings['ai_enabled'] = (bool) $fields['ai_enabled'];
+        if (array_key_exists('show_ai_tokens', $fields)) $settings['show_ai_tokens'] = (bool) $fields['show_ai_tokens'];
 
         $user->update(['settings' => $settings]);
 
