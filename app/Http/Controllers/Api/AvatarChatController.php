@@ -88,9 +88,35 @@ class AvatarChatController extends Controller
             ['role' => 'system', 'content' => $systemPrompt],
         ];
 
-        // Add conversation history (max 10 messages).
-        // P1 security: re-sanitize tiap content — history poisoning protection.
-        foreach (array_slice($history, -10) as $msg) {
+        // Summary Buffer Memory pattern untuk history:
+        // Kalau history >10 turn, older messages di-compressed jadi summary block.
+        // FE harus include `summary` field per history item (dari response sebelumnya).
+        $historyCount = count($history);
+        if ($historyCount > 10) {
+            $older = array_slice($history, 0, $historyCount - 10);
+            $recent = array_slice($history, -10);
+
+            // Aggregate summary dari older messages
+            $summaries = array_filter(array_map(function ($m) {
+                if (empty($m['summary'])) return null;
+                $role = ($m['role'] ?? 'user') === 'assistant' ? 'Priva' : 'User';
+                return "- {$role}: {$m['summary']}";
+            }, $older));
+
+            if (!empty($summaries)) {
+                $safeSummary = AiContentSanitizer::neutralize(implode("\n", $summaries));
+                $olderCount = count($older);
+                $messages[] = [
+                    'role' => 'system',
+                    'content' => "[Ringkasan percakapan sebelumnya — {$olderCount} pesan]:\n{$safeSummary}",
+                ];
+            }
+            // else: fallback sliding window (older dropped)
+        } else {
+            $recent = $history;
+        }
+
+        foreach ($recent as $msg) {
             $messages[] = [
                 'role' => $msg['role'] ?? 'user',
                 'content' => AiContentSanitizer::neutralize((string) ($msg['content'] ?? '')),
@@ -152,6 +178,15 @@ class AvatarChatController extends Controller
                 }
 
                 // Clean response — strip all markdown formatting
+                // Parse [SUMMARY]: marker — separate visible text dari hidden summary.
+                // Marker WAJIB di akhir, satu baris, format: "[SUMMARY]: <text>"
+                $summary = null;
+                if (preg_match('/\n\[SUMMARY\]:\s*(.+?)(?:\n|$)/is', $reply, $sumMatch)) {
+                    $summary = trim($sumMatch[1]);
+                    // Strip marker dari visible reply
+                    $reply = preg_replace('/\n\[SUMMARY\]:.*$/s', '', $reply);
+                }
+
                 $reply = preg_replace('/```[\s\S]*?```/', '', $reply);  // code blocks
                 $reply = preg_replace('/`([^`]+)`/', '$1', $reply);     // inline code
                 $reply = preg_replace('/\*\*([^*]+)\*\*/', '$1', $reply); // **bold**
@@ -161,9 +196,17 @@ class AvatarChatController extends Controller
                 $reply = preg_replace('/^#{1,6}\s*/m', '', $reply);     // # headings
                 $reply = preg_replace('/^\s*>\s*/m', '', $reply);       // > blockquotes
 
+                $usage = $data['usage'] ?? [];
+
                 return response()->json([
                     'reply' => trim($reply),
+                    'summary' => $summary,  // FE include di next history item untuk memory
                     'model' => $providerConfig['model']->name ?? $model,
+                    'usage' => [
+                        'prompt_tokens' => $usage['prompt_tokens'] ?? null,
+                        'completion_tokens' => $usage['completion_tokens'] ?? null,
+                        'total_tokens' => $usage['total_tokens'] ?? null,
+                    ],
                 ]);
             } else {
                 $errBody = $response->json();
@@ -224,6 +267,14 @@ Kamu adalah **Priva**, asisten virtual 3D milik platform PRIVASIMU — platform 
 - Gunakan tanda strip (–) untuk daftar/list
 - Jawab dalam paragraf pendek dan ringkas
 - Jangan gunakan huruf kapital semua untuk satu kata
+
+## SUMMARY MEMORY (WAJIB)
+Setelah jawaban utama, tambahkan SATU baris terakhir dengan format persis:
+[SUMMARY]: <ringkasan 20-30 kata Bahasa Indonesia tentang topik dan keputusan turn ini, untuk memory percakapan, tidak akan dibacakan ke user>
+
+Contoh output:
+"Untuk membuat RoPA, Anda bisa masuk ke menu RoPA dan klik tombol tambah. Saya bisa pandu Anda step by step.
+[SUMMARY]: User tanya cara buat RoPA, Priva tawarkan panduan step by step menu RoPA"
 
 PROMPT;
 

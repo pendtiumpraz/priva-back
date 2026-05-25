@@ -9,6 +9,7 @@ use App\Models\ChatMessage;
 use App\Models\KnowledgeBaseSection;
 use App\Models\License;
 use App\Services\AiContentSanitizer;
+use App\Services\ChatSummaryMemoryService;
 use App\Services\CreditService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -163,7 +164,8 @@ Kamu WAJIB membalas dalam format JSON valid dengan struktur berikut:
       "language": "sql (untuk type code, opsional)"
     }
   ],
-  "closing": "Kalimat penutup singkat (opsional, boleh null)"
+  "closing": "Kalimat penutup singkat (opsional, boleh null)",
+  "summary": "Ringkasan 20-30 kata Bahasa Indonesia tentang topik dan keputusan turn ini (WAJIB diisi untuk memory percakapan, tidak ditampilkan ke user)"
 }
 
 TIPE SECTION:
@@ -192,28 +194,13 @@ PROMPT;
             ['role' => 'system', 'content' => $systemPrompt],
         ];
 
-        // Add conversation history (max last 10)
-        // P1 security: re-sanitize tiap message dari history. Conversation
-        // bisa berisi prompt injection lama dari user yang sengaja inject
-        // 1 minggu lalu — tanpa re-sanitize, attack persist setiap load.
-        $historySlice = array_slice($history, -10);
-        foreach ($historySlice as $msg) {
-            if (isset($msg['role']) && isset($msg['content'])) {
-                $role = $msg['role'] === 'admin' ? 'assistant' : $msg['role'];
-                $messages[] = [
-                    'role' => $role,
-                    'content' => AiContentSanitizer::neutralize((string) $msg['content']),
-                ];
-            }
-        }
-
-        // User message current request — juga sanitize defensively.
-        // (Server-authoritative: client-side guard ai-input-guard.ts hanya
-        // early UX warn, backend tetap final enforcement.)
-        $messages[] = [
-            'role' => 'user',
-            'content' => AiContentSanitizer::neutralize($userMessage),
-        ];
+        // Build history pakai Summary Buffer Memory pattern:
+        // - Older messages: compressed jadi 1 system "[Ringkasan]" line
+        // - Recent 10 messages: full content (sanitized)
+        // User message current sudah saved di line 117, jadi sudah include
+        // sebagai message terakhir di buildHistoryMessages (no duplikat).
+        $historyMessages = ChatSummaryMemoryService::buildHistoryMessages($conversation->id);
+        $messages = array_merge($messages, $historyMessages);
 
         try {
             $headers = ['Content-Type' => 'application/json'];
@@ -266,12 +253,27 @@ PROMPT;
                 ], 422);
             }
 
-            // Save AI reply
+            // Parse summary dari JSON response — disimpan untuk summary memory
+            // pattern. FE tetap render full `reply` (greeting/sections/closing).
+            $extractedSummary = null;
+            $decodedReply = json_decode($reply, true);
+            if (is_array($decodedReply) && isset($decodedReply['summary'])) {
+                $extractedSummary = (string) $decodedReply['summary'];
+            }
+
+            // Save AI reply dengan summary + token usage (granular tracking per chat)
+            $usage = $data['usage'] ?? [];
             ChatMessage::create([
                 'conversation_id' => $conversation->id,
                 'role' => 'assistant',
                 'content' => $reply,
+                'summary' => $extractedSummary,
                 'sender_name' => 'PRIVASIMU AI',
+                'prompt_tokens' => $usage['prompt_tokens'] ?? null,
+                'completion_tokens' => $usage['completion_tokens'] ?? null,
+                'total_tokens' => $usage['total_tokens'] ?? null,
+                'provider' => $providerConfig['provider']->name ?? null,
+                'model' => $chatModel,
             ]);
 
             $conversation->update(['last_message_at' => now()]);
