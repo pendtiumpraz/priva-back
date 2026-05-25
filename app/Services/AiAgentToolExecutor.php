@@ -227,196 +227,23 @@ class AiAgentToolExecutor
      * actual personal data values. Safe keys (status, counts, enums, ids)
      * pass through. Free-text over 200 chars is truncated with a marker.
      */
+    /**
+     * Delegate ke shared AiContentSanitizer supaya 3 AI surface
+     * (Agent, Chat Widget, Avatar) inherit defense yang sama.
+     * Lihat app/Services/AiContentSanitizer.php untuk detail layer.
+     */
     private static function sanitizeForAi($data)
     {
-        if (is_array($data)) {
-            // Associative array: sanitize each key; sequential array: sanitize each element
-            $isAssoc = array_keys($data) !== range(0, count($data) - 1);
-            $out = [];
-            foreach ($data as $k => $v) {
-                if ($isAssoc && is_string($k)) {
-                    $out[$k] = self::sanitizeField((string) $k, $v);
-                } else {
-                    $out[$k] = self::sanitizeForAi($v);
-                }
-            }
-
-            return $out;
-        }
-
-        return $data;
-    }
-
-    private static function sanitizeField(string $key, $value)
-    {
-        if (is_array($value)) {
-            return self::sanitizeForAi($value);
-        }
-        if (! is_string($value)) {
-            return $value;
-        }
-
-        $k = strtolower($key);
-
-        // Full redact: credentials, tokens, IDs where knowing the value is pure PII
-        if (preg_match('/(password|secret|token|api_key|credit_card|cvv|rekening|bank_account)/', $k)) {
-            return '[REDACTED]';
-        }
-
-        // National ID numbers (NIK/KTP): keep only first 4 + last 2
-        if (preg_match('/(^|_)(nik|ktp|national_id|identity_number)($|_)/', $k)) {
-            return self::maskDigits($value, 4, 2);
-        }
-
-        // Email → keep domain only
-        if (preg_match('/(^|_)(email|mail|e_mail)($|_)/', $k) && str_contains($value, '@')) {
-            [, $domain] = array_pad(explode('@', $value, 2), 2, '');
-
-            return '***@'.$domain;
-        }
-
-        // Phone-like → mask middle digits
-        if (preg_match('/(phone|telepon|telp|handphone|hp|mobile|whatsapp|wa_number)/', $k)) {
-            return self::maskDigits($value, 2, 2);
-        }
-
-        // Name-ish or address → partial mask
-        if (preg_match('/(^name$|_name$|^nama$|_nama$|requester_name|full.?name|first.?name|last.?name|address|alamat)/', $k)) {
-            return self::maskString($value, 2);
-        }
-
-        // Free-text fields (description, notes, response, dll) — neutralisasi
-        // pola prompt-injection sebelum di-include ke konteks AI. Ini lapis
-        // pertahanan terhadap konten DB yang user-controlled. Lihat
-        // neutralizePromptInjection() untuk pola yang di-strip.
-        $value = self::neutralizePromptInjection($value);
-
-        // Long narrative text — truncate so LLM sees context but not full body
-        if (strlen($value) > 200) {
-            return substr($value, 0, 200).'… [truncated for privacy]';
-        }
-
-        return $value;
+        return \App\Services\AiContentSanitizer::sanitizeForAi($data);
     }
 
     /**
-     * Anti-prompt-injection sanitizer untuk field bebas (description, notes,
-     * response, narrative) yang user-controlled di DB. Strip pola yang sering
-     * dipakai jailbreak / obfuscated injection sehingga AI tidak akan obey
-     * instruksi yang muncul di dalam DATA.
-     *
-     * Lapisan yang di-strip:
-     *  1. Encoded blobs: morse, base64, hex panjang, ROT13 all-caps blok besar
-     *  2. Zero-width / invisible Unicode (steganografi)
-     *  3. Role-tokens: SYSTEM:/ASSISTANT:/USER:/TOOL: di awal kalimat
-     *  4. Markdown system fences: ```system, ```role
-     *  5. Custom marker: `===END===`, `=== AKHIR DOKUMEN ===` (mencegah marker spoofing)
-     *  6. Control chars (kecuali \n, \t) — strip semua
-     *  7. Newline berlebih (>2 berurutan) → di-collapse
-     *
-     * NB: ini destructive — kalau ada user sah simpan base64 hash (mis. file
-     * checksum) di field bebas, juga ke-strip. Trade-off keamanan vs UX yang
-     * kami ambil: tampilkan placeholder ⟦encoded⟧ + log warning.
+     * Delegate ke shared sanitizer. Lihat AiContentSanitizer untuk
+     * implementation detail + 11 layer defense lengkap.
      */
     private static function neutralizePromptInjection(string $text): string
     {
-        if ($text === '') {
-            return $text;
-        }
-        $original = $text;
-        $stripCount = 0;
-
-        // (1) Strip control chars kecuali tab/newline/CR
-        $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $text) ?? $text;
-
-        // (2) Zero-width chars / BOM / right-to-left override / invisible separators
-        $text = preg_replace('/[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{206F}\x{FEFF}]/u', '', $text) ?? $text;
-
-        // (3) Morse code — sequence panjang dot/dash/slash/spasi
-        $text = preg_replace_callback('/(?:[.\-]{1,8}[\s\/]){6,}[.\-]{1,8}/u', function ($m) use (&$stripCount) {
-            $stripCount++;
-            return '⟦encoded:morse⟧';
-        }, $text) ?? $text;
-
-        // (4) Base64 blob — 60+ char Base64-alphabet
-        $text = preg_replace_callback('/[A-Za-z0-9+\/]{60,}={0,2}/', function ($m) use (&$stripCount) {
-            $stripCount++;
-            return '⟦encoded:base64⟧';
-        }, $text) ?? $text;
-
-        // (5) Hex blob — 40+ char hex murni
-        $text = preg_replace_callback('/\b[0-9a-fA-F]{40,}\b/', function ($m) use (&$stripCount) {
-            $stripCount++;
-            return '⟦encoded:hex⟧';
-        }, $text) ?? $text;
-
-        // (6) ROT13-like — all-caps tanpa spasi panjang (heuristik)
-        $text = preg_replace_callback('/\b[A-Z]{30,}\b/', function ($m) use (&$stripCount) {
-            $stripCount++;
-            return '⟦encoded:caps-blob⟧';
-        }, $text) ?? $text;
-
-        // (7) Role-token impersonation pada awal baris atau setelah newline
-        $text = preg_replace('/(^|\n)\s*(SYSTEM|ASSISTANT|USER|TOOL|FUNCTION)\s*:\s*/i', '$1[role-strip] ', $text) ?? $text;
-
-        // (8) Markdown fenced with system/role tag
-        $text = preg_replace('/```\s*(?:system|role|instruction|prompt)\b/i', '[fence-strip]', $text) ?? $text;
-
-        // (9) Custom delimiters yang dipakai di file upload context (mencegah
-        // attacker palsu `=== AKHIR DOKUMEN ===` lalu inject instruction)
-        $text = preg_replace('/(===\s*(?:END|AKHIR|BEGIN|MULAI)\b[^\n]*===)/iu', '⟦marker-strip⟧', $text) ?? $text;
-
-        // (10) Common jailbreak phrases (lowercase-match supaya simple)
-        $jailbreakPhrases = [
-            '/ignore (?:all )?(?:previous|prior|above) (?:instructions?|prompts?|rules?)/i',
-            '/disregard (?:all )?(?:previous|prior|above)/i',
-            '/abaikan (?:semua )?(?:instruksi|perintah|aturan) (?:sebelumnya|di atas)/i',
-            '/lupakan (?:semua )?(?:instruksi|perintah|aturan) (?:sebelumnya|di atas)/i',
-            '/forget (?:all )?(?:previous|prior|earlier)/i',
-            '/you are (?:now )?(?:a )?(?:new|different|jailbroken)/i',
-            '/act as (?:a )?(?:DAN|developer mode|unrestricted)/i',
-            '/(?:bypass|override) (?:safety|guardrail|filter|approval)/i',
-        ];
-        foreach ($jailbreakPhrases as $p) {
-            $text = preg_replace($p, '[jailbreak-strip]', $text) ?? $text;
-        }
-
-        // (11) Collapse 3+ consecutive newlines (sering dipakai memisahkan
-        // "data" dari "instruction" di prompt injection)
-        $text = preg_replace('/\n{3,}/', "\n\n", $text) ?? $text;
-
-        if ($stripCount > 0 || $text !== $original) {
-            \Log::warning('AI sanitizer neutralized suspicious content in tool result', [
-                'strip_count' => $stripCount,
-                'orig_len' => strlen($original),
-                'after_len' => strlen($text),
-            ]);
-        }
-
-        return $text;
-    }
-
-    private static function maskDigits(string $value, int $keepStart, int $keepEnd): string
-    {
-        $digits = preg_replace('/\D/', '', $value);
-        $len = strlen($digits);
-        if ($len <= $keepStart + $keepEnd) {
-            return str_repeat('*', $len);
-        }
-
-        return substr($digits, 0, $keepStart)
-            .str_repeat('*', $len - $keepStart - $keepEnd)
-            .substr($digits, -$keepEnd);
-    }
-
-    private static function maskString(string $value, int $keepStart): string
-    {
-        $len = strlen($value);
-        if ($len <= $keepStart + 1) {
-            return str_repeat('*', $len);
-        }
-
-        return substr($value, 0, $keepStart).str_repeat('*', $len - $keepStart);
+        return \App\Services\AiContentSanitizer::neutralize($text);
     }
 
     // =============================================

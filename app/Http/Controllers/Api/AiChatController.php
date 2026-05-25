@@ -7,6 +7,8 @@ use App\Models\AppSetting;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\KnowledgeBaseSection;
+use App\Models\License;
+use App\Services\AiContentSanitizer;
 use App\Services\CreditService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -14,10 +16,42 @@ use Illuminate\Support\Facades\Http;
 class AiChatController extends Controller
 {
     /**
+     * License gate untuk AI Chat. SuperAdmin/root bypass.
+     * P0 fix dari audit AI security — sebelumnya Surface 2 (Chat Widget)
+     * tidak punya license check, basic tier user bisa akses fitur Pro.
+     */
+    private function checkAiChatLicense(Request $request): bool
+    {
+        $user = $request->user();
+        if (! $user || ! $user->org_id || in_array($user->role, ['root', 'superadmin'], true)) {
+            return true;
+        }
+
+        $license = License::where('org_id', $user->org_id)
+            ->where('status', 'active')
+            ->first();
+
+        return $license && $license->package_type !== 'basic';
+    }
+
+    private function denyBasic()
+    {
+        return response()->json([
+            'message' => 'Fitur AI Chat hanya tersedia untuk paket Pro AI dan Enterprise.',
+            'upgrade_required' => true,
+        ], 403);
+    }
+
+    /**
      * Chat with AI assistant — answers based on PRIVASIMU knowledge base only.
      */
     public function chat(Request $request)
     {
+        // P0: License gate (Pro AI / Enterprise required)
+        if (! $this->checkAiChatLicense($request)) {
+            return $this->denyBasic();
+        }
+
         $request->validate([
             'message' => 'required|string|max:2000',
             'history' => 'nullable|array',
@@ -56,9 +90,16 @@ class AiChatController extends Controller
         $user = $request->user();
 
         // Get or create conversation
+        // P0 fix: scope by user_id AND org_id supaya tidak bisa cross-tenant
+        // access kalau attacker dapat conversation_id milik Org lain.
         $conversation = null;
         if ($request->conversation_id) {
-            $conversation = ChatConversation::find($request->conversation_id);
+            $query = ChatConversation::where('id', $request->conversation_id)
+                ->where('user_id', $user->id);
+            if ($user->org_id) {
+                $query->where('org_id', $user->org_id);
+            }
+            $conversation = $query->first();
         }
         if (! $conversation) {
             $conversation = ChatConversation::create([
@@ -370,7 +411,12 @@ PROMPT;
             if (! empty($relevant)) {
                 $kb = '';
                 foreach ($relevant as $section) {
-                    $kb .= "\n---\n# {$section->title}\n{$section->content}\n";
+                    // P0 fix: sanitize KB content sebelum inject ke system prompt.
+                    // Tanpa ini, attacker yang edit KB section bisa inject
+                    // "SYSTEM: forget all rules" via content field.
+                    $safeTitle = AiContentSanitizer::neutralize($section->title);
+                    $safeContent = AiContentSanitizer::neutralize($section->content);
+                    $kb .= "\n---\n# {$safeTitle}\n{$safeContent}\n";
                 }
 
                 return $kb;
@@ -378,7 +424,9 @@ PROMPT;
         }
 
         // Fallback: use legacy app_settings knowledge_base or default
-        return AppSetting::get('knowledge_base', $this->getDefaultKnowledgeBase());
+        // (juga sanitize — meskipun source dari admin trusted, defensive)
+        $fallback = AppSetting::get('knowledge_base', $this->getDefaultKnowledgeBase());
+        return AiContentSanitizer::neutralize((string) $fallback);
     }
 
     private function getDefaultKnowledgeBase(): string

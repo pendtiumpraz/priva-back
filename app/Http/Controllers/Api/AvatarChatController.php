@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\License;
+use App\Services\AiContentSanitizer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -18,10 +20,36 @@ use Illuminate\Support\Facades\Log;
 class AvatarChatController extends Controller
 {
     /**
+     * License gate (P0 fix dari audit AI security).
+     */
+    private function checkAiChatLicense(Request $request): bool
+    {
+        $user = $request->user();
+        if (! $user || ! $user->org_id || in_array($user->role, ['root', 'superadmin'], true)) {
+            return true;
+        }
+
+        $license = License::where('org_id', $user->org_id)
+            ->where('status', 'active')
+            ->first();
+
+        return $license && $license->package_type !== 'basic';
+    }
+
+    /**
      * Chat with the avatar
      */
     public function chat(Request $request)
     {
+        // P0: License gate
+        if (! $this->checkAiChatLicense($request)) {
+            return response()->json([
+                'reply' => 'Fitur Avatar AI hanya tersedia untuk paket Pro AI dan Enterprise.',
+                'upgrade_required' => true,
+                'error' => true,
+            ], 403);
+        }
+
         $request->validate([
             'message' => 'required|string|max:2000',
             'history' => 'nullable|array',
@@ -248,13 +276,17 @@ PROMPT;
         $topMatches = array_slice($matches, 0, 3);
 
         if (empty($topMatches)) {
-            // Include general platform overview as fallback
-            return $this->getGeneralOverview();
+            // Include general platform overview as fallback (juga sanitize)
+            return AiContentSanitizer::neutralize($this->getGeneralOverview());
         }
 
         $result = '';
         foreach ($topMatches as $m) {
-            $result .= "### {$m['topic']['title']}\n{$m['topic']['content']}\n\n";
+            // P0 fix: sanitize KB content sebelum inject ke system prompt.
+            // Cegah indirect injection via DB-stored KB content.
+            $safeTitle = AiContentSanitizer::neutralize($m['topic']['title']);
+            $safeContent = AiContentSanitizer::neutralize($m['topic']['content']);
+            $result .= "### {$safeTitle}\n{$safeContent}\n\n";
         }
 
         return $result;
