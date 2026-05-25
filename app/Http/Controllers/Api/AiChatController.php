@@ -35,6 +35,27 @@ class AiChatController extends Controller
         return $license && $license->package_type !== 'basic';
     }
 
+    /**
+     * Check apakah license enterprise tier — untuk enable mini-agent
+     * (read-only tool calling) di Chat Widget. SuperAdmin bypass.
+     *
+     * Pro AI tier: KB Q&A doang.
+     * Enterprise tier: KB Q&A + read-only tools (list_ropa, get_dpia_detail, dll).
+     */
+    private function isEnterpriseTier(Request $request): bool
+    {
+        $user = $request->user();
+        if (! $user) return false;
+        if (in_array($user->role, ['root', 'superadmin'], true)) return true;
+        if (! $user->org_id) return false;
+
+        $license = License::where('org_id', $user->org_id)
+            ->where('status', 'active')
+            ->first();
+
+        return $license && in_array($license->package_type, ['enterprise', 'ai_agent'], true);
+    }
+
     private function denyBasic()
     {
         return response()->json([
@@ -202,6 +223,35 @@ PROMPT;
         $historyMessages = ChatSummaryMemoryService::buildHistoryMessages($conversation->id);
         $messages = array_merge($messages, $historyMessages);
 
+        // ============================================
+        // PHASE 2: Mini-agent mode untuk Enterprise tier
+        // ============================================
+        // Chat Widget biasanya cuma KB Q&A. Tapi untuk Enterprise tier,
+        // enable read-only tool calling supaya user bisa quick query
+        // ("@ROPA-005 status apa?", "list breach minggu ini") dari widget
+        // tanpa pindah ke /ai-agent full page.
+        //
+        // Mutation tools (create/update/delete) TETAP exclusive di AI Agent
+        // untuk approval flow integrity.
+        $isEnterprise = $this->isEnterpriseTier($request);
+        $intentResult = \App\Services\AiIntentClassifier::classify($userMessage);
+        $currentModule = $request->input('current_module');
+
+        $widgetTools = null;
+        if ($isEnterprise && $intentResult['intent'] !== \App\Services\AiIntentClassifier::PURE_QA) {
+            // Enterprise + butuh data → kirim read-only tools (filtered by page)
+            $widgetTools = $currentModule
+                ? \App\Services\AiAgentToolExecutor::getReadOnlyToolDefinitionsForPage($currentModule)
+                : \App\Services\AiAgentToolExecutor::getReadOnlyToolDefinitions();
+        }
+
+        \Log::info('AI Chat Widget tool selection', [
+            'is_enterprise' => $isEnterprise,
+            'intent' => $intentResult['intent'],
+            'current_module' => $currentModule,
+            'widget_tools' => $widgetTools ? count($widgetTools) : 0,
+        ]);
+
         try {
             $headers = ['Content-Type' => 'application/json'];
             if ($chatAuthPrefix) {
@@ -216,18 +266,24 @@ PROMPT;
             $outputGuard = app(\App\Services\AiOutputGuard::class);
             $maxTokens = $outputGuard->clampMaxTokens(1500);
 
+            $payload = [
+                'model' => $chatModel,
+                'messages' => $messages,
+                'temperature' => 0.3,
+                'max_tokens' => $maxTokens,
+            ];
+            // Conditional tools field — Enterprise mini-agent mode
+            if ($widgetTools !== null && count($widgetTools) > 0) {
+                $payload['tools'] = $widgetTools;
+            }
+
             $response = Http::withOptions([
                 'timeout' => 60,
                 'connect_timeout' => 15,
             ])
                 ->withoutVerifying()
                 ->withHeaders($headers)
-                ->post($chatBaseUrl.'/chat/completions', [
-                    'model' => $chatModel,
-                    'messages' => $messages,
-                    'temperature' => 0.3,
-                    'max_tokens' => $maxTokens,
-                ]);
+                ->post($chatBaseUrl.'/chat/completions', $payload);
 
             if ($response->failed()) {
                 \Log::error('AI Provider API error ['.$chatModel.']: '.$response->body());
@@ -236,7 +292,71 @@ PROMPT;
             }
 
             $data = $response->json();
-            $reply = $data['choices'][0]['message']['content'] ?? 'Maaf, tidak ada respons.';
+            $assistantMessage = $data['choices'][0]['message'] ?? [];
+            $reply = $assistantMessage['content'] ?? '';
+
+            // Phase 2: Handle tool_calls kalau Enterprise mode + AI memutuskan call tool.
+            // Single iteration only (no multi-step chain seperti AI Agent) untuk
+            // keep widget responsive. Execute tools, append result, re-call AI
+            // satu kali untuk dapat final text response.
+            if (! empty($assistantMessage['tool_calls']) && $widgetTools !== null) {
+                $toolCalls = $assistantMessage['tool_calls'];
+                $executor = new \App\Services\AiAgentToolExecutor($user->org_id ?? '');
+
+                // Append assistant message dengan tool_calls
+                $messages[] = $assistantMessage;
+
+                foreach ($toolCalls as $toolCall) {
+                    $fnName = $toolCall['function']['name'] ?? '';
+                    $fnArgs = json_decode($toolCall['function']['arguments'] ?? '{}', true) ?: [];
+
+                    try {
+                        // Read-only tools only (widget mini-agent restriction)
+                        if (! in_array($fnName, \App\Services\AiAgentToolExecutor::READ_ONLY_TOOLS, true)) {
+                            $result = ['error' => 'Tool ini tidak tersedia di Chat Widget. Buka /ai-agent untuk fitur lengkap.'];
+                        } else {
+                            [$result, ] = $executor->execute($fnName, $fnArgs);
+                        }
+                    } catch (\Throwable $e) {
+                        $result = ['error' => $e->getMessage()];
+                    }
+
+                    $messages[] = [
+                        'role' => 'tool',
+                        'tool_call_id' => $toolCall['id'] ?? '',
+                        'content' => json_encode($result, JSON_UNESCAPED_UNICODE),
+                    ];
+                }
+
+                // Second call — AI generate final text response with tool results
+                $payload2 = [
+                    'model' => $chatModel,
+                    'messages' => $messages,
+                    'temperature' => 0.3,
+                    'max_tokens' => $maxTokens,
+                ];
+                $response2 = Http::withOptions(['timeout' => 60, 'connect_timeout' => 15])
+                    ->withoutVerifying()
+                    ->withHeaders($headers)
+                    ->post($chatBaseUrl.'/chat/completions', $payload2);
+
+                if ($response2->successful()) {
+                    $data2 = $response2->json();
+                    $reply = $data2['choices'][0]['message']['content'] ?? $reply;
+                    // Update usage to sum of both rounds
+                    if (isset($data2['usage'])) {
+                        $data['usage'] = [
+                            'prompt_tokens' => ($data['usage']['prompt_tokens'] ?? 0) + ($data2['usage']['prompt_tokens'] ?? 0),
+                            'completion_tokens' => ($data['usage']['completion_tokens'] ?? 0) + ($data2['usage']['completion_tokens'] ?? 0),
+                            'total_tokens' => ($data['usage']['total_tokens'] ?? 0) + ($data2['usage']['total_tokens'] ?? 0),
+                        ];
+                    }
+                }
+            }
+
+            if (empty($reply)) {
+                $reply = 'Maaf, tidak ada respons.';
+            }
 
             // Output safety guard — tolak respons yang melewati batas total,
             // mengandung pola berulang, atau baris terlalu panjang. Mencegah

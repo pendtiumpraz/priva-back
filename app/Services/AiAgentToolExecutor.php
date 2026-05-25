@@ -1030,6 +1030,86 @@ class AiAgentToolExecutor
         ];
     }
 
+    /**
+     * Page → tool name mapping untuk page-context filtering.
+     * FE pass `current_module` di request body → backend filter tools.
+     * Save 60-80% tokens saat user di specific module page.
+     */
+    private const PAGE_TOOL_MAP = [
+        'ropa' => ['list_ropa', 'get_ropa_detail', 'create_ropa', 'update_ropa', 'search_similar_ropa', 'find_related_records'],
+        'dpia' => ['list_dpia', 'get_dpia_detail', 'create_dpia', 'update_dpia', 'search_similar_dpia', 'find_related_records'],
+        'breach' => ['list_breach', 'get_breach_detail', 'create_breach', 'update_breach', 'search_similar_breach', 'find_related_records'],
+        'dsr' => ['list_dsr', 'get_dsr_detail', 'update_dsr', 'find_related_records'],
+        'gap' => ['list_gap_assessment', 'get_gap_assessment_detail'],
+        'consent' => ['list_consent', 'get_consent_detail'],
+        'data-discovery' => ['list_information_systems', 'get_system_detail'],
+        'simulation' => ['list_simulations', 'get_simulation_detail'],
+    ];
+
+    /** Universal tools yang selalu tersedia (cross-module utility). */
+    private const UNIVERSAL_TOOLS = [
+        'get_compliance_summary',
+        'search_knowledge_base',
+    ];
+
+    /** Read-only tool names (filter saat intent = READ_ONLY atau widget mode). */
+    public const READ_ONLY_TOOLS = [
+        'list_ropa', 'get_ropa_detail',
+        'list_dpia', 'get_dpia_detail',
+        'list_breach', 'get_breach_detail',
+        'list_dsr', 'get_dsr_detail',
+        'list_gap_assessment', 'get_gap_assessment_detail',
+        'list_consent', 'get_consent_detail',
+        'list_information_systems', 'get_system_detail',
+        'list_simulations', 'get_simulation_detail',
+        'search_similar_ropa', 'search_similar_dpia', 'search_similar_breach',
+        'search_knowledge_base', 'find_related_records',
+        'get_compliance_summary',
+    ];
+
+    /**
+     * Filter tools by module page context. Kalau $module null atau tidak
+     * di-recognize, return all tools (default behavior).
+     *
+     * @param  string|null  $module  Mis. 'ropa', 'dpia', 'breach'
+     */
+    public static function getToolDefinitionsForPage(?string $module = null): array
+    {
+        $allTools = self::getToolDefinitions();
+
+        if (! $module || ! isset(self::PAGE_TOOL_MAP[$module])) {
+            return $allTools;
+        }
+
+        $allowedNames = array_merge(self::PAGE_TOOL_MAP[$module], self::UNIVERSAL_TOOLS);
+        return array_values(array_filter($allTools, function ($tool) use ($allowedNames) {
+            return in_array($tool['function']['name'] ?? '', $allowedNames, true);
+        }));
+    }
+
+    /**
+     * Filter tools jadi cuma read-only. Dipakai saat intent classifier
+     * detect READ_ONLY action, atau di Chat Widget enterprise mode.
+     */
+    public static function getReadOnlyToolDefinitions(): array
+    {
+        $allTools = self::getToolDefinitions();
+        return array_values(array_filter($allTools, function ($tool) {
+            return in_array($tool['function']['name'] ?? '', self::READ_ONLY_TOOLS, true);
+        }));
+    }
+
+    /**
+     * Kombinasi: filter by page + read-only saja.
+     */
+    public static function getReadOnlyToolDefinitionsForPage(?string $module = null): array
+    {
+        $pageTools = self::getToolDefinitionsForPage($module);
+        return array_values(array_filter($pageTools, function ($tool) {
+            return in_array($tool['function']['name'] ?? '', self::READ_ONLY_TOOLS, true);
+        }));
+    }
+
     // =============================================
     // Tool Definitions for SuperAdmin (admin/read-only tools only)
     // =============================================

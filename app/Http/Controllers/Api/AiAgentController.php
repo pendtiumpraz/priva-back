@@ -80,6 +80,10 @@ class AiAgentController extends Controller
             'message' => 'required|string|max:'.max(1, $maxMessageChars),
             'conversation_id' => 'nullable|string',
             'file' => 'nullable|file|max:10240|mimes:pdf,docx,xlsx,xls,csv,jpg,jpeg,png,gif,webp',
+            // Page context untuk smart tool filtering. Mis. saat user chat
+            // dari /ropa page, FE kirim 'ropa' → backend kirim cuma RoPA tools
+            // (8 tools instead of 37). Save ~70% token.
+            'current_module' => 'nullable|string|in:ropa,dpia,breach,dsr,gap,consent,data-discovery,simulation',
         ]);
 
         // Handle file upload
@@ -268,10 +272,46 @@ class AiAgentController extends Controller
         // https://arxiv.org/abs/2312.06119 (spotlight defense).
         $toolNonce = bin2hex(random_bytes(8));
 
-        // Role-based tool filtering
-        $tools = $isSuperAdmin
-            ? AiAgentToolExecutor::getSuperAdminToolDefinitions()
-            : AiAgentToolExecutor::getToolDefinitions();
+        // ============================================
+        // SMART TOOL SELECTION (3-phase optimization)
+        // ============================================
+        // Phase 1: Intent classification (rule-based, 0ms, save ~3700 token)
+        // Phase 2: Read-only filter (kalau intent = READ_ONLY)
+        // Phase 3: Page context filter (kalau FE pass current_module)
+        //
+        // Untuk SuperAdmin: tetap kirim subset SuperAdmin tools (skip filter).
+        // Untuk tenant user: smart selection berdasarkan intent + page.
+        $currentModule = $request->input('current_module');
+        $intentResult = \App\Services\AiIntentClassifier::classify($request->message);
+
+        if ($isSuperAdmin) {
+            $tools = AiAgentToolExecutor::getSuperAdminToolDefinitions();
+            $toolSelectionReason = 'superadmin tools';
+        } elseif ($intentResult['intent'] === \App\Services\AiIntentClassifier::PURE_QA) {
+            // Pure Q&A: tidak butuh tools sama sekali, save ~3700 token
+            $tools = null;
+            $toolSelectionReason = 'pure Q&A (no tools sent)';
+        } elseif ($intentResult['intent'] === \App\Services\AiIntentClassifier::READ_ONLY) {
+            // Read-only intent: kirim cuma list/get/search tools
+            $tools = $currentModule
+                ? AiAgentToolExecutor::getReadOnlyToolDefinitionsForPage($currentModule)
+                : AiAgentToolExecutor::getReadOnlyToolDefinitions();
+            $toolSelectionReason = 'read-only tools' . ($currentModule ? " for module {$currentModule}" : '');
+        } else {
+            // CRUD_ACTION atau AMBIGUOUS: full tools (filtered by page kalau ada)
+            $tools = $currentModule
+                ? AiAgentToolExecutor::getToolDefinitionsForPage($currentModule)
+                : AiAgentToolExecutor::getToolDefinitions();
+            $toolSelectionReason = 'full tools' . ($currentModule ? " for module {$currentModule}" : '');
+        }
+
+        \Log::info('AI Agent tool selection', [
+            'intent' => $intentResult['intent'],
+            'reason' => $intentResult['reason'],
+            'current_module' => $currentModule,
+            'tool_count' => $tools ? count($tools) : 0,
+            'selection_reason' => $toolSelectionReason,
+        ]);
 
         $languageDirective = ($user->locale === 'en')
             ? "1. You MUST reply entirely in English. All text, labels, and content must be in English."
@@ -464,10 +504,16 @@ PROMPT;
                     $payload = [
                         'model' => $agentModel,
                         'messages' => $messages,
-                        'tools' => $tools,
                         'temperature' => 0.2,
                         'max_tokens' => $agentMaxTokens,
                     ];
+
+                    // Conditional: kirim field `tools` hanya kalau ada tool.
+                    // Phase 1 optimization: pure Q&A intent → tools=null →
+                    // skip field entirely. Save ~3700 token per request.
+                    if ($tools !== null && count($tools) > 0) {
+                        $payload['tools'] = $tools;
+                    }
 
                     $headers = ['Content-Type' => 'application/json'];
                     $trimmedKey = trim($apiKey);
