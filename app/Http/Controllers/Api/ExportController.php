@@ -1816,7 +1816,9 @@ class ExportController extends Controller
                 'total_pii_alerts' => (clone $discoveryQuery)->whereNull('deleted_at')->sum('pii_alert_count'),
             ],
             'gap_assessment' => [
-                'latest_score' => (clone $gapQuery)->whereNull('deleted_at')->latest()->value('score') ?? 0,
+                // Kolom asli di tabel adalah `overall_score`, bukan `score`.
+                // Pakai nama kolom yang benar supaya query tidak 500.
+                'latest_score' => (clone $gapQuery)->whereNull('deleted_at')->latest()->value('overall_score') ?? 0,
                 'latest_level' => (clone $gapQuery)->whereNull('deleted_at')->latest()->value('compliance_level') ?? '-',
             ],
             'ai_analysis' => [
