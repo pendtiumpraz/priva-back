@@ -135,14 +135,13 @@ class GapAssessmentController extends Controller
     {
         $code = $request->query('regulation', 'uupdp');
 
-        // GUARD: if there is an UNFINISHED assessment for this regulation
-        // (any regulation, actually — prevents juggling multiple drafts),
-        // user must finish it before starting a new one.
+        // GUARD: if there is an UNFINALIZED assessment (any regulation),
+        // user must finalize / hapus dulu sebelum mulai baru. Sekarang gate
+        // pakai finalized_at — sebelumnya pakai progress < 100, tapi itu
+        // bocor: assessment saved (progress 100 tapi belum diklik Selesai)
+        // dianggap "selesai" oleh guard, padahal user masih edit-mode.
         $unfinished = GapAssessment::where('org_id', $request->user()->org_id)
-            ->where(function ($q) {
-                $q->where('progress', '<', 100)
-                  ->orWhereNull('progress');
-            })
+            ->whereNull('finalized_at')
             ->orderBy('created_at', 'desc')
             ->first();
         if ($unfinished) {
@@ -209,9 +208,7 @@ class GapAssessmentController extends Controller
         $orgId = $request->user()->org_id;
 
         $unfinished = GapAssessment::where('org_id', $orgId)
-            ->where(function ($q) {
-                $q->where('progress', '<', 100)->orWhereNull('progress');
-            })
+            ->whereNull('finalized_at')
             ->orderBy('created_at', 'desc')
             ->first();
         if ($unfinished) {
@@ -232,9 +229,10 @@ class GapAssessmentController extends Controller
         if (! $source) {
             return response()->json(['message' => 'Assessment sumber tidak ditemukan atau sudah dihapus.'], 404);
         }
-        if ((int) $source->progress < 100) {
+        // Source harus sudah FINALIZED (bukan sekadar progress 100%).
+        if ($source->finalized_at === null) {
             return response()->json([
-                'message' => 'Hanya assessment yang sudah selesai (100%) yang bisa diduplikasi.',
+                'message' => 'Hanya assessment yang sudah diklik "Selesaikan" yang bisa diduplikasi.',
             ], 422);
         }
 
@@ -299,32 +297,44 @@ class GapAssessmentController extends Controller
         $request->validate([
             'answers' => 'required|array',
             'attachments' => 'nullable|array',
+            // `finalize`: hanya true dari tombol "Selesaikan" (Finish). Save & Exit
+            // mengirim false (atau tidak set), sehingga assessment tetap editable
+            // walau semua jawaban sudah terisi (progress 100%).
+            'finalize' => 'nullable|boolean',
         ]);
 
         $assessment = GapAssessment::findOrFail($id);
         $answers = $request->input('answers');
         $attachmentsInput = $request->input('attachments', []);
+        $finalize = (bool) $request->input('finalize', false);
 
-        // Calculate score
         $result = GapAssessment::calculateScore($answers, $assessment->regulation_code ?? 'uupdp');
 
-        // Calculate progress (include custom questions)
         $customCount = CustomGapQuestion::forOrg($assessment->org_id)->forRegulation($assessment->regulation_code ?? 'uupdp')->active()->count();
         $totalQuestions = count(GapAssessment::getQuestionBank($assessment->regulation_code ?? 'uupdp')) + $customCount;
         $answeredCount = count(array_filter($answers, fn($a) => $a !== null && $a !== ''));
         $progress = round(($answeredCount / $totalQuestions) * 100);
 
-        $assessment->update([
+        $update = [
             'answers' => $answers,
             'attachments' => $attachmentsInput,
             'overall_score' => $result['overall_score'],
             'compliance_level' => $result['compliance_level'],
             'progress' => $progress,
             'recommendations' => $result['recommendations'],
-        ]);
+        ];
+
+        // Hanya tombol "Selesaikan" yang mark assessment sebagai final
+        // (set finalized_at). Tidak pernah un-finalize via endpoint ini —
+        // user harus duplicate kalau mau edit lagi sesudah finalized.
+        if ($finalize && $assessment->finalized_at === null) {
+            $update['finalized_at'] = now();
+        }
+
+        $assessment->update($update);
 
         return response()->json([
-            'message' => 'Answers saved and score calculated',
+            'message' => $finalize ? 'Assessment finalized.' : 'Answers saved.',
             'data' => $assessment->fresh(),
             'result' => $result,
         ]);
