@@ -313,6 +313,31 @@ class GapAssessmentController extends Controller
 
     public function uploadEvidence(Request $request, string $id, TenantStorageService $storage, FileUploadValidator $validator)
     {
+        // Kalau body request melebihi `post_max_size` PHP, $_POST + $_FILES
+        // dibuang dan request seolah kosong — tanpa pesan jelas. Cek
+        // CONTENT_LENGTH manual supaya bisa kasih error "PHP tolak karena
+        // upload limit hosting < X MB" alih-alih "field required".
+        $contentLength = (int) $request->server('CONTENT_LENGTH');
+        $postMax = $this->bytesFromIni((string) ini_get('post_max_size'));
+        $uploadMax = $this->bytesFromIni((string) ini_get('upload_max_filesize'));
+        if ($postMax > 0 && $contentLength > $postMax) {
+            return response()->json([
+                'message' => sprintf(
+                    'Ukuran upload (%s) melebihi batas server PHP post_max_size (%s). Minta admin naikkan post_max_size & upload_max_filesize di php.ini hosting.',
+                    $this->humanBytes($contentLength),
+                    ini_get('post_max_size'),
+                ),
+            ], 413);
+        }
+        if ($request->hasFile('file') && $uploadMax > 0 && $request->file('file')->getSize() > $uploadMax) {
+            return response()->json([
+                'message' => sprintf(
+                    'Ukuran file melebihi batas server PHP upload_max_filesize (%s).',
+                    ini_get('upload_max_filesize'),
+                ),
+            ], 413);
+        }
+
         $request->validate([
             'question_id' => 'required|string',
             'file' => 'required|file|max:10240',
@@ -489,6 +514,29 @@ class GapAssessmentController extends Controller
      * storage_path('app/public/...') OR storage_path('app/...') depending on
      * the driver. We try the most common locations in order.
      */
+    /** Convert PHP ini shorthand (50M, 8K, 2G) ke byte integer. */
+    private function bytesFromIni(string $val): int
+    {
+        $val = trim($val);
+        if ($val === '') return 0;
+        $unit = strtolower(substr($val, -1));
+        $num = (int) $val;
+        return match ($unit) {
+            'g' => $num * 1024 * 1024 * 1024,
+            'm' => $num * 1024 * 1024,
+            'k' => $num * 1024,
+            default => $num,
+        };
+    }
+
+    /** Format byte ke MB/KB human-readable. */
+    private function humanBytes(int $bytes): string
+    {
+        if ($bytes >= 1048576) return number_format($bytes / 1048576, 1) . 'MB';
+        if ($bytes >= 1024) return number_format($bytes / 1024, 1) . 'KB';
+        return $bytes . 'B';
+    }
+
     private function resolveAttachmentPath(GapAssessment $assessment, string $relativePath): ?string
     {
         $candidates = [
