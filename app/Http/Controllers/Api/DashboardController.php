@@ -85,32 +85,101 @@ class DashboardController extends Controller
     {
         $orgId = $request->user()->org_id;
         $months = [];
+        $yearly = [];
+        $availableYears = [];
 
-        // Last 7 months
-        for ($i = 6; $i >= 0; $i--) {
-            $date = now()->subMonths($i);
-            $start = $date->copy()->startOfMonth();
-            $end = $date->copy()->endOfMonth();
-            $label = $date->format('M');
+        // Query param control:
+        //   ?period=monthly&year=YYYY  → 12 bulan tahun tsb (Jan-Des)
+        //   ?period=yearly             → 5 tahun terakhir (aggregate)
+        //   default (no period)        → last 7 months (backward compat)
+        $period = $request->query('period');
+        $year = (int) $request->query('year', now()->year);
 
-            $months[] = [
-                'month' => $label,
-                'ropa' => DB::table('ropas')->where('org_id', $orgId)
-                    ->whereNull('deleted_at')
-                    ->where('created_at', '<=', $end)->count(),
-                'dpia' => DB::table('dpias')->where('org_id', $orgId)
-                    ->whereNull('deleted_at')
-                    ->where('created_at', '<=', $end)->count(),
-                'dsr' => DB::table('dsr_requests')->where('org_id', $orgId)
-                    ->whereNull('deleted_at')
-                    ->whereBetween('created_at', [$start, $end])->count(),
-                'breach' => DB::table('breach_incidents')->where('org_id', $orgId)
-                    ->where('is_simulation', false)->whereNull('deleted_at')
-                    ->whereBetween('created_at', [$start, $end])->count(),
-                'consent' => DB::table('consent_collection_points')->where('org_id', $orgId)
-                    ->whereNull('deleted_at')
-                    ->where('created_at', '<=', $end)->count(),
-            ];
+        // Cari tahun-tahun yang punya data (untuk picker frontend).
+        $oldestDate = DB::table('ropas')->where('org_id', $orgId)->whereNull('deleted_at')->min('created_at');
+        $oldestYear = $oldestDate ? (int) date('Y', strtotime($oldestDate)) : now()->year;
+        for ($y = now()->year; $y >= $oldestYear; $y--) {
+            $availableYears[] = $y;
+        }
+        if (empty($availableYears)) {
+            $availableYears = [now()->year];
+        }
+
+        if ($period === 'yearly') {
+            // Aggregate per tahun untuk 5 tahun terakhir (atau sejak data ada).
+            $startYear = max($oldestYear, now()->year - 4);
+            for ($y = $startYear; $y <= now()->year; $y++) {
+                $yStart = "{$y}-01-01 00:00:00";
+                $yEnd = "{$y}-12-31 23:59:59";
+                $yearly[] = [
+                    'year' => (string) $y,
+                    'ropa' => DB::table('ropas')->where('org_id', $orgId)->whereNull('deleted_at')
+                        ->whereBetween('created_at', [$yStart, $yEnd])->count(),
+                    'dpia' => DB::table('dpias')->where('org_id', $orgId)->whereNull('deleted_at')
+                        ->whereBetween('created_at', [$yStart, $yEnd])->count(),
+                    'dsr' => DB::table('dsr_requests')->where('org_id', $orgId)->whereNull('deleted_at')
+                        ->whereBetween('created_at', [$yStart, $yEnd])->count(),
+                    'breach' => DB::table('breach_incidents')->where('org_id', $orgId)
+                        ->where('is_simulation', false)->whereNull('deleted_at')
+                        ->whereBetween('created_at', [$yStart, $yEnd])->count(),
+                    'consent' => DB::table('consent_collection_points')->where('org_id', $orgId)->whereNull('deleted_at')
+                        ->whereBetween('created_at', [$yStart, $yEnd])->count(),
+                ];
+            }
+            // Tetap include monthly_trend default supaya backward compat untuk
+            // konsumer yang tidak handle period=yearly.
+        }
+
+        if ($period === 'monthly') {
+            // 12 bulan dari tahun yang diminta.
+            for ($m = 1; $m <= 12; $m++) {
+                $start = "{$year}-" . str_pad((string) $m, 2, '0', STR_PAD_LEFT) . "-01 00:00:00";
+                $endDt = (new \DateTime($start))->modify('last day of this month')->format('Y-m-d') . ' 23:59:59';
+                $label = (new \DateTime($start))->format('M');
+                $months[] = [
+                    'month' => $label,
+                    'year' => $year,
+                    'ropa' => DB::table('ropas')->where('org_id', $orgId)->whereNull('deleted_at')
+                        ->whereBetween('created_at', [$start, $endDt])->count(),
+                    'dpia' => DB::table('dpias')->where('org_id', $orgId)->whereNull('deleted_at')
+                        ->whereBetween('created_at', [$start, $endDt])->count(),
+                    'dsr' => DB::table('dsr_requests')->where('org_id', $orgId)->whereNull('deleted_at')
+                        ->whereBetween('created_at', [$start, $endDt])->count(),
+                    'breach' => DB::table('breach_incidents')->where('org_id', $orgId)
+                        ->where('is_simulation', false)->whereNull('deleted_at')
+                        ->whereBetween('created_at', [$start, $endDt])->count(),
+                    'consent' => DB::table('consent_collection_points')->where('org_id', $orgId)->whereNull('deleted_at')
+                        ->whereBetween('created_at', [$start, $endDt])->count(),
+                ];
+            }
+        } else {
+            // Default: last 7 months (legacy behaviour) — kumulatif untuk ropa/dpia/consent,
+            // per-month untuk dsr/breach. Dipertahankan supaya UI lama tidak rusak.
+            for ($i = 6; $i >= 0; $i--) {
+                $date = now()->subMonths($i);
+                $start = $date->copy()->startOfMonth();
+                $end = $date->copy()->endOfMonth();
+                $label = $date->format('M');
+
+                $months[] = [
+                    'month' => $label,
+                    'ropa' => DB::table('ropas')->where('org_id', $orgId)
+                        ->whereNull('deleted_at')
+                        ->where('created_at', '<=', $end)->count(),
+                    'dpia' => DB::table('dpias')->where('org_id', $orgId)
+                        ->whereNull('deleted_at')
+                        ->where('created_at', '<=', $end)->count(),
+                    'dsr' => DB::table('dsr_requests')->where('org_id', $orgId)
+                        ->whereNull('deleted_at')
+                        ->whereBetween('created_at', [$start, $end])->count(),
+                    'breach' => DB::table('breach_incidents')->where('org_id', $orgId)
+                        ->where('is_simulation', false)->whereNull('deleted_at')
+                        ->whereBetween('created_at', [$start, $end])->count(),
+                    'consent' => DB::table('consent_collection_points')->where('org_id', $orgId)
+                        ->whereNull('deleted_at')
+                        ->where('created_at', '<=', $end)->count(),
+                ];
+            }
         }
 
         // GAP Assessment history (all scores)
@@ -147,6 +216,10 @@ class DashboardController extends Controller
 
         return response()->json([
             'monthly_trend' => $months,
+            'yearly_trend' => $yearly,
+            'available_years' => $availableYears,
+            'period' => $period ?: 'default',
+            'selected_year' => $year,
             'gap_history' => $gapHistory,
             'ropa_by_status' => $ropaByStatus,
             'dpia_by_risk' => $dpiaByRisk,
