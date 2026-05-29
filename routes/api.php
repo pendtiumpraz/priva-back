@@ -317,6 +317,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
             Route::delete('/custom-questions/{id}', [GapAssessmentController::class, 'destroyCustomQuestion'])->middleware('permission:gap_assessment,write');
 
             Route::post('/', [GapAssessmentController::class, 'store'])->middleware('permission:gap_assessment,write');
+            Route::post('/{id}/duplicate', [GapAssessmentController::class, 'duplicate'])->middleware('permission:gap_assessment,write');
             Route::get('/{id}', [GapAssessmentController::class, 'show'])->middleware('permission:gap_assessment,read');
             Route::post('/{id}/submit', [GapAssessmentController::class, 'submitAnswers'])->middleware('permission:gap_assessment,write');
             Route::delete('/{id}', [GapAssessmentController::class, 'destroy'])->middleware('permission:gap_assessment,write');

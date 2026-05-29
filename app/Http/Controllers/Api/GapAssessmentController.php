@@ -199,6 +199,77 @@ class GapAssessmentController extends Controller
     }
 
     /**
+     * Duplicate completed assessment — bikin assessment baru editable
+     * dengan answers dari source. Source HARUS sudah complete (progress
+     * 100) dan tidak deleted. Sama seperti store(), kalau ada assessment
+     * unfinished yang lain → 409 (user harus selesaikan dulu).
+     */
+    public function duplicate(Request $request, string $id)
+    {
+        $orgId = $request->user()->org_id;
+
+        $unfinished = GapAssessment::where('org_id', $orgId)
+            ->where(function ($q) {
+                $q->where('progress', '<', 100)->orWhereNull('progress');
+            })
+            ->orderBy('created_at', 'desc')
+            ->first();
+        if ($unfinished) {
+            return response()->json([
+                'message' => 'Assessment "' . ($unfinished->version ?? 'sebelumnya') . '" belum selesai (progress ' . (int) ($unfinished->progress ?? 0) . '%). Selesaikan atau hapus dulu sebelum duplikasi.',
+                'unfinished' => [
+                    'id' => $unfinished->id,
+                    'version' => $unfinished->version,
+                    'progress' => (int) ($unfinished->progress ?? 0),
+                ],
+            ], 409);
+        }
+
+        $source = GapAssessment::where('org_id', $orgId)
+            ->where('id', $id)
+            ->whereNull('deleted_at')
+            ->first();
+        if (! $source) {
+            return response()->json(['message' => 'Assessment sumber tidak ditemukan atau sudah dihapus.'], 404);
+        }
+        if ((int) $source->progress < 100) {
+            return response()->json([
+                'message' => 'Hanya assessment yang sudah selesai (100%) yang bisa diduplikasi.',
+            ], 422);
+        }
+
+        $code = $source->regulation_code ?? 'uupdp';
+        $lastVersion = GapAssessment::where('org_id', $orgId)
+            ->where('regulation_code', $code)
+            ->withTrashed()
+            ->count();
+
+        $assessment = GapAssessment::create([
+            'org_id' => $orgId,
+            'regulation_code' => $code,
+            'version' => 'GAP_v3.0_' . strtoupper($code) . '_#' . ($lastVersion + 1) . ' (dup)',
+            'overall_score' => 0,
+            'compliance_level' => 'low',
+            // Force progress=0 supaya frontend treat sebagai editable
+            // walaupun semua answers ada — wizard akan terbuka.
+            'progress' => 0,
+            'answers' => $source->answers ?? [],
+            // Attachments tidak ikut di-copy karena tied ke file fisik
+            // tertentu di storage source; user bisa upload ulang per question.
+            'attachments' => [],
+            'recommendations' => [],
+            'created_by' => $request->user()->id,
+        ]);
+
+        return response()->json([
+            'message' => 'Assessment berhasil diduplikasi dari ' . $source->version,
+            'data' => $assessment,
+            'source_id' => $source->id,
+            'source_version' => $source->version,
+        ], 201);
+    }
+
+    /**
      * Get assessment detail
      */
     public function show(Request $request, string $id)
