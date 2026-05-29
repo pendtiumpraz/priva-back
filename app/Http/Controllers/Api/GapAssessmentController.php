@@ -588,6 +588,144 @@ class GapAssessmentController extends Controller
     }
 
     /**
+     * Bulk analyze ALL evidence attachments di assessment ini.
+     *
+     * Iterasi setiap (question, attachment terbaru). Skip:
+     *   - Question yang tidak punya attachment.
+     *   - Pasangan (attachment_path, question) yang sudah ada di
+     *     ai_analyses cache (no re-charge).
+     *   - File gambar (OCR belum didukung).
+     *
+     * Stop early kalau credit habis di tengah — return apa yang sudah
+     * dianalisis + flag `credits_exhausted`. Caller bisa retry setelah
+     * top-up dan sisanya akan diproses (yang sudah cached di-skip).
+     */
+    public function bulkAnalyzeEvidence(Request $request, string $id, AiDocumentAnalyzer $analyzer)
+    {
+        $assessment = GapAssessment::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $orgId = $request->user()->org_id;
+        $regCode = $assessment->regulation_code ?? 'uupdp';
+
+        // Question map: platform bank + custom org.
+        $questionMap = collect(GapAssessment::getQuestionBank($regCode))->keyBy('id');
+        $customQs = CustomGapQuestion::forOrg($orgId)->forRegulation($regCode)->active()->get();
+        foreach ($customQs as $cq) {
+            $questionMap['custom_'.$cq->id] = $cq->toQuestionFormat();
+        }
+
+        $attachments = $assessment->attachments ?? [];
+        $existing = $assessment->ai_analyses ?? [];
+        $newAnalyses = $existing;
+
+        $stats = ['analyzed' => 0, 'cached' => 0, 'skipped' => 0, 'failed' => 0];
+        $creditsExhausted = false;
+        $imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'];
+
+        foreach ($attachments as $qId => $files) {
+            if (empty($files) || ! is_array($files)) {
+                continue;
+            }
+
+            $question = $questionMap->get($qId);
+            if (! $question) {
+                $stats['skipped']++;
+                continue;
+            }
+
+            // Pakai attachment TERBARU per question (last in array).
+            $att = end($files);
+            $attachmentPath = is_array($att) ? ($att['path'] ?? null) : $att;
+            if (! $attachmentPath) {
+                $stats['skipped']++;
+                continue;
+            }
+
+            // Cache hit: skip kalau hasil analysis sudah ada untuk attachment yang sama.
+            $prev = $existing[$qId] ?? null;
+            if ($prev && ($prev['attachment_path'] ?? null) === $attachmentPath && ! empty($prev['status'])) {
+                $stats['cached']++;
+                continue;
+            }
+
+            // Image: skip (OCR not supported)
+            $ext = strtolower(pathinfo($attachmentPath, PATHINFO_EXTENSION));
+            if (in_array($ext, $imageExts, true)) {
+                $newAnalyses[$qId] = [
+                    'status' => 'unsure',
+                    'analysis' => 'Gambar belum didukung untuk analisis AI (perlu OCR engine).',
+                    'cited_passages' => [],
+                    'confidence' => 0,
+                    'analyzed_at' => now()->toIso8601String(),
+                    'attachment_path' => $attachmentPath,
+                ];
+                $stats['skipped']++;
+                continue;
+            }
+
+            // Credit gate per-item supaya tidak bocor kuota.
+            if ($orgId) {
+                CreditService::resetIfNeeded($orgId);
+                if (! CreditService::hasCredit($orgId, 'ai_doc_analyze')) {
+                    $creditsExhausted = true;
+                    break;
+                }
+            }
+
+            $localPath = $this->resolveAttachmentPath($assessment, $attachmentPath);
+            if (! $localPath || ! is_file($localPath)) {
+                $newAnalyses[$qId] = [
+                    'status' => 'unsure',
+                    'analysis' => 'File tidak ditemukan di storage.',
+                    'cited_passages' => [],
+                    'confidence' => 0,
+                    'analyzed_at' => now()->toIso8601String(),
+                    'attachment_path' => $attachmentPath,
+                ];
+                $stats['failed']++;
+                continue;
+            }
+
+            try {
+                $result = $analyzer->analyze(
+                    documentPath: $localPath,
+                    question: $question['question'] ?? '',
+                    regulationRef: $question['article'] ?? ($question['regulation_ref'] ?? ''),
+                    orgId: $orgId,
+                );
+                $newAnalyses[$qId] = array_merge($result->toArray(), [
+                    'analyzed_at' => now()->toIso8601String(),
+                    'attachment_path' => $attachmentPath,
+                ]);
+                $stats['analyzed']++;
+            } catch (\Throwable $e) {
+                $newAnalyses[$qId] = [
+                    'status' => 'unsure',
+                    'analysis' => 'Gagal analisis: '.$e->getMessage(),
+                    'cited_passages' => [],
+                    'confidence' => 0,
+                    'analyzed_at' => now()->toIso8601String(),
+                    'attachment_path' => $attachmentPath,
+                ];
+                $stats['failed']++;
+            }
+        }
+
+        $assessment->update(['ai_analyses' => $newAnalyses]);
+
+        $msg = "Bulk analisis selesai: {$stats['analyzed']} baru, {$stats['cached']} cache, {$stats['skipped']} skip, {$stats['failed']} gagal.";
+        if ($creditsExhausted) {
+            $msg .= ' Kredit habis di tengah — sebagian belum dianalisis. Top up dan klik analisis ulang untuk lanjut.';
+        }
+
+        return response()->json([
+            'message' => $msg,
+            'stats' => $stats,
+            'credits_exhausted' => $creditsExhausted,
+            'ai_analyses' => $newAnalyses,
+        ]);
+    }
+
+    /**
      * Resolve the attachment relative path to an absolute filesystem path.
      *
      * TenantStorageService stores via either the local public disk

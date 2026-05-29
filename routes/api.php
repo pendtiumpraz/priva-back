@@ -326,6 +326,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
             Route::post('/{id}/upload-evidence', [GapAssessmentController::class, 'uploadEvidence'])->middleware('permission:gap_assessment,write');
             // Sprint G.9: AI evidence analyzer (per-question, charges 1 credit)
             Route::post('/{id}/analyze-evidence', [GapAssessmentController::class, 'analyzeEvidence'])->middleware('permission:gap_assessment,write');
+            Route::post('/{id}/analyze-evidence-bulk', [GapAssessmentController::class, 'bulkAnalyzeEvidence'])->middleware('permission:gap_assessment,write');
         }
     );
 
