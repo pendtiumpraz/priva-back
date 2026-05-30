@@ -26,9 +26,47 @@ class GapAssessment extends Model
     ];
 
     /**
+     * Agregasi hasil AI analysis untuk satu pertanyaan ke 1 verdict.
+     * Banyak dokumen per pertanyaan → pilih WORST status (paling
+     * konservatif). `unsure` di-skip; kalau semua unsure return null.
+     *
+     * @param  mixed  $value  Bisa null, single object (legacy), atau array of objects.
+     */
+    public static function aggregateAiVerdict(mixed $value): ?string
+    {
+        if (empty($value) || ! is_array($value)) return null;
+        // Legacy single object
+        $entries = isset($value['status']) ? [$value] : array_values($value);
+        $rank = ['non_comply' => 3, 'partial' => 2, 'comply' => 1];
+        $worst = null;
+        $worstRank = 0;
+        foreach ($entries as $e) {
+            $st = $e['status'] ?? null;
+            if (! $st || $st === 'unsure') continue;
+            $r = $rank[$st] ?? 0;
+            if ($r > $worstRank) {
+                $worst = $st;
+                $worstRank = $r;
+            }
+        }
+        return $worst;
+    }
+
+    /** Convert AI verdict ke answer key. Null = no override. */
+    public static function aiVerdictToAnswer(?string $verdict): ?string
+    {
+        return match ($verdict) {
+            'comply' => 'yes',
+            'partial' => 'partial',
+            'non_comply' => 'no',
+            default => null,
+        };
+    }
+
+    /**
      * Hitung skor otomatis dari jawaban
      */
-    public static function calculateScore(array $answers, string $code = 'uupdp'): array
+    public static function calculateScore(array $answers, string $code = 'uupdp', array $aiAnalyses = []): array
     {
         $questions = self::getQuestionBank($code);
         $totalWeight = 0;
@@ -55,7 +93,16 @@ class GapAssessment extends Model
             $categoryScores[$q['category']]['total'] += $weight;
             $subcategoryScores[$sub]['total'] += $weight;
 
-            $score = match ($answer) {
+            // AI verdict override: kalau ada hasil AI analysis untuk pertanyaan
+            // ini, agregasi jadi WORST verdict (paling konservatif untuk audit).
+            // Verdict ini override jawaban user untuk perhitungan skor —
+            // user yang ngaku 'yes' tapi dokumennya menunjukkan non_comply
+            // akan kena diskon skor sesuai bukti dokumen.
+            // 'na' tidak di-override (user secara eksplisit menyatakan tidak berlaku).
+            $aiVerdict = $answer !== 'na' ? self::aggregateAiVerdict($aiAnalyses[$qId] ?? null) : null;
+            $effective = self::aiVerdictToAnswer($aiVerdict) ?? $answer;
+
+            $score = match ($effective) {
                 'yes' => $weight,
                 'partial' => $weight * 0.5,
                 'no' => 0,
@@ -63,7 +110,7 @@ class GapAssessment extends Model
                 default => 0,
             };
 
-            if ($answer === 'na') {
+            if ($effective === 'na') {
                 $totalWeight -= $weight; // Don't count N/A
                 $categoryScores[$q['category']]['total'] -= $weight;
                 $subcategoryScores[$sub]['total'] -= $weight;
@@ -73,8 +120,8 @@ class GapAssessment extends Model
                 $subcategoryScores[$sub]['earned'] += $score;
             }
 
-            // Generate recommendation untuk jawaban No atau Partial
-            if ($answer === 'no' || $answer === 'partial') {
+            // Generate recommendation untuk jawaban No atau Partial (pakai effective).
+            if ($effective === 'no' || $effective === 'partial') {
                 $recommendations[] = [
                     'question_id' => $qId,
                     'question' => $q['question'],
@@ -82,6 +129,7 @@ class GapAssessment extends Model
                     'priority' => $weight >= 4 ? 'critical' : ($weight >= 3 ? 'high' : 'medium'),
                     'recommendation' => $q['recommendation'],
                     'current_answer' => $answer,
+                    'ai_override' => $aiVerdict !== null && $effective !== $answer,
                 ];
             }
         }

@@ -307,7 +307,13 @@ class GapAssessmentController extends Controller
         $answers = $request->input('answers');
         $finalize = (bool) $request->input('finalize', false);
 
-        $result = GapAssessment::calculateScore($answers, $assessment->regulation_code ?? 'uupdp');
+        // Pass ai_analyses supaya verdict AI (kalau ada) ikut menentukan skor
+        // sebagai override jawaban user. Lihat aggregateAiVerdict() di model.
+        $result = GapAssessment::calculateScore(
+            $answers,
+            $assessment->regulation_code ?? 'uupdp',
+            $assessment->ai_analyses ?? []
+        );
 
         $customCount = CustomGapQuestion::forOrg($assessment->org_id)->forRegulation($assessment->regulation_code ?? 'uupdp')->active()->count();
         $totalQuestions = count(GapAssessment::getQuestionBank($assessment->regulation_code ?? 'uupdp')) + $customCount;
@@ -583,15 +589,62 @@ class GapAssessmentController extends Controller
             orgId: $orgId,
         );
 
-        // Cache the result on the assessment row (keyed by question_id).
-        $analyses = $assessment->ai_analyses ?? [];
-        $analyses[$request->question_id] = array_merge($result->toArray(), [
+        $newEntry = array_merge($result->toArray(), [
             'analyzed_at' => now()->toIso8601String(),
             'attachment_path' => $request->attachment_path,
         ]);
-        $assessment->update(['ai_analyses' => $analyses]);
 
-        return response()->json($analyses[$request->question_id]);
+        // ai_analyses[qId] sekarang ARRAY (satu entri per attachment) supaya
+        // banyak dokumen di 1 pertanyaan bisa punya verdict masing-masing.
+        // Format lama (object tunggal) di-wrap normalize jadi array dulu.
+        $analyses = $assessment->ai_analyses ?? [];
+        $listForQ = $this->normalizeAnalysesForQuestion($analyses[$request->question_id] ?? null);
+        // Replace kalau attachment_path sudah ada di array; else append.
+        $found = false;
+        foreach ($listForQ as $i => $item) {
+            if (($item['attachment_path'] ?? null) === $request->attachment_path) {
+                $listForQ[$i] = $newEntry;
+                $found = true;
+                break;
+            }
+        }
+        if (! $found) {
+            $listForQ[] = $newEntry;
+        }
+        $analyses[$request->question_id] = $listForQ;
+
+        // Recompute skor — AI verdict baru bisa override jawaban user.
+        $result = GapAssessment::calculateScore(
+            $assessment->answers ?? [],
+            $assessment->regulation_code ?? 'uupdp',
+            $analyses
+        );
+        $assessment->update([
+            'ai_analyses' => $analyses,
+            'overall_score' => $result['overall_score'],
+            'compliance_level' => $result['compliance_level'],
+            'recommendations' => $result['recommendations'],
+        ]);
+
+        return response()->json($newEntry);
+    }
+
+    /**
+     * Normalisasi nilai ai_analyses[qId] ke array entries.
+     * Format lama: object tunggal { status, analysis, attachment_path, ... }
+     * Format baru: array [ { ... }, { ... } ]
+     */
+    private function normalizeAnalysesForQuestion(mixed $value): array
+    {
+        if (empty($value) || ! is_array($value)) {
+            return [];
+        }
+        // Object tunggal punya field 'status' di root → bungkus jadi array.
+        if (isset($value['status'])) {
+            return [$value];
+        }
+        // Sudah berupa list (numeric indexed).
+        return array_values($value);
     }
 
     /**
@@ -635,89 +688,119 @@ class GapAssessmentController extends Controller
 
             $question = $questionMap->get($qId);
             if (! $question) {
-                $stats['skipped']++;
+                $stats['skipped'] += is_array($files) ? count($files) : 1;
                 continue;
             }
 
-            // Pakai attachment TERBARU per question (last in array).
-            $att = end($files);
-            $attachmentPath = is_array($att) ? ($att['path'] ?? null) : $att;
-            if (! $attachmentPath) {
-                $stats['skipped']++;
-                continue;
-            }
-
-            // Cache hit: skip kalau hasil analysis sudah ada untuk attachment yang sama.
-            $prev = $existing[$qId] ?? null;
-            if ($prev && ($prev['attachment_path'] ?? null) === $attachmentPath && ! empty($prev['status'])) {
-                $stats['cached']++;
-                continue;
-            }
-
-            // Image: skip (OCR not supported)
-            $ext = strtolower(pathinfo($attachmentPath, PATHINFO_EXTENSION));
-            if (in_array($ext, $imageExts, true)) {
-                $newAnalyses[$qId] = [
-                    'status' => 'unsure',
-                    'analysis' => 'Gambar belum didukung untuk analisis AI (perlu OCR engine).',
-                    'cited_passages' => [],
-                    'confidence' => 0,
-                    'analyzed_at' => now()->toIso8601String(),
-                    'attachment_path' => $attachmentPath,
-                ];
-                $stats['skipped']++;
-                continue;
-            }
-
-            // Credit gate per-item supaya tidak bocor kuota.
-            if ($orgId) {
-                CreditService::resetIfNeeded($orgId);
-                if (! CreditService::hasCredit($orgId, 'ai_doc_analyze')) {
-                    $creditsExhausted = true;
-                    break;
+            // ai_analyses[qId] sekarang ARRAY. Bangun array baru untuk
+            // pertanyaan ini, satu entri per attachment, supaya banyak
+            // dokumen di 1 pertanyaan masing-masing punya verdict.
+            $prevList = $this->normalizeAnalysesForQuestion($existing[$qId] ?? null);
+            $prevByPath = [];
+            foreach ($prevList as $p) {
+                if (! empty($p['attachment_path'])) {
+                    $prevByPath[$p['attachment_path']] = $p;
                 }
             }
 
-            $localPath = $this->resolveAttachmentPath($assessment, $attachmentPath);
-            if (! $localPath || ! is_file($localPath)) {
-                $newAnalyses[$qId] = [
-                    'status' => 'unsure',
-                    'analysis' => 'File tidak ditemukan di storage.',
-                    'cited_passages' => [],
-                    'confidence' => 0,
-                    'analyzed_at' => now()->toIso8601String(),
-                    'attachment_path' => $attachmentPath,
-                ];
-                $stats['failed']++;
-                continue;
+            $newListForQ = [];
+            foreach ($files as $att) {
+                $attachmentPath = is_array($att) ? ($att['path'] ?? null) : $att;
+                if (! $attachmentPath) {
+                    $stats['skipped']++;
+                    continue;
+                }
+
+                // Cache hit: skip kalau hasil analysis sudah ada untuk attachment yang sama.
+                $prev = $prevByPath[$attachmentPath] ?? null;
+                if ($prev && ! empty($prev['status'])) {
+                    $newListForQ[] = $prev;
+                    $stats['cached']++;
+                    continue;
+                }
+
+                // Image: skip (OCR not supported)
+                $ext = strtolower(pathinfo($attachmentPath, PATHINFO_EXTENSION));
+                if (in_array($ext, $imageExts, true)) {
+                    $newListForQ[] = [
+                        'status' => 'unsure',
+                        'analysis' => 'Gambar belum didukung untuk analisis AI (perlu OCR engine).',
+                        'cited_passages' => [],
+                        'confidence' => 0,
+                        'analyzed_at' => now()->toIso8601String(),
+                        'attachment_path' => $attachmentPath,
+                    ];
+                    $stats['skipped']++;
+                    continue;
+                }
+
+                // Credit gate per-item supaya tidak bocor kuota.
+                if ($orgId) {
+                    CreditService::resetIfNeeded($orgId);
+                    if (! CreditService::hasCredit($orgId, 'ai_doc_analyze')) {
+                        $creditsExhausted = true;
+                        break 2; // break out of inner+outer loops
+                    }
+                }
+
+                $localPath = $this->resolveAttachmentPath($assessment, $attachmentPath);
+                if (! $localPath || ! is_file($localPath)) {
+                    $newListForQ[] = [
+                        'status' => 'unsure',
+                        'analysis' => 'File tidak ditemukan di storage.',
+                        'cited_passages' => [],
+                        'confidence' => 0,
+                        'analyzed_at' => now()->toIso8601String(),
+                        'attachment_path' => $attachmentPath,
+                    ];
+                    $stats['failed']++;
+                    continue;
+                }
+
+                try {
+                    $result = $analyzer->analyze(
+                        documentPath: $localPath,
+                        question: $question['question'] ?? '',
+                        regulationRef: $question['article'] ?? ($question['regulation_ref'] ?? ''),
+                        orgId: $orgId,
+                    );
+                    $newListForQ[] = array_merge($result->toArray(), [
+                        'analyzed_at' => now()->toIso8601String(),
+                        'attachment_path' => $attachmentPath,
+                    ]);
+                    $stats['analyzed']++;
+                } catch (\Throwable $e) {
+                    $newListForQ[] = [
+                        'status' => 'unsure',
+                        'analysis' => 'Gagal analisis: '.$e->getMessage(),
+                        'cited_passages' => [],
+                        'confidence' => 0,
+                        'analyzed_at' => now()->toIso8601String(),
+                        'attachment_path' => $attachmentPath,
+                    ];
+                    $stats['failed']++;
+                }
             }
 
-            try {
-                $result = $analyzer->analyze(
-                    documentPath: $localPath,
-                    question: $question['question'] ?? '',
-                    regulationRef: $question['article'] ?? ($question['regulation_ref'] ?? ''),
-                    orgId: $orgId,
-                );
-                $newAnalyses[$qId] = array_merge($result->toArray(), [
-                    'analyzed_at' => now()->toIso8601String(),
-                    'attachment_path' => $attachmentPath,
-                ]);
-                $stats['analyzed']++;
-            } catch (\Throwable $e) {
-                $newAnalyses[$qId] = [
-                    'status' => 'unsure',
-                    'analysis' => 'Gagal analisis: '.$e->getMessage(),
-                    'cited_passages' => [],
-                    'confidence' => 0,
-                    'analyzed_at' => now()->toIso8601String(),
-                    'attachment_path' => $attachmentPath,
-                ];
-                $stats['failed']++;
+            if (! empty($newListForQ)) {
+                $newAnalyses[$qId] = $newListForQ;
             }
         }
 
-        $assessment->update(['ai_analyses' => $newAnalyses]);
+        // Recompute skor pakai AI verdicts baru — verdict AI bisa override
+        // jawaban user di calculateScore. Jadi user lihat skor terupdate
+        // tepat setelah bulk analisis selesai.
+        $result = GapAssessment::calculateScore(
+            $assessment->answers ?? [],
+            $assessment->regulation_code ?? 'uupdp',
+            $newAnalyses
+        );
+        $assessment->update([
+            'ai_analyses' => $newAnalyses,
+            'overall_score' => $result['overall_score'],
+            'compliance_level' => $result['compliance_level'],
+            'recommendations' => $result['recommendations'],
+        ]);
 
         $msg = "Bulk analisis selesai: {$stats['analyzed']} baru, {$stats['cached']} cache, {$stats['skipped']} skip, {$stats['failed']} gagal.";
         if ($creditsExhausted) {
