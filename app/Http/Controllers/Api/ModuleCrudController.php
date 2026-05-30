@@ -109,7 +109,40 @@ class ModuleCrudController extends Controller
      * - With category + custom number: `ROPA-HR-PAY-001` — custom_number
      *   is inserted as an extra segment; category counter still advances.
      */
-    private function nextCode(string $prefix, $model, string $orgId, ?string $categoryId = null, ?string $customNumber = null): string
+    /**
+     * Resolve division code untuk RoPA registration number prefix.
+     * Sumber prioritas:
+     *   1. wizard_data.detail_pemrosesan.divisi_penanggung_jawab → cari
+     *      Department by name + ambil .code (mis. "HR Division" → "HR").
+     *   2. wizard_data.detail_pemrosesan.divisi (legacy single).
+     *   3. column `division` di payload (legacy lebih lama).
+     * Return null kalau tidak ada Department yang match (atau code-nya kosong),
+     * sehingga nextCode fallback ke legacy ROPA-YYYY-NNN.
+     */
+    private function resolveDivisionCodeForRopa(array $data, ?string $orgId): ?string
+    {
+        if (! $orgId) return null;
+        $wiz = $data['wizard_data'] ?? null;
+        $wiz = is_array($wiz) ? $wiz : (is_string($wiz) ? (json_decode($wiz, true) ?: []) : []);
+        $detail = $wiz['detail_pemrosesan'] ?? [];
+        $candidates = [
+            $detail['divisi_penanggung_jawab'] ?? null,
+            $detail['divisi'] ?? null,
+            $data['division'] ?? null,
+        ];
+        foreach ($candidates as $name) {
+            if (! is_string($name) || trim($name) === '') continue;
+            $dept = \App\Models\Department::where('org_id', $orgId)
+                ->where('name', $name)
+                ->first();
+            if ($dept && ! empty($dept->code)) {
+                return (string) $dept->code;
+            }
+        }
+        return null;
+    }
+
+    private function nextCode(string $prefix, $model, string $orgId, ?string $categoryId = null, ?string $customNumber = null, ?string $divisionCode = null): string
     {
         $year = date('Y');
 
@@ -128,7 +161,40 @@ class ModuleCrudController extends Controller
             }
         }
 
-        // Legacy fallback — no category selected
+        // Division-code-based numbering (RoPA modal sekarang nge-skip
+        // ProcessingCategory dan langsung pakai kode divisi penanggung
+        // jawab — mis. "HR" → ROPA-HR-2026-001). Counter per (prefix,
+        // divcode, year) di-derived dari max+1 pattern.
+        $cleanDiv = $divisionCode ? preg_replace('/[^A-Za-z0-9]/', '', strtoupper($divisionCode)) : null;
+        if ($cleanDiv) {
+            $codeColumn = match ($prefix) {
+                'ROPA', 'DPIA' => 'registration_number',
+                'DSR' => 'request_id',
+                'CNT' => 'collection_id',
+                'BRC' => 'incident_code',
+                default => 'registration_number',
+            };
+            $pattern = $prefix.'-'.$cleanDiv.'-'.$year.'-%';
+            $codes = $model->withTrashed()
+                ->where('org_id', $orgId)
+                ->where($codeColumn, 'like', $pattern)
+                ->pluck($codeColumn)
+                ->toArray();
+            $maxNum = 0;
+            foreach ($codes as $code) {
+                $num = (int) substr($code, strrpos($code, '-') + 1);
+                if ($num > $maxNum) $maxNum = $num;
+            }
+            $next = $maxNum + 1;
+            $segments = [$prefix, $cleanDiv, $year];
+            if ($customNumber !== null && $customNumber !== '') {
+                $segments[] = preg_replace('/[^A-Za-z0-9]/', '', strtoupper($customNumber));
+            }
+            $segments[] = str_pad((string) $next, 3, '0', STR_PAD_LEFT);
+            return implode('-', array_filter($segments, fn ($s) => $s !== ''));
+        }
+
+        // Legacy fallback — no category, no division code
         $pattern = $prefix.'-'.$year.'-%';
 
         $codeColumn = match ($prefix) {
@@ -488,10 +554,15 @@ class ModuleCrudController extends Controller
             // Auto-generate codes
             switch ($module) {
                 case 'ropa':
+                    // Resolve division code dari divisi penanggung jawab
+                    // (wizard_data → divisi_penanggung_jawab → Department.code)
+                    // sebagai pengganti kategori pemrosesan.
+                    $divCode = $this->resolveDivisionCodeForRopa($data, $orgId = $data['org_id']);
                     $data['registration_number'] = $data['registration_number'] ?? $this->nextCode(
-                        'ROPA', $model, $data['org_id'],
+                        'ROPA', $model, $orgId,
                         $data['category_id'] ?? null,
-                        $data['custom_number'] ?? null
+                        $data['custom_number'] ?? null,
+                        $divCode
                     );
                     // Auto-risk from 7-step wizard triggers (Sprint E1).
                     $data = $this->applyRopaAutoRisk($data);
