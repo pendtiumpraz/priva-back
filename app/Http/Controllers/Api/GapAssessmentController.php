@@ -765,18 +765,54 @@ class GapAssessmentController extends Controller
 
     private function resolveAttachmentPath(GapAssessment $assessment, string $relativePath): ?string
     {
-        $candidates = [
-            storage_path('app/public/'.ltrim($relativePath, '/')),
-            storage_path('app/'.ltrim($relativePath, '/')),
-        ];
+        $rel = ltrim($relativePath, '/');
 
-        foreach ($candidates as $candidate) {
+        // Layer 1: local public / app disk — fast path saat tenant pakai
+        // storage lokal di-server yang sama dengan PHP-FPM.
+        $localCandidates = [
+            storage_path('app/public/'.$rel),
+            storage_path('app/'.$rel),
+        ];
+        foreach ($localCandidates as $candidate) {
             if (is_file($candidate) && is_readable($candidate)) {
                 return $candidate;
             }
         }
 
-        return null;
+        // Layer 2: tenant disk (S3 / GCS / dll). File diunduh ke temp file
+        // supaya analyzer (smalot/pdfparser/PhpWord/PhpSpreadsheet) yang
+        // butuh local filesystem path bisa baca. Temp file dibiarkan ke
+        // OS untuk cleanup — pakai sys_get_temp_dir.
+        try {
+            $org = Organization::find($assessment->org_id);
+            if (! $org) {
+                return null;
+            }
+            /** @var TenantStorageService $svc */
+            $svc = app(TenantStorageService::class);
+            $disk = $svc->getDisk($org);
+            if (! $disk->exists($rel)) {
+                return null;
+            }
+            $contents = $disk->get($rel);
+            if ($contents === null || $contents === '') {
+                return null;
+            }
+            $ext = pathinfo($rel, PATHINFO_EXTENSION) ?: 'bin';
+            $tmpDir = sys_get_temp_dir();
+            $tmpPath = $tmpDir.DIRECTORY_SEPARATOR.'gap_evidence_'.substr(hash('sha256', $rel), 0, 16).'.'.$ext;
+            if (file_put_contents($tmpPath, $contents) === false) {
+                return null;
+            }
+            return $tmpPath;
+        } catch (\Throwable $e) {
+            \Log::warning('[GAP resolveAttachmentPath] tenant disk fetch failed', [
+                'org_id' => $assessment->org_id,
+                'path' => $rel,
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
     }
 
     // =============================================
