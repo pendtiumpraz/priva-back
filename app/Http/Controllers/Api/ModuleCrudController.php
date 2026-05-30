@@ -155,6 +155,54 @@ class ModuleCrudController extends Controller
         return $prefix.'-'.$year.'-'.str_pad($maxNum + 1, 3, '0', STR_PAD_LEFT);
     }
 
+    /**
+     * RoPA per-user/divisi access scope. Non-admin/non-DPO hanya lihat RoPA:
+     *   (a) assign_group='(All Group)' atau null — terbuka untuk semua user
+     *       di tenant yang sama (tenant boundary tetap via org_id),
+     *   (b) user.id ada di kolom JSON assignees,
+     *   (c) user.department.name ada di
+     *       wizard_data.detail_pemrosesan.divisi_list (multi-divisi baru)
+     *       ATAU wizard_data.detail_pemrosesan.divisi (single legacy)
+     *       ATAU kolom `division` lama,
+     *   (d) creator (created_by = user.id) — pembuat selalu bisa lihat.
+     *
+     * Admin/superadmin/DPO bypass (terlihat semua di tenant). Tenant boundary
+     * tetap dijaga oleh getQuery() — query ini hanya menambah WHERE, tidak
+     * pernah melonggarkan org_id constraint.
+     */
+    private function applyRopaUserScope($query, Request $request, string $module): void
+    {
+        if ($module !== 'ropa') return;
+        $user = $request->user();
+        if (! $user) return;
+        $role = $user->role ?? '';
+        $tenantRoleName = optional($user->tenantRole)->name;
+        $isAdminish = in_array($role, ['superadmin', 'admin', 'dpo'], true)
+            || in_array(strtolower((string) $tenantRoleName), ['admin', 'dpo'], true);
+        if ($isAdminish) return;
+
+        $userId = $user->id;
+        $deptName = optional($user->department)->name;
+
+        $query->where(function ($w) use ($userId, $deptName) {
+            // (a) All-group
+            $w->where(function ($a) {
+                $a->whereNull('assign_group')
+                  ->orWhere('assign_group', '(All Group)');
+            });
+            // (b) Explicit assignee
+            $w->orWhereJsonContains('assignees', $userId);
+            // (d) Creator
+            $w->orWhere('created_by', $userId);
+            // (c) Divisi user terlibat di RoPA
+            if ($deptName) {
+                $w->orWhereJsonContains('wizard_data->detail_pemrosesan->divisi_list', $deptName);
+                $w->orWhere('wizard_data->detail_pemrosesan->divisi', $deptName);
+                $w->orWhere('division', $deptName);
+            }
+        });
+    }
+
     private function getQuery(Request $request, string $module)
     {
         $model = $this->getModel($module);
@@ -337,6 +385,8 @@ class ModuleCrudController extends Controller
         if ($request->get('status')) {
             $query->where('status', $request->get('status'));
         }
+
+        $this->applyRopaUserScope($query, $request, $module);
 
         // Basic search if 'q' is provided
         if ($request->filled('q')) {
@@ -714,6 +764,11 @@ class ModuleCrudController extends Controller
             $query->with(['app:id,name,app_code']);
         }
 
+        // Scope filter sama dengan list — supaya user tidak bisa bypass
+        // dengan hit /m/ropa/{id} langsung untuk record yang seharusnya
+        // tidak boleh ia akses.
+        $this->applyRopaUserScope($query, $request, $module);
+
         $record = $query->findOrFail($id);
 
         // Sprint C1: attach tenant custom field definitions for RoPA / DPIA
@@ -740,7 +795,11 @@ class ModuleCrudController extends Controller
         if ($denied = $this->checkPermission($request, $module, 'write')) {
             return $denied;
         }
-        $record = $this->getQuery($request, $module)->findOrFail($id);
+        $query = $this->getQuery($request, $module);
+        // Apply scope yang sama dengan index/show — kalau user tidak bisa
+        // lihat record-nya, tidak boleh update juga (cegah enumeration ID).
+        $this->applyRopaUserScope($query, $request, $module);
+        $record = $query->findOrFail($id);
 
         // Auto-append timeline + fire notifications for breach status changes.
         if ($module === 'breach' && $request->has('status') && $record->status !== $request->input('status')) {
@@ -962,7 +1021,9 @@ class ModuleCrudController extends Controller
         if ($denied = $this->checkPermission($request, $module, 'write')) {
             return $denied;
         }
-        $this->getQuery($request, $module)->findOrFail($id)->delete();
+        $q = $this->getQuery($request, $module);
+        $this->applyRopaUserScope($q, $request, $module);
+        $q->findOrFail($id)->delete();
 
         return response()->json(['message' => 'Moved to trash']);
     }
@@ -975,7 +1036,9 @@ class ModuleCrudController extends Controller
         if ($denied = $this->checkPermission($request, $module, 'write')) {
             return $denied;
         }
-        $record = $this->getQuery($request, $module)->onlyTrashed()->findOrFail($id);
+        $q = $this->getQuery($request, $module)->onlyTrashed();
+        $this->applyRopaUserScope($q, $request, $module);
+        $record = $q->findOrFail($id);
         $record->restore();
 
         return response()->json(['message' => 'Restored', 'data' => $record]);
@@ -989,7 +1052,9 @@ class ModuleCrudController extends Controller
         if ($denied = $this->checkPermission($request, $module, 'write')) {
             return $denied;
         }
-        $this->getQuery($request, $module)->onlyTrashed()->findOrFail($id)->forceDelete();
+        $q = $this->getQuery($request, $module)->onlyTrashed();
+        $this->applyRopaUserScope($q, $request, $module);
+        $q->findOrFail($id)->forceDelete();
 
         return response()->json(['message' => 'Permanently deleted']);
     }
