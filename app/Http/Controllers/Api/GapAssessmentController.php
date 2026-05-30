@@ -305,7 +305,6 @@ class GapAssessmentController extends Controller
 
         $assessment = GapAssessment::findOrFail($id);
         $answers = $request->input('answers');
-        $attachmentsInput = $request->input('attachments', []);
         $finalize = (bool) $request->input('finalize', false);
 
         $result = GapAssessment::calculateScore($answers, $assessment->regulation_code ?? 'uupdp');
@@ -317,12 +316,20 @@ class GapAssessmentController extends Controller
 
         $update = [
             'answers' => $answers,
-            'attachments' => $attachmentsInput,
             'overall_score' => $result['overall_score'],
             'compliance_level' => $result['compliance_level'],
             'progress' => $progress,
             'recommendations' => $result['recommendations'],
         ];
+
+        // Attachments di-update HANYA kalau client kirim eksplisit. Sebelumnya
+        // request tanpa key `attachments` default ke [] dan overwrite kolom
+        // attachments di DB jadi kosong — bikin evidence yang sudah di-upload
+        // hilang setelah Save. uploadEvidence sudah append attachment langsung
+        // ke kolom, jadi submitAnswers default-nya tidak boleh sentuh.
+        if ($request->has('attachments') && $request->input('attachments') !== null) {
+            $update['attachments'] = $request->input('attachments', []);
+        }
 
         // Hanya tombol "Selesaikan" yang mark assessment sebagai final
         // (set finalized_at). Tidak pernah un-finalize via endpoint ini —
