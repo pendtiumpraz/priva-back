@@ -29,9 +29,13 @@ class CrossBorderController extends Controller
     public function index(Request $request)
     {
         $orgId = $request->user()->org_id;
+        // Respect ?per_page (clamp 1..200). TIA source picker minta 200 supaya
+        // semua CBDT muncul; tanpa ini hardcoded 15 memotong daftar.
+        $perPage = (int) $request->query('per_page', 15);
+        $perPage = max(1, min($perPage, 200));
         $transfers = CrossBorderTransfer::where('org_id', $orgId)
             ->orderBy('created_at', 'desc')
-            ->paginate(15);
+            ->paginate($perPage);
 
         return response()->json($transfers);
     }
