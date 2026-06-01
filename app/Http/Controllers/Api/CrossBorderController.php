@@ -60,6 +60,16 @@ class CrossBorderController extends Controller
             Log::warning('Auto-TIA on CrossBorder store failed (non-fatal): '.$e->getMessage());
         }
 
+        try {
+            \App\Services\NotificationService::dispatch(
+                kind: 'info', severity: 'medium', module: 'cross-border',
+                type: 'cross_border.created', recipient: 'role:dpo,admin', orgId: $transfer->org_id,
+                title: 'Transfer lintas negara baru: '.($transfer->destination_country ?? ''),
+                body: ($transfer->transfer_purpose ?? 'Cross-border transfer').' — wajib TIA (Pasal 56 UU PDP).',
+                actionUrl: '/cross-border', metadata: ['record_id' => $transfer->id],
+            );
+        } catch (\Throwable $e) { Log::warning('cross_border.created notif failed: '.$e->getMessage()); }
+
         return response()->json([
             'message' => 'Data transfer berhasil didaftarkan',
             'data' => $transfer,
@@ -91,6 +101,15 @@ class CrossBorderController extends Controller
             ApprovalWorkflowDispatcher::dispatch(
                 $transfer->org_id, 'cross_border', $transfer->id
             );
+            try {
+                \App\Services\NotificationService::dispatch(
+                    kind: 'warning', severity: 'medium', module: 'cross-border',
+                    type: 'cross_border.submitted', recipient: 'role:dpo,admin', orgId: $transfer->org_id,
+                    title: 'Transfer lintas negara menunggu approval: '.($transfer->destination_country ?? ''),
+                    body: ($transfer->transfer_purpose ?? '').' — perlu sign-off compliance.',
+                    actionUrl: '/cross-border', metadata: ['record_id' => $transfer->id],
+                );
+            } catch (\Throwable $e) { Log::warning('cross_border.submitted notif failed: '.$e->getMessage()); }
         }
 
         return response()->json(['message' => 'Data transfer berhasil diperbarui', 'data' => $transfer->fresh()]);

@@ -974,7 +974,7 @@ class ModuleCrudController extends Controller
                     severity: $severity,
                     module: 'breach',
                     type: "breach.status.{$newStatus}",
-                    recipient: 'role:dpo',
+                    recipient: 'role:dpo,admin',
                     orgId: $record->org_id,
                     title: "Breach {$record->incident_code}: {$oldBreachStatus} → {$newStatus}",
                     body: $body,
@@ -1027,6 +1027,32 @@ class ModuleCrudController extends Controller
             $payload['wizard_data'] = $merged['wizard_data'];
         }
         $record->update($payload);
+
+        // Status-change notification untuk ropa/dpia/dsr ke DPO + admin tenant.
+        // (breach sudah ditangani di blok timeline khusus di atas.)
+        if (in_array($module, ['ropa', 'dpia', 'dsr'], true)
+            && array_key_exists('status', $payload)
+            && $payload['status'] !== $oldStatus
+        ) {
+            try {
+                $label = ['ropa' => 'RoPA', 'dpia' => 'DPIA', 'dsr' => 'DSR'][$module];
+                $code = $record->registration_number ?? $record->request_id ?? '';
+                $newStatus = (string) $payload['status'];
+                // approved/rejected = lebih penting → warning; lainnya info.
+                $sev = in_array($newStatus, ['approved', 'rejected', 'waiting'], true) ? 'medium' : 'low';
+                NotificationService::dispatch(
+                    kind: $newStatus === 'rejected' ? 'warning' : 'info',
+                    severity: $sev, module: $module, type: "{$module}.status.{$newStatus}",
+                    recipient: 'role:dpo,admin', orgId: $record->org_id,
+                    title: "{$label} {$code}: status → {$newStatus}",
+                    body: ($oldStatus ?? '-')." → {$newStatus}",
+                    actionUrl: "/{$module}/{$record->id}",
+                    metadata: ['record_id' => $record->id, 'old_status' => $oldStatus, 'new_status' => $newStatus],
+                );
+            } catch (\Throwable $e) {
+                \Log::warning("{$module} status notif failed: ".$e->getMessage());
+            }
+        }
 
         // Sync RoPA ↔ Information System pivot (many-to-many).
         if ($module === 'ropa') {
