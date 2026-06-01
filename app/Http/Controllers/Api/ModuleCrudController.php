@@ -686,7 +686,10 @@ class ModuleCrudController extends Controller
                         );
                     }
                 }
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
+                // \Throwable (bukan cuma \Exception) supaya \Error dari
+                // provider misconfig (mis. credential AI/SMTP/Telegram) tidak
+                // bubble ke outer catch dan menggagalkan create record.
                 \Log::warning('Notification dispatch failed on create: '.$e->getMessage());
             }
 
@@ -808,13 +811,21 @@ class ModuleCrudController extends Controller
                 'auto_lia_id' => $autoLiaId ?? null,
                 'auto_scope_count' => $autoScopeCount,
             ], 201);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            // Catch \Throwable (bukan cuma \Exception) supaya \Error juga
+            // tertangani — jangan biarkan Laravel handler render full message
+            // ke client saat APP_DEBUG=true.
             \Log::error('ModuleCrud store error: '.$e->getMessage(), [
                 'module' => $module,
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            return response()->json(['message' => 'Error: '.$e->getMessage()], 500);
+            // JANGAN bocorkan raw exception message ke client — pesan dari
+            // provider (AI/SMTP/Telegram) sering memuat API key / credential.
+            // Detail lengkap sudah masuk ke log server untuk ops follow-up.
+            return response()->json([
+                'message' => 'Gagal menyimpan data. Silakan coba lagi atau hubungi admin bila berlanjut.',
+            ], 500);
         }
     }
 

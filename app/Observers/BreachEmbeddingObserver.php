@@ -88,13 +88,20 @@ class BreachEmbeddingObserver
                 : $breach->notification_deadline,
         ];
 
-        EmbedRecordJob::dispatch(
-            (string) $breach->org_id,
-            'breach',
-            (string) $breach->id,
-            $content,
-            $metadata,
-        );
+        // Wrap dispatch — kalau QUEUE_CONNECTION=sync, job jalan inline dan
+        // sebuah credential error embedding bisa bubble ke domain create.
+        // Embedding adalah bookkeeping; tidak boleh menggagalkan create breach.
+        try {
+            EmbedRecordJob::dispatch(
+                (string) $breach->org_id,
+                'breach',
+                (string) $breach->id,
+                $content,
+                $metadata,
+            );
+        } catch (Throwable $e) {
+            report($e);
+        }
 
         return null;
     }
