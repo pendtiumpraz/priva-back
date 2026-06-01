@@ -51,10 +51,21 @@ class SecurityHeaders
             $response->headers->set('Strict-Transport-Security', $hstsValue);
         }
 
-        // Frame options
-        $frameOptions = (string) config('security.headers.frame_options', 'SAMEORIGIN');
-        if (in_array(strtoupper($frameOptions), ['DENY', 'SAMEORIGIN'], true)) {
-            $response->headers->set('X-Frame-Options', strtoupper($frameOptions));
+        // Live preview sandbox pages (/preview/dsr-widget, /preview/consent-banner)
+        // SENGAJA dirancang untuk di-embed via iframe dari dashboard tenant —
+        // yang sering beda origin dengan backend. X-Frame-Options: SAMEORIGIN
+        // + CSP frame-ancestors 'self' akan memblokir iframe cross-origin
+        // ("refused to connect"). Halaman ini publik & read-only (cuma resolve
+        // embed_token untuk menampilkan widget), jadi tidak ada aksi ter-auth
+        // yang bisa di-clickjack — aman untuk dibuka embedding-nya.
+        $isPreviewSandbox = $request->is('preview/*');
+
+        // Frame options — skip untuk preview sandbox supaya bisa di-iframe.
+        if (! $isPreviewSandbox) {
+            $frameOptions = (string) config('security.headers.frame_options', 'SAMEORIGIN');
+            if (in_array(strtoupper($frameOptions), ['DENY', 'SAMEORIGIN'], true)) {
+                $response->headers->set('X-Frame-Options', strtoupper($frameOptions));
+            }
         }
 
         // Referrer policy
@@ -81,6 +92,19 @@ class SecurityHeaders
             if (stripos($contentType, 'text/html') !== false) {
                 $cspValue = (string) config('security.headers.csp_html_value', '');
                 if ($cspValue !== '') {
+                    // Preview sandbox: relax frame-ancestors jadi '*' supaya
+                    // dashboard cross-origin boleh nge-embed. Directive lain
+                    // (script-src dll) tetap dipertahankan.
+                    if ($isPreviewSandbox) {
+                        $cspValue = preg_replace(
+                            "/frame-ancestors[^;]*;?/i",
+                            'frame-ancestors *;',
+                            $cspValue
+                        );
+                        if (stripos($cspValue, 'frame-ancestors') === false) {
+                            $cspValue = rtrim($cspValue, '; ').'; frame-ancestors *;';
+                        }
+                    }
                     $response->headers->set('Content-Security-Policy', $cspValue);
                 }
             }
