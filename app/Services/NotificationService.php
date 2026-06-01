@@ -297,13 +297,27 @@ class NotificationService
             return $user ? [$user] : [];
         }
         if (str_starts_with($spec, 'role:')) {
-            $role = substr($spec, 5);
-            $q = User::where('role', $role);
+            // Dukung multi-role: "role:dpo,admin" → notify DPO DAN admin tenant.
+            // Match legacy `role` column ATAU nama tenant_role (custom role
+            // yang nama-nya mengandung kata kunci, mis. "DPO Senior") supaya
+            // user dengan custom role compliance tetap dapat notifikasi.
+            $roles = array_filter(array_map('trim', explode(',', substr($spec, 5))));
+            if (empty($roles)) {
+                return [];
+            }
+            $q = User::query()->where(function ($w) use ($roles) {
+                $w->whereIn('role', $roles)
+                    ->orWhereHas('tenantRole', function ($tr) use ($roles) {
+                        foreach ($roles as $r) {
+                            $tr->orWhereRaw('LOWER(name) LIKE ?', ['%'.strtolower($r).'%']);
+                        }
+                    });
+            });
             if ($orgId) {
                 $q->where('org_id', $orgId);
             }
 
-            return $q->get()->all();
+            return $q->get()->unique('id')->values()->all();
         }
         if (str_starts_with($spec, 'org:')) {
             $id = substr($spec, 4);

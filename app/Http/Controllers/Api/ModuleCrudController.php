@@ -690,19 +690,44 @@ class ModuleCrudController extends Controller
 
             // ===== Notification hooks on create =====
             try {
-                // Breach: any new incident is a critical alert to the DPO team.
+                // Breach: any new incident is a critical alert to DPO + admin tenant.
                 if ($module === 'breach') {
                     NotificationService::dispatch(
                         kind: 'alert',
                         severity: 'critical',
                         module: 'breach',
                         type: 'breach.created',
-                        recipient: 'role:dpo',
+                        recipient: 'role:dpo,admin',
                         orgId: $record->org_id,
                         title: "🚨 Insiden baru: {$record->incident_code}",
                         body: ($record->description ?? 'Data breach detected').' — 72 jam untuk notifikasi.',
                         actionUrl: "/breach/{$record->id}",
                         metadata: ['record_id' => $record->id, 'incident_code' => $record->incident_code]
+                    );
+                }
+                // Modul tenant lain: info notification "record baru dibuat" ke
+                // DPO + admin tenant supaya mereka aware tanpa harus polling
+                // list. Hanya untuk modul yang punya code identitas.
+                $moduleNotifMeta = [
+                    'ropa' => ['label' => 'RoPA', 'sev' => 'low'],
+                    'dpia' => ['label' => 'DPIA', 'sev' => 'medium'],
+                    'dsr' => ['label' => 'DSR', 'sev' => 'medium'],
+                    'consent' => ['label' => 'Consent Point', 'sev' => 'low'],
+                ];
+                if (isset($moduleNotifMeta[$module])) {
+                    $m = $moduleNotifMeta[$module];
+                    $code = $record->registration_number ?? $record->request_id ?? $record->collection_id ?? $record->incident_code ?? '';
+                    NotificationService::dispatch(
+                        kind: 'info',
+                        severity: $m['sev'],
+                        module: $module,
+                        type: "{$module}.created",
+                        recipient: 'role:dpo,admin',
+                        orgId: $record->org_id,
+                        title: "{$m['label']} baru dibuat".($code ? ": {$code}" : ''),
+                        body: $record->processing_activity ?? $record->description ?? $record->name ?? $record->requester_name ?? '',
+                        actionUrl: "/{$module}/{$record->id}",
+                        metadata: ['record_id' => $record->id]
                     );
                 }
                 // RoPA with assignees → per-user info notification.
