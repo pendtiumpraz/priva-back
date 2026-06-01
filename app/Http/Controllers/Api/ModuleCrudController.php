@@ -478,7 +478,10 @@ class ModuleCrudController extends Controller
 
         // Add relationship counts for consent module
         if ($module === 'consent') {
-            $query->withCount(['items', 'records']);
+            // records_count diisi dari relasi logs() (tabel consent_logs) —
+            // sumber data records yang sebenarnya. Relasi records() lama
+            // (consent_records) hampir selalu kosong → count 0 di list.
+            $query->withCount(['items', 'logs as records_count']);
         }
 
         // Eager-load DSR app for list view (used by /dsr page App column + filter)

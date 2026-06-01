@@ -784,33 +784,52 @@ class ExportController extends Controller
     {
         $orgId = $request->user()->role === 'superadmin' ? null : $request->user()->org_id;
 
-        $query = ConsentRecord::query()
-            ->join('consent_collection_points', 'consent_records.collection_point_id', '=', 'consent_collection_points.id')
-            ->join('consent_items', 'consent_records.consent_item_id', '=', 'consent_items.id');
+        // Real consent records hidup di tabel consent_logs (model ConsentLog,
+        // FK collection_id), bukan consent_records legacy yang join lama
+        // selalu kosong. Optional filter ?collection_id= untuk export per
+        // collection point.
+        $query = \App\Models\ConsentLog::query()
+            ->join('consent_collection_points', 'consent_logs.collection_id', '=', 'consent_collection_points.id');
 
         if ($orgId) {
             $query->where('consent_collection_points.org_id', $orgId);
         }
+        if ($request->filled('collection_id')) {
+            $query->where('consent_logs.collection_id', $request->collection_id);
+        }
 
         $records = $query->select(
-            'consent_records.*',
-            'consent_collection_points.name as cp_name',
-            'consent_items.title as item_title'
-        )->orderBy('consent_records.created_at', 'desc')->limit(5000)->get();
+            'consent_logs.*',
+            'consent_collection_points.name as cp_name'
+        )->orderBy('consent_logs.created_at', 'desc')->limit(5000)->get();
 
         $headers = [
-            'Collection Point', 'Consent Item', 'Subject ID', 'Subject Name',
-            'Channel', 'Granted', 'IP Address',
-            'Granted At', 'Revoked At', 'Revoke Reason',
+            'Collection Point', 'Subject Identifier', 'Policy Version',
+            'Consented Items', 'IP Address', 'User Agent', 'Tercatat Pada',
         ];
 
-        $rows = $records->map(fn ($r) => [
-            $r->cp_name, $r->item_title, $r->subject_identifier, $r->subject_name ?? '-',
-            $r->channel, $r->is_granted ? 'Ya' : 'Tidak', $r->ip_address ?? '-',
-            $r->granted_at?->format('Y-m-d H:i') ?? '-',
-            $r->revoked_at?->format('Y-m-d H:i') ?? '-',
-            $r->revoke_reason ?? '-',
-        ]);
+        $rows = $records->map(function ($r) {
+            // consented_items bisa array of id (legacy) atau map id→bool.
+            $ci = $r->consented_items;
+            if (is_array($ci)) {
+                $isAssoc = array_keys($ci) !== range(0, count($ci) - 1);
+                $consented = $isAssoc
+                    ? collect($ci)->filter(fn ($v) => (bool) $v)->keys()->implode(', ')
+                    : implode(', ', $ci);
+            } else {
+                $consented = (string) $ci;
+            }
+
+            return [
+                $r->cp_name,
+                $r->user_identifier ?? '-',
+                'v'.($r->policy_version ?? '1.0'),
+                $consented ?: '-',
+                $r->ip_address ?? '-',
+                $r->user_agent ? mb_substr($r->user_agent, 0, 120) : '-',
+                optional($r->created_at)->format('Y-m-d H:i') ?? '-',
+            ];
+        });
 
         return $this->streamCsv('consent_records_export_'.date('Y-m-d').'.csv', $headers, $rows);
     }

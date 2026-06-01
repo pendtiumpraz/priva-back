@@ -149,6 +149,18 @@ class ConsentCollectionPoint extends Model
     }
 
     /**
+     * Consent logs (identifiable consent capture) — tabel `consent_logs`,
+     * FK `collection_id`. INI sumber data "Records" yang sebenarnya
+     * (public capture + CS manual). Berbeda dari relasi records() di atas
+     * yang menunjuk tabel legacy `consent_records` (FK collection_point_id)
+     * dan biasanya kosong — itu kenapa records_count dulu selalu 0.
+     */
+    public function logs()
+    {
+        return $this->hasMany(ConsentLog::class, 'collection_id');
+    }
+
+    /**
      * Many-to-many: 1 collection point (banner) bisa terkait banyak RoPA
      * (cookie banner cover analytics + marketing + cross-border transfer activity).
      */
