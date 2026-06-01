@@ -219,6 +219,23 @@ class DataDiscoveryController extends Controller
             'engine' => $engine,
         ], 'system');
 
+        // Notif DPO + admin tenant saat scan selesai. Warning kalau ada
+        // temuan PDP/PII, info kalau bersih.
+        try {
+            $hasAlerts = ($pdpCount + $piiCount) > 0;
+            \App\Services\NotificationService::dispatch(
+                kind: $hasAlerts ? 'warning' : 'info',
+                severity: $hasAlerts ? 'high' : 'low',
+                module: 'data-discovery', type: 'data_discovery.scan_completed',
+                recipient: 'role:dpo,admin', orgId: $system->org_id,
+                title: "Scan selesai: {$system->name}",
+                body: $hasAlerts
+                    ? "Ditemukan {$pdpCount} alert PDP + {$piiCount} kolom PII dari ".count($tables).' tabel.'
+                    : 'Tidak ada temuan PII signifikan dari '.count($tables).' tabel.',
+                actionUrl: "/data-discovery", metadata: ['record_id' => $system->id],
+            );
+        } catch (\Throwable $e) { \Log::warning('data_discovery.scan_completed notif failed: '.$e->getMessage()); }
+
         // Phase 3b — re-materialize posture findings now that scan changed.
         // Wrapped so a finding-side bug can't fail the scan response.
         $findingsResult = null;

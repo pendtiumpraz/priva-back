@@ -263,6 +263,16 @@ class MaturityController extends Controller
             'overall_level' => $assessment->overall_level,
         ], 'manual');
 
+        try {
+            \App\Services\NotificationService::dispatch(
+                kind: 'info', severity: 'medium', module: 'maturity',
+                type: 'maturity.submitted', recipient: 'role:dpo,admin', orgId: $assessment->org_id,
+                title: 'Maturity Assessment disubmit: '.($assessment->title ?? ''),
+                body: 'Skor '.$assessment->overall_score.'/10 — Level '.$assessment->levelLabel().'.',
+                actionUrl: "/maturity", metadata: ['record_id' => $assessment->id],
+            );
+        } catch (\Throwable $e) { \Log::warning('maturity.submitted notif failed: '.$e->getMessage()); }
+
         return response()->json([
             'message' => 'Submitted. Score: ' . $assessment->overall_score . ' / 10 — Level ' . $assessment->levelLabel(),
             'data' => $assessment->fresh(),

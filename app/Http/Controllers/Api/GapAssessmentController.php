@@ -346,6 +346,21 @@ class GapAssessmentController extends Controller
 
         $assessment->update($update);
 
+        // Notif ke DPO + admin tenant saat assessment diselesaikan.
+        if ($finalize) {
+            try {
+                \App\Services\NotificationService::dispatch(
+                    kind: 'info', severity: 'medium', module: 'gap-assessment',
+                    type: 'gap.finalized', recipient: 'role:dpo,admin',
+                    orgId: $assessment->org_id,
+                    title: "GAP Assessment selesai: {$assessment->version}",
+                    body: 'Skor '.round((float) $assessment->overall_score).'% — tingkat '.($assessment->compliance_level ?? '-').'.',
+                    actionUrl: "/gap-assessment",
+                    metadata: ['record_id' => $assessment->id],
+                );
+            } catch (\Throwable $e) { \Log::warning('gap.finalized notif failed: '.$e->getMessage()); }
+        }
+
         return response()->json([
             'message' => $finalize ? 'Assessment finalized.' : 'Answers saved.',
             'data' => $assessment->fresh(),

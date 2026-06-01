@@ -391,6 +391,19 @@ class VendorRiskController extends Controller
         $vendor->next_assessment_due_at = $scorer->nextDueDate($result['risk_level']);
         $vendor->save();
 
+        // Notif ke DPO + admin tenant — severity ikut tingkat risiko hasil asesmen.
+        try {
+            $sev = in_array($result['risk_level'], ['high', 'critical'], true) ? 'high' : 'low';
+            \App\Services\NotificationService::dispatch(
+                kind: in_array($result['risk_level'], ['high', 'critical'], true) ? 'warning' : 'info',
+                severity: $sev, module: 'vendor-risk', type: 'vendor.assessed',
+                recipient: 'role:dpo,admin', orgId: $vendor->org_id,
+                title: "Asesmen pihak ketiga selesai: {$vendor->vendor_name}",
+                body: 'Skor '.$result['score'].'/100 — risiko '.strtoupper($result['risk_level']).'.',
+                actionUrl: "/vendor-risk", metadata: ['record_id' => $vendor->id],
+            );
+        } catch (\Throwable $e) { \Log::warning('vendor.assessed notif failed: '.$e->getMessage()); }
+
         return response()->json([
             'message' => 'Assessment selesai. Skor: '.$result['score'].'/100 ('.strtoupper($result['risk_level']).').',
             'data' => [

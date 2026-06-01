@@ -215,6 +215,16 @@ class LiaController extends Controller
             'maker_id' => $record->maker_id,
         ], 'manual');
 
+        try {
+            \App\Services\NotificationService::dispatch(
+                kind: 'warning', severity: 'medium', module: 'lia',
+                type: 'lia.submitted', recipient: 'role:dpo,admin', orgId: $record->org_id,
+                title: "LIA menunggu review: {$record->lia_code}",
+                body: ($record->title ?? 'Legitimate Interest Assessment').' — perlu Checker/Approver.',
+                actionUrl: "/lia/{$record->id}", metadata: ['record_id' => $record->id],
+            );
+        } catch (\Throwable $e) { \Log::warning('lia.submitted notif failed: '.$e->getMessage()); }
+
         return response()->json([
             'message' => 'Submitted to Checker / Approver. The record is now read-only.',
             'data' => $record->fresh(),
@@ -306,6 +316,16 @@ class LiaController extends Controller
                 'balancing' => $record->conclusion_balancing,
             ],
         ], 'manual');
+
+        try {
+            \App\Services\NotificationService::dispatch(
+                kind: 'info', severity: 'medium', module: 'lia',
+                type: 'lia.approved', recipient: 'role:dpo,admin', orgId: $record->org_id,
+                title: "LIA disetujui: {$record->lia_code}",
+                body: 'Verdict keseluruhan: '.$record->overallVerdict().'.',
+                actionUrl: "/lia/{$record->id}", metadata: ['record_id' => $record->id],
+            );
+        } catch (\Throwable $e) { \Log::warning('lia.approved notif failed: '.$e->getMessage()); }
 
         return response()->json([
             'message' => 'LIA approved. Overall verdict: '.$record->overallVerdict(),

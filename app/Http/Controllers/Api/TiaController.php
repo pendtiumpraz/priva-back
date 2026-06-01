@@ -285,6 +285,16 @@ class TiaController extends Controller
             'risk_level' => $record->riskLevel(),
         ], 'manual');
 
+        try {
+            \App\Services\NotificationService::dispatch(
+                kind: 'warning', severity: 'medium', module: 'tia',
+                type: 'tia.submitted', recipient: 'role:dpo,admin', orgId: $record->org_id,
+                title: "TIA menunggu review: {$record->tia_code}",
+                body: 'Skor risiko '.round((float) $record->overall_risk_score, 1).' ('.$record->riskLevel().') — perlu Checker/Approver.',
+                actionUrl: "/tia/{$record->id}", metadata: ['record_id' => $record->id],
+            );
+        } catch (\Throwable $e) { \Log::warning('tia.submitted notif failed: '.$e->getMessage()); }
+
         return response()->json([
             'message' => 'Submitted to Checker / Approver. Read-only now.',
             'data' => $record->fresh(),
@@ -358,6 +368,16 @@ class TiaController extends Controller
             'verdict' => $record->conclusion_verdict,
             'overall_risk_score' => $record->overall_risk_score,
         ], 'manual');
+
+        try {
+            \App\Services\NotificationService::dispatch(
+                kind: 'info', severity: 'medium', module: 'tia',
+                type: 'tia.approved', recipient: 'role:dpo,admin', orgId: $record->org_id,
+                title: "TIA disetujui ({$record->conclusion_verdict}): {$record->tia_code}",
+                body: 'Verdict: '.$record->conclusion_verdict.' · skor risiko '.round((float) $record->overall_risk_score, 1).'.',
+                actionUrl: "/tia/{$record->id}", metadata: ['record_id' => $record->id],
+            );
+        } catch (\Throwable $e) { \Log::warning('tia.approved notif failed: '.$e->getMessage()); }
 
         return response()->json([
             'message' => 'TIA approved with verdict: '.$record->conclusion_verdict,
