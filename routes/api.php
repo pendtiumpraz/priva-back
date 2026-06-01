@@ -595,31 +595,36 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // =============================================
     Route::prefix('vendor-risk')->group(function () {
         // Phase 2 — Deterministic questionnaire endpoints. Must precede /{id}.
-        Route::get('/categories', [VendorRiskController::class, 'listCategories']);
-        Route::get('/questionnaire/{category}', [VendorRiskController::class, 'getQuestionnaire']);
-        Route::post('/assess-deterministic', [VendorRiskController::class, 'assessDeterministic']);                  // create + assess in one call
-        Route::post('/{id}/assess-deterministic', [VendorRiskController::class, 'assessDeterministic']);             // re-assess existing
+        // Read endpoints: butuh vendor_risk,read.
+        Route::get('/categories', [VendorRiskController::class, 'listCategories'])->middleware('permission:vendor_risk,read');
+        Route::get('/questionnaire/{category}', [VendorRiskController::class, 'getQuestionnaire'])->middleware('permission:vendor_risk,read');
+        // Create/assess endpoints: butuh vendor_risk,write. Sebelumnya TANPA
+        // gate sama sekali — bikin permission model TPRM inkonsisten dengan
+        // screening/intake yang sudah di-gate, dan bingung kenapa role yang
+        // diberi vendor_risk:write tetap "Akses ditolak" di sebagian aksi.
+        Route::post('/assess-deterministic', [VendorRiskController::class, 'assessDeterministic'])->middleware('permission:vendor_risk,write');  // create + assess in one call
+        Route::post('/{id}/assess-deterministic', [VendorRiskController::class, 'assessDeterministic'])->middleware('permission:vendor_risk,write'); // re-assess existing
 
-        Route::get('/trashed', [VendorRiskController::class, 'trashed']);
-        Route::get('/', [VendorRiskController::class, 'index']);
-        Route::post('/', [VendorRiskController::class, 'store']);
-        Route::get('/{id}', [VendorRiskController::class, 'show']);
-        Route::put('/{id}', [VendorRiskController::class, 'update']);
-        Route::delete('/{id}', [VendorRiskController::class, 'destroy']);
-        Route::post('/{id}/restore', [VendorRiskController::class, 'restore']);
-        Route::delete('/{id}/force', [VendorRiskController::class, 'forceDelete']);
-        Route::post('/{id}/submit-for-approval', [VendorRiskController::class, 'submitForApproval']);
+        Route::get('/trashed', [VendorRiskController::class, 'trashed'])->middleware('permission:vendor_risk,read');
+        Route::get('/', [VendorRiskController::class, 'index'])->middleware('permission:vendor_risk,read');
+        Route::post('/', [VendorRiskController::class, 'store'])->middleware('permission:vendor_risk,write');
+        Route::get('/{id}', [VendorRiskController::class, 'show'])->middleware('permission:vendor_risk,read');
+        Route::put('/{id}', [VendorRiskController::class, 'update'])->middleware('permission:vendor_risk,write');
+        Route::delete('/{id}', [VendorRiskController::class, 'destroy'])->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/restore', [VendorRiskController::class, 'restore'])->middleware('permission:vendor_risk,write');
+        Route::delete('/{id}/force', [VendorRiskController::class, 'forceDelete'])->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/submit-for-approval', [VendorRiskController::class, 'submitForApproval'])->middleware('permission:vendor_risk,write');
         // AI Assessment (existing — parallel path to deterministic)
-        Route::post('/extract', [VendorRiskController::class, 'extract']);
-        Route::post('/generate-questions', [VendorRiskController::class, 'generateQuestions']);
-        Route::post('/assess', [VendorRiskController::class, 'assess']);
+        Route::post('/extract', [VendorRiskController::class, 'extract'])->middleware('permission:vendor_risk,write');
+        Route::post('/generate-questions', [VendorRiskController::class, 'generateQuestions'])->middleware('permission:vendor_risk,write');
+        Route::post('/assess', [VendorRiskController::class, 'assess'])->middleware('permission:vendor_risk,write');
 
         // Sprint D3: TPRM document management
-        Route::post('/{id}/documents', [VendorRiskController::class, 'uploadDocument']);
-        Route::delete('/{id}/documents/{docId}', [VendorRiskController::class, 'deleteDocument']);
-        Route::post('/{id}/screen-documents', [VendorRiskController::class, 'screenDocuments']);
+        Route::post('/{id}/documents', [VendorRiskController::class, 'uploadDocument'])->middleware('permission:vendor_risk,write');
+        Route::delete('/{id}/documents/{docId}', [VendorRiskController::class, 'deleteDocument'])->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/screen-documents', [VendorRiskController::class, 'screenDocuments'])->middleware('permission:vendor_risk,write');
         // Re-assessment (manual override atau AI re-run) — legacy path
-        Route::post('/{id}/reassess', [VendorRiskController::class, 'reassess']);
+        Route::post('/{id}/reassess', [VendorRiskController::class, 'reassess'])->middleware('permission:vendor_risk,write');
 
         // Sprint G.6 — Generate public assessment link untuk pihak ketiga
         Route::post('/{id}/generate-public-link', [VendorRiskController::class, 'generatePublicLink'])
