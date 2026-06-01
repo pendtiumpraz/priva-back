@@ -623,7 +623,40 @@ class ModuleCrudController extends Controller
                     break;
             }
 
-            $record = $model->create($data);
+            // Create dengan retry pada unique-code collision. Dua create
+            // hampir-bersamaan (double submit, atau dari tab/user berbeda)
+            // bisa menghitung registration_number/request_id/incident_code/
+            // collection_id yang sama dari max+1 → unique violation
+            // (SQLSTATE 23000). Regenerate code lalu coba lagi (maks 3x).
+            $codeField = match ($module) {
+                'ropa', 'dpia' => 'registration_number',
+                'dsr' => 'request_id',
+                'consent' => 'collection_id',
+                'breach' => 'incident_code',
+                default => null,
+            };
+            $codePrefix = match ($module) {
+                'ropa' => 'ROPA', 'dpia' => 'DPIA', 'dsr' => 'DSR',
+                'consent' => 'CNT', 'breach' => 'BRC', default => null,
+            };
+            $record = null;
+            for ($attempt = 0; $attempt < 3; $attempt++) {
+                try {
+                    $record = $model->create($data);
+                    break;
+                } catch (\Illuminate\Database\QueryException $qe) {
+                    // 23000 = integrity constraint violation (incl. duplicate entry).
+                    $isDup = $qe->getCode() === '23000'
+                        || str_contains($qe->getMessage(), 'Duplicate entry')
+                        || str_contains($qe->getMessage(), 'UNIQUE constraint');
+                    if ($isDup && $codeField && $codePrefix && $attempt < 2) {
+                        // Regenerate hanya untuk modul yang pakai legacy prefix-year code.
+                        $data[$codeField] = $this->nextCode($codePrefix, $model, $data['org_id']);
+                        continue;
+                    }
+                    throw $qe;
+                }
+            }
 
             // Sync RoPA ↔ Information System pivot on create
             if ($module === 'ropa') {
