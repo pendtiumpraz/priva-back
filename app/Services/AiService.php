@@ -1308,10 +1308,14 @@ class AiService
         $system = "Kamu adalah Database Administrator Ahli (Dialect: {$dialect}).\n"
                 ."Tugasmu adalah menghasilkan query SQL READ-ONLY murni untuk mencari entitas spesifik yang diminta user berdasarkan skema.\n"
                 ."Output WAJIB berupa JSON valid.\n\n"
+                ."ATURAN PENCOCOKAN MUTLAK:\n"
+                ."- Gunakan HANYA operator sama-dengan exact: `col = 'nilai'`.\n"
+                ."- DILARANG memakai LIKE / ILIKE / wildcard `%` / `_`. Pencarian DSR harus exact match (identifier subjek: email, NIK, no. HP — persis, bukan partial).\n"
+                ."- Untuk beberapa kandidat nilai, pakai `col IN ('a','b')`, bukan LIKE.\n\n"
                 ."FORMAT OUTPUT JSON:\n"
                 .json_encode([
                     'sql_queries' => [
-                        "SELECT * FROM table1 WHERE col1 LIKE '%keyword%';",
+                        "SELECT * FROM table1 WHERE col1 = 'nilai_exact';",
                         "SELECT a.* FROM table2 a JOIN table3 b ON a.fk = b.id WHERE b.col2 = 'exact';",
                     ],
                 ], JSON_PRETTY_PRINT);
@@ -1321,6 +1325,7 @@ class AiService
               ."Instruksi pencarian DSR: \"{$prompt}\"\n\n"
               ."Hasilkan maksimal 3 query SQL yang paling optimal untuk menemukan data tersebut.\n"
               ."PENTING: Hanya gunakan SELECT. JANGAN gunakan UPDATE, DELETE, INSERT, DROP.\n"
+              ."WAJIB exact match (`col = 'nilai'`) — JANGAN pakai LIKE / ILIKE / wildcard.\n"
               .'Keluarkan HANYA output JSON valid.';
 
         return $this->ask($system, $user, 1500);
