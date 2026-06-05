@@ -9,6 +9,7 @@ use App\Models\VendorScreening;
 use App\Services\VendorScreening\AiContextPresets;
 use App\Services\VendorScreening\VendorScreeningService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -87,7 +88,7 @@ class VendorScreeningController extends Controller
             ]);
         }
 
-        // Async mode — bikin row pending, dispatch job, return 202
+        // Async mode — bikin row pending lalu antrian job, return 202.
         $screening = VendorScreening::create([
             'id' => (string) Str::uuid(),
             'org_id' => $orgId,
@@ -96,6 +97,32 @@ class VendorScreeningController extends Controller
             'sources_used' => $sources,
             'status' => VendorScreening::STATUS_PENDING,
         ]);
+
+        // FALLBACK SINKRON (vendor tunggal): kalau queue worker terdeteksi
+        // tidak men-drain antrian (mis. `php artisan queue:work` tidak jalan),
+        // job async akan menggantung di tabel `jobs` selamanya → FE polling
+        // timeout & hasil kosong. Untuk single vendor (user sedang menunggu di
+        // halaman) lebih baik jalankan job inline supaya hasil langsung jadi.
+        // `dispatchSync` mengeksekusi handle() yang SAMA persis (bikin/isi hasil,
+        // mark failed on error) sehingga tidak ada duplikasi logika. Bulk screen
+        // (`bulkScreen`) tetap async — di sana user tidak menunggu sinkron.
+        if ($this->queueWorkerLikelyDown()) {
+            @set_time_limit(0); // screening AI bisa >30s; cegah PHP mematikan request
+            ProcessVendorScreeningJob::dispatchSync(
+                $screening->id,
+                $vendor->id,
+                $orgId,
+                $sources,
+                $request->user()->id,
+                $preset,
+            );
+
+            return response()->json([
+                'message' => 'Screening selesai (mode sinkron — queue worker tidak terdeteksi).',
+                'data' => $this->presentBrief($screening->fresh()),
+                'sync_fallback' => true,
+            ], 200);
+        }
 
         ProcessVendorScreeningJob::dispatch(
             $screening->id,
@@ -110,6 +137,49 @@ class VendorScreeningController extends Controller
             'message' => 'Screening dijadwalkan, status akan diperbarui di background.',
             'data' => $this->presentBrief($screening),
         ], 202);
+    }
+
+    /**
+     * Heuristik ringan: apakah queue worker kemungkinan TIDAK jalan?
+     *
+     * Sinyal: ada job di tabel `jobs` yang belum pernah di-reserve worker
+     * (`reserved_at IS NULL`) dan sudah lebih tua dari ambang detik tertentu →
+     * indikasi kuat tidak ada worker yang men-drain antrian. Dipakai untuk
+     * memutuskan fallback sinkron pada screening vendor tunggal.
+     *
+     * Aman by design: hanya berlaku untuk koneksi queue yang butuh worker
+     * (bukan `sync`); kalau pengecekan gagal → kembalikan false (alur async
+     * normal, tidak mengganggu). Override paksa via env VENDOR_SCREENING_FORCE_SYNC.
+     */
+    private function queueWorkerLikelyDown(): bool
+    {
+        if (filter_var(env('VENDOR_SCREENING_FORCE_SYNC', false), FILTER_VALIDATE_BOOLEAN)) {
+            return true;
+        }
+
+        $conn = config('queue.default');
+        if ($conn === 'sync') {
+            return false; // koneksi sync sudah jalan inline, tidak perlu fallback
+        }
+
+        // Heuristik hanya andal untuk driver database (punya tabel `jobs`).
+        if ($conn !== 'database') {
+            return false;
+        }
+
+        try {
+            $staleSeconds = (int) env('QUEUE_WORKER_STALE_SECONDS', 20);
+            $cutoff = now()->subSeconds($staleSeconds)->getTimestamp();
+
+            return DB::table('jobs')
+                ->whereNull('reserved_at')
+                ->where('created_at', '<=', $cutoff)
+                ->exists();
+        } catch (\Throwable $e) {
+            \Log::warning('queueWorkerLikelyDown check failed: '.$e->getMessage());
+
+            return false;
+        }
     }
 
     /**
