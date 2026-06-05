@@ -254,6 +254,37 @@ class WizardSchemaService
         ])->values()->toArray();
     }
 
+    /**
+     * State field BUILT-IN untuk dipakai wizard render (gating visibility +
+     * label override) TANPA mengubah tampilan. Keyed by field_name:
+     *   { is_active: bool, label: string|null, sort_order: int }
+     *
+     * Org yang BELUM di-seed → map kosong → FE default semua field aktif
+     * (tampilan normal seperti sekarang). Org yang sudah edit di Master Schema
+     * → wizard menghormati toggle aktif/nonaktif + label yang diubah.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function getBuiltInFieldStates(string $orgId, string $module): array
+    {
+        $rows = ModuleCustomField::forOrg($orgId)
+            ->forModule($module)
+            ->where('origin', 'built_in')
+            ->get(['field_name', 'field_label', 'is_active', 'sort_order', 'section_key']);
+
+        $out = [];
+        foreach ($rows as $r) {
+            $out[$r->field_name] = [
+                'is_active' => (bool) $r->is_active,
+                'label' => $r->field_label,
+                'sort_order' => (int) $r->sort_order,
+                'section_key' => $r->section_key,
+            ];
+        }
+
+        return $out;
+    }
+
     /** Apakah org sudah punya schema built-in ter-materialize untuk module ini? */
     public function isSeeded(string $orgId, string $module): bool
     {

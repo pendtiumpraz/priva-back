@@ -31,6 +31,9 @@ class WizardSchemaController extends Controller
 
         return response()->json([
             'data' => $this->schema->getSchema($orgId, $module),
+            // State field built-in (aktif/label) untuk gating wizard tanpa ubah
+            // tampilan. Kosong = org belum kustomisasi → semua field aktif.
+            'built_in_fields' => $this->schema->getBuiltInFieldStates($orgId, $module),
         ]);
     }
 
