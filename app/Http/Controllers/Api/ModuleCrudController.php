@@ -919,6 +919,7 @@ class ModuleCrudController extends Controller
         if (in_array($module, ['ropa', 'dpia'], true)) {
             $customFields = ModuleCustomField::where('org_id', $request->user()->org_id)
                 ->forModule($module)
+                ->where('origin', '!=', 'built_in')
                 ->active()
                 ->orderBy('sort_order')
                 ->get();

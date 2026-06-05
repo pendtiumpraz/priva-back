@@ -35,6 +35,27 @@ class WizardSchemaController extends Controller
     }
 
     /**
+     * Schema lengkap untuk EDITOR Master Schema (semua field built-in + custom,
+     * aktif + nonaktif). Auto-seed default kalau org belum punya.
+     */
+    public function editor(Request $request, string $module): JsonResponse
+    {
+        if (! in_array($module, WizardSchemaService::SUPPORTED_MODULES, true)) {
+            return response()->json(['message' => 'Invalid module'], 422);
+        }
+        $user = $request->user();
+        $orgId = $user?->org_id;
+        if (! $orgId) {
+            return response()->json(['message' => 'Tenant context missing.'], 403);
+        }
+        if (! $this->canManageSchema($user)) {
+            return response()->json(['message' => 'Tidak punya izin mengelola schema.'], 403);
+        }
+
+        return response()->json(['data' => $this->schema->getEditorSchema($orgId, $module)]);
+    }
+
+    /**
      * Reset schema module ke default kanonik: hapus semua kustomisasi org
      * (built-in override + custom) lalu seed ulang dari RopaDefaultSchema.
      * Hanya untuk role pengelola schema (admin/dpo/root/superadmin) atau

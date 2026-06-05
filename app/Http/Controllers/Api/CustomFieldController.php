@@ -73,8 +73,11 @@ class CustomFieldController extends Controller
             return response()->json(['message' => 'Invalid module'], 422);
         }
 
+        // Editor lama hanya kelola field custom (origin != built_in). Field
+        // built_in dikelola lewat endpoint /wizard-schema/{module}/editor.
         $fields = ModuleCustomField::where('org_id', $request->user()->org_id)
             ->forModule($module)
+            ->where('origin', '!=', 'built_in')
             ->orderBy('sort_order')
             ->get();
 
@@ -230,6 +233,13 @@ class CustomFieldController extends Controller
             'section_key' => ['sometimes', 'string', 'max:64', 'regex:'.self::FIELD_NAME_REGEX],
         ]);
 
+        // Field bawaan widget-locked (origin=built_in & widget!=null): perilaku
+        // di-hardcode di komponen React. Hanya boleh ubah label / aktif / urut /
+        // wajib — tipe, opsi, dan pindah-section DILARANG.
+        if ($field->origin === 'built_in' && $field->widget !== null) {
+            unset($data['field_type'], $data['field_options'], $data['section_key']);
+        }
+
         $effectiveType = $data['field_type'] ?? $field->field_type;
         $effectiveOptions = array_key_exists('field_options', $data) ? $data['field_options'] : $field->field_options;
         if ($err = $this->validateOptionsForType($effectiveType, $effectiveOptions)) {
@@ -252,6 +262,15 @@ class CustomFieldController extends Controller
         }
 
         $field = ModuleCustomField::forOrg($request->user()->org_id)->findOrFail($id);
+
+        // Field bawaan tidak boleh dihapus — gunakan nonaktifkan/sembunyikan.
+        // Reset-to-default yang mengembalikannya.
+        if ($field->origin === 'built_in') {
+            return response()->json([
+                'message' => 'Field bawaan tidak bisa dihapus. Nonaktifkan field ini sebagai gantinya.',
+            ], 422);
+        }
+
         $snapshot = $field->only(['module', 'section_key', 'field_name']);
         $field->delete();
 

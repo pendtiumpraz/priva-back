@@ -74,8 +74,14 @@ class WizardSchemaService
 
         $builtinKeys = self::BUILTIN_SECTION_KEYS[$module] ?? [];
 
+        // PENTING: render wizard saat ini HANYA menampilkan field CUSTOM
+        // (origin != built_in). Field built_in yang sudah di-materialize (untuk
+        // editor/reset) sengaja DIKECUALIKAN di sini supaya tidak menduplikasi
+        // field hardcoded yang masih dirender FE. Saat fase render generik aktif,
+        // filter ini dilonggarkan + field hardcoded FE dihapus.
         $allCustomFields = ModuleCustomField::forOrg($orgId)
             ->forModule($module)
+            ->where('origin', '!=', 'built_in')
             ->active()
             ->orderBy('sort_order')
             ->orderBy('created_at')
@@ -84,6 +90,7 @@ class WizardSchemaService
 
         $orgSections = ModuleCustomSection::forOrg($orgId)
             ->forModule($module)
+            ->where('origin', '!=', 'built_in')
             ->active()
             ->orderBy('sort_order')
             ->orderBy('created_at')
@@ -181,6 +188,7 @@ class WizardSchemaService
     {
         return ModuleCustomField::forOrg($orgId)
             ->forModule($module)
+            ->where('origin', '!=', 'built_in')
             ->active()
             ->orderBy('section_key')
             ->orderBy('sort_order')
@@ -198,6 +206,53 @@ class WizardSchemaService
     // field hardcoded yang masih dirender FE. Aman dipanggil; efek nyata baru
     // muncul saat fase render generik aktif.
     // ===================================================================
+
+    /**
+     * Schema lengkap untuk EDITOR (Master Schema): SEMUA section + field
+     * (built_in & custom, aktif & nonaktif) dengan metadata penuh
+     * (origin, widget, is_active, options). Auto-seed default kalau org belum
+     * punya built-in rows. Terpisah dari getSchema() (render wizard) supaya
+     * editor bisa kelola built-in tanpa mengubah render wizard saat ini.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getEditorSchema(string $orgId, string $module): array
+    {
+        if ($module === \App\Support\Schema\RopaDefaultSchema::MODULE && ! $this->isSeeded($orgId, $module)) {
+            $this->seedDefaults($orgId, $module);
+        }
+
+        $sections = ModuleCustomSection::forOrg($orgId)->forModule($module)
+            ->orderBy('sort_order')->orderBy('created_at')->get();
+        $fields = ModuleCustomField::forOrg($orgId)->forModule($module)
+            ->orderBy('sort_order')->orderBy('created_at')->get()
+            ->groupBy('section_key');
+
+        return $sections->map(fn (ModuleCustomSection $s) => [
+            'id' => $s->id,
+            'section_key' => $s->section_key,
+            'section_label' => $s->section_label,
+            'origin' => $s->origin,
+            'is_active' => (bool) $s->is_active,
+            'sort_order' => (int) $s->sort_order,
+            'fields' => ($fields->get($s->section_key) ?? collect())->map(fn (ModuleCustomField $f) => [
+                'id' => $f->id,
+                'field_name' => $f->field_name,
+                'field_label' => $f->field_label,
+                'field_type' => $f->field_type,
+                'widget' => $f->widget,
+                'origin' => $f->origin,
+                'field_options' => $f->field_options,
+                'help_text' => $f->help_text,
+                'is_required' => (bool) $f->is_required,
+                'is_active' => (bool) $f->is_active,
+                'sort_order' => (int) $f->sort_order,
+                // Field built-in dgn widget != null: tipe & nama dikunci
+                // (perilaku di-hardcode di komponen React).
+                'locked' => $f->origin === 'built_in' && $f->widget !== null,
+            ])->values()->toArray(),
+        ])->values()->toArray();
+    }
 
     /** Apakah org sudah punya schema built-in ter-materialize untuk module ini? */
     public function isSeeded(string $orgId, string $module): bool
