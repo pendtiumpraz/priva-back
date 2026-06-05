@@ -24,7 +24,7 @@ class ModuleCustomSection extends Model
     use BelongsToOrg, HasUuids, SoftDeletes;
 
     protected $fillable = [
-        'org_id', 'module', 'section_key', 'section_label',
+        'org_id', 'module', 'origin', 'section_key', 'section_label',
         'description', 'sort_order', 'is_active',
     ];
 

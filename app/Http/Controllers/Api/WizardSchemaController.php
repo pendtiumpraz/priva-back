@@ -33,4 +33,54 @@ class WizardSchemaController extends Controller
             'data' => $this->schema->getSchema($orgId, $module),
         ]);
     }
+
+    /**
+     * Reset schema module ke default kanonik: hapus semua kustomisasi org
+     * (built-in override + custom) lalu seed ulang dari RopaDefaultSchema.
+     * Hanya untuk role pengelola schema (admin/dpo/root/superadmin) atau
+     * permission wizard_schema:write / settings:write.
+     */
+    public function reset(Request $request, string $module): JsonResponse
+    {
+        if (! in_array($module, WizardSchemaService::SUPPORTED_MODULES, true)) {
+            return response()->json(['message' => 'Invalid module'], 422);
+        }
+
+        $user = $request->user();
+        $orgId = $user?->org_id;
+        if (! $orgId) {
+            return response()->json(['message' => 'Tenant context missing.'], 403);
+        }
+
+        if (! $this->canManageSchema($user)) {
+            return response()->json(['message' => 'Tidak punya izin mengelola schema.'], 403);
+        }
+
+        $this->schema->resetToDefault($orgId, $module);
+
+        \App\Models\AuditLog::log('wizard_schema', $module, 'schema.reset', ['module' => $module]);
+
+        return response()->json([
+            'message' => 'Schema dikembalikan ke default.',
+            'data' => $this->schema->getSchema($orgId, $module),
+        ]);
+    }
+
+    private function canManageSchema($user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+        if (in_array($user->role, ['root', 'superadmin', 'admin', 'dpo'], true)) {
+            return true;
+        }
+        $perms = $user->tenantRole?->permissions;
+        if (is_array($perms)) {
+            return in_array('*', $perms, true)
+                || in_array('wizard_schema:write', $perms, true)
+                || in_array('settings:write', $perms, true);
+        }
+
+        return false;
+    }
 }

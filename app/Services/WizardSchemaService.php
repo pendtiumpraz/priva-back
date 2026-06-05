@@ -188,4 +188,80 @@ class WizardSchemaService
             ->get()
             ->toArray();
     }
+
+    // ===================================================================
+    // Full schema-driven — seed & reset (Phase 1 fondasi)
+    //
+    // CATATAN: method ini MATERIALIZE default schema kanonik ke tabel
+    // module_custom_sections/fields dengan origin='built_in'. BELUM di-wire
+    // ke getSchema()/FE (itu fase render berikutnya) supaya tidak menduplikasi
+    // field hardcoded yang masih dirender FE. Aman dipanggil; efek nyata baru
+    // muncul saat fase render generik aktif.
+    // ===================================================================
+
+    /** Apakah org sudah punya schema built-in ter-materialize untuk module ini? */
+    public function isSeeded(string $orgId, string $module): bool
+    {
+        return ModuleCustomField::forOrg($orgId)
+            ->forModule($module)
+            ->where('origin', 'built_in')
+            ->exists();
+    }
+
+    /**
+     * Materialize default schema kanonik ke DB (idempotent). Hanya men-seed
+     * field/section built-in yang BELUM ada (tidak menyentuh custom milik org).
+     */
+    public function seedDefaults(string $orgId, string $module): void
+    {
+        if ($module !== \App\Support\Schema\RopaDefaultSchema::MODULE) {
+            return; // Phase 1: hanya RoPA
+        }
+
+        $sectionSort = 0;
+        foreach (\App\Support\Schema\RopaDefaultSchema::sections() as $section) {
+            ModuleCustomSection::firstOrCreate(
+                ['org_id' => $orgId, 'module' => $module, 'section_key' => $section['section_key']],
+                [
+                    'origin' => 'built_in',
+                    'section_label' => $section['section_label'],
+                    'sort_order' => $sectionSort,
+                    'is_active' => true,
+                ],
+            );
+
+            $fieldSort = 0;
+            foreach ($section['fields'] as $field) {
+                ModuleCustomField::firstOrCreate(
+                    ['org_id' => $orgId, 'module' => $module, 'field_name' => $field['field_name']],
+                    [
+                        'origin' => 'built_in',
+                        'section_key' => $section['section_key'],
+                        'field_label' => $field['field_label'],
+                        'field_type' => $field['field_type'],
+                        'widget' => $field['widget'],
+                        'field_options' => $field['field_options'],
+                        'is_required' => $field['is_required'],
+                        'sort_order' => $fieldSort,
+                        'is_active' => true,
+                    ],
+                );
+                $fieldSort += 10;
+            }
+            $sectionSort += 10;
+        }
+    }
+
+    /**
+     * Reset schema RoPA org ke default: hapus SEMUA section + field (built_in
+     * maupun custom) untuk (org, module), lalu seed ulang dari default kanonik.
+     * Force-delete supaya bersih (bukan soft-delete) agar unique constraint
+     * (org, module, field_name) tidak bentrok saat seed ulang.
+     */
+    public function resetToDefault(string $orgId, string $module): void
+    {
+        ModuleCustomField::forOrg($orgId)->forModule($module)->forceDelete();
+        ModuleCustomSection::forOrg($orgId)->forModule($module)->forceDelete();
+        $this->seedDefaults($orgId, $module);
+    }
 }

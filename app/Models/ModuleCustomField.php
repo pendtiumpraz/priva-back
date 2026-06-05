@@ -15,8 +15,8 @@ class ModuleCustomField extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
-        'org_id', 'module', 'section_key', 'field_name', 'field_label',
-        'field_type', 'field_options', 'help_text', 'is_required',
+        'org_id', 'module', 'origin', 'section_key', 'field_name', 'field_label',
+        'field_type', 'widget', 'field_options', 'help_text', 'is_required',
         'sort_order', 'is_active',
     ];
 

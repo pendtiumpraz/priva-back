@@ -1457,6 +1457,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // dynamic `/{id}` route or Laravel matches `reorder` as an id.
     // =============================================
     Route::get('/wizard-schema/{module}', [WizardSchemaController::class, 'show']);
+    Route::post('/wizard-schema/{module}/reset', [WizardSchemaController::class, 'reset']);
 
     Route::prefix('custom-sections')->group(function () {
         Route::get('/', [CustomSectionController::class, 'index']);
