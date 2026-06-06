@@ -267,12 +267,32 @@ class WizardSchemaService
      */
     public function getBuiltInFieldStates(string $orgId, string $module): array
     {
+        $out = [];
+
+        // Basis: daftar field default kanonik (semua aktif). Supaya FE selalu
+        // punya daftar field lengkap (utk gating + modal hide per-record) walau
+        // org belum pernah kustomisasi di Master Schema.
+        if ($module === \App\Support\Schema\RopaDefaultSchema::MODULE) {
+            $sort = 0;
+            foreach (\App\Support\Schema\RopaDefaultSchema::sections() as $sec) {
+                foreach ($sec['fields'] as $f) {
+                    $out[$f['field_name']] = [
+                        'is_active' => true,
+                        'label' => $f['field_label'],
+                        'sort_order' => $sort,
+                        'section_key' => $sec['section_key'],
+                    ];
+                    $sort += 10;
+                }
+            }
+        }
+
+        // Override dgn baris milik org (kalau sudah di-seed / dikustomisasi).
         $rows = ModuleCustomField::forOrg($orgId)
             ->forModule($module)
             ->where('origin', 'built_in')
             ->get(['field_name', 'field_label', 'is_active', 'sort_order', 'section_key']);
 
-        $out = [];
         foreach ($rows as $r) {
             $out[$r->field_name] = [
                 'is_active' => (bool) $r->is_active,
