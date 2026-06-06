@@ -1135,6 +1135,20 @@ class ModuleCrudController extends Controller
         if (! empty($newWizard) && is_array($newWizard)) {
             foreach ($newWizard as $sectionKey => $sectionData) {
                 $oldSection = $oldWizard[$sectionKey] ?? [];
+
+                // Per-record field customization (hide & reorder) — log sebagai
+                // entri history yang bersih, bukan diff field numerik.
+                if (in_array($sectionKey, ['hidden_fields', 'field_order'], true)) {
+                    if (json_encode($oldSection) !== json_encode($sectionData)) {
+                        $action = $sectionKey === 'hidden_fields' ? 'fields_hidden_changed' : 'fields_reordered';
+                        AuditLog::log($module, $record->id, $action, [
+                            $sectionKey => ['old' => $oldSection ?: null, 'new' => $sectionData ?: null],
+                        ], $sectionKey);
+                    }
+
+                    continue;
+                }
+
                 if (json_encode($oldSection) !== json_encode($sectionData)) {
                     // Find what changed
                     $changedFields = [];
