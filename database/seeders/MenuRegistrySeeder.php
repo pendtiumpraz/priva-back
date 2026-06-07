@@ -83,6 +83,7 @@ class MenuRegistrySeeder extends Seeder
             // Subject Rights
             ['menu_key' => 'dsr', 'label' => 'DSR Request', 'href' => '/dsr', 'icon' => 'UserCheck', 'section' => 'Subject Rights', 'sort' => 310, 'roles' => array_merge(['root'], self::EDITOR)],
             ['menu_key' => 'consent', 'label' => 'Consent Mgmt', 'href' => '/consent', 'icon' => 'FolderLock', 'section' => 'Subject Rights', 'sort' => 320, 'roles' => array_merge(['root'], self::EDITOR)],
+            ['menu_key' => 'cookie', 'label' => 'Cookie Mgmt', 'href' => '/cookie', 'icon' => 'Cookie', 'section' => 'Subject Rights', 'sort' => 330, 'roles' => array_merge(['root'], self::EDITOR)],
 
             // AI Enterprise (license-gated)
             ['menu_key' => 'ai-agent', 'label' => 'AI Agent', 'href' => '/ai-agent', 'icon' => 'Bot', 'section' => 'AI Enterprise', 'sort' => 410, 'roles' => self::ALL, 'packages' => self::PKG_AI_AGENT_ONLY],
