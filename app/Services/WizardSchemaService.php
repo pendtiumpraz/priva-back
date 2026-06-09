@@ -341,8 +341,10 @@ class WizardSchemaService
     }
 
     /**
-     * Materialize default schema kanonik ke DB (idempotent). Hanya men-seed
-     * field/section built-in yang BELUM ada (tidak menyentuh custom milik org).
+     * Materialize default schema kanonik ke DB via updateOrCreate (idempotent
+     * upsert). Section/field built-in disinkronkan ke definisi kanonik; field
+     * custom milik org (origin != built_in) tidak disentuh. Dipakai untuk seed
+     * awal maupun reset-to-default.
      */
     public function seedDefaults(string $orgId, string $module): void
     {
@@ -352,7 +354,7 @@ class WizardSchemaService
 
         $sectionSort = 0;
         foreach ($this->defaultSections($module) as $section) {
-            ModuleCustomSection::firstOrCreate(
+            ModuleCustomSection::updateOrCreate(
                 ['org_id' => $orgId, 'module' => $module, 'section_key' => $section['section_key']],
                 [
                     'origin' => 'built_in',
@@ -364,7 +366,7 @@ class WizardSchemaService
 
             $fieldSort = 0;
             foreach ($section['fields'] as $field) {
-                ModuleCustomField::firstOrCreate(
+                ModuleCustomField::updateOrCreate(
                     ['org_id' => $orgId, 'module' => $module, 'field_name' => $field['field_name']],
                     [
                         'origin' => 'built_in',
