@@ -54,6 +54,32 @@ class WizardSchemaService
     ];
 
     /**
+     * Map module → kelas default schema kanonik. Tambah modul baru di sini.
+     */
+    private const DEFAULT_SCHEMAS = [
+        'ropa' => \App\Support\Schema\RopaDefaultSchema::class,
+        'dpia' => \App\Support\Schema\DpiaDefaultSchema::class,
+    ];
+
+    /** Apakah module punya default schema kanonik untuk di-seed? */
+    private function hasDefaultSchema(string $module): bool
+    {
+        return isset(self::DEFAULT_SCHEMAS[$module]);
+    }
+
+    /**
+     * Section default kanonik untuk module (kosong kalau tak terdaftar).
+     *
+     * @return array<int, array{section_key:string, section_label:string, fields:array<int,array<string,mixed>>}>
+     */
+    private function defaultSections(string $module): array
+    {
+        $cls = self::DEFAULT_SCHEMAS[$module] ?? null;
+
+        return $cls ? $cls::sections() : [];
+    }
+
+    /**
      * Get the merged wizard schema for an org+module.
      *
      * Built-in sections are emitted with `source='built_in'` and `id=null`.
@@ -218,7 +244,7 @@ class WizardSchemaService
      */
     public function getEditorSchema(string $orgId, string $module): array
     {
-        if ($module === \App\Support\Schema\RopaDefaultSchema::MODULE && ! $this->isSeeded($orgId, $module)) {
+        if ($this->hasDefaultSchema($module) && ! $this->isSeeded($orgId, $module)) {
             $this->seedDefaults($orgId, $module);
         }
 
@@ -272,9 +298,9 @@ class WizardSchemaService
         // Basis: daftar field default kanonik (semua aktif). Supaya FE selalu
         // punya daftar field lengkap (utk gating + modal hide per-record) walau
         // org belum pernah kustomisasi di Master Schema.
-        if ($module === \App\Support\Schema\RopaDefaultSchema::MODULE) {
+        if ($this->hasDefaultSchema($module)) {
             $sort = 0;
-            foreach (\App\Support\Schema\RopaDefaultSchema::sections() as $sec) {
+            foreach ($this->defaultSections($module) as $sec) {
                 foreach ($sec['fields'] as $f) {
                     $out[$f['field_name']] = [
                         'is_active' => true,
@@ -320,12 +346,12 @@ class WizardSchemaService
      */
     public function seedDefaults(string $orgId, string $module): void
     {
-        if ($module !== \App\Support\Schema\RopaDefaultSchema::MODULE) {
-            return; // Phase 1: hanya RoPA
+        if (! $this->hasDefaultSchema($module)) {
+            return; // module tanpa default schema kanonik
         }
 
         $sectionSort = 0;
-        foreach (\App\Support\Schema\RopaDefaultSchema::sections() as $section) {
+        foreach ($this->defaultSections($module) as $section) {
             ModuleCustomSection::firstOrCreate(
                 ['org_id' => $orgId, 'module' => $module, 'section_key' => $section['section_key']],
                 [
