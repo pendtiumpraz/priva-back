@@ -108,6 +108,9 @@ class MaturityController extends Controller
                 MaturityQuestionResponse::SOURCE_AUTO_DERIVE,
                 MaturityQuestionResponse::SOURCE_DOCUMENT_AI,
             ])],
+            // Keterangan penyesuaian (provenance) — dipakai saat reviewer
+            // mengubah skor pada assessment yang SUDAH submitted.
+            'reason' => 'nullable|string|max:1000',
         ]);
 
         $assessment = MaturityAssessment::query()->findOrFail($id);
@@ -124,19 +127,52 @@ class MaturityController extends Controller
             return response()->json(['message' => 'Pertanyaan tidak ditemukan di set pertanyaan aktif organisasi.'], 422);
         }
 
-        DB::transaction(function () use ($assessment, $data, $question) {
+        $adjusted = null;
+        DB::transaction(function () use ($assessment, $data, $question, $request, &$adjusted) {
+            $attrs = [
+                'domain' => $question['domain'],
+                'score' => $data['score'],
+                'notes' => $data['notes'] ?? null,
+                'source' => $data['source'] ?? MaturityQuestionResponse::SOURCE_MANUAL,
+            ];
+
+            // Review window: assessment sudah submitted (belum published) +
+            // response sudah ada dengan skor BERBEDA → ini penyesuaian
+            // reviewer. Catat provenance di source_metadata (draft edits
+            // tetap seperti semula, tanpa metadata).
+            $existing = MaturityQuestionResponse::query()
+                ->where('assessment_id', $assessment->id)
+                ->where('question_code', $data['question_code'])
+                ->first();
+            if ($assessment->status === MaturityAssessment::STATUS_SUBMITTED
+                && $existing
+                && (int) $existing->score !== (int) $data['score']) {
+                $adjusted = $this->buildResponseAdjustmentMeta(
+                    $request,
+                    (int) $existing->score,
+                    (int) $data['score'],
+                    $data['reason'] ?? null,
+                );
+                $attrs['source'] = MaturityQuestionResponse::SOURCE_MANUAL;
+                $attrs['source_metadata'] = $adjusted;
+            }
+
             MaturityQuestionResponse::updateOrCreate(
                 ['assessment_id' => $assessment->id, 'question_code' => $data['question_code']],
-                [
-                    'domain' => $question['domain'],
-                    'score' => $data['score'],
-                    'notes' => $data['notes'] ?? null,
-                    'source' => $data['source'] ?? MaturityQuestionResponse::SOURCE_MANUAL,
-                ],
+                $attrs,
             );
             $assessment->recompute();
             $assessment->save();
         });
+
+        if ($adjusted) {
+            AuditLog::log('maturity', $assessment->id, 'response_adjusted', [
+                'question_code' => $data['question_code'],
+                'old_score' => $adjusted['old_score'],
+                'new_score' => $adjusted['new_score'],
+                'reason' => $adjusted['reason'],
+            ], 'manual');
+        }
 
         return response()->json(['message' => 'Response saved.', 'data' => $assessment->fresh()->load('responses')]);
     }
@@ -157,6 +193,9 @@ class MaturityController extends Controller
                 MaturityQuestionResponse::SOURCE_AUTO_DERIVE,
                 MaturityQuestionResponse::SOURCE_DOCUMENT_AI,
             ])],
+            // Keterangan penyesuaian (provenance) — satu reason untuk
+            // semua item yang skornya BERUBAH pada assessment submitted.
+            'reason' => 'nullable|string|max:1000',
         ]);
 
         $assessment = MaturityAssessment::query()->findOrFail($id);
@@ -170,28 +209,90 @@ class MaturityController extends Controller
         $questions = collect(MaturityQuestion::effectiveQuestions($assessment->org_id, $assessment->version ?? 'v1'))
             ->keyBy('question_code');
 
-        DB::transaction(function () use ($assessment, $data, $questions) {
+        // Review window: skor existing yang berubah saat status submitted
+        // dicatat sebagai penyesuaian reviewer (source_metadata.adjusted).
+        $isReviewWindow = $assessment->status === MaturityAssessment::STATUS_SUBMITTED;
+        $existingByCode = $isReviewWindow
+            ? MaturityQuestionResponse::query()
+                ->where('assessment_id', $assessment->id)
+                ->get()
+                ->keyBy('question_code')
+            : collect();
+        $adjustedItems = [];
+
+        DB::transaction(function () use ($assessment, $data, $questions, $request, $isReviewWindow, $existingByCode, &$adjustedItems) {
             foreach ($data['responses'] as $r) {
                 $q = $questions->get($r['question_code']);
                 if (!$q) continue;
+
+                $attrs = [
+                    'domain' => $q['domain'],
+                    'score' => $r['score'],
+                    'notes' => $r['notes'] ?? null,
+                    'source' => $r['source'] ?? MaturityQuestionResponse::SOURCE_MANUAL,
+                ];
+
+                $existing = $existingByCode->get($r['question_code']);
+                if ($isReviewWindow && $existing && (int) $existing->score !== (int) $r['score']) {
+                    $meta = $this->buildResponseAdjustmentMeta(
+                        $request,
+                        (int) $existing->score,
+                        (int) $r['score'],
+                        $data['reason'] ?? null,
+                    );
+                    $attrs['source'] = MaturityQuestionResponse::SOURCE_MANUAL;
+                    $attrs['source_metadata'] = $meta;
+                    $adjustedItems[] = [
+                        'question_code' => $r['question_code'],
+                        'old_score' => $meta['old_score'],
+                        'new_score' => $meta['new_score'],
+                    ];
+                }
+
                 MaturityQuestionResponse::updateOrCreate(
                     ['assessment_id' => $assessment->id, 'question_code' => $r['question_code']],
-                    [
-                        'domain' => $q['domain'],
-                        'score' => $r['score'],
-                        'notes' => $r['notes'] ?? null,
-                        'source' => $r['source'] ?? MaturityQuestionResponse::SOURCE_MANUAL,
-                    ],
+                    $attrs,
                 );
             }
             $assessment->recompute();
             $assessment->save();
         });
 
+        if (! empty($adjustedItems)) {
+            AuditLog::log('maturity', $assessment->id, 'response_adjusted', [
+                'adjustments' => $adjustedItems,
+                'reason' => $data['reason'] ?? null,
+            ], 'manual');
+        }
+
         return response()->json([
             'message' => 'Responses saved.',
             'data' => $assessment->fresh()->load('responses'),
         ]);
+    }
+
+    /**
+     * Build source_metadata provenance entry untuk penyesuaian skor oleh
+     * reviewer pada assessment submitted: siapa (nama + role), kapan,
+     * alasan, dan skor lama → baru. Ditampilkan FE sebagai badge
+     * "Manual — disesuaikan {nama} ({role})".
+     *
+     * @return array<string, mixed>
+     */
+    private function buildResponseAdjustmentMeta(Request $request, int $oldScore, int $newScore, ?string $reason): array
+    {
+        $user = $request->user();
+
+        return [
+            'adjusted' => true,
+            'old_score' => $oldScore,
+            'new_score' => $newScore,
+            'reason' => $reason,
+            'adjusted_by' => $user?->id,
+            'adjusted_by_name' => $user?->name,
+            'adjusted_by_role' => $user?->tenantRole->name ?? $user?->role,
+            'adjusted_at' => now()->toIso8601String(),
+        ];
     }
 
     /**

@@ -1351,6 +1351,10 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         // Workflow
         Route::post('/{id}/submit', [TiaController::class, 'submit']);
         Route::post('/{id}/check', [TiaController::class, 'check']);
+        // Score adjustment with provenance — Checker/Approver menyesuaikan
+        // skor metrik saat review window (submitted/checked), reason wajib.
+        // Tercatat append-only di score_adjustments[] + audit log.
+        Route::post('/{id}/adjust-metric', [TiaController::class, 'adjustMetric']);
         Route::post('/{id}/approve', [TiaController::class, 'approve']);
         Route::post('/{id}/reject', [TiaController::class, 'reject']);
         Route::post('/{id}/unlock', [TiaController::class, 'unlock']);

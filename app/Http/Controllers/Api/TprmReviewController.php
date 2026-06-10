@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Organization;
+use App\Models\User;
 use App\Models\Vendor;
 use App\Models\VendorAssessment;
 use App\Models\VendorAssessmentAdjustment;
@@ -151,6 +152,13 @@ class TprmReviewController extends Controller
             ->orderByDesc('adjusted_at')
             ->get();
 
+        // Provenance display: resolve nama user pelaku adjustment supaya FE
+        // bisa render badge "Manual — disesuaikan {nama} ({role})" (tabel
+        // adjustment menyimpan user_id + role + timestamp + before/after).
+        $adjusterNames = User::query()
+            ->whereIn('id', $adjustments->pluck('adjusted_by_user_id')->filter()->unique())
+            ->pluck('name', 'id');
+
         return response()->json([
             'data' => [
                 'assessment' => [
@@ -209,6 +217,7 @@ class TprmReviewController extends Controller
                     'after_note' => $a->after_note,
                     'reason' => $a->reason,
                     'adjusted_by_user_id' => $a->adjusted_by_user_id,
+                    'adjusted_by_name' => $adjusterNames[$a->adjusted_by_user_id] ?? null,
                     'adjusted_by_role' => $a->adjusted_by_role,
                     'adjusted_at' => $a->adjusted_at?->toIso8601String(),
                 ]),

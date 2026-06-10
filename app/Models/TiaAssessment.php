@@ -28,7 +28,7 @@ class TiaAssessment extends Model
         'rejection_reason', 'is_locked', 'unlocked_by', 'unlocked_at',
         'conclusion_verdict', 'conclusion_notes',
         'status', 'wizard_data', 'created_by',
-        'attachments', 'ai_analyses',
+        'attachments', 'ai_analyses', 'score_adjustments',
     ];
 
     protected $casts = [
@@ -39,6 +39,7 @@ class TiaAssessment extends Model
         'wizard_data' => 'array',
         'attachments' => 'array',
         'ai_analyses' => 'array',
+        'score_adjustments' => 'array',
         'supplementary_doc_ids' => 'array',
         'destination_has_pdp_law' => 'boolean',
         'destination_has_pdp_authority' => 'boolean',

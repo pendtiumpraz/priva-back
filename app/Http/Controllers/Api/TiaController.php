@@ -349,6 +349,115 @@ class TiaController extends Controller
         ]);
     }
 
+    /**
+     * POST /tia/{id}/adjust-metric — Score adjustment with provenance.
+     *
+     * Checker/Approver menyesuaikan skor satu metrik (naik ATAU turun)
+     * selama review window (status submitted/checked — sama dengan window
+     * check()/approve(); seperti kedua method itu, semua member org yang
+     * authenticated boleh memanggil). Keterangan (reason) WAJIB.
+     *
+     * Body: { metric_code, new_score (int 1-10 | null = hapus skor),
+     *         reason (required, max 1000) }
+     *
+     * Behavior:
+     *   - metric_code divalidasi terhadap effectiveMetrics org (default
+     *     aktif + override + custom).
+     *   - Skor lama dicatat, skor baru ditulis ke storage yang benar
+     *     (kolom dedicated untuk metrik default, JSON
+     *     risk_assessment.custom_metric_scores untuk metrik custom).
+     *   - Entry provenance di-APPEND ke score_adjustments[] (append-only;
+     *     latest entry per metric menang untuk display di FE).
+     *   - overall_risk_score di-recompute via computeOverallRisk() —
+     *     formula TIDAK berubah, hanya inputnya yang disesuaikan.
+     */
+    public function adjustMetric(Request $request, string $id)
+    {
+        $data = $request->validate([
+            'metric_code' => 'required|string|max:128',
+            'new_score' => 'nullable|integer|min:1|max:10',
+            'reason' => 'required|string|max:1000',
+        ]);
+
+        $record = TiaAssessment::query()->findOrFail($id);
+        if (! in_array($record->status, [TiaAssessment::STATUS_SUBMITTED, TiaAssessment::STATUS_CHECKED], true)) {
+            return response()->json([
+                'message' => "Penyesuaian skor hanya bisa dilakukan saat review (submitted/checked). Status sekarang: '{$record->status}'.",
+            ], 409);
+        }
+
+        $metric = collect(TiaAssessment::effectiveMetrics($record->org_id))
+            ->firstWhere('metric_code', $data['metric_code']);
+        if (! $metric) {
+            return response()->json(['message' => 'Metrik tidak ditemukan di set metrik aktif organisasi.'], 422);
+        }
+
+        $code = $data['metric_code'];
+        $newScore = array_key_exists('new_score', $data) ? $data['new_score'] : null;
+        $newScore = $newScore === null ? null : (int) $newScore;
+
+        $isCustom = ! empty($metric['is_custom']);
+        $oldScore = $isCustom
+            ? ($record->customMetricScores()[$code] ?? null)
+            : ($record->{$code} !== null ? (int) $record->{$code} : null);
+
+        $user = $request->user();
+        $entry = [
+            'metric_code' => $code,
+            'old_score' => $oldScore,
+            'new_score' => $newScore,
+            'reason' => $data['reason'],
+            'adjusted_by' => $user->id,
+            'adjusted_by_name' => $user->name,
+            'adjusted_by_role' => $user->tenantRole->name ?? $user->role,
+            'adjusted_at' => now()->toIso8601String(),
+        ];
+
+        DB::transaction(function () use ($record, $code, $newScore, $isCustom, $entry) {
+            if ($isCustom) {
+                $ra = is_array($record->risk_assessment) ? $record->risk_assessment : [];
+                $scores = is_array($ra['custom_metric_scores'] ?? null) ? $ra['custom_metric_scores'] : [];
+                if ($newScore === null) {
+                    unset($scores[$code]);
+                } else {
+                    $scores[$code] = $newScore;
+                }
+                $ra['custom_metric_scores'] = $scores;
+                $record->risk_assessment = $ra;
+            } else {
+                $record->{$code} = $newScore;
+            }
+
+            $adjustments = is_array($record->score_adjustments) ? $record->score_adjustments : [];
+            $adjustments[] = $entry;
+            $record->score_adjustments = $adjustments;
+
+            // Recompute dari input yang sudah disesuaikan — formula tetap.
+            $record->overall_risk_score = $record->computeOverallRisk();
+            $record->save();
+        });
+
+        AuditLog::log('tia', $record->id, 'metric_adjusted', [
+            'tia_code' => $record->tia_code,
+            'metric_code' => $code,
+            'old_score' => $entry['old_score'],
+            'new_score' => $entry['new_score'],
+            'reason' => $entry['reason'],
+            'overall_risk_score' => $record->overall_risk_score,
+        ], 'manual');
+
+        return response()->json([
+            'message' => "Skor metrik '{$code}' disesuaikan ({$this->scoreLabel($entry['old_score'])} → {$this->scoreLabel($entry['new_score'])}) dan tercatat di audit.",
+            'data' => $this->presentRecord($record->fresh()),
+        ]);
+    }
+
+    /** Format nilai skor untuk pesan response ('—' kalau null). */
+    private function scoreLabel(?int $score): string
+    {
+        return $score === null ? '—' : (string) $score;
+    }
+
     public function approve(Request $request, string $id)
     {
         $data = $request->validate([
