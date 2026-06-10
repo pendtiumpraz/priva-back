@@ -1289,6 +1289,19 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::post('/from-ropa/{ropaId}', [TiaController::class, 'fromRopa']);
         Route::post('/from-cross-border/{cbtId}', [TiaController::class, 'fromCrossBorder']);
         Route::post('/from-vendor/{vendorId}', [TiaController::class, 'fromVendor']);
+
+        // Kelola Metrik (mirror GAP/Maturity Kelola Pertanyaan): metrik
+        // default bisa di-edit/nonaktif/reset (TANPA delete, kind locked),
+        // metrik custom full CRUD. MUST precede /{id} or Laravel routes
+        // GET /tia/metrics ke show($id='metrics') → 404.
+        Route::get('/metrics', [TiaController::class, 'metrics']);
+        Route::get('/custom-metrics', [TiaController::class, 'customMetrics']);
+        Route::post('/custom-metrics', [TiaController::class, 'storeCustomMetric']);
+        Route::put('/custom-metrics/{id}', [TiaController::class, 'updateCustomMetric']);
+        Route::delete('/custom-metrics/{id}', [TiaController::class, 'destroyCustomMetric']);
+        Route::put('/default-metrics/{metricCode}', [TiaController::class, 'updateDefaultMetric']);
+        Route::post('/default-metrics/{metricCode}/reset', [TiaController::class, 'resetDefaultMetric']);
+
         Route::get('/{id}', [TiaController::class, 'show']);
         Route::put('/{id}', [TiaController::class, 'update']);
         Route::delete('/{id}', [TiaController::class, 'destroy']);

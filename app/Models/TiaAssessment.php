@@ -79,6 +79,136 @@ class TiaAssessment extends Model
         'security_encryption_score',
     ];
 
+    /**
+     * Katalog metrik DEFAULT TIA — single source of truth (platform-level,
+     * tidak ada tabel). FE fetch lewat GET /tia/metrics, jangan hardcode.
+     *
+     * metric_code = nama kolom skor di tia_assessments (1:1 mapping).
+     * kind: 'risk'  → skor 10 = paling berisiko (masuk komponen risiko);
+     *       'security' → skor 10 = paling aman (masuk komponen mitigasi).
+     * Bobot default semua metrik = 1 (bisa di-override per org lewat
+     * tia_metric_overrides).
+     */
+    public const DEFAULT_METRICS = [
+        ['metric_code' => 'risk_regulation_mismatch', 'kind' => 'risk',
+            'label' => 'Ketidaksesuaian Standar Perlindungan',
+            'description' => 'Negara tujuan tidak punya regulasi/proteksi setara UU PDP. Skor 10 = sangat berisiko.'],
+        ['metric_code' => 'risk_contractual_breach', 'kind' => 'risk',
+            'label' => 'Potensi Pelanggaran Kontraktual',
+            'description' => 'Kemungkinan pihak penerima melanggar klausul DPA/kontrak transfer.'],
+        ['metric_code' => 'risk_admin_sanctions', 'kind' => 'risk',
+            'label' => 'Potensi Sanksi Administrasi',
+            'description' => 'Kemungkinan otoritas (OJK / Kominfo) menjatuhkan sanksi administrasi.'],
+        ['metric_code' => 'risk_data_leak', 'kind' => 'risk',
+            'label' => 'Kemungkinan Kebocoran Data',
+            'description' => 'Probabilitas data leak di pihak penerima.'],
+        ['metric_code' => 'risk_data_integrity', 'kind' => 'risk',
+            'label' => 'Risiko Integritas Data',
+            'description' => 'Risiko data berubah/rusak/tidak akurat selama transfer atau di pihak penerima.'],
+        ['metric_code' => 'risk_sovereign_access', 'kind' => 'risk',
+            'label' => 'Risiko Kedaulatan & Akses Pemerintah',
+            'description' => 'Akses pemerintah negara tujuan ke data (subpoena, surveillance law).'],
+        ['metric_code' => 'security_protocol_score', 'kind' => 'security',
+            'label' => 'Implementasi Protokol Aman Antar Jaringan',
+            'description' => 'TLS 1.3, mTLS, VPN, IPsec atau setara. Skor 10 = enforcement penuh + rotasi kredensial.'],
+        ['metric_code' => 'security_encryption_score', 'kind' => 'security',
+            'label' => 'Enkripsi, Anonimisasi, Pseudonimisasi',
+            'description' => 'AES-256 at-rest + in-transit, anonimisasi sebelum transfer. Skor 10 = paling aman.'],
+    ];
+
+    /**
+     * Resolve set metrik EFEKTIF untuk satu org (mirror
+     * MaturityQuestion::effectiveQuestions):
+     *   1. Katalog default (DEFAULT_METRICS) sebagai basis, weight = 1.
+     *   2. Override per-org diterapkan: field non-null (label/description/
+     *      weight) menggantikan nilai default (kind TIDAK pernah berubah);
+     *      is_active=false → metrik di-DROP (kecuali $includeInactive=true,
+     *      untuk management UI).
+     *   3. Custom metrics (CustomTiaMetric) org di-append.
+     *
+     * Setiap entri di-tag: is_default (bool), is_overridden (bool),
+     * is_active (bool), is_custom (bool).
+     *
+     * Dipakai oleh endpoint GET /tia/metrics, validasi submit, DAN
+     * computeOverallRisk() supaya metrik default yang dinonaktifkan tidak
+     * ikut dihitung dan metrik custom masuk weighted average.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public static function effectiveMetrics(?string $orgId, bool $includeInactive = false): array
+    {
+        $defaults = [];
+        foreach (self::DEFAULT_METRICS as $i => $m) {
+            $defaults[] = array_merge($m, [
+                'weight' => 1.0,
+                'sort_order' => $i,
+                'is_default' => true,
+                'is_overridden' => false,
+                'is_active' => true,
+                'is_custom' => false,
+            ]);
+        }
+
+        if (! $orgId) {
+            return $defaults;
+        }
+
+        $overrides = TiaMetricOverride::forOrg($orgId)
+            ->get()
+            ->keyBy('metric_code');
+
+        $effective = [];
+        foreach ($defaults as $row) {
+            $ov = $overrides->get($row['metric_code']);
+            if ($ov) {
+                foreach (TiaMetricOverride::OVERRIDABLE_FIELDS as $field) {
+                    if ($ov->{$field} !== null) {
+                        $row[$field] = $field === 'weight' ? (float) $ov->weight : $ov->{$field};
+                        $row['is_overridden'] = true;
+                    }
+                }
+                if (! $ov->is_active) {
+                    if (! $includeInactive) {
+                        continue; // metrik default dinonaktifkan untuk org ini
+                    }
+                    $row['is_active'] = false;
+                }
+            }
+
+            $effective[] = $row;
+        }
+
+        $customs = CustomTiaMetric::forOrg($orgId)
+            ->when(! $includeInactive, fn ($query) => $query->active())
+            ->orderBy('sort_order')
+            ->get()
+            ->map(function ($cm) {
+                $row = $cm->toMetricFormat();
+                $row['is_default'] = false;
+                $row['is_overridden'] = false;
+                $row['is_active'] = (bool) $cm->is_active;
+
+                return $row;
+            })
+            ->toArray();
+
+        return array_merge($effective, $customs);
+    }
+
+    /**
+     * Skor metrik CUSTOM record ini, keyed by metric_code (CUST-N → int).
+     * Disimpan di JSON `risk_assessment.custom_metric_scores` (skor metrik
+     * default tetap di kolom dedicated masing-masing).
+     *
+     * @return array<string, int>
+     */
+    public function customMetricScores(): array
+    {
+        $scores = $this->risk_assessment['custom_metric_scores'] ?? [];
+
+        return is_array($scores) ? $scores : [];
+    }
+
     public function organization()
     {
         return $this->belongsTo(Organization::class, 'org_id');
@@ -214,24 +344,66 @@ class TiaAssessment extends Model
     }
 
     /**
-     * Compute overall risk score on a 1-10 scale.
-     *   - Risk metrics (6 of them) average → raw risk
-     *   - Security metrics (2 of them) average → mitigation factor (1-10 → 0-1)
-     *   - residual = raw_risk × (1 − mitigation_factor × 0.5)
-     *     i.e. perfect security halves the raw risk; no security leaves it unchanged.
+     * Compute overall risk score on a 1-10 scale, weight-aware over the
+     * EFFECTIVE metric set (default − disabled + custom, per org):
+     *   - risk_component     = sum(score × weight) / sum(weight) atas
+     *     metrik risk aktif (weighted average → raw risk)
+     *   - security_component = weighted average metrik security aktif yang
+     *     terisi → mitigation factor (1-10 → 0-1)
+     *   - residual = risk_component × (1 − security_component/10 × 0.5)
+     *     i.e. perfect security halves the raw risk; no security leaves it
+     *     unchanged.
      *
-     * Returns null if any required metric is unset.
+     * Dengan semua metrik default aktif pada bobot 1 (tanpa custom),
+     * hasilnya IDENTIK dengan formula lama avg(6 risk) × (1 − avg(2
+     * security)/10 × 0.5).
+     *
+     * Guards:
+     *   - semua metrik risk dinonaktifkan → 0.0 (tidak ada risiko terukur)
+     *   - semua metrik security dinonaktifkan/kosong → mitigation 0
+     *   - ada metrik risk aktif yang belum diskor → null (perilaku lama)
      */
     public function computeOverallRisk(): ?float
     {
-        $riskValues = collect(self::RISK_METRIC_KEYS)->map(fn ($k) => $this->$k)->filter(fn ($v) => $v !== null);
-        $securityValues = collect(self::SECURITY_METRIC_KEYS)->map(fn ($k) => $this->$k)->filter(fn ($v) => $v !== null);
+        $metrics = self::effectiveMetrics($this->org_id);
+        $customScores = $this->customMetricScores();
 
-        if ($riskValues->count() < count(self::RISK_METRIC_KEYS)) return null;
+        $riskSum = 0.0;
+        $riskWeight = 0.0;
+        $secSum = 0.0;
+        $secWeight = 0.0;
+        $hasActiveRiskMetric = false;
+        $missingRiskScore = false;
 
-        $rawRisk = $riskValues->avg();
-        $mitigation = $securityValues->count() > 0 ? $securityValues->avg() / 10 : 0;
-        $residual = $rawRisk * (1 - $mitigation * 0.5);
+        foreach ($metrics as $m) {
+            $value = ! empty($m['is_custom'])
+                ? ($customScores[$m['metric_code']] ?? null)
+                : $this->{$m['metric_code']};
+            $weight = (float) ($m['weight'] ?? 1);
+
+            if (($m['kind'] ?? 'risk') === 'risk') {
+                $hasActiveRiskMetric = true;
+                if ($value === null) {
+                    $missingRiskScore = true;
+                    continue;
+                }
+                $riskSum += (float) $value * $weight;
+                $riskWeight += $weight;
+            } else {
+                if ($value === null) {
+                    continue;
+                }
+                $secSum += (float) $value * $weight;
+                $secWeight += $weight;
+            }
+        }
+
+        if (! $hasActiveRiskMetric) return 0.0;
+        if ($missingRiskScore) return null;
+
+        $riskComponent = $riskWeight > 0 ? $riskSum / $riskWeight : 0.0;
+        $securityComponent = $secWeight > 0 ? $secSum / $secWeight : 0.0;
+        $residual = $riskComponent * (1 - $securityComponent / 10 * 0.5);
 
         return round((float) $residual, 2);
     }

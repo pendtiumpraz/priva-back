@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\CrossBorderTransfer;
+use App\Models\CustomTiaMetric;
 use App\Models\Ropa;
 use App\Models\TiaAssessment;
+use App\Models\TiaMetricOverride;
 use App\Models\Vendor;
 use App\Services\AssessmentPdfService;
 use Illuminate\Http\Request;
@@ -80,6 +82,7 @@ class TiaController extends Controller
     public function store(Request $request)
     {
         $data = $this->validatePayload($request);
+        $data = $this->applyCustomMetricScores($data, $request->user()->org_id);
         $data['org_id'] = $request->user()->org_id;
         $data['created_by'] = $request->user()->id;
         $data['maker_id'] = $request->user()->id;
@@ -240,6 +243,7 @@ class TiaController extends Controller
         }
 
         $data = $this->validatePayload($request, $id);
+        $data = $this->applyCustomMetricScores($data, $record->org_id, $record);
 
         // Auto-recompute overall_risk_score whenever any metric changes
         $record->fill($data);
@@ -483,6 +487,215 @@ class TiaController extends Controller
         return $pdf->tia($record, $request->user())->download($filename);
     }
 
+    // =============================================
+    // Kelola Metrik — effective set (default + override + custom)
+    // =============================================
+
+    /**
+     * GET /tia/metrics
+     * Set metrik EFEKTIF untuk org pemanggil: katalog default
+     * (TiaAssessment::DEFAULT_METRICS) + override per-org (default
+     * nonaktif di-drop) + metrik custom aktif. include_inactive=1 dipakai
+     * management UI supaya metrik yang dinonaktifkan tetap tampil (flag
+     * is_active=false) dan bisa diaktifkan lagi.
+     */
+    public function metrics(Request $request)
+    {
+        $metrics = TiaAssessment::effectiveMetrics(
+            $request->user()?->org_id,
+            $request->boolean('include_inactive'),
+        );
+
+        return response()->json(['data' => array_values($metrics)]);
+    }
+
+    // =============================================
+    // Default Metric Overrides (copy-on-write)
+    // =============================================
+    //
+    // Metrik DEFAULT bisa di-EDIT (label/description/weight) dan
+    // di-NONAKTIFKAN per org, tapi TIDAK bisa dihapus dan kind
+    // (risk|security) TIDAK bisa diubah. Edit mem-fork baris override
+    // (tia_metric_overrides); reset menghapus override sehingga kembali
+    // ke nilai katalog default.
+
+    /**
+     * PUT /tia/default-metrics/{metricCode}
+     * Upsert override untuk org pemanggil. Field yang nilainya sama dengan
+     * default disimpan NULL (= tidak di-override) supaya flag is_overridden
+     * akurat dan reset semantics bersih. Bobot default = 1.
+     */
+    public function updateDefaultMetric(Request $request, string $metricCode)
+    {
+        $request->validate([
+            'label' => 'nullable|string|max:255',
+            'description' => 'nullable|string|max:2000',
+            'weight' => 'nullable|numeric|min:1|max:10',
+            'is_active' => 'nullable|boolean',
+        ]);
+
+        $default = collect(TiaAssessment::DEFAULT_METRICS)->firstWhere('metric_code', $metricCode);
+        if (! $default) {
+            return response()->json(['message' => 'Metrik default tidak ditemukan.'], 404);
+        }
+
+        $orgId = $request->user()->org_id;
+
+        // Hanya simpan field yang BERBEDA dari nilai default — yang sama
+        // (atau kosong) disimpan NULL = "pakai default".
+        $values = [];
+        foreach (['label', 'description'] as $field) {
+            if ($request->has($field)) {
+                $val = $request->input($field);
+                $val = is_string($val) ? trim($val) : $val;
+                $values[$field] = ($val === null || $val === '' || $val === ($default[$field] ?? null)) ? null : $val;
+            }
+        }
+        if ($request->has('weight')) {
+            $w = $request->input('weight');
+            $values['weight'] = ($w === null || abs((float) $w - 1.0) < 0.001) ? null : (float) $w;
+        }
+        if ($request->has('is_active')) {
+            $values['is_active'] = $request->boolean('is_active');
+        }
+
+        // Upsert — restore dulu kalau row pernah soft-deleted (unique
+        // constraint org+metric_code mencegah duplikat).
+        $override = TiaMetricOverride::withTrashed()
+            ->where('org_id', $orgId)
+            ->where('metric_code', $metricCode)
+            ->first();
+
+        if ($override) {
+            if ($override->trashed()) {
+                $override->restore();
+            }
+            $override->fill($values)->save();
+        } else {
+            $override = TiaMetricOverride::create(array_merge([
+                'org_id' => $orgId,
+                'metric_code' => $metricCode,
+                'is_active' => true,
+            ], $values));
+        }
+
+        // No-op override (semua field null + masih aktif) → buang row
+        // supaya metrik kembali murni default.
+        if (! $override->hasEffect()) {
+            $override->forceDelete();
+        }
+
+        $effective = collect(TiaAssessment::effectiveMetrics($orgId, true))
+            ->firstWhere('metric_code', $metricCode);
+
+        return response()->json([
+            'message' => 'Metrik default diperbarui.',
+            'data' => $effective,
+        ]);
+    }
+
+    /**
+     * POST /tia/default-metrics/{metricCode}/reset
+     * Hapus override org → metrik kembali ke nilai katalog default.
+     */
+    public function resetDefaultMetric(Request $request, string $metricCode)
+    {
+        $orgId = $request->user()->org_id;
+
+        TiaMetricOverride::withTrashed()
+            ->where('org_id', $orgId)
+            ->where('metric_code', $metricCode)
+            ->forceDelete();
+
+        $effective = collect(TiaAssessment::effectiveMetrics($orgId, true))
+            ->firstWhere('metric_code', $metricCode);
+
+        return response()->json([
+            'message' => 'Metrik dikembalikan ke default.',
+            'data' => $effective,
+        ]);
+    }
+
+    // =============================================
+    // Custom Metrics CRUD (Kelola Metrik)
+    // =============================================
+
+    public function customMetrics(Request $request)
+    {
+        $metrics = CustomTiaMetric::forOrg($request->user()->org_id)
+            ->orderBy('sort_order')
+            ->get();
+
+        return response()->json(['data' => $metrics]);
+    }
+
+    public function storeCustomMetric(Request $request)
+    {
+        $data = $request->validate([
+            'kind' => ['required', Rule::in(CustomTiaMetric::ALL_KINDS)],
+            'label' => 'required|string|max:255',
+            'description' => 'nullable|string|max:2000',
+            'weight' => 'nullable|numeric|min:1|max:10',
+            'sort_order' => 'nullable|integer|min:0',
+        ]);
+
+        $orgId = $request->user()->org_id;
+
+        // metric_code auto: CUST-1, CUST-2, ... — withTrashed supaya
+        // tidak menabrak unique constraint dengan row yang soft-deleted.
+        $lastNum = CustomTiaMetric::withTrashed()
+            ->where('org_id', $orgId)
+            ->pluck('metric_code')
+            ->map(fn ($c) => (int) preg_replace('/\D+/', '', (string) $c))
+            ->max() ?? 0;
+
+        $metric = CustomTiaMetric::create([
+            'org_id' => $orgId,
+            'metric_code' => 'CUST-'.($lastNum + 1),
+            'kind' => $data['kind'],
+            'label' => $data['label'],
+            'description' => $data['description'] ?? null,
+            'weight' => $data['weight'] ?? 1,
+            'sort_order' => $data['sort_order']
+                ?? ((int) CustomTiaMetric::forOrg($orgId)->max('sort_order') + 1),
+        ]);
+
+        return response()->json(['message' => 'Metrik custom ditambahkan.', 'data' => $metric], 201);
+    }
+
+    public function updateCustomMetric(Request $request, string $id)
+    {
+        $metric = CustomTiaMetric::forOrg($request->user()->org_id)->findOrFail($id);
+
+        $request->validate([
+            'kind' => ['sometimes', Rule::in(CustomTiaMetric::ALL_KINDS)],
+            'label' => 'sometimes|string|max:255',
+            'description' => 'nullable|string|max:2000',
+            'weight' => 'nullable|numeric|min:1|max:10',
+            'sort_order' => 'nullable|integer|min:0',
+            'is_active' => 'nullable|boolean',
+        ]);
+
+        $payload = $request->only([
+            'kind', 'label', 'description', 'weight', 'sort_order', 'is_active',
+        ]);
+        // Kolom weight NOT NULL (default 1) — null berarti "jangan ubah".
+        if (array_key_exists('weight', $payload) && $payload['weight'] === null) {
+            unset($payload['weight']);
+        }
+        $metric->update($payload);
+
+        return response()->json(['message' => 'Metrik custom diperbarui.', 'data' => $metric->fresh()]);
+    }
+
+    public function destroyCustomMetric(Request $request, string $id)
+    {
+        $metric = CustomTiaMetric::forOrg($request->user()->org_id)->findOrFail($id);
+        $metric->delete();
+
+        return response()->json(['message' => 'Metrik custom dihapus.']);
+    }
+
     // ─── Helpers ────────────────────────────────────────────────────────────
 
     private function applyFilters($query, Request $request): void
@@ -550,6 +763,13 @@ class TiaController extends Controller
             'security_protocol_score' => 'nullable|integer|min:1|max:10',
             'security_encryption_score' => 'nullable|integer|min:1|max:10',
 
+            // Skor metrik CUSTOM per-org (Kelola Metrik), keyed by
+            // metric_code (CUST-N). null = hapus skor. Disimpan ke JSON
+            // risk_assessment.custom_metric_scores oleh
+            // applyCustomMetricScores().
+            'custom_metric_scores' => 'nullable|array',
+            'custom_metric_scores.*' => 'nullable|integer|min:1|max:10',
+
             'supplementary_doc_ids' => 'nullable|array',
             'supplementary_doc_ids.*' => 'uuid',
 
@@ -573,13 +793,69 @@ class TiaController extends Controller
         if (empty($r->transfer_basis)) {
             $issues[] = 'transfer_basis is required';
         }
-        foreach (TiaAssessment::RISK_METRIC_KEYS as $k) {
-            if ($r->$k === null) {
-                $issues[] = "Risk metric '{$k}' must be scored 1-10";
+
+        // Cek set metrik EFEKTIF (default − nonaktif + custom) — metrik
+        // risk aktif wajib diskor; metrik security opsional (mitigasi).
+        $customScores = $r->customMetricScores();
+        foreach (TiaAssessment::effectiveMetrics($r->org_id) as $m) {
+            if (($m['kind'] ?? 'risk') !== 'risk') {
+                continue;
+            }
+            $value = ! empty($m['is_custom'])
+                ? ($customScores[$m['metric_code']] ?? null)
+                : $r->{$m['metric_code']};
+            if ($value === null) {
+                $issues[] = "Risk metric '{$m['metric_code']}' must be scored 1-10";
             }
         }
 
         return $issues;
+    }
+
+    /**
+     * Pindahkan payload `custom_metric_scores` (keyed by metric_code
+     * CUST-N) ke JSON kolom `risk_assessment.custom_metric_scores`.
+     * Kode yang bukan milik org di-drop; nilai null menghapus skor.
+     * Skor metrik DEFAULT tetap di kolom dedicated masing-masing.
+     */
+    private function applyCustomMetricScores(array $data, string $orgId, ?TiaAssessment $record = null): array
+    {
+        if (! array_key_exists('custom_metric_scores', $data)) {
+            return $data;
+        }
+
+        $incoming = $data['custom_metric_scores'] ?? [];
+        unset($data['custom_metric_scores']);
+        if (! is_array($incoming)) {
+            return $data;
+        }
+
+        $validCodes = CustomTiaMetric::forOrg($orgId)->pluck('metric_code')->all();
+
+        $ra = $data['risk_assessment'] ?? $record?->risk_assessment ?? [];
+        if (! is_array($ra)) {
+            $ra = [];
+        }
+        $scores = $ra['custom_metric_scores'] ?? [];
+        if (! is_array($scores)) {
+            $scores = [];
+        }
+
+        foreach ($incoming as $code => $score) {
+            if (! in_array($code, $validCodes, true)) {
+                continue;
+            }
+            if ($score === null) {
+                unset($scores[$code]);
+            } else {
+                $scores[$code] = (int) $score;
+            }
+        }
+
+        $ra['custom_metric_scores'] = $scores;
+        $data['risk_assessment'] = $ra;
+
+        return $data;
     }
 
     private function suggestCode(string $orgId, string $unit, string $activity): string
