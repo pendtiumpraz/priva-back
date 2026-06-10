@@ -86,6 +86,7 @@ class PositionController extends Controller
             ->where('is_active', true)
             ->whereNull('deleted_at')
             ->select('id', 'name', 'email', 'phone', 'position', 'role', 'department_id', 'position_id')
+            ->with('department:id,name')
             ->orderByRaw("CASE role WHEN 'dpo' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END")
             ->orderBy('name')
             ->get();
