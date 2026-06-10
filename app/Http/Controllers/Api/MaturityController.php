@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\CustomMaturityQuestion;
 use App\Models\MaturityAssessment;
 use App\Models\MaturityQuestion;
+use App\Models\MaturityQuestionOverride;
 use App\Models\MaturityQuestionResponse;
 use App\Services\AssessmentPdfService;
 use App\Services\MaturityAutoDeriveService;
@@ -107,18 +109,20 @@ class MaturityController extends Controller
             return response()->json(['message' => 'Published assessments are read-only.'], 423);
         }
 
-        $question = MaturityQuestion::query()
-            ->withoutGlobalScope('org')   // platform-level
-            ->where('question_code', $data['question_code'])
-            ->where('version', $assessment->version)
-            ->where('is_active', true)
-            ->firstOrFail();
+        // Validasi terhadap set pertanyaan EFEKTIF org (default aktif +
+        // custom aktif) — bukan hanya bank platform, supaya pertanyaan
+        // custom bisa dijawab dan default yang dinonaktifkan ditolak.
+        $question = collect(MaturityQuestion::effectiveQuestions($assessment->org_id, $assessment->version ?? 'v1'))
+            ->firstWhere('question_code', $data['question_code']);
+        if (! $question) {
+            return response()->json(['message' => 'Pertanyaan tidak ditemukan di set pertanyaan aktif organisasi.'], 422);
+        }
 
         DB::transaction(function () use ($assessment, $data, $question) {
             MaturityQuestionResponse::updateOrCreate(
                 ['assessment_id' => $assessment->id, 'question_code' => $data['question_code']],
                 [
-                    'domain' => $question->domain,
+                    'domain' => $question['domain'],
                     'score' => $data['score'],
                     'notes' => $data['notes'] ?? null,
                     'source' => $data['source'] ?? MaturityQuestionResponse::SOURCE_MANUAL,
@@ -154,11 +158,11 @@ class MaturityController extends Controller
             return response()->json(['message' => 'Published assessments are read-only.'], 423);
         }
 
-        $codes = collect($data['responses'])->pluck('question_code');
-        $questions = MaturityQuestion::query()->withoutGlobalScope('org')
-            ->whereIn('question_code', $codes)
-            ->where('version', $assessment->version)
-            ->get()->keyBy('question_code');
+        // Set pertanyaan EFEKTIF org — default aktif + custom aktif.
+        // Response untuk code di luar set ini di-skip diam-diam (sama
+        // seperti behavior lama untuk code yang tidak dikenal).
+        $questions = collect(MaturityQuestion::effectiveQuestions($assessment->org_id, $assessment->version ?? 'v1'))
+            ->keyBy('question_code');
 
         DB::transaction(function () use ($assessment, $data, $questions) {
             foreach ($data['responses'] as $r) {
@@ -167,7 +171,7 @@ class MaturityController extends Controller
                 MaturityQuestionResponse::updateOrCreate(
                     ['assessment_id' => $assessment->id, 'question_code' => $r['question_code']],
                     [
-                        'domain' => $q->domain,
+                        'domain' => $q['domain'],
                         'score' => $r['score'],
                         'notes' => $r['notes'] ?? null,
                         'source' => $r['source'] ?? MaturityQuestionResponse::SOURCE_MANUAL,
@@ -201,11 +205,10 @@ class MaturityController extends Controller
 
         $derived = $this->deriver->deriveAll($orgId);
 
-        // Map question_code → domain (one query, in-memory after)
-        $questions = MaturityQuestion::query()->withoutGlobalScope('org')
-            ->where('version', $assessment->version)
-            ->where('is_active', true)
-            ->get()->keyBy('question_code');
+        // Map question_code → effective question. Default yang
+        // dinonaktifkan org tidak ada di map → skor derived-nya di-skip.
+        $questions = collect(MaturityQuestion::effectiveQuestions($orgId, $assessment->version ?? 'v1'))
+            ->keyBy('question_code');
 
         DB::transaction(function () use ($assessment, $derived, $questions) {
             foreach ($derived as $code => $r) {
@@ -214,7 +217,7 @@ class MaturityController extends Controller
                 MaturityQuestionResponse::updateOrCreate(
                     ['assessment_id' => $assessment->id, 'question_code' => $code],
                     [
-                        'domain' => $q->domain,
+                        'domain' => $q['domain'],
                         'score' => $r['score'],
                         'source' => MaturityQuestionResponse::SOURCE_AUTO_DERIVE,
                         'source_metadata' => $r['metadata'] ?? null,
@@ -245,10 +248,17 @@ class MaturityController extends Controller
         if ($assessment->status === MaturityAssessment::STATUS_PUBLISHED) {
             return response()->json(['message' => 'Already published.'], 409);
         }
-        if ($assessment->responses()->count() < 18) {
+        // Wajib menjawab SEMUA pertanyaan efektif org (default aktif +
+        // custom aktif) — bukan angka 18 hard-coded, karena org bisa
+        // menonaktifkan default dan menambah pertanyaan custom.
+        $effectiveCodes = collect(MaturityQuestion::effectiveQuestions($assessment->org_id, $assessment->version ?? 'v1'))
+            ->pluck('question_code');
+        $answered = $assessment->responses()->whereIn('question_code', $effectiveCodes)->count();
+        if ($answered < $effectiveCodes->count()) {
             return response()->json([
-                'message' => 'All 18 questions must have a score before submitting.',
-                'answered' => $assessment->responses()->count(),
+                'message' => 'All ' . $effectiveCodes->count() . ' questions must have a score before submitting.',
+                'answered' => $answered,
+                'required' => $effectiveCodes->count(),
             ], 422);
         }
 
@@ -294,24 +304,227 @@ class MaturityController extends Controller
     }
 
     /**
-     * Master question list (per active version). Frontend wizard uses
-     * this to render the 18 ruler questions in the right order.
+     * Effective question list (per active version) untuk org pemanggil:
+     * default platform + override per-org (default nonaktif di-drop) +
+     * custom questions aktif. include_inactive=1 dipakai management UI
+     * supaya default yang dinonaktifkan tetap tampil (flag
+     * is_active=false) dan bisa diaktifkan lagi.
      */
     public function questions(Request $request)
     {
         $version = $request->get('version', 'v1');
-        $questions = MaturityQuestion::query()->withoutGlobalScope('org')
-            ->where('version', $version)
-            ->where('is_active', true)
-            ->orderBy('sort_order')
-            ->get();
+        $includeInactive = $request->boolean('include_inactive');
+        $questions = collect(MaturityQuestion::effectiveQuestions(
+            $request->user()?->org_id,
+            $version,
+            $includeInactive,
+        ));
+
         return response()->json([
-            'data' => $questions,
+            'data' => $questions->values(),
             'domains' => collect(MaturityQuestion::ALL_DOMAINS)->map(fn ($d) => [
                 'key' => $d,
                 'label' => MaturityQuestion::DOMAIN_LABELS[$d] ?? $d,
                 'count' => $questions->where('domain', $d)->count(),
             ])->values(),
+        ]);
+    }
+
+    // =============================================
+    // Custom Questions CRUD (Kelola Pertanyaan)
+    // =============================================
+
+    public function customQuestions(Request $request)
+    {
+        $questions = CustomMaturityQuestion::forOrg($request->user()->org_id)
+            ->orderBy('sort_order')
+            ->get();
+
+        return response()->json(['data' => $questions]);
+    }
+
+    public function storeCustomQuestion(Request $request)
+    {
+        $data = $request->validate([
+            'domain' => ['required', Rule::in(MaturityQuestion::ALL_DOMAINS)],
+            'question_text' => 'required|string',
+            'description' => 'nullable|string',
+            'regulation_ref' => 'nullable|string|max:100',
+            'scoring_guide' => 'nullable|array',
+            'sort_order' => 'nullable|integer|min:0',
+        ]);
+
+        $orgId = $request->user()->org_id;
+
+        // question_code auto: CUST-1, CUST-2, ... — withTrashed supaya
+        // tidak menabrak unique constraint dengan row yang soft-deleted.
+        $lastNum = CustomMaturityQuestion::withTrashed()
+            ->where('org_id', $orgId)
+            ->pluck('question_code')
+            ->map(fn ($c) => (int) preg_replace('/\D+/', '', (string) $c))
+            ->max() ?? 0;
+
+        $question = CustomMaturityQuestion::create([
+            'org_id' => $orgId,
+            'question_code' => 'CUST-' . ($lastNum + 1),
+            'domain' => $data['domain'],
+            'question_text' => $data['question_text'],
+            'description' => $data['description'] ?? null,
+            'regulation_ref' => $data['regulation_ref'] ?? null,
+            'scoring_guide' => $data['scoring_guide'] ?? null,
+            'sort_order' => $data['sort_order']
+                ?? ((int) CustomMaturityQuestion::forOrg($orgId)->max('sort_order') + 1),
+        ]);
+
+        return response()->json(['message' => 'Pertanyaan custom ditambahkan.', 'data' => $question], 201);
+    }
+
+    public function updateCustomQuestion(Request $request, string $id)
+    {
+        $question = CustomMaturityQuestion::forOrg($request->user()->org_id)->findOrFail($id);
+
+        $request->validate([
+            'domain' => ['sometimes', Rule::in(MaturityQuestion::ALL_DOMAINS)],
+            'question_text' => 'sometimes|string',
+            'description' => 'nullable|string',
+            'regulation_ref' => 'nullable|string|max:100',
+            'scoring_guide' => 'nullable|array',
+            'sort_order' => 'nullable|integer|min:0',
+            'is_active' => 'nullable|boolean',
+        ]);
+
+        $question->update($request->only([
+            'domain', 'question_text', 'description', 'regulation_ref',
+            'scoring_guide', 'sort_order', 'is_active',
+        ]));
+
+        return response()->json(['message' => 'Pertanyaan custom diperbarui.', 'data' => $question->fresh()]);
+    }
+
+    public function destroyCustomQuestion(Request $request, string $id)
+    {
+        $question = CustomMaturityQuestion::forOrg($request->user()->org_id)->findOrFail($id);
+        $question->delete();
+
+        return response()->json(['message' => 'Pertanyaan custom dihapus.']);
+    }
+
+    // =============================================
+    // Default Question Overrides (copy-on-write)
+    // =============================================
+    //
+    // Pertanyaan DEFAULT bisa di-EDIT (teks/deskripsi/referensi regulasi/
+    // panduan skor) dan di-NONAKTIFKAN per org, tapi TIDAK bisa dihapus
+    // dan domain TIDAK bisa diubah. Edit mem-fork baris override
+    // (maturity_question_overrides); reset menghapus override sehingga
+    // kembali ke nilai default platform.
+
+    /**
+     * PUT /maturity/default-questions/{questionCode}
+     * Upsert override untuk org pemanggil. Field yang nilainya sama dengan
+     * default disimpan NULL (= tidak di-override) supaya flag is_overridden
+     * akurat dan reset semantics bersih.
+     */
+    public function updateDefaultQuestion(Request $request, string $questionCode)
+    {
+        $request->validate([
+            'version' => 'nullable|string|max:16',
+            'question_text' => 'nullable|string',
+            'description' => 'nullable|string',
+            'regulation_ref' => 'nullable|string|max:100',
+            'scoring_guide' => 'nullable|array',
+            'is_active' => 'nullable|boolean',
+        ]);
+
+        $orgId = $request->user()->org_id;
+        $version = $request->input('version', 'v1');
+
+        $default = MaturityQuestion::query()->withoutGlobalScope('org')
+            ->where('question_code', $questionCode)
+            ->where('version', $version)
+            ->where('is_active', true)
+            ->first();
+        if (! $default) {
+            return response()->json(['message' => 'Pertanyaan default tidak ditemukan.'], 404);
+        }
+
+        // Hanya simpan field yang BERBEDA dari nilai default — yang sama
+        // (atau kosong) disimpan NULL = "pakai default".
+        $values = [];
+        foreach (MaturityQuestionOverride::OVERRIDABLE_TEXT_FIELDS as $field) {
+            if ($request->has($field)) {
+                $val = $request->input($field);
+                $val = is_string($val) ? trim($val) : $val;
+                $values[$field] = ($val === null || $val === '' || $val === ($default->{$field} ?? null)) ? null : $val;
+            }
+        }
+        if ($request->has('scoring_guide')) {
+            $guide = $request->input('scoring_guide');
+            $values['scoring_guide'] = (empty($guide) || $guide == $default->scoring_guide) ? null : $guide;
+        }
+        if ($request->has('is_active')) {
+            $values['is_active'] = $request->boolean('is_active');
+        }
+
+        // Upsert — restore dulu kalau row pernah soft-deleted (unique
+        // constraint org+question_code mencegah duplikat).
+        $override = MaturityQuestionOverride::withTrashed()
+            ->where('org_id', $orgId)
+            ->where('question_code', $questionCode)
+            ->first();
+
+        if ($override) {
+            if ($override->trashed()) {
+                $override->restore();
+            }
+            $override->fill($values)->save();
+        } else {
+            $override = MaturityQuestionOverride::create(array_merge([
+                'org_id' => $orgId,
+                'question_code' => $questionCode,
+                'is_active' => true,
+            ], $values));
+        }
+
+        // No-op override (semua field null + masih aktif) → buang row
+        // supaya pertanyaan kembali murni default.
+        if (! $override->hasEffect()) {
+            $override->forceDelete();
+        }
+
+        $effective = collect(MaturityQuestion::effectiveQuestions($orgId, $version, true))
+            ->firstWhere('question_code', $questionCode);
+
+        return response()->json([
+            'message' => 'Pertanyaan default diperbarui.',
+            'data' => $effective,
+        ]);
+    }
+
+    /**
+     * POST /maturity/default-questions/{questionCode}/reset
+     * Hapus override org → pertanyaan kembali ke nilai default platform.
+     */
+    public function resetDefaultQuestion(Request $request, string $questionCode)
+    {
+        $request->validate([
+            'version' => 'nullable|string|max:16',
+        ]);
+
+        $orgId = $request->user()->org_id;
+        $version = $request->input('version', 'v1');
+
+        MaturityQuestionOverride::withTrashed()
+            ->where('org_id', $orgId)
+            ->where('question_code', $questionCode)
+            ->forceDelete();
+
+        $effective = collect(MaturityQuestion::effectiveQuestions($orgId, $version, true))
+            ->firstWhere('question_code', $questionCode);
+
+        return response()->json([
+            'message' => 'Pertanyaan dikembalikan ke default.',
+            'data' => $effective,
         ]);
     }
 

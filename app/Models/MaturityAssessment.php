@@ -80,10 +80,22 @@ class MaturityAssessment extends Model
     /**
      * Compute domain_scores + overall_score from the responses() collection.
      * Called after every save in the controller.
+     *
+     * Hanya response yang question_code-nya ada di set pertanyaan EFEKTIF
+     * org (default aktif + custom aktif) yang ikut dihitung — response
+     * lama milik pertanyaan default yang dinonaktifkan otomatis di-exclude.
+     * Domain pertanyaan custom mengikuti pilihan domain saat ini (dari
+     * effective set, bukan kolom domain yang tersimpan di response).
      */
     public function recompute(): void
     {
-        $byDomain = $this->responses()->get()->groupBy('domain');
+        $domainByCode = collect(MaturityQuestion::effectiveQuestions($this->org_id, $this->version ?? 'v1'))
+            ->pluck('domain', 'question_code');
+
+        $responses = $this->responses()->get()
+            ->filter(fn ($r) => $domainByCode->has($r->question_code));
+
+        $byDomain = $responses->groupBy(fn ($r) => $domainByCode[$r->question_code]);
         $domainScores = [];
         foreach (MaturityQuestion::ALL_DOMAINS as $d) {
             $items = $byDomain->get($d, collect());
@@ -91,7 +103,7 @@ class MaturityAssessment extends Model
         }
         $this->domain_scores = $domainScores;
 
-        $allScores = $this->responses()->pluck('score');
+        $allScores = $responses->pluck('score');
         if ($allScores->isNotEmpty()) {
             $this->overall_score = round($allScores->avg(), 2);
             $this->overall_level = self::scoreToLevel((float) $this->overall_score);

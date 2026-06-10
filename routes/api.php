@@ -1313,6 +1313,17 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::get('/questions', [MaturityController::class, 'questions']);
         Route::get('/trend', [MaturityController::class, 'trend']);
 
+        // Kelola Pertanyaan (mirror GAP): custom questions full CRUD +
+        // default question overrides (edit/nonaktif/reset, TANPA delete).
+        // MUST precede /{id} or Laravel routes GET /maturity/custom-questions
+        // ke show($id='custom-questions') → 404.
+        Route::get('/custom-questions', [MaturityController::class, 'customQuestions']);
+        Route::post('/custom-questions', [MaturityController::class, 'storeCustomQuestion']);
+        Route::put('/custom-questions/{id}', [MaturityController::class, 'updateCustomQuestion']);
+        Route::delete('/custom-questions/{id}', [MaturityController::class, 'destroyCustomQuestion']);
+        Route::put('/default-questions/{questionCode}', [MaturityController::class, 'updateDefaultQuestion']);
+        Route::post('/default-questions/{questionCode}/reset', [MaturityController::class, 'resetDefaultQuestion']);
+
         Route::get('/', [MaturityController::class, 'index']);
         Route::post('/', [MaturityController::class, 'store']);
         Route::get('/{id}', [MaturityController::class, 'show']);
