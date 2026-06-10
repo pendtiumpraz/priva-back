@@ -705,6 +705,10 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
             ->middleware('permission:vendor_risk,write');
         Route::post('/{id}/clone', [TprmLibraryController::class, 'clone'])
             ->middleware('permission:vendor_risk,write');
+        // Reset fork COW template platform → kembali ke 56 pertanyaan default.
+        // Fork di-soft-delete; asesmen in-flight tetap pegang snapshot-nya.
+        Route::post('/{id}/reset-to-default', [TprmLibraryController::class, 'resetToDefault'])
+            ->middleware('permission:vendor_risk,write');
 
         // Segment CRUD (nested)
         Route::post('/{id}/segments', [TprmLibraryController::class, 'storeSegment'])

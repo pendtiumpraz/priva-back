@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\QuestionLibrary;
 use App\Models\QuestionLibrarySegment;
+use App\Models\VendorAssessment;
 use App\Models\VendorQuestionnaire;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -52,7 +53,21 @@ class TprmLibraryController extends Controller
         $libraries = $query
             ->orderByDesc('is_locked')           // template global di atas
             ->orderBy('name')
-            ->get()
+            ->get();
+
+        // Shadowing COW: fork org (source=forked) MENGGANTIKAN template
+        // platform asalnya — org melihat SATU entri per template: fork-nya
+        // kalau ada, else template platform asli.
+        $shadowedTemplateIds = $libraries
+            ->filter(fn ($l) => $l->org_id === $orgId
+                && $l->source === QuestionLibrary::SOURCE_FORKED
+                && $l->cloned_from_library_id)
+            ->pluck('cloned_from_library_id')
+            ->all();
+
+        $libraries = $libraries
+            ->reject(fn ($l) => $l->org_id === null && in_array($l->id, $shadowedTemplateIds, true))
+            ->values()
             ->map(fn ($lib) => $this->presentLibrary($lib, $orgId));
 
         return response()->json(['data' => $libraries]);
@@ -205,16 +220,16 @@ class TprmLibraryController extends Controller
                 if (isset($segmentMap[$sectionKey])) {
                     continue;
                 }
-                $segId = (string) Str::uuid();
-                QuestionLibrarySegment::create([
-                    'id' => $segId,
+                // 'id' tidak fillable — HasUuids generate sendiri. Baca id
+                // dari model hasil create() supaya link question→segment valid.
+                $seg = QuestionLibrarySegment::create([
                     'library_id' => $lib->id,
                     'name' => VendorQuestionnaire::SECTION_LABELS[$sectionKey] ?? ucwords(str_replace('_', ' ', $sectionKey)),
                     'code' => strtoupper(substr(preg_replace('/[^A-Za-z]/', '', $sectionKey), 0, 3)),
                     'order_index' => $orderIndex++,
                     'weight_pct' => 0,
                 ]);
-                $segmentMap[$sectionKey] = $segId;
+                $segmentMap[$sectionKey] = $seg->id;
             }
 
             // Copy mandiri tiap pertanyaan (bukan reference) — perubahan
@@ -279,31 +294,58 @@ class TprmLibraryController extends Controller
             'name' => 'nullable|string|max:200',
         ]);
 
-        $newLibrary = DB::transaction(function () use ($source, $orgId, $data, $request) {
-            $newLibId = (string) Str::uuid();
+        [$newLibrary] = $this->duplicateLibrary(
+            $source,
+            $orgId,
+            $request->user()->id,
+            $data['name'] ?? ($source->name.' (Salinan)'),
+            QuestionLibrary::SOURCE_CLONED,
+        );
 
+        return response()->json([
+            'data' => $this->presentLibrary($newLibrary->fresh(), $orgId),
+        ], 201);
+    }
+
+    /**
+     * Copy library + semua segment + semua question ke library baru milik
+     * tenant. Dipakai clone() (manual "Salin") dan COW fork (edit template
+     * platform via Bank Pertanyaan).
+     *
+     * @return array{0: QuestionLibrary, 1: array<string,string>, 2: array<string,string>}
+     *                                                                                     [library baru, map old_segment_id=>new_segment_id, map old_question_id=>new_question_id]
+     */
+    private function duplicateLibrary(
+        QuestionLibrary $source,
+        string $orgId,
+        string $userId,
+        string $name,
+        string $sourceType
+    ): array {
+        return DB::transaction(function () use ($source, $orgId, $userId, $name, $sourceType) {
             $lib = QuestionLibrary::create([
-                'id' => $newLibId,
+                'id' => (string) Str::uuid(),
                 'org_id' => $orgId,
-                'name' => $data['name'] ?? ($source->name.' (Salinan)'),
-                'slug' => Str::slug(($data['name'] ?? $source->name)).'-'.Str::lower(Str::random(4)),
+                'name' => $name,
+                'slug' => Str::slug($name).'-'.Str::lower(Str::random(4)),
                 'description' => $source->description,
                 'category' => $source->category,
                 'version' => $source->version,
-                'source' => QuestionLibrary::SOURCE_CLONED,
+                'source' => $sourceType,
                 'is_active' => true,
                 'is_locked' => false,
                 'tags' => $source->tags,
-                'created_by' => $request->user()->id,
+                'created_by' => $userId,
                 'cloned_from_library_id' => $source->id,
             ]);
 
-            // Map old_segment_id -> new_segment_id supaya question link tepat
+            // Map old_segment_id -> new_segment_id supaya question link tepat.
+            // CATATAN: 'id' TIDAK fillable di model ini — HasUuids generate id
+            // sendiri saat creating. Selalu baca id dari model hasil create(),
+            // jangan pre-generate uuid lalu asumsikan terpakai.
             $segmentMap = [];
             foreach ($source->segments as $oldSeg) {
-                $newSegId = (string) Str::uuid();
-                QuestionLibrarySegment::create([
-                    'id' => $newSegId,
+                $newSeg = QuestionLibrarySegment::create([
                     'library_id' => $lib->id,
                     'name' => $oldSeg->name,
                     'code' => $oldSeg->code,
@@ -311,7 +353,7 @@ class TprmLibraryController extends Controller
                     'order_index' => $oldSeg->order_index,
                     'weight_pct' => $oldSeg->weight_pct,
                 ]);
-                $segmentMap[$oldSeg->id] = $newSegId;
+                $segmentMap[$oldSeg->id] = $newSeg->id;
             }
 
             // Clone semua question — buat copy baru bukan reference parent,
@@ -319,12 +361,14 @@ class TprmLibraryController extends Controller
             $oldQuestions = VendorQuestionnaire::query()
                 ->withoutGlobalScope('org')
                 ->where('library_id', $source->id)
+                ->when($source->org_id, fn ($q) => $q->where('org_id', $source->org_id))
+                ->when(! $source->org_id, fn ($q) => $q->whereNull('org_id'))
                 ->get();
 
+            $questionMap = [];
             foreach ($oldQuestions as $oldQ) {
                 $newSegId = $segmentMap[$oldQ->library_segment_id] ?? null;
-                VendorQuestionnaire::create([
-                    'id' => (string) Str::uuid(),
+                $newQ = VendorQuestionnaire::create([
                     'org_id' => $orgId,
                     'parent_id' => null, // copy mandiri, bukan override
                     'library_id' => $lib->id,
@@ -345,6 +389,7 @@ class TprmLibraryController extends Controller
                     'is_active' => $oldQ->is_active,
                     'sort_order' => $oldQ->sort_order,
                 ]);
+                $questionMap[$oldQ->id] = $newQ->id;
             }
 
             $lib->refreshCounters();
@@ -352,22 +397,19 @@ class TprmLibraryController extends Controller
                 $seg->refreshCounter();
             }
 
-            return $lib;
+            return [$lib, $segmentMap, $questionMap];
         });
-
-        return response()->json([
-            'data' => $this->presentLibrary($newLibrary->fresh(), $orgId),
-        ], 201);
     }
 
     /**
      * PATCH /api/tprm/libraries/{id}
      * Update meta library (name, description, tags, is_active).
+     * Template platform → copy-on-write fork otomatis (lihat resolveEditable).
      */
     public function update(Request $request, string $id)
     {
         $orgId = $request->user()->org_id;
-        $library = $this->findOwnedOrFail($id, $orgId);
+        $library = $this->resolveEditable($request, $id);
 
         $data = $request->validate([
             'name' => 'sometimes|string|max:200',
@@ -381,7 +423,9 @@ class TprmLibraryController extends Controller
 
         $library->fill($data)->save();
 
-        return response()->json(['data' => $this->presentLibrary($library->fresh(), $orgId)]);
+        return response()->json(
+            ['data' => $this->presentLibrary($library->fresh(), $orgId)] + $this->cowMeta($library, $orgId)
+        );
     }
 
     /**
@@ -409,7 +453,7 @@ class TprmLibraryController extends Controller
     public function storeSegment(Request $request, string $id)
     {
         $orgId = $request->user()->org_id;
-        $library = $this->findOwnedOrFail($id, $orgId);
+        $library = $this->resolveEditable($request, $id);
 
         $data = $request->validate([
             'name' => 'required|string|max:120',
@@ -431,7 +475,7 @@ class TprmLibraryController extends Controller
 
         $library->refreshCounters();
 
-        return response()->json(['data' => $segment], 201);
+        return response()->json(['data' => $segment] + $this->cowMeta($library, $orgId), 201);
     }
 
     /**
@@ -440,10 +484,10 @@ class TprmLibraryController extends Controller
     public function updateSegment(Request $request, string $id, string $segmentId)
     {
         $orgId = $request->user()->org_id;
-        $library = $this->findOwnedOrFail($id, $orgId);
+        $library = $this->resolveEditable($request, $id);
 
         $segment = QuestionLibrarySegment::query()
-            ->where('id', $segmentId)
+            ->where('id', $this->mapSegmentId($segmentId))
             ->where('library_id', $library->id)
             ->firstOrFail();
 
@@ -457,7 +501,7 @@ class TprmLibraryController extends Controller
 
         $segment->fill($data)->save();
 
-        return response()->json(['data' => $segment->fresh()]);
+        return response()->json(['data' => $segment->fresh()] + $this->cowMeta($library, $orgId));
     }
 
     /**
@@ -469,17 +513,17 @@ class TprmLibraryController extends Controller
     public function destroySegment(Request $request, string $id, string $segmentId)
     {
         $orgId = $request->user()->org_id;
-        $library = $this->findOwnedOrFail($id, $orgId);
+        $library = $this->resolveEditable($request, $id);
 
         $segment = QuestionLibrarySegment::query()
-            ->where('id', $segmentId)
+            ->where('id', $this->mapSegmentId($segmentId))
             ->where('library_id', $library->id)
             ->firstOrFail();
 
         $segment->delete();
         $library->refreshCounters();
 
-        return response()->json(['message' => 'Segment dihapus.']);
+        return response()->json(['message' => 'Segment dihapus.'] + $this->cowMeta($library, $orgId));
     }
 
     /**
@@ -490,7 +534,7 @@ class TprmLibraryController extends Controller
     public function reorderSegments(Request $request, string $id)
     {
         $orgId = $request->user()->org_id;
-        $library = $this->findOwnedOrFail($id, $orgId);
+        $library = $this->resolveEditable($request, $id);
 
         $data = $request->validate([
             'order' => 'required|array|min:1',
@@ -500,13 +544,13 @@ class TprmLibraryController extends Controller
         DB::transaction(function () use ($library, $data) {
             foreach ($data['order'] as $i => $segId) {
                 QuestionLibrarySegment::query()
-                    ->where('id', $segId)
+                    ->where('id', $this->mapSegmentId($segId))
                     ->where('library_id', $library->id)
                     ->update(['order_index' => $i]);
             }
         });
 
-        return response()->json(['message' => 'Urutan segment diperbarui.']);
+        return response()->json(['message' => 'Urutan segment diperbarui.'] + $this->cowMeta($library, $orgId));
     }
 
     // =============================================
@@ -522,7 +566,7 @@ class TprmLibraryController extends Controller
     public function storeQuestion(Request $request, string $id)
     {
         $orgId = $request->user()->org_id;
-        $library = $this->findOwnedOrFail($id, $orgId);
+        $library = $this->resolveEditable($request, $id);
 
         $data = $request->validate([
             'library_segment_id' => 'required|string',
@@ -543,7 +587,7 @@ class TprmLibraryController extends Controller
 
         // Verify segment milik library yang sama (anti cross-library injection)
         $segment = QuestionLibrarySegment::query()
-            ->where('id', $data['library_segment_id'])
+            ->where('id', $this->mapSegmentId($data['library_segment_id']))
             ->where('library_id', $library->id)
             ->firstOrFail();
 
@@ -573,7 +617,7 @@ class TprmLibraryController extends Controller
         $library->refreshCounters();
         $segment->refreshCounter();
 
-        return response()->json(['data' => $question], 201);
+        return response()->json(['data' => $question] + $this->cowMeta($library, $orgId), 201);
     }
 
     /**
@@ -582,11 +626,11 @@ class TprmLibraryController extends Controller
     public function updateQuestion(Request $request, string $id, string $questionId)
     {
         $orgId = $request->user()->org_id;
-        $library = $this->findOwnedOrFail($id, $orgId);
+        $library = $this->resolveEditable($request, $id);
 
         $question = VendorQuestionnaire::query()
             ->withoutGlobalScope('org')
-            ->where('id', $questionId)
+            ->where('id', $this->mapQuestionId($questionId))
             ->where('library_id', $library->id)
             ->where('org_id', $orgId)
             ->firstOrFail();
@@ -609,6 +653,7 @@ class TprmLibraryController extends Controller
 
         // Validate segment pindah masih di library yang sama
         if (isset($data['library_segment_id'])) {
+            $data['library_segment_id'] = $this->mapSegmentId($data['library_segment_id']);
             QuestionLibrarySegment::query()
                 ->where('id', $data['library_segment_id'])
                 ->where('library_id', $library->id)
@@ -624,7 +669,7 @@ class TprmLibraryController extends Controller
             }
         }
 
-        return response()->json(['data' => $question->fresh()]);
+        return response()->json(['data' => $question->fresh()] + $this->cowMeta($library, $orgId));
     }
 
     /**
@@ -633,11 +678,11 @@ class TprmLibraryController extends Controller
     public function destroyQuestion(Request $request, string $id, string $questionId)
     {
         $orgId = $request->user()->org_id;
-        $library = $this->findOwnedOrFail($id, $orgId);
+        $library = $this->resolveEditable($request, $id);
 
         $question = VendorQuestionnaire::query()
             ->withoutGlobalScope('org')
-            ->where('id', $questionId)
+            ->where('id', $this->mapQuestionId($questionId))
             ->where('library_id', $library->id)
             ->where('org_id', $orgId)
             ->firstOrFail();
@@ -651,7 +696,7 @@ class TprmLibraryController extends Controller
             $seg?->refreshCounter();
         }
 
-        return response()->json(['message' => 'Pertanyaan dihapus.']);
+        return response()->json(['message' => 'Pertanyaan dihapus.'] + $this->cowMeta($library, $orgId));
     }
 
     /**
@@ -661,7 +706,7 @@ class TprmLibraryController extends Controller
     public function reorderQuestions(Request $request, string $id)
     {
         $orgId = $request->user()->org_id;
-        $library = $this->findOwnedOrFail($id, $orgId);
+        $library = $this->resolveEditable($request, $id);
 
         $data = $request->validate([
             'order' => 'required|array|min:1',
@@ -672,14 +717,14 @@ class TprmLibraryController extends Controller
             foreach ($data['order'] as $i => $qId) {
                 VendorQuestionnaire::query()
                     ->withoutGlobalScope('org')
-                    ->where('id', $qId)
+                    ->where('id', $this->mapQuestionId($qId))
                     ->where('library_id', $library->id)
                     ->where('org_id', $orgId)
                     ->update(['sort_order' => $i]);
             }
         });
 
-        return response()->json(['message' => 'Urutan pertanyaan diperbarui.']);
+        return response()->json(['message' => 'Urutan pertanyaan diperbarui.'] + $this->cowMeta($library, $orgId));
     }
 
     /**
@@ -712,7 +757,7 @@ class TprmLibraryController extends Controller
     public function bulkStoreQuestions(Request $request, string $id)
     {
         $orgId = $request->user()->org_id;
-        $library = $this->findOwnedOrFail($id, $orgId);
+        $library = $this->resolveEditable($request, $id);
 
         $data = $request->validate([
             'questions' => 'required|array|min:1|max:500',
@@ -729,6 +774,11 @@ class TprmLibraryController extends Controller
             'questions.*.weight' => 'nullable|integer|min:1|max:10',
             'questions.*.direction' => 'nullable|integer|in:-1,1',
         ]);
+
+        // Terjemahkan id segment (mungkin milik template platform saat COW)
+        foreach ($data['questions'] as $i => $q) {
+            $data['questions'][$i]['library_segment_id'] = $this->mapSegmentId($q['library_segment_id']);
+        }
 
         // Validate semua segment milik library yang sama
         $segmentIds = collect($data['questions'])->pluck('library_segment_id')->unique();
@@ -793,7 +843,7 @@ class TprmLibraryController extends Controller
         return response()->json([
             'message' => "{$inserted} pertanyaan ditambahkan.",
             'inserted_count' => $inserted,
-        ], 201);
+        ] + $this->cowMeta($library, $orgId), 201);
     }
 
     /**
@@ -810,6 +860,61 @@ class TprmLibraryController extends Controller
             ->count();
 
         return sprintf('%s-%02d', $prefix, $count + 1);
+    }
+
+    // =============================================
+    // RESET KE DEFAULT (fork COW → kembali ke template platform)
+    // =============================================
+
+    /**
+     * POST /api/tprm/libraries/{id}/reset-to-default
+     *
+     * {id} = fork COW milik org (source=forked). Fork di-SOFT-DELETE — bukan
+     * hard delete — supaya asesmen in-flight yang ber-library_id fork tetap
+     * bisa dirender & di-skor: jalur load pertanyaan (AsesmenPublikController,
+     * TprmReviewController, ThirdPartyAssessmentScorer) query langsung
+     * `vendor_questionnaires.library_id` tanpa join ke row library, dan
+     * pertanyaan fork TIDAK dihapus. Setelah reset, template platform asli
+     * muncul kembali pristine di list + picker (shadow hilang).
+     */
+    public function resetToDefault(Request $request, string $id)
+    {
+        $orgId = $request->user()->org_id;
+        if (! $orgId) {
+            return response()->json(['error' => 'Org context required.'], 403);
+        }
+
+        $fork = QuestionLibrary::query()
+            ->withoutGlobalScope('org')
+            ->where('id', $id)
+            ->where('org_id', $orgId)
+            ->where('source', QuestionLibrary::SOURCE_FORKED)
+            ->firstOrFail();
+
+        // Info untuk pesan konfirmasi — asesmen yang sudah terlanjur memakai
+        // fork ini tetap menyimpan snapshot pertanyaannya (lihat docblock).
+        $inFlightCount = VendorAssessment::query()
+            ->where('org_id', $orgId)
+            ->where('library_id', $fork->id)
+            ->count();
+
+        $template = $fork->cloned_from_library_id
+            ? QuestionLibrary::query()
+                ->withoutGlobalScope('org')
+                ->whereNull('org_id')
+                ->where('id', $fork->cloned_from_library_id)
+                ->first()
+            : null;
+
+        $fork->delete(); // soft delete — pertanyaan fork tetap di DB
+
+        return response()->json([
+            'message' => $inFlightCount > 0
+                ? "Template dikembalikan ke versi default platform. {$inFlightCount} asesmen yang sudah memakai versi ubahan tetap menggunakan snapshot pertanyaannya."
+                : 'Template dikembalikan ke versi default platform.',
+            'in_flight_assessments' => $inFlightCount,
+            'data' => $template ? $this->presentLibrary($template, $orgId) : null,
+        ]);
     }
 
     // =============================================
@@ -850,6 +955,150 @@ class TprmLibraryController extends Controller
         return $library;
     }
 
+    // ---------------------------------------------
+    // Copy-on-write fork (Bank Pertanyaan = single surface)
+    // ---------------------------------------------
+
+    /** True kalau request ini di-redirect ke fork COW (target awal = template platform). */
+    private bool $cowForked = false;
+
+    /** Map id segment template platform → id segment fork. */
+    private array $cowSegmentMap = [];
+
+    /** Map id question template platform → id question fork. */
+    private array $cowQuestionMap = [];
+
+    /**
+     * Resolve library yang BISA diedit org untuk operasi mutasi.
+     *
+     * - Library milik org (tidak locked) → dipakai langsung.
+     * - Template platform (org_id NULL)  → copy-on-write: fork otomatis ke
+     *   library milik org (source=forked, nama sama) yang men-shadow template
+     *   di list/picker. Kalau fork sudah ada (mis. request dari tab lama yang
+     *   masih memegang id template), operasi di-redirect ke fork existing
+     *   dengan pemetaan id segment/question via code → name → text.
+     *
+     * Caller WAJIB menerjemahkan id segment/question dari payload lewat
+     * mapSegmentId()/mapQuestionId() setelah memanggil method ini.
+     */
+    private function resolveEditable(Request $request, string $id): QuestionLibrary
+    {
+        $orgId = $request->user()->org_id;
+        if (! $orgId) {
+            abort(403, 'Org context required.');
+        }
+
+        $library = QuestionLibrary::query()
+            ->withoutGlobalScope('org')
+            ->visibleTo($orgId)
+            ->where('id', $id)
+            ->firstOrFail();
+
+        // Library milik org sendiri → edit langsung (locked tetap ditolak).
+        if ($library->org_id === $orgId) {
+            if ($library->is_locked) {
+                abort(403, 'Library terkunci. Clone dahulu untuk mengubah.');
+            }
+
+            return $library;
+        }
+
+        // Template platform → COW fork.
+        $existingFork = QuestionLibrary::query()
+            ->withoutGlobalScope('org')
+            ->where('org_id', $orgId)
+            ->where('source', QuestionLibrary::SOURCE_FORKED)
+            ->where('cloned_from_library_id', $library->id)
+            ->orderByDesc('created_at')
+            ->first();
+
+        if ($existingFork) {
+            $this->cowForked = true;
+            $this->buildCowMaps($library, $existingFork);
+
+            return $existingFork;
+        }
+
+        [$fork, $segmentMap, $questionMap] = $this->duplicateLibrary(
+            $library,
+            $orgId,
+            $request->user()->id,
+            $library->name,
+            QuestionLibrary::SOURCE_FORKED,
+        );
+
+        $this->cowForked = true;
+        $this->cowSegmentMap = $segmentMap;
+        $this->cowQuestionMap = $questionMap;
+
+        return $fork;
+    }
+
+    /**
+     * Bangun map id template→fork untuk fork yang SUDAH ada (request masih
+     * memegang id milik template platform). Match segment by code lalu name;
+     * question by question_code lalu question_text.
+     */
+    private function buildCowMaps(QuestionLibrary $template, QuestionLibrary $fork): void
+    {
+        $forkSegments = $fork->segments;
+        foreach ($template->segments as $tplSeg) {
+            $match = $forkSegments->first(fn ($s) => $tplSeg->code && $s->code === $tplSeg->code)
+                ?? $forkSegments->first(fn ($s) => $s->name === $tplSeg->name);
+            if ($match) {
+                $this->cowSegmentMap[$tplSeg->id] = $match->id;
+            }
+        }
+
+        $tplQuestions = VendorQuestionnaire::query()
+            ->withoutGlobalScope('org')
+            ->where('library_id', $template->id)
+            ->whereNull('org_id')
+            ->get();
+        $forkQuestions = VendorQuestionnaire::query()
+            ->withoutGlobalScope('org')
+            ->where('library_id', $fork->id)
+            ->where('org_id', $fork->org_id)
+            ->get();
+
+        foreach ($tplQuestions as $tplQ) {
+            $match = $forkQuestions->first(fn ($q) => $tplQ->question_code && $q->question_code === $tplQ->question_code)
+                ?? $forkQuestions->first(fn ($q) => $q->question_text === $tplQ->question_text);
+            if ($match) {
+                $this->cowQuestionMap[$tplQ->id] = $match->id;
+            }
+        }
+    }
+
+    /** Terjemahkan id segment payload (mungkin milik template) ke id fork. */
+    private function mapSegmentId(?string $segmentId): ?string
+    {
+        return $segmentId !== null ? ($this->cowSegmentMap[$segmentId] ?? $segmentId) : null;
+    }
+
+    /** Terjemahkan id question payload (mungkin milik template) ke id fork. */
+    private function mapQuestionId(string $questionId): string
+    {
+        return $this->cowQuestionMap[$questionId] ?? $questionId;
+    }
+
+    /**
+     * Metadata COW yang di-merge ke response mutasi: kalau request ini bekerja
+     * pada fork (baru dibuat ATAU redirect ke fork existing), FE perlu pindah
+     * ke library id fork. Empty array kalau bukan COW.
+     */
+    private function cowMeta(QuestionLibrary $library, ?string $orgId): array
+    {
+        if (! $this->cowForked) {
+            return [];
+        }
+
+        return [
+            'forked' => true,
+            'library' => $this->presentLibrary($library->fresh(), $orgId),
+        ];
+    }
+
     private function presentLibrary(QuestionLibrary $lib, ?string $orgId): array
     {
         return [
@@ -865,6 +1114,9 @@ class TprmLibraryController extends Controller
             'is_locked' => $lib->is_locked,
             'is_template' => $lib->org_id === null,
             'is_owned' => $lib->org_id === $orgId,
+            // Fork COW dari template platform — di UI tampil menggantikan
+            // template asalnya dengan badge "(diubah)" + tombol Reset ke Default.
+            'is_fork' => $lib->source === QuestionLibrary::SOURCE_FORKED,
             'segments_count' => $lib->segments_count,
             'questions_count' => $lib->questions_count,
             'tags' => $lib->tags ?? [],

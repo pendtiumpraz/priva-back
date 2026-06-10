@@ -27,8 +27,19 @@ class QuestionLibrary extends Model
     use HasUuids, LandlordPinned, SoftDeletes;
 
     public const SOURCE_SEEDED = 'seeded';
+
     public const SOURCE_CUSTOM = 'custom';
+
     public const SOURCE_CLONED = 'cloned';
+
+    /**
+     * Fork copy-on-write dari template platform: dibuat OTOMATIS saat org
+     * pertama kali mengedit template platform via Bank Pertanyaan. Fork
+     * men-shadow template asalnya (cloned_from_library_id) di list +
+     * picker — org melihat SATU entri per template: fork-nya kalau ada,
+     * else template platform asli. "Reset ke Default" = soft-delete fork.
+     */
+    public const SOURCE_FORKED = 'forked';
 
     protected $fillable = [
         'org_id',

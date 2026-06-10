@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\LandlordPinned;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 
 /**
  * Platform-level vendor questionnaire bank. Pinned to landlord because
@@ -23,8 +24,11 @@ class VendorQuestionnaire extends Model
     use HasUuids, LandlordPinned;
 
     public const CATEGORY_CLOUD = 'cloud_infrastructure';
+
     public const CATEGORY_SAAS = 'saas';
+
     public const CATEGORY_DATA_PROCESSOR = 'data_processor';
+
     /**
      * Default category untuk semua pihak ketiga sejak Sprint G revisi:
      * 56 pertanyaan PDP komprehensif yang berlaku untuk SEMUA bidang vendor
@@ -55,9 +59,13 @@ class VendorQuestionnaire extends Model
     ];
 
     public const SECTION_GOVERNANCE = 'governance';
+
     public const SECTION_SECURITY = 'security';
+
     public const SECTION_DATA_HANDLING = 'data_handling';
+
     public const SECTION_COMPLIANCE = 'compliance';
+
     public const SECTION_CONTRACTUAL = 'contractual';
 
     public const SECTION_LABELS = [
@@ -69,7 +77,9 @@ class VendorQuestionnaire extends Model
     ];
 
     public const ANSWER_YES_NO = 'yes_no';
+
     public const ANSWER_MULTI_CHOICE = 'multi_choice';
+
     public const ANSWER_SCALE_1_5 = 'scale_1_5';
 
     protected $fillable = [
@@ -112,7 +122,7 @@ class VendorQuestionnaire extends Model
      *
      * De-activated overrides remove the default from the effective set.
      */
-    public static function effectiveForOrg(?string $orgId): \Illuminate\Support\Collection
+    public static function effectiveForOrg(?string $orgId): Collection
     {
         $defaults = self::query()
             ->withoutGlobalScope('org')
@@ -137,10 +147,15 @@ class VendorQuestionnaire extends Model
                 }
             }
 
+            // whereNull('library_id'): pertanyaan milik library org (snapshot /
+            // clone / fork dari Bank Pertanyaan) BUKAN bagian set efektif legacy
+            // — tanpa filter ini, fork 56 pertanyaan template akan menduplikasi
+            // seluruh set efektif untuk assessment lama (library_id NULL).
             $customs = self::query()
                 ->withoutGlobalScope('org')
                 ->where('org_id', $orgId)
                 ->whereNull('parent_id')
+                ->whereNull('library_id')
                 ->get();
 
             // Filter out de-activated defaults
