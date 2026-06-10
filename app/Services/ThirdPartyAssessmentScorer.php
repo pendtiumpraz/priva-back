@@ -40,10 +40,23 @@ class ThirdPartyAssessmentScorer
 
     public function compute(VendorAssessment $assessment): array
     {
-        // Resolve effective questions untuk org pemilik assessment. Filter:
-        // hanya pertanyaan aktif + versi v2_2026 (versi publik baru).
-        $questions = VendorQuestionnaire::effectiveForOrg($assessment->org_id)
-            ->filter(fn ($q) => $q->is_active && $q->version === self::VERSION);
+        // Dual path — HARUS mirror question-loading di AsesmenPublikController
+        // ::show dan TprmReviewController::doShow supaya denominator skor sama
+        // persis dengan pertanyaan yang dirender ke pihak ketiga:
+        //   (a) library_id terisi → semua pertanyaan aktif dari library tsb
+        //       (template global atau library tenant), tanpa filter versi
+        //       (versi library bebas, mis. 'v1').
+        //   (b) legacy (library_id NULL) → effectiveForOrg + versi v2_2026.
+        if (! empty($assessment->library_id)) {
+            $questions = VendorQuestionnaire::query()
+                ->withoutGlobalScope('org')
+                ->where('library_id', $assessment->library_id)
+                ->where('is_active', true)
+                ->get();
+        } else {
+            $questions = VendorQuestionnaire::effectiveForOrg($assessment->org_id)
+                ->filter(fn ($q) => $q->is_active && $q->version === self::VERSION);
+        }
 
         $answers = is_array($assessment->answers) ? $assessment->answers : [];
         $totalAktif = $questions->count();

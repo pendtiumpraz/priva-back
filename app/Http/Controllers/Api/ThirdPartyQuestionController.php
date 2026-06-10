@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\VendorQuestionnaire;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Sprint G.4 — Customisasi pertanyaan TPRM per-tenant.
@@ -271,6 +271,59 @@ class ThirdPartyQuestionController extends Controller
 
         return response()->json([
             'message' => 'Pertanyaan berhasil dihapus.',
+        ]);
+    }
+
+    /**
+     * POST /api/third-party/questions/factory-reset
+     * Reset TOTAL set pertanyaan "Kelola Pertanyaan" org ke default pabrikan
+     * (paritas dengan GAP/Maturity/TIA/LIA):
+     *   - Semua override default org (org_id=org, parent_id NOT NULL) dihapus
+     *     permanen → edit di-revert + default yang dinonaktifkan (tombstone)
+     *     otomatis aktif lagi.
+     *   - Semua pertanyaan custom org (org_id=org, parent_id NULL) dihapus —
+     *     tabel ini tidak punya soft delete (semantik sama dengan destroy()).
+     *
+     * PENTING — yang TIDAK disentuh:
+     *   - Baris system default (org_id NULL) milik platform.
+     *   - Pertanyaan milik library tenant (library_id NOT NULL) — itu dikelola
+     *     lewat Bank Pertanyaan TPRM (/tprm/libraries), bukan Kelola Pertanyaan.
+     *     Asesmen yang terikat library (library_id terisi) tidak terpengaruh.
+     *
+     * Risiko yang disengaja & dikomunikasikan di confirm FE: asesmen berjalan
+     * TANPA library (library_id NULL — jalur legacy effectiveForOrg) akan
+     * melihat set pertanyaan berubah; jawaban tersimpan pada pertanyaan
+     * custom/override yang dihapus menjadi orphan.
+     */
+    public function factoryResetQuestions(Request $request)
+    {
+        $orgId = $request->user()->org_id;
+        if (! $orgId) {
+            return response()->json(['message' => 'Org context required.'], 403);
+        }
+
+        $overridesRemoved = VendorQuestionnaire::query()
+            ->withoutGlobalScope('org')
+            ->where('org_id', $orgId)
+            ->whereNotNull('parent_id')
+            ->delete();
+
+        $customsRemoved = VendorQuestionnaire::query()
+            ->withoutGlobalScope('org')
+            ->where('org_id', $orgId)
+            ->whereNull('parent_id')
+            ->whereNull('library_id') // jangan sentuh pertanyaan milik library tenant
+            ->delete();
+
+        AuditLog::log('vendor_risk', $orgId, 'questions_factory_reset', [
+            'overrides_removed' => (int) $overridesRemoved,
+            'customs_removed' => (int) $customsRemoved,
+        ]);
+
+        return response()->json([
+            'message' => 'Semua pertanyaan dikembalikan ke default pabrikan.',
+            'overrides_removed' => (int) $overridesRemoved,
+            'customs_removed' => (int) $customsRemoved,
         ]);
     }
 

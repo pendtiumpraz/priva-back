@@ -669,6 +669,11 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
             ->middleware('permission:vendor_risk,read');
         Route::post('/', [ThirdPartyQuestionController::class, 'store'])
             ->middleware('permission:vendor_risk,write');
+        // Factory reset: hapus SEMUA override default + SEMUA custom question
+        // org (Kelola Pertanyaan). Library tenant TIDAK disentuh. MUST precede
+        // route {id} wildcards.
+        Route::post('/factory-reset', [ThirdPartyQuestionController::class, 'factoryResetQuestions'])
+            ->middleware('permission:vendor_risk,write');
         Route::put('/{id}', [ThirdPartyQuestionController::class, 'update'])
             ->middleware('permission:vendor_risk,write');
         Route::delete('/{id}', [ThirdPartyQuestionController::class, 'destroy'])
@@ -686,6 +691,11 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::get('/', [TprmLibraryController::class, 'index'])
             ->middleware('permission:vendor_risk,read');
         Route::post('/', [TprmLibraryController::class, 'store'])
+            ->middleware('permission:vendor_risk,write');
+        // Snapshot set pertanyaan EFEKTIF org (default + override + custom dari
+        // Kelola Pertanyaan) menjadi library baru milik org ("Simpan sebagai
+        // Template"). MUST precede route {id} wildcards.
+        Route::post('/snapshot', [TprmLibraryController::class, 'snapshotFromEffective'])
             ->middleware('permission:vendor_risk,write');
         Route::get('/{id}', [TprmLibraryController::class, 'show'])
             ->middleware('permission:vendor_risk,read');

@@ -133,6 +133,133 @@ class TprmLibraryController extends Controller
     }
 
     /**
+     * POST /api/tprm/libraries/snapshot
+     *
+     * "Simpan sebagai Template" — snapshot set pertanyaan EFEKTIF org saat ini
+     * (VendorQuestionnaire::effectiveForOrg = default + override + custom dari
+     * Kelola Pertanyaan) menjadi library baru milik org. Segment dibentuk
+     * otomatis dari `section` pertanyaan (Tata Kelola, Keamanan, dst).
+     *
+     * Versi auto: "v{N}" dengan N = jumlah snapshot org yang sudah ada + 1,
+     * supaya snapshot berulang tidak bentrok nama/versi.
+     *
+     * Hasilnya bisa dipilih sebagai bank pertanyaan saat membuat tautan
+     * asesmen pihak ketiga (library_id pada vendor_assessments), dan immune
+     * terhadap perubahan Kelola Pertanyaan berikutnya (copy mandiri).
+     */
+    public function snapshotFromEffective(Request $request)
+    {
+        $orgId = $request->user()->org_id;
+        if (! $orgId) {
+            return response()->json(['error' => 'Org context required.'], 403);
+        }
+
+        $data = $request->validate([
+            'name' => 'required|string|max:200',
+            'description' => 'nullable|string|max:2000',
+        ]);
+
+        // Set efektif org — hanya pertanyaan aktif versi scorer (v2_2026).
+        $effective = VendorQuestionnaire::effectiveForOrg($orgId)
+            ->filter(fn ($q) => $q->is_active && $q->version === 'v2_2026')
+            ->sortBy([['section', 'asc'], ['sort_order', 'asc']])
+            ->values();
+
+        if ($effective->isEmpty()) {
+            return response()->json([
+                'error' => 'Set pertanyaan efektif organisasi kosong — tidak ada yang bisa disimpan sebagai template.',
+            ], 422);
+        }
+
+        // Auto-version: v{N} per (org, nama) — termasuk yang sudah dihapus
+        // supaya versi tidak pernah reuse saat snapshot berulang nama sama.
+        $sameName = QuestionLibrary::withTrashed()
+            ->withoutGlobalScope('org')
+            ->where('org_id', $orgId)
+            ->where('name', $data['name'])
+            ->count();
+        $version = 'v'.($sameName + 1);
+
+        $library = DB::transaction(function () use ($orgId, $data, $effective, $version, $request) {
+            $lib = QuestionLibrary::create([
+                'id' => (string) Str::uuid(),
+                'org_id' => $orgId,
+                'name' => $data['name'],
+                'slug' => Str::slug($data['name']).'-'.Str::lower(Str::random(4)),
+                'description' => $data['description']
+                    ?? 'Snapshot set pertanyaan efektif organisasi (Kelola Pertanyaan).',
+                'category' => 'pdp_compliance',
+                'version' => $version,
+                'source' => QuestionLibrary::SOURCE_CUSTOM,
+                'is_active' => true,
+                'is_locked' => false,
+                'tags' => ['snapshot'],
+                'created_by' => $request->user()->id,
+            ]);
+
+            // Segment per section, urut sesuai kemunculan di set efektif.
+            $segmentMap = [];
+            $orderIndex = 0;
+            foreach ($effective as $q) {
+                $sectionKey = $q->section ?: 'lainnya';
+                if (isset($segmentMap[$sectionKey])) {
+                    continue;
+                }
+                $segId = (string) Str::uuid();
+                QuestionLibrarySegment::create([
+                    'id' => $segId,
+                    'library_id' => $lib->id,
+                    'name' => VendorQuestionnaire::SECTION_LABELS[$sectionKey] ?? ucwords(str_replace('_', ' ', $sectionKey)),
+                    'code' => strtoupper(substr(preg_replace('/[^A-Za-z]/', '', $sectionKey), 0, 3)),
+                    'order_index' => $orderIndex++,
+                    'weight_pct' => 0,
+                ]);
+                $segmentMap[$sectionKey] = $segId;
+            }
+
+            // Copy mandiri tiap pertanyaan (bukan reference) — perubahan
+            // Kelola Pertanyaan berikutnya tidak mengubah template ini.
+            foreach ($effective as $q) {
+                VendorQuestionnaire::create([
+                    'id' => (string) Str::uuid(),
+                    'org_id' => $orgId,
+                    'parent_id' => null,
+                    'library_id' => $lib->id,
+                    'library_segment_id' => $segmentMap[$q->section ?: 'lainnya'],
+                    'category' => $q->category,
+                    'version' => $version,
+                    'question_code' => $q->question_code,
+                    'section' => $q->section,
+                    'question_text' => $q->question_text,
+                    'description' => $q->description,
+                    'regulation_ref' => $q->regulation_ref,
+                    'recommendation_if_no' => $q->recommendation_if_no,
+                    'requires_evidence_upload' => $q->requires_evidence_upload,
+                    'answer_type' => $q->answer_type,
+                    'answer_options' => $q->answer_options,
+                    'weight' => $q->weight,
+                    'direction' => $q->direction,
+                    'is_active' => true,
+                    'sort_order' => $q->sort_order,
+                ]);
+            }
+
+            $lib->refreshCounters();
+            foreach ($lib->segments as $seg) {
+                $seg->refreshCounter();
+            }
+
+            return $lib;
+        });
+
+        return response()->json([
+            'message' => "Template \"{$library->name}\" ({$version}) berhasil dibuat dari {$effective->count()} pertanyaan efektif organisasi.",
+            'questions_count' => $effective->count(),
+            'data' => $this->presentLibrary($library->fresh(), $orgId),
+        ], 201);
+    }
+
+    /**
      * POST /api/tprm/libraries/{id}/clone
      *
      * Duplikat library + semua segment + semua question ke library baru

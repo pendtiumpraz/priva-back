@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Organization;
+use App\Models\QuestionLibrary;
 use App\Models\Vendor;
 use App\Models\VendorAssessment;
 use App\Models\VendorQuestionnaire;
@@ -14,6 +15,7 @@ use App\Services\AssessmentAutoTriggerService;
 use App\Services\AssessmentTokenService;
 use App\Services\DocumentParserService;
 use App\Services\FileUploadValidator;
+use App\Services\NotificationService;
 use App\Services\TenantStorageService;
 use App\Services\VendorRiskScoreService;
 use Illuminate\Http\Request;
@@ -166,9 +168,9 @@ class VendorRiskController extends Controller
     public function assessmentHistory(Request $request, string $id)
     {
         $orgId = $request->user()->org_id;
-        $vendor = \App\Models\Vendor::where('org_id', $orgId)->findOrFail($id);
+        $vendor = Vendor::where('org_id', $orgId)->findOrFail($id);
 
-        $assessments = \App\Models\VendorAssessment::query()
+        $assessments = VendorAssessment::query()
             ->where('vendor_id', $vendor->id)
             ->where('org_id', $orgId)
             ->orderByDesc('created_at')
@@ -184,13 +186,15 @@ class VendorRiskController extends Controller
 
         // Reminder logic: cek kapan assessment approved terakhir kali
         $lastApproved = $assessments
-            ->where('status', \App\Models\VendorAssessment::STATUS_APPROVED)
+            ->where('status', VendorAssessment::STATUS_APPROVED)
             ->sortByDesc('approver_actioned_at')
             ->first();
 
         $frequencyMonths = (int) config('vendor_screening.full_assessment_frequency_months', 12);
         // Fallback hardcoded 12 kalau config tidak ada
-        if ($frequencyMonths <= 0) $frequencyMonths = 12;
+        if ($frequencyMonths <= 0) {
+            $frequencyMonths = 12;
+        }
 
         $needReassessment = false;
         $monthsSinceLastApproval = null;
@@ -394,15 +398,17 @@ class VendorRiskController extends Controller
         // Notif ke DPO + admin tenant — severity ikut tingkat risiko hasil asesmen.
         try {
             $sev = in_array($result['risk_level'], ['high', 'critical'], true) ? 'high' : 'low';
-            \App\Services\NotificationService::dispatch(
+            NotificationService::dispatch(
                 kind: in_array($result['risk_level'], ['high', 'critical'], true) ? 'warning' : 'info',
                 severity: $sev, module: 'vendor-risk', type: 'vendor.assessed',
                 recipient: 'role:dpo,admin', orgId: $vendor->org_id,
                 title: "Asesmen pihak ketiga selesai: {$vendor->vendor_name}",
                 body: 'Skor '.$result['score'].'/100 — risiko '.strtoupper($result['risk_level']).'.',
-                actionUrl: "/vendor-risk", metadata: ['record_id' => $vendor->id],
+                actionUrl: '/vendor-risk', metadata: ['record_id' => $vendor->id],
             );
-        } catch (\Throwable $e) { \Log::warning('vendor.assessed notif failed: '.$e->getMessage()); }
+        } catch (\Throwable $e) {
+            \Log::warning('vendor.assessed notif failed: '.$e->getMessage());
+        }
 
         return response()->json([
             'message' => 'Assessment selesai. Skor: '.$result['score'].'/100 ('.strtoupper($result['risk_level']).').',
@@ -912,7 +918,7 @@ class VendorRiskController extends Controller
         // dipilih. Validasi library visible untuk org ini.
         $libraryId = $request->input('library_id');
         if ($libraryId) {
-            $lib = \App\Models\QuestionLibrary::query()
+            $lib = QuestionLibrary::query()
                 ->withoutGlobalScope('org')
                 ->visibleTo($vendor->org_id)
                 ->where('id', $libraryId)
@@ -940,10 +946,13 @@ class VendorRiskController extends Controller
             ]
         );
 
-        // Kalau row existing (firstOrCreate hit lama) dan client kirim library
-        // berbeda, update supaya pertanyaan yang dirender konsisten.
-        if ($libraryId && $assessment->library_id !== $libraryId) {
-            $assessment->update(['library_id' => $libraryId]);
+        // Kalau row existing (firstOrCreate hit lama) dan client kirim pilihan
+        // library berbeda, update supaya pertanyaan yang dirender konsisten.
+        // `exists('library_id')` membedakan "key dikirim bernilai null" (=
+        // pilih Default / pertanyaan org saat ini → CLEAR library_id, jalur
+        // effectiveForOrg) dari "key tidak dikirim" (legacy client → no-op).
+        if ($request->exists('library_id') && $assessment->library_id !== ($libraryId ?: null)) {
+            $assessment->update(['library_id' => $libraryId ?: null]);
         }
 
         // Generate token (default expiry 30 hari, configurable via

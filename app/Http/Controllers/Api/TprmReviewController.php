@@ -17,6 +17,7 @@ use App\Services\FileUploadValidator;
 use App\Services\TenantStorageService;
 use App\Services\ThirdPartyAssessmentScorer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -76,6 +77,7 @@ class TprmReviewController extends Controller
         return response()->json([
             'data' => $rows->map(function ($a) use ($vendors, $userId) {
                 $v = $vendors->get($a->vendor_id);
+
                 return [
                     'id' => $a->id,
                     'vendor_id' => $a->vendor_id,
@@ -109,6 +111,7 @@ class TprmReviewController extends Controller
                 'message' => $e->getMessage(),
                 'file' => $e->getFile().':'.$e->getLine(),
             ]);
+
             return response()->json([
                 'message' => 'Gagal memuat detail review.',
                 'error' => $e->getMessage(),
@@ -359,18 +362,24 @@ class TprmReviewController extends Controller
             'reviewer_note' => 'nullable|string|max:2000',
         ]);
 
-        // Recompute score setelah semua adjustment
+        // Recompute score setelah semua adjustment. compute() sudah dual-path:
+        // honor library_id assessment kalau terisi, else effectiveForOrg legacy.
+        // (Sebelumnya memanggil method score() yang tidak ada → recompute
+        // selalu silently skip via catch.)
         try {
-            $result = app(ThirdPartyAssessmentScorer::class)->score(
-                $assessment->library_id ? null : ($assessment->category ?? 'pdp_compliance'),
-                $assessment->answers ?? [],
-                $assessment->library_id
-            );
+            $result = app(ThirdPartyAssessmentScorer::class)->compute($assessment);
             $scoreUpdate = [
                 'score' => (int) round($result['score'] ?? $assessment->score),
                 'risk_level' => $result['risk_level'] ?? $assessment->risk_level,
                 'recommendations' => $result['recommendations'] ?? $assessment->recommendations,
-                'score_breakdown' => $result['breakdown'] ?? $assessment->score_breakdown,
+                'score_breakdown' => [
+                    'total_aktif' => $result['total_aktif'],
+                    'jawab_ya' => $result['jawab_ya'],
+                    'jawab_tidak' => $result['jawab_tidak'],
+                    'jawab_kosong' => $result['jawab_kosong'],
+                    'score' => $result['score'],
+                    'version' => $result['version'],
+                ],
             ];
         } catch (\Throwable $e) {
             // Scoring opsional — kalau gagal, lanjutkan tanpa recompute
@@ -428,7 +437,7 @@ class TprmReviewController extends Controller
         $assessment->forceFill([
             'status' => VendorAssessment::STATUS_SENT,
             'token_consumed_at' => null,  // re-open token supaya vendor bisa buka lagi
-            'reviewer_note' => "Dikembalikan ke vendor: ".$data['reason'],
+            'reviewer_note' => 'Dikembalikan ke vendor: '.$data['reason'],
             'reviewer_actioned_at' => now(),
             'reviewer_id' => $request->user()->id,
         ])->save();
@@ -546,6 +555,7 @@ class TprmReviewController extends Controller
             );
         } catch (\Throwable $e) {
             report($e);
+
             return response()->json([
                 'message' => 'Gagal menyimpan file ke storage: '.$e->getMessage(),
             ], 500);
@@ -683,6 +693,7 @@ class TprmReviewController extends Controller
             CreditService::resetIfNeeded($orgId);
             if (! CreditService::hasCredit($orgId, 'ai_doc_analyze')) {
                 $cost = CreditService::getCost('ai_doc_analyze');
+
                 return response()->json([
                     'message' => "Kredit AI Anda habis. Dibutuhkan {$cost} kredit untuk analisis ini. Silakan top up kredit melalui menu Konfigurasi Platform.",
                     'credits_exhausted' => true,
@@ -772,6 +783,7 @@ class TprmReviewController extends Controller
             $question = $questionMap->get($qId);
             if (! $question) {
                 $stats['skipped'] += count($files);
+
                 continue;
             }
 
@@ -788,6 +800,7 @@ class TprmReviewController extends Controller
                 $attachmentPath = is_array($att) ? ($att['path'] ?? null) : $att;
                 if (! $attachmentPath) {
                     $stats['skipped']++;
+
                     continue;
                 }
 
@@ -796,6 +809,7 @@ class TprmReviewController extends Controller
                 if ($prev && ! empty($prev['status'])) {
                     $newListForQ[] = $prev;
                     $stats['cached']++;
+
                     continue;
                 }
 
@@ -811,6 +825,7 @@ class TprmReviewController extends Controller
                         'attachment_path' => $attachmentPath,
                     ];
                     $stats['skipped']++;
+
                     continue;
                 }
 
@@ -834,6 +849,7 @@ class TprmReviewController extends Controller
                         'attachment_path' => $attachmentPath,
                     ];
                     $stats['failed']++;
+
                     continue;
                 }
 
@@ -888,7 +904,7 @@ class TprmReviewController extends Controller
      * Dual path mirror doShow(): library_id (TPRM Phase 1+) atau legacy
      * effectiveForOrg + filter versi scorer.
      */
-    private function questionsForAssessment(VendorAssessment $assessment): \Illuminate\Support\Collection
+    private function questionsForAssessment(VendorAssessment $assessment): Collection
     {
         if (! empty($assessment->library_id)) {
             return VendorQuestionnaire::query()
@@ -965,9 +981,12 @@ class TprmReviewController extends Controller
     private function bytesFromIni(string $val): int
     {
         $val = trim($val);
-        if ($val === '') return 0;
+        if ($val === '') {
+            return 0;
+        }
         $unit = strtolower(substr($val, -1));
         $num = (int) $val;
+
         return match ($unit) {
             'g' => $num * 1024 * 1024 * 1024,
             'm' => $num * 1024 * 1024,
@@ -979,8 +998,13 @@ class TprmReviewController extends Controller
     /** Format byte ke MB/KB human-readable. */
     private function humanBytes(int $bytes): string
     {
-        if ($bytes >= 1048576) return number_format($bytes / 1048576, 1).'MB';
-        if ($bytes >= 1024) return number_format($bytes / 1024, 1).'KB';
+        if ($bytes >= 1048576) {
+            return number_format($bytes / 1048576, 1).'MB';
+        }
+        if ($bytes >= 1024) {
+            return number_format($bytes / 1024, 1).'KB';
+        }
+
         return $bytes.'B';
     }
 
@@ -1028,6 +1052,7 @@ class TprmReviewController extends Controller
             if (file_put_contents($tmpPath, $contents) === false) {
                 return null;
             }
+
             return $tmpPath;
         } catch (\Throwable $e) {
             \Log::warning('[TPRM resolveAttachmentPath] tenant disk fetch failed', [
@@ -1035,6 +1060,7 @@ class TprmReviewController extends Controller
                 'path' => $rel,
                 'error' => $e->getMessage(),
             ]);
+
             return null;
         }
     }
@@ -1044,6 +1070,7 @@ class TprmReviewController extends Controller
         if (! $orgId) {
             abort(403, 'Org context required.');
         }
+
         return VendorAssessment::query()
             ->where('id', $id)
             ->where('org_id', $orgId)
