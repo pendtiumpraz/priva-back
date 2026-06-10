@@ -28,6 +28,7 @@ class TiaAssessment extends Model
         'rejection_reason', 'is_locked', 'unlocked_by', 'unlocked_at',
         'conclusion_verdict', 'conclusion_notes',
         'status', 'wizard_data', 'created_by',
+        'attachments', 'ai_analyses',
     ];
 
     protected $casts = [
@@ -36,6 +37,8 @@ class TiaAssessment extends Model
         'risk_assessment' => 'array',
         'supplementary_measures' => 'array',
         'wizard_data' => 'array',
+        'attachments' => 'array',
+        'ai_analyses' => 'array',
         'supplementary_doc_ids' => 'array',
         'destination_has_pdp_law' => 'boolean',
         'destination_has_pdp_authority' => 'boolean',
@@ -254,6 +257,38 @@ class TiaAssessment extends Model
         if (!$user) return false;
         if (!$this->is_locked) return true;
         return $user->role === 'root';
+    }
+
+    /**
+     * Agregasi hasil AI analysis untuk satu metrik ke 1 verdict (mirror
+     * MaturityAssessment::aggregateAiVerdict). Banyak dokumen per metrik
+     * → pilih WORST status (paling konservatif). `unsure` di-skip; kalau
+     * semua unsure return null.
+     *
+     * PENTING: di TIA verdict ini ADVISORY ONLY — tidak pernah mengubah
+     * skor metrik 1-10 user dan TIDAK dipakai di computeOverallRisk().
+     * UI menampilkannya sebagai badge per metrik.
+     *
+     * @param  mixed  $value  Bisa null, single object (legacy), atau array of objects.
+     */
+    public static function aggregateAiVerdict(mixed $value): ?string
+    {
+        if (empty($value) || ! is_array($value)) return null;
+        // Legacy single object
+        $entries = isset($value['status']) ? [$value] : array_values($value);
+        $rank = ['non_comply' => 3, 'partial' => 2, 'comply' => 1];
+        $worst = null;
+        $worstRank = 0;
+        foreach ($entries as $e) {
+            $st = is_array($e) ? ($e['status'] ?? null) : null;
+            if (! $st || $st === 'unsure') continue;
+            $r = $rank[$st] ?? 0;
+            if ($r > $worstRank) {
+                $worst = $st;
+                $worstRank = $r;
+            }
+        }
+        return $worst;
     }
 
     /**

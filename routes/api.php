@@ -1278,6 +1278,13 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::put('/default-questions/{questionCode}', [LiaController::class, 'updateDefaultQuestion']);
         Route::post('/default-questions/{questionCode}/reset', [LiaController::class, 'resetDefaultQuestion']);
 
+        // Evidence upload + AI document analysis per pertanyaan (parity
+        // dgn GAP/Maturity) — evidence keyed by question_code; verdict AI
+        // murni advisory (LIA tidak punya scoring).
+        Route::post('/{id}/upload-evidence', [LiaController::class, 'uploadEvidence']);
+        Route::post('/{id}/analyze-evidence', [LiaController::class, 'analyzeEvidence']);
+        Route::post('/{id}/analyze-evidence-bulk', [LiaController::class, 'bulkAnalyzeEvidence']);
+
         Route::get('/{id}', [LiaController::class, 'show']);
         Route::put('/{id}', [LiaController::class, 'update']);
         Route::delete('/{id}', [LiaController::class, 'destroy']);
@@ -1315,6 +1322,14 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::delete('/custom-metrics/{id}', [TiaController::class, 'destroyCustomMetric']);
         Route::put('/default-metrics/{metricCode}', [TiaController::class, 'updateDefaultMetric']);
         Route::post('/default-metrics/{metricCode}/reset', [TiaController::class, 'resetDefaultMetric']);
+
+        // Evidence upload + AI document analysis per metrik (parity dgn
+        // GAP/Maturity) — evidence keyed by metric_code (param request
+        // tetap `question_id` utk kompatibilitas komponen FE); verdict AI
+        // murni advisory, tidak masuk computeOverallRisk().
+        Route::post('/{id}/upload-evidence', [TiaController::class, 'uploadEvidence']);
+        Route::post('/{id}/analyze-evidence', [TiaController::class, 'analyzeEvidence']);
+        Route::post('/{id}/analyze-evidence-bulk', [TiaController::class, 'bulkAnalyzeEvidence']);
 
         Route::get('/{id}', [TiaController::class, 'show']);
         Route::put('/{id}', [TiaController::class, 'update']);
