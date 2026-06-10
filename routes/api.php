@@ -1264,6 +1264,20 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::get('/', [LiaController::class, 'index']);
         Route::post('/', [LiaController::class, 'store']);
         Route::post('/from-ropa/{ropaId}', [LiaController::class, 'fromRopa']);
+
+        // Kelola Pertanyaan (mirror GAP/Maturity/TIA): pertanyaan panduan
+        // default bisa di-edit/nonaktif/reset (TANPA delete, test locked),
+        // pertanyaan custom full CRUD. LIA kualitatif — TIDAK ada scoring,
+        // verdict tetap manual oleh Approver. MUST precede /{id} or Laravel
+        // routes GET /lia/questions ke show($id='questions') → 404.
+        Route::get('/questions', [LiaController::class, 'questions']);
+        Route::get('/custom-questions', [LiaController::class, 'customQuestions']);
+        Route::post('/custom-questions', [LiaController::class, 'storeCustomQuestion']);
+        Route::put('/custom-questions/{id}', [LiaController::class, 'updateCustomQuestion']);
+        Route::delete('/custom-questions/{id}', [LiaController::class, 'destroyCustomQuestion']);
+        Route::put('/default-questions/{questionCode}', [LiaController::class, 'updateDefaultQuestion']);
+        Route::post('/default-questions/{questionCode}/reset', [LiaController::class, 'resetDefaultQuestion']);
+
         Route::get('/{id}', [LiaController::class, 'show']);
         Route::put('/{id}', [LiaController::class, 'update']);
         Route::delete('/{id}', [LiaController::class, 'destroy']);

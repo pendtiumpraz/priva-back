@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\CustomLiaQuestion;
 use App\Models\LiaAssessment;
+use App\Models\LiaQuestionOverride;
 use App\Models\Ropa;
 use App\Services\AssessmentPdfService;
 use Illuminate\Http\Request;
@@ -441,6 +443,204 @@ class LiaController extends Controller
         return $pdf->lia($record, $request->user())->download($filename);
     }
 
+    // =============================================
+    // Kelola Pertanyaan — effective set (default + override + custom)
+    // =============================================
+
+    /**
+     * GET /lia/questions
+     * Set pertanyaan panduan EFEKTIF untuk org pemanggil: katalog default
+     * (LiaAssessment::DEFAULT_QUESTIONS) + override per-org (default
+     * nonaktif di-drop) + pertanyaan custom aktif. include_inactive=1
+     * dipakai management UI supaya pertanyaan yang dinonaktifkan tetap
+     * tampil (flag is_active=false) dan bisa diaktifkan lagi.
+     *
+     * TIDAK ada dampak scoring — LIA kualitatif, verdict tetap manual.
+     */
+    public function questions(Request $request)
+    {
+        $questions = LiaAssessment::effectiveQuestions(
+            $request->user()?->org_id,
+            $request->boolean('include_inactive'),
+        );
+
+        return response()->json(['data' => array_values($questions)]);
+    }
+
+    // =============================================
+    // Default Question Overrides (copy-on-write)
+    // =============================================
+    //
+    // Pertanyaan DEFAULT bisa di-EDIT (label/description) dan
+    // di-NONAKTIFKAN per org, tapi TIDAK bisa dihapus dan test
+    // (purpose|necessity|balancing) TIDAK bisa diubah. Edit mem-fork
+    // baris override (lia_question_overrides); reset menghapus override
+    // sehingga kembali ke nilai katalog default.
+
+    /**
+     * PUT /lia/default-questions/{questionCode}
+     * Upsert override untuk org pemanggil. Field yang nilainya sama dengan
+     * default disimpan NULL (= tidak di-override) supaya flag is_overridden
+     * akurat dan reset semantics bersih.
+     */
+    public function updateDefaultQuestion(Request $request, string $questionCode)
+    {
+        $request->validate([
+            'label' => 'nullable|string|max:500',
+            'description' => 'nullable|string|max:2000',
+            'is_active' => 'nullable|boolean',
+        ]);
+
+        $default = collect(LiaAssessment::DEFAULT_QUESTIONS)->firstWhere('question_code', $questionCode);
+        if (! $default) {
+            return response()->json(['message' => 'Pertanyaan default tidak ditemukan.'], 404);
+        }
+
+        $orgId = $request->user()->org_id;
+
+        // Hanya simpan field yang BERBEDA dari nilai default — yang sama
+        // (atau kosong) disimpan NULL = "pakai default".
+        $values = [];
+        foreach (['label', 'description'] as $field) {
+            if ($request->has($field)) {
+                $val = $request->input($field);
+                $val = is_string($val) ? trim($val) : $val;
+                $values[$field] = ($val === null || $val === '' || $val === ($default[$field] ?? null)) ? null : $val;
+            }
+        }
+        if ($request->has('is_active')) {
+            $values['is_active'] = $request->boolean('is_active');
+        }
+
+        // Upsert — restore dulu kalau row pernah soft-deleted (unique
+        // constraint org+question_code mencegah duplikat).
+        $override = LiaQuestionOverride::withTrashed()
+            ->where('org_id', $orgId)
+            ->where('question_code', $questionCode)
+            ->first();
+
+        if ($override) {
+            if ($override->trashed()) {
+                $override->restore();
+            }
+            $override->fill($values)->save();
+        } else {
+            $override = LiaQuestionOverride::create(array_merge([
+                'org_id' => $orgId,
+                'question_code' => $questionCode,
+                'is_active' => true,
+            ], $values));
+        }
+
+        // No-op override (semua field null + masih aktif) → buang row
+        // supaya pertanyaan kembali murni default.
+        if (! $override->hasEffect()) {
+            $override->forceDelete();
+        }
+
+        $effective = collect(LiaAssessment::effectiveQuestions($orgId, true))
+            ->firstWhere('question_code', $questionCode);
+
+        return response()->json([
+            'message' => 'Pertanyaan default diperbarui.',
+            'data' => $effective,
+        ]);
+    }
+
+    /**
+     * POST /lia/default-questions/{questionCode}/reset
+     * Hapus override org → pertanyaan kembali ke nilai katalog default.
+     */
+    public function resetDefaultQuestion(Request $request, string $questionCode)
+    {
+        $orgId = $request->user()->org_id;
+
+        LiaQuestionOverride::withTrashed()
+            ->where('org_id', $orgId)
+            ->where('question_code', $questionCode)
+            ->forceDelete();
+
+        $effective = collect(LiaAssessment::effectiveQuestions($orgId, true))
+            ->firstWhere('question_code', $questionCode);
+
+        return response()->json([
+            'message' => 'Pertanyaan dikembalikan ke default.',
+            'data' => $effective,
+        ]);
+    }
+
+    // =============================================
+    // Custom Questions CRUD (Kelola Pertanyaan)
+    // =============================================
+
+    public function customQuestions(Request $request)
+    {
+        $questions = CustomLiaQuestion::forOrg($request->user()->org_id)
+            ->orderBy('sort_order')
+            ->get();
+
+        return response()->json(['data' => $questions]);
+    }
+
+    public function storeCustomQuestion(Request $request)
+    {
+        $data = $request->validate([
+            'test' => ['required', Rule::in(CustomLiaQuestion::ALL_TESTS)],
+            'label' => 'required|string|max:500',
+            'description' => 'nullable|string|max:2000',
+            'sort_order' => 'nullable|integer|min:0',
+        ]);
+
+        $orgId = $request->user()->org_id;
+
+        // question_code auto: CUST-1, CUST-2, ... — withTrashed supaya
+        // tidak menabrak unique constraint dengan row yang soft-deleted.
+        $lastNum = CustomLiaQuestion::withTrashed()
+            ->where('org_id', $orgId)
+            ->pluck('question_code')
+            ->map(fn ($c) => (int) preg_replace('/\D+/', '', (string) $c))
+            ->max() ?? 0;
+
+        $question = CustomLiaQuestion::create([
+            'org_id' => $orgId,
+            'question_code' => 'CUST-'.($lastNum + 1),
+            'test' => $data['test'],
+            'label' => $data['label'],
+            'description' => $data['description'] ?? null,
+            'sort_order' => $data['sort_order']
+                ?? ((int) CustomLiaQuestion::forOrg($orgId)->max('sort_order') + 1),
+        ]);
+
+        return response()->json(['message' => 'Pertanyaan custom ditambahkan.', 'data' => $question], 201);
+    }
+
+    public function updateCustomQuestion(Request $request, string $id)
+    {
+        $question = CustomLiaQuestion::forOrg($request->user()->org_id)->findOrFail($id);
+
+        $request->validate([
+            'test' => ['sometimes', Rule::in(CustomLiaQuestion::ALL_TESTS)],
+            'label' => 'sometimes|string|max:500',
+            'description' => 'nullable|string|max:2000',
+            'sort_order' => 'nullable|integer|min:0',
+            'is_active' => 'nullable|boolean',
+        ]);
+
+        $question->update($request->only([
+            'test', 'label', 'description', 'sort_order', 'is_active',
+        ]));
+
+        return response()->json(['message' => 'Pertanyaan custom diperbarui.', 'data' => $question->fresh()]);
+    }
+
+    public function destroyCustomQuestion(Request $request, string $id)
+    {
+        $question = CustomLiaQuestion::forOrg($request->user()->org_id)->findOrFail($id);
+        $question->delete();
+
+        return response()->json(['message' => 'Pertanyaan custom dihapus.']);
+    }
+
     // ─── Helpers ────────────────────────────────────────────────────────────
 
     private function applyFilters($query, Request $request): void
@@ -489,9 +689,15 @@ class LiaController extends Controller
     /**
      * Surface obvious incompleteness before allowing submit. Not exhaustive —
      * Approver still has final say. These are just sanity-check gates.
+     *
+     * Section emptiness is gated on the org's EFFECTIVE question set
+     * (Kelola Pertanyaan): a test with no active question — or a
+     * deactivated risk register — is never flagged as missing.
      */
     private function validateForSubmission(LiaAssessment $r): array
     {
+        $effective = collect(LiaAssessment::effectiveQuestions($r->org_id));
+
         $issues = [];
         if (empty($r->lia_code)) {
             $issues[] = 'lia_code is required';
@@ -505,13 +711,13 @@ class LiaController extends Controller
         if (empty($r->legitimate_interest_basis)) {
             $issues[] = 'Section 3 (Dasar Pemrosesan) is empty';
         }
-        if (empty($r->purpose_test)) {
+        if ($effective->contains(fn ($q) => $q['test'] === 'purpose') && empty($r->purpose_test)) {
             $issues[] = 'Section 4 (Purpose Test) is empty';
         }
-        if (empty($r->necessity_test)) {
+        if ($effective->contains(fn ($q) => $q['test'] === 'necessity') && empty($r->necessity_test)) {
             $issues[] = 'Section 5 (Necessity Test) is empty';
         }
-        if (empty($r->balancing_risk_events)) {
+        if ($effective->contains(fn ($q) => $q['question_code'] === 'risk_register') && empty($r->balancing_risk_events)) {
             $issues[] = 'Section 6 (Balancing risk register) is empty';
         }
 
