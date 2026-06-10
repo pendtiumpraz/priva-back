@@ -575,6 +575,38 @@ class LiaController extends Controller
         ]);
     }
 
+    /**
+     * POST /lia/questions/factory-reset
+     * Reset TOTAL ke default pabrikan (mirror GapAssessmentController::
+     * factoryResetQuestions):
+     * - Semua override pertanyaan default org dihapus permanen (force delete,
+     *   sama seperti resetDefaultQuestion) → edit di-revert + default yang
+     *   dinonaktifkan otomatis aktif lagi.
+     * - Semua pertanyaan custom org di-soft-delete (semantik sama dengan
+     *   destroyCustomQuestion) → hilang dari list & set efektif.
+     */
+    public function factoryResetQuestions(Request $request)
+    {
+        $orgId = $request->user()->org_id;
+
+        $overridesRemoved = LiaQuestionOverride::withTrashed()
+            ->where('org_id', $orgId)
+            ->forceDelete();
+
+        $customsRemoved = CustomLiaQuestion::forOrg($orgId)->delete();
+
+        AuditLog::log('lia', $orgId, 'questions_factory_reset', [
+            'overrides_removed' => (int) $overridesRemoved,
+            'customs_removed' => (int) $customsRemoved,
+        ]);
+
+        return response()->json([
+            'message' => 'Semua pertanyaan dikembalikan ke default pabrikan.',
+            'overrides_removed' => (int) $overridesRemoved,
+            'customs_removed' => (int) $customsRemoved,
+        ]);
+    }
+
     // =============================================
     // Custom Questions CRUD (Kelola Pertanyaan)
     // =============================================

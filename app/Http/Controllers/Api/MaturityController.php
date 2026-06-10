@@ -427,9 +427,19 @@ class MaturityController extends Controller
             $includeInactive,
         ));
 
+        // Domain meta dibangun dari union ALL_DOMAINS + domain yang benar-benar
+        // ada di set efektif — pertanyaan custom boleh memakai domain BARU
+        // (di luar 4 default), dan FE (wizard + Kelola Pertanyaan) iterate
+        // list ini, bukan hardcode 4 domain.
+        $domainKeys = collect(MaturityQuestion::ALL_DOMAINS)
+            ->concat($questions->pluck('domain'))
+            ->filter()
+            ->unique()
+            ->values();
+
         return response()->json([
             'data' => $questions->values(),
-            'domains' => collect(MaturityQuestion::ALL_DOMAINS)->map(fn ($d) => [
+            'domains' => $domainKeys->map(fn ($d) => [
                 'key' => $d,
                 'label' => MaturityQuestion::DOMAIN_LABELS[$d] ?? $d,
                 'count' => $questions->where('domain', $d)->count(),
@@ -450,10 +460,21 @@ class MaturityController extends Controller
         return response()->json(['data' => $questions]);
     }
 
+    /**
+     * Normalisasi ringan domain custom: trim + lowercase + spasi → underscore
+     * supaya konsisten sebagai key di domain_scores. Domain BARU (di luar 4
+     * default) diperbolehkan — recompute() membangun peta domain dari set
+     * efektif sehingga domain baru otomatis jadi key baru di domain_scores.
+     */
+    private function normalizeDomain(string $domain): string
+    {
+        return preg_replace('/\s+/', '_', strtolower(trim($domain)));
+    }
+
     public function storeCustomQuestion(Request $request)
     {
         $data = $request->validate([
-            'domain' => ['required', Rule::in(MaturityQuestion::ALL_DOMAINS)],
+            'domain' => 'required|string|max:100',
             'question_text' => 'required|string',
             'description' => 'nullable|string',
             'regulation_ref' => 'nullable|string|max:100',
@@ -474,7 +495,7 @@ class MaturityController extends Controller
         $question = CustomMaturityQuestion::create([
             'org_id' => $orgId,
             'question_code' => 'CUST-' . ($lastNum + 1),
-            'domain' => $data['domain'],
+            'domain' => $this->normalizeDomain($data['domain']),
             'question_text' => $data['question_text'],
             'description' => $data['description'] ?? null,
             'regulation_ref' => $data['regulation_ref'] ?? null,
@@ -491,7 +512,7 @@ class MaturityController extends Controller
         $question = CustomMaturityQuestion::forOrg($request->user()->org_id)->findOrFail($id);
 
         $request->validate([
-            'domain' => ['sometimes', Rule::in(MaturityQuestion::ALL_DOMAINS)],
+            'domain' => 'sometimes|string|max:100',
             'question_text' => 'sometimes|string',
             'description' => 'nullable|string',
             'regulation_ref' => 'nullable|string|max:100',
@@ -500,10 +521,14 @@ class MaturityController extends Controller
             'is_active' => 'nullable|boolean',
         ]);
 
-        $question->update($request->only([
+        $payload = $request->only([
             'domain', 'question_text', 'description', 'regulation_ref',
             'scoring_guide', 'sort_order', 'is_active',
-        ]));
+        ]);
+        if (isset($payload['domain']) && is_string($payload['domain'])) {
+            $payload['domain'] = $this->normalizeDomain($payload['domain']);
+        }
+        $question->update($payload);
 
         return response()->json(['message' => 'Pertanyaan custom diperbarui.', 'data' => $question->fresh()]);
     }
@@ -632,6 +657,38 @@ class MaturityController extends Controller
         return response()->json([
             'message' => 'Pertanyaan dikembalikan ke default.',
             'data' => $effective,
+        ]);
+    }
+
+    /**
+     * POST /maturity/questions/factory-reset
+     * Reset TOTAL ke default pabrikan (mirror GapAssessmentController::
+     * factoryResetQuestions):
+     * - Semua override pertanyaan default org dihapus permanen (force delete,
+     *   sama seperti resetDefaultQuestion) → edit di-revert + default yang
+     *   dinonaktifkan otomatis aktif lagi.
+     * - Semua pertanyaan custom org di-soft-delete (semantik sama dengan
+     *   destroyCustomQuestion) → hilang dari list & set efektif.
+     */
+    public function factoryResetQuestions(Request $request)
+    {
+        $orgId = $request->user()->org_id;
+
+        $overridesRemoved = MaturityQuestionOverride::withTrashed()
+            ->where('org_id', $orgId)
+            ->forceDelete();
+
+        $customsRemoved = CustomMaturityQuestion::forOrg($orgId)->delete();
+
+        AuditLog::log('maturity', $orgId, 'questions_factory_reset', [
+            'overrides_removed' => (int) $overridesRemoved,
+            'customs_removed' => (int) $customsRemoved,
+        ]);
+
+        return response()->json([
+            'message' => 'Semua pertanyaan dikembalikan ke default pabrikan.',
+            'overrides_removed' => (int) $overridesRemoved,
+            'customs_removed' => (int) $customsRemoved,
         ]);
     }
 

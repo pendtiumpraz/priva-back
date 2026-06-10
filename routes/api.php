@@ -1285,6 +1285,9 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         // verdict tetap manual oleh Approver. MUST precede /{id} or Laravel
         // routes GET /lia/questions ke show($id='questions') → 404.
         Route::get('/questions', [LiaController::class, 'questions']);
+        // Factory reset: hapus SEMUA override default + SEMUA custom
+        // questions org. MUST precede /{id} wildcards.
+        Route::post('/questions/factory-reset', [LiaController::class, 'factoryResetQuestions']);
         Route::get('/custom-questions', [LiaController::class, 'customQuestions']);
         Route::post('/custom-questions', [LiaController::class, 'storeCustomQuestion']);
         Route::put('/custom-questions/{id}', [LiaController::class, 'updateCustomQuestion']);
@@ -1330,6 +1333,9 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         // metrik custom full CRUD. MUST precede /{id} or Laravel routes
         // GET /tia/metrics ke show($id='metrics') → 404.
         Route::get('/metrics', [TiaController::class, 'metrics']);
+        // Factory reset: hapus SEMUA override default + SEMUA custom
+        // metrics org. MUST precede /{id} wildcards.
+        Route::post('/metrics/factory-reset', [TiaController::class, 'factoryResetMetrics']);
         Route::get('/custom-metrics', [TiaController::class, 'customMetrics']);
         Route::post('/custom-metrics', [TiaController::class, 'storeCustomMetric']);
         Route::put('/custom-metrics/{id}', [TiaController::class, 'updateCustomMetric']);
@@ -1371,6 +1377,9 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // =============================================
     Route::prefix('maturity')->group(function () {
         Route::get('/questions', [MaturityController::class, 'questions']);
+        // Factory reset: hapus SEMUA override default + SEMUA custom
+        // questions org. MUST precede /{id} wildcards.
+        Route::post('/questions/factory-reset', [MaturityController::class, 'factoryResetQuestions']);
         Route::get('/trend', [MaturityController::class, 'trend']);
 
         // Kelola Pertanyaan (mirror GAP): custom questions full CRUD +

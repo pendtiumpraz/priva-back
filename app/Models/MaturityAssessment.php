@@ -131,8 +131,17 @@ class MaturityAssessment extends Model
             ->filter(fn ($r) => $domainByCode->has($r->question_code));
 
         $byDomain = $responses->groupBy(fn ($r) => $domainByCode[$r->question_code]);
+        // Domain = union 4 default + domain lain di set efektif — pertanyaan
+        // custom boleh memakai domain BARU; domain baru otomatis jadi key
+        // baru di domain_scores (FE menampilkan key yang ada, bukan
+        // hardcode 4 domain default).
+        $domains = collect(MaturityQuestion::ALL_DOMAINS)
+            ->concat($domainByCode->values())
+            ->filter()
+            ->unique()
+            ->values();
         $domainScores = [];
-        foreach (MaturityQuestion::ALL_DOMAINS as $d) {
+        foreach ($domains as $d) {
             $items = $byDomain->get($d, collect());
             $domainScores[$d] = $items->isEmpty() ? null : round($items->avg('score'), 2);
         }

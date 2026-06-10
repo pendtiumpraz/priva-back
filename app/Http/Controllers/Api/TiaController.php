@@ -731,6 +731,38 @@ class TiaController extends Controller
         ]);
     }
 
+    /**
+     * POST /tia/metrics/factory-reset
+     * Reset TOTAL ke default pabrikan (mirror GapAssessmentController::
+     * factoryResetQuestions):
+     * - Semua override metrik default org dihapus permanen (force delete,
+     *   sama seperti resetDefaultMetric) → edit label/bobot di-revert +
+     *   metrik default yang dinonaktifkan otomatis aktif lagi.
+     * - Semua metrik custom org di-soft-delete (semantik sama dengan
+     *   destroyCustomMetric) → hilang dari list & set efektif.
+     */
+    public function factoryResetMetrics(Request $request)
+    {
+        $orgId = $request->user()->org_id;
+
+        $overridesRemoved = TiaMetricOverride::withTrashed()
+            ->where('org_id', $orgId)
+            ->forceDelete();
+
+        $customsRemoved = CustomTiaMetric::forOrg($orgId)->delete();
+
+        AuditLog::log('tia', $orgId, 'metrics_factory_reset', [
+            'overrides_removed' => (int) $overridesRemoved,
+            'customs_removed' => (int) $customsRemoved,
+        ]);
+
+        return response()->json([
+            'message' => 'Semua metrik dikembalikan ke default pabrikan.',
+            'overrides_removed' => (int) $overridesRemoved,
+            'customs_removed' => (int) $customsRemoved,
+        ]);
+    }
+
     // =============================================
     // Custom Metrics CRUD (Kelola Metrik)
     // =============================================
