@@ -64,11 +64,96 @@ class GapAssessment extends Model
     }
 
     /**
-     * Hitung skor otomatis dari jawaban
+     * Resolve set pertanyaan EFEKTIF untuk satu org:
+     *   1. Question bank default ($code) sebagai basis.
+     *   2. Override per-org diterapkan: field non-null menggantikan nilai
+     *      default; is_active=false → pertanyaan di-DROP (kecuali
+     *      $includeInactive=true, untuk management UI).
+     *   3. Custom questions (CustomGapQuestion) org di-append.
+     *
+     * Setiap entri di-tag: is_default (bool), is_overridden (bool),
+     * is_active (bool), dan is_custom untuk custom questions.
+     *
+     * Dipakai oleh endpoint questions() DAN calculateScore() supaya edit
+     * pertanyaan default langsung memengaruhi skor.
      */
-    public static function calculateScore(array $answers, string $code = 'uupdp', array $aiAnalyses = []): array
+    public static function effectiveQuestions(?string $orgId, string $code = 'uupdp', bool $includeInactive = false): array
     {
-        $questions = self::getQuestionBank($code);
+        $bank = self::getQuestionBank($code);
+
+        if (! $orgId) {
+            return array_map(function ($q) {
+                $q['is_default'] = true;
+                $q['is_overridden'] = false;
+                $q['is_active'] = true;
+
+                return $q;
+            }, $bank);
+        }
+
+        $overrides = GapQuestionOverride::forOrg($orgId)
+            ->forRegulation($code)
+            ->get()
+            ->keyBy('question_id');
+
+        $effective = [];
+        foreach ($bank as $q) {
+            $q['is_default'] = true;
+            $q['is_overridden'] = false;
+            $q['is_active'] = true;
+
+            $ov = $overrides->get($q['id']);
+            if ($ov) {
+                foreach (GapQuestionOverride::OVERRIDABLE_TEXT_FIELDS as $field) {
+                    if ($ov->{$field} !== null) {
+                        $q[$field] = $ov->{$field};
+                        $q['is_overridden'] = true;
+                    }
+                }
+                if ($ov->weight !== null) {
+                    $q['weight'] = (float) $ov->weight;
+                    $q['is_overridden'] = true;
+                }
+                if (! $ov->is_active) {
+                    if (! $includeInactive) {
+                        continue; // default dinonaktifkan untuk org ini
+                    }
+                    $q['is_active'] = false;
+                }
+            }
+
+            $effective[] = $q;
+        }
+
+        $customs = CustomGapQuestion::forOrg($orgId)
+            ->forRegulation($code)
+            ->when(! $includeInactive, fn ($query) => $query->active())
+            ->orderBy('sort_order')
+            ->get()
+            ->map(function ($cq) {
+                $q = $cq->toQuestionFormat();
+                $q['is_default'] = false;
+                $q['is_overridden'] = false;
+                $q['is_active'] = (bool) $cq->is_active;
+
+                return $q;
+            })
+            ->toArray();
+
+        return array_merge($effective, $customs);
+    }
+
+    /**
+     * Hitung skor otomatis dari jawaban.
+     *
+     * Kalau $orgId diberikan, skor dihitung dari set pertanyaan EFEKTIF
+     * org tersebut (default + override, default nonaktif di-exclude,
+     * custom questions di-include). Tanpa $orgId fallback ke question
+     * bank default (BC untuk caller lama / seeder).
+     */
+    public static function calculateScore(array $answers, string $code = 'uupdp', array $aiAnalyses = [], ?string $orgId = null): array
+    {
+        $questions = $orgId ? self::effectiveQuestions($orgId, $code) : self::getQuestionBank($code);
         $totalWeight = 0;
         $earnedWeight = 0;
         $recommendations = [];

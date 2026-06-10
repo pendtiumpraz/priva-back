@@ -39,8 +39,8 @@ class GapComparisonController extends Controller
 
         $firstAssessment = $assessments->first();
         $lastAssessment = $assessments->last();
-        $calcFirst = GapAssessment::calculateScore($firstAssessment->answers ?: [], $regCode);
-        $calcLast = GapAssessment::calculateScore($lastAssessment->answers ?: [], $regCode);
+        $calcFirst = GapAssessment::calculateScore($firstAssessment->answers ?: [], $regCode, [], $firstAssessment->org_id);
+        $calcLast = GapAssessment::calculateScore($lastAssessment->answers ?: [], $regCode, [], $lastAssessment->org_id);
 
         // Subcategory granularity for the radar (UU PDP has only 2 top-level
         // categories — too few spokes for a meaningful polygon).
@@ -49,7 +49,7 @@ class GapComparisonController extends Controller
         foreach ($subKeys as $sub) {
             $row = ['category' => $sub];
             foreach ($assessments as $assessment) {
-                $calc = GapAssessment::calculateScore($assessment->answers ?: [], $regCode);
+                $calc = GapAssessment::calculateScore($assessment->answers ?: [], $regCode, [], $assessment->org_id);
                 $row[$assessment->version] = $calc['subcategory_breakdown'][$sub] ?? 0;
             }
             $chartData[] = $row;
@@ -164,7 +164,7 @@ class GapComparisonController extends Controller
         $regCode = $assessment->regulation_code ?? 'uupdp';
         $industry = $request->input('industry') ?? optional($request->user()->organization)->industry;
 
-        $calc = GapAssessment::calculateScore($assessment->answers ?: [], $regCode);
+        $calc = GapAssessment::calculateScore($assessment->answers ?: [], $regCode, [], $assessment->org_id);
         $series = GapBenchmarkService::buildSeriesFor($industry, $regCode);
 
         $youLabel = $assessment->version ?: 'Anda';

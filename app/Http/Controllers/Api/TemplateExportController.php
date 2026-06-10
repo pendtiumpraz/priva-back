@@ -1010,7 +1010,7 @@ class TemplateExportController extends Controller
         $sheet->getStyle('A9')->getFont()->setBold(true);
 
         $row = 10;
-        $scoreData = GapAssessment::calculateScore($gap->answers ?: [], $gap->regulation_code ?: 'uupdp');
+        $scoreData = GapAssessment::calculateScore($gap->answers ?: [], $gap->regulation_code ?: 'uupdp', [], $gap->org_id);
         foreach ($scoreData['category_breakdown'] as $cat => $score) {
             $sheet->setCellValue('A'.$row, $cat);
             $sheet->setCellValue('B'.$row, $score.'%');
@@ -1027,7 +1027,7 @@ class TemplateExportController extends Controller
 
         $sheet->getStyle("A{$startRow}:E{$startRow}")->applyFromArray($headerStyle);
 
-        $questions = GapAssessment::getQuestionBank($gap->regulation_code ?: 'uupdp');
+        $questions = GapAssessment::effectiveQuestions($gap->org_id, $gap->regulation_code ?: 'uupdp');
         $currentRow = $startRow + 1;
 
         foreach ($questions as $q) {
@@ -1108,7 +1108,7 @@ class TemplateExportController extends Controller
             $orgMeta = $this->resolveOrgMeta(auth()->user()->organization);
             $regCode = $gap->regulation_code ?? 'uupdp';
             $regName = RegulationFramework::where('code', $regCode)->value('name') ?? 'UU No. 27 Tahun 2022 (UU PDP)';
-            $scoreData = GapAssessment::calculateScore($gap->answers ?: [], $regCode);
+            $scoreData = GapAssessment::calculateScore($gap->answers ?: [], $regCode, [], $gap->org_id);
 
             // Cover Page
             $this->addCoverPage(
@@ -1161,7 +1161,7 @@ class TemplateExportController extends Controller
             // 3. Detail Pertanyaan & Jawaban
             $this->addSectionTitle($sec, '3. Detail Jawaban per Pertanyaan');
 
-            $questions = GapAssessment::getQuestionBank($regCode);
+            $questions = GapAssessment::effectiveQuestions($gap->org_id, $regCode);
             $answerLabels = [
                 'yes' => ['label' => 'Sudah Memenuhi', 'color' => '22c55e'],
                 'partial' => ['label' => 'Memenuhi Sebagian', 'color' => 'f59e0b'],

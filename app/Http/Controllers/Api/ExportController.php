@@ -848,7 +848,7 @@ class ExportController extends Controller
             'Dibuat', 'Diperbarui',
         ];
 
-        $totalQuestions = count(GapAssessment::getQuestionBank('uupdp'));
+        $totalQuestions = count(GapAssessment::effectiveQuestions($request->user()->org_id, 'uupdp'));
 
         $rows = $items->map(function ($g) use ($totalQuestions) {
             $answers = $g->answers ?? [];
@@ -884,8 +884,8 @@ class ExportController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        // Question bank (single source of truth for headers, weights, recs).
-        $questionBank = GapAssessment::getQuestionBank('uupdp');
+        // Question bank EFEKTIF org (default + override, custom included).
+        $questionBank = GapAssessment::effectiveQuestions($request->user()->org_id, 'uupdp');
         $totalQuestions = count($questionBank);
 
         // Distinct categories (preserving order of first appearance).

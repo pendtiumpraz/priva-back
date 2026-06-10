@@ -316,6 +316,13 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
             Route::put('/custom-questions/{id}', [GapAssessmentController::class, 'updateCustomQuestion'])->middleware('permission:gap_assessment,write');
             Route::delete('/custom-questions/{id}', [GapAssessmentController::class, 'destroyCustomQuestion'])->middleware('permission:gap_assessment,write');
 
+            // Default questions: EDITABLE per-org (copy-on-write override) +
+            // bisa dinonaktifkan/diaktifkan (tombstone reversible), tapi
+            // TIDAK ada endpoint delete — default tidak pernah bisa dihapus.
+            // MUST precede /{id} routes (sama seperti custom-questions).
+            Route::put('/default-questions/{questionId}', [GapAssessmentController::class, 'updateDefaultQuestion'])->middleware('permission:gap_assessment,write');
+            Route::post('/default-questions/{questionId}/reset', [GapAssessmentController::class, 'resetDefaultQuestion'])->middleware('permission:gap_assessment,write');
+
             Route::post('/', [GapAssessmentController::class, 'store'])->middleware('permission:gap_assessment,write');
             Route::post('/{id}/duplicate', [GapAssessmentController::class, 'duplicate'])->middleware('permission:gap_assessment,write');
             Route::get('/{id}', [GapAssessmentController::class, 'show'])->middleware('permission:gap_assessment,read');

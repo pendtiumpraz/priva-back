@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\GapAssessment;
 use App\Models\CustomGapQuestion;
+use App\Models\GapQuestionOverride;
 use App\Models\Organization;
 use App\Services\AiDocumentAnalyzer;
 use App\Services\CreditService;
@@ -73,14 +74,14 @@ class GapAssessmentController extends Controller
             ->orderBy('created_at')
             ->get();
 
-        $questions = GapAssessment::getQuestionBank($regCode);
+        $questions = GapAssessment::effectiveQuestions($request->user()->org_id, $regCode);
         $categories = array_values(array_unique(array_column($questions, 'category')));
 
         $results = [];
         foreach ($categories as $cat) {
             $row = ['category' => $cat];
             foreach ($assessments as $assessment) {
-                $calc = GapAssessment::calculateScore($assessment->answers ?: [], $regCode);
+                $calc = GapAssessment::calculateScore($assessment->answers ?: [], $regCode, [], $assessment->org_id);
                 $breakdown = $calc['category_breakdown'];
                 $row[$assessment->version] = $breakdown[$cat] ?? 0;
             }
@@ -99,20 +100,13 @@ class GapAssessmentController extends Controller
     public function questions(Request $request)
     {
         $code = $request->query('regulation', 'uupdp');
-        $questions = GapAssessment::getQuestionBank($code);
 
-        // Merge custom questions from this org
-        $orgId = $request->user()->org_id;
-        if ($orgId) {
-            $customQuestions = CustomGapQuestion::forOrg($orgId)
-                ->forRegulation($code)
-                ->active()
-                ->orderBy('sort_order')
-                ->get()
-                ->map(fn($q) => $q->toQuestionFormat())
-                ->toArray();
-            $questions = array_merge($questions, $customQuestions);
-        }
+        // Set pertanyaan EFEKTIF: default + override per-org (default
+        // nonaktif di-drop) + custom questions aktif. include_inactive=1
+        // dipakai management UI supaya default yang dinonaktifkan tetap
+        // tampil (dengan flag is_active=false) dan bisa diaktifkan lagi.
+        $includeInactive = $request->boolean('include_inactive');
+        $questions = GapAssessment::effectiveQuestions($request->user()->org_id, $code, $includeInactive);
 
         // Group by category
         $grouped = [];
@@ -274,14 +268,8 @@ class GapAssessmentController extends Controller
     {
         $assessment = GapAssessment::withTrashed()->findOrFail($id);
         $code = $assessment->regulation_code ?? 'uupdp';
-        $questions = GapAssessment::getQuestionBank($code);
-
-        // Merge custom questions
-        $orgId = $request->user()->org_id;
-        if ($orgId) {
-            $custom = CustomGapQuestion::forOrg($orgId)->forRegulation($code)->active()->orderBy('sort_order')->get();
-            $questions = array_merge($questions, $custom->map(fn($q) => $q->toQuestionFormat())->toArray());
-        }
+        // Set pertanyaan EFEKTIF (default + override org + custom aktif).
+        $questions = GapAssessment::effectiveQuestions($request->user()->org_id, $code);
 
         return response()->json([
             'data' => $assessment,
@@ -309,16 +297,18 @@ class GapAssessmentController extends Controller
 
         // Pass ai_analyses supaya verdict AI (kalau ada) ikut menentukan skor
         // sebagai override jawaban user. Lihat aggregateAiVerdict() di model.
+        // org_id ikut di-pass supaya skor pakai set pertanyaan EFEKTIF
+        // (default + override, default nonaktif di-exclude, custom included).
         $result = GapAssessment::calculateScore(
             $answers,
             $assessment->regulation_code ?? 'uupdp',
-            $assessment->ai_analyses ?? []
+            $assessment->ai_analyses ?? [],
+            $assessment->org_id
         );
 
-        $customCount = CustomGapQuestion::forOrg($assessment->org_id)->forRegulation($assessment->regulation_code ?? 'uupdp')->active()->count();
-        $totalQuestions = count(GapAssessment::getQuestionBank($assessment->regulation_code ?? 'uupdp')) + $customCount;
+        $totalQuestions = count(GapAssessment::effectiveQuestions($assessment->org_id, $assessment->regulation_code ?? 'uupdp'));
         $answeredCount = count(array_filter($answers, fn($a) => $a !== null && $a !== ''));
-        $progress = round(($answeredCount / $totalQuestions) * 100);
+        $progress = $totalQuestions > 0 ? round(($answeredCount / $totalQuestions) * 100) : 0;
 
         $update = [
             'answers' => $answers,
@@ -531,28 +521,13 @@ class GapAssessmentController extends Controller
         $assessment = GapAssessment::where('org_id', $request->user()->org_id)
             ->findOrFail($id);
 
-        // Resolve the question text + regulation_ref. Search both the
-        // platform question bank and the tenant's custom questions —
-        // operators may attach evidence to either.
+        // Resolve the question text + regulation_ref dari set pertanyaan
+        // EFEKTIF (default + override org + custom aktif) — operator bisa
+        // attach evidence ke keduanya, dan teks yang dianalisis AI harus
+        // teks hasil override (bukan default asli).
         $regCode = $assessment->regulation_code ?? 'uupdp';
-        $question = collect(GapAssessment::getQuestionBank($regCode))
+        $question = collect(GapAssessment::effectiveQuestions($assessment->org_id, $regCode))
             ->firstWhere('id', $request->question_id);
-
-        if (! $question) {
-            // Custom question IDs are prefixed with "custom_" by
-            // CustomGapQuestion::toQuestionFormat().
-            $customId = str_starts_with($request->question_id, 'custom_')
-                ? substr($request->question_id, 7)
-                : $request->question_id;
-            $custom = CustomGapQuestion::forOrg($assessment->org_id)
-                ->forRegulation($regCode)
-                ->active()
-                ->where('id', $customId)
-                ->first();
-            if ($custom) {
-                $question = $custom->toQuestionFormat();
-            }
-        }
 
         if (! $question) {
             return response()->json(['message' => 'Pertanyaan tidak ditemukan.'], 404);
@@ -632,7 +607,8 @@ class GapAssessmentController extends Controller
         $result = GapAssessment::calculateScore(
             $assessment->answers ?? [],
             $assessment->regulation_code ?? 'uupdp',
-            $analyses
+            $analyses,
+            $assessment->org_id
         );
         $assessment->update([
             'ai_analyses' => $analyses,
@@ -681,12 +657,9 @@ class GapAssessmentController extends Controller
         $orgId = $request->user()->org_id;
         $regCode = $assessment->regulation_code ?? 'uupdp';
 
-        // Question map: platform bank + custom org.
-        $questionMap = collect(GapAssessment::getQuestionBank($regCode))->keyBy('id');
-        $customQs = CustomGapQuestion::forOrg($orgId)->forRegulation($regCode)->active()->get();
-        foreach ($customQs as $cq) {
-            $questionMap['custom_'.$cq->id] = $cq->toQuestionFormat();
-        }
+        // Question map: set pertanyaan EFEKTIF (default + override org +
+        // custom aktif) — keyed by id, termasuk id custom_xxx.
+        $questionMap = collect(GapAssessment::effectiveQuestions($orgId, $regCode))->keyBy('id');
 
         $attachments = $assessment->attachments ?? [];
         $existing = $assessment->ai_analyses ?? [];
@@ -808,7 +781,8 @@ class GapAssessmentController extends Controller
         $result = GapAssessment::calculateScore(
             $assessment->answers ?? [],
             $assessment->regulation_code ?? 'uupdp',
-            $newAnalyses
+            $newAnalyses,
+            $assessment->org_id
         );
         $assessment->update([
             'ai_analyses' => $newAnalyses,
@@ -981,5 +955,125 @@ class GapAssessmentController extends Controller
         $question->delete();
 
         return response()->json(['message' => 'Custom question deleted']);
+    }
+
+    // =============================================
+    // Default Question Overrides (copy-on-write)
+    // =============================================
+    //
+    // Pertanyaan DEFAULT bisa di-EDIT (teks/penjelasan/rekomendasi/bobot/
+    // kategori/pasal) dan di-NONAKTIFKAN per org, tapi TIDAK bisa dihapus.
+    // Edit mem-fork baris override (gap_question_overrides); reset menghapus
+    // override sehingga kembali ke nilai default platform.
+
+    /**
+     * PUT /gap/default-questions/{questionId}
+     * Upsert override untuk org pemanggil. Field yang nilainya sama dengan
+     * default disimpan NULL (= tidak di-override) supaya flag is_overridden
+     * akurat dan reset semantics bersih.
+     */
+    public function updateDefaultQuestion(Request $request, string $questionId)
+    {
+        $request->validate([
+            'regulation_code' => 'required|string|max:20',
+            'question' => 'nullable|string',
+            'explanation' => 'nullable|string',
+            'recommendation' => 'nullable|string',
+            'category' => 'nullable|string|max:255',
+            'subcategory' => 'nullable|string|max:255',
+            'article' => 'nullable|string|max:100',
+            'weight' => 'nullable|numeric|gt:0|max:100',
+            'is_active' => 'nullable|boolean',
+        ]);
+
+        $orgId = $request->user()->org_id;
+        $code = $request->input('regulation_code');
+
+        $default = collect(GapAssessment::getQuestionBank($code))->firstWhere('id', $questionId);
+        if (! $default) {
+            return response()->json(['message' => 'Pertanyaan default tidak ditemukan untuk regulasi ini.'], 404);
+        }
+
+        // Hanya simpan field yang BERBEDA dari nilai default — yang sama
+        // (atau kosong) disimpan NULL = "pakai default".
+        $values = [];
+        foreach (GapQuestionOverride::OVERRIDABLE_TEXT_FIELDS as $field) {
+            if ($request->has($field)) {
+                $val = $request->input($field);
+                $val = is_string($val) ? trim($val) : $val;
+                $values[$field] = ($val === null || $val === '' || $val === ($default[$field] ?? null)) ? null : $val;
+            }
+        }
+        if ($request->has('weight')) {
+            $weight = $request->input('weight');
+            $values['weight'] = ($weight === null || (float) $weight === (float) ($default['weight'] ?? 0)) ? null : (float) $weight;
+        }
+        if ($request->has('is_active')) {
+            $values['is_active'] = $request->boolean('is_active');
+        }
+
+        // Upsert — restore dulu kalau row pernah soft-deleted (unique
+        // constraint org+regulation+question_id mencegah duplikat).
+        $override = GapQuestionOverride::withTrashed()
+            ->where('org_id', $orgId)
+            ->where('regulation_code', $code)
+            ->where('question_id', $questionId)
+            ->first();
+
+        if ($override) {
+            if ($override->trashed()) {
+                $override->restore();
+            }
+            $override->fill($values)->save();
+        } else {
+            $override = GapQuestionOverride::create(array_merge([
+                'org_id' => $orgId,
+                'regulation_code' => $code,
+                'question_id' => $questionId,
+                'is_active' => true,
+            ], $values));
+        }
+
+        // No-op override (semua field null + masih aktif) → buang row
+        // supaya pertanyaan kembali murni default.
+        if (! $override->hasEffect()) {
+            $override->forceDelete();
+        }
+
+        $effective = collect(GapAssessment::effectiveQuestions($orgId, $code, true))
+            ->firstWhere('id', $questionId);
+
+        return response()->json([
+            'message' => 'Pertanyaan default diperbarui.',
+            'data' => $effective,
+        ]);
+    }
+
+    /**
+     * POST /gap/default-questions/{questionId}/reset
+     * Hapus override org → pertanyaan kembali ke nilai default platform.
+     */
+    public function resetDefaultQuestion(Request $request, string $questionId)
+    {
+        $request->validate([
+            'regulation_code' => 'required|string|max:20',
+        ]);
+
+        $orgId = $request->user()->org_id;
+        $code = $request->input('regulation_code');
+
+        GapQuestionOverride::withTrashed()
+            ->where('org_id', $orgId)
+            ->where('regulation_code', $code)
+            ->where('question_id', $questionId)
+            ->forceDelete();
+
+        $effective = collect(GapAssessment::effectiveQuestions($orgId, $code, true))
+            ->firstWhere('id', $questionId);
+
+        return response()->json([
+            'message' => 'Pertanyaan dikembalikan ke default.',
+            'data' => $effective,
+        ]);
     }
 }

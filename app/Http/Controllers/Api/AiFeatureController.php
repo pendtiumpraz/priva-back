@@ -270,7 +270,12 @@ class AiFeatureController extends Controller
         }
 
         $assessment = GapAssessment::findOrFail($id);
-        $result = GapAssessment::calculateScore($assessment->answers ?? []);
+        $result = GapAssessment::calculateScore(
+            $assessment->answers ?? [],
+            $assessment->regulation_code ?? 'uupdp',
+            [],
+            $assessment->org_id
+        );
 
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
         if (! $ai->isAvailable()) {
