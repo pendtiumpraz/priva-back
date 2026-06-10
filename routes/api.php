@@ -308,6 +308,9 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
             Route::get('/compare', [GapAssessmentController::class, 'compare'])->middleware('permission:gap_assessment,read');
             Route::get('/regulations', [GapAssessmentController::class, 'getRegulations'])->middleware('permission:gap_assessment,read');
             Route::get('/questions', [GapAssessmentController::class, 'questions'])->middleware('permission:gap_assessment,read');
+            // Factory reset: hapus SEMUA override default + SEMUA custom
+            // questions org untuk satu regulasi. MUST precede /{id} wildcards.
+            Route::post('/questions/factory-reset', [GapAssessmentController::class, 'factoryResetQuestions'])->middleware('permission:gap_assessment,write');
 
             // Custom Questions CRUD (Sprint B2). MUST precede /{id} or Laravel
             // routes GET /gap/custom-questions to show($id='custom-questions') → 404.

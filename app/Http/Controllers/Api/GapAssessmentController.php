@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\GapAssessment;
 use App\Models\CustomGapQuestion;
 use App\Models\GapQuestionOverride;
@@ -1074,6 +1075,46 @@ class GapAssessmentController extends Controller
         return response()->json([
             'message' => 'Pertanyaan dikembalikan ke default.',
             'data' => $effective,
+        ]);
+    }
+
+    /**
+     * POST /gap/questions/factory-reset
+     * Reset TOTAL ke default pabrikan untuk satu regulasi:
+     * - Semua override pertanyaan default org dihapus permanen (force delete,
+     *   sama seperti resetDefaultQuestion) → edit di-revert + default yang
+     *   dinonaktifkan otomatis aktif lagi.
+     * - Semua pertanyaan custom org di-soft-delete (semantik sama dengan
+     *   destroyCustomQuestion) → hilang dari list & set efektif.
+     */
+    public function factoryResetQuestions(Request $request)
+    {
+        $request->validate([
+            'regulation_code' => 'required|string|max:20',
+        ]);
+
+        $orgId = $request->user()->org_id;
+        $code = $request->input('regulation_code');
+
+        $overridesRemoved = GapQuestionOverride::withTrashed()
+            ->where('org_id', $orgId)
+            ->where('regulation_code', $code)
+            ->forceDelete();
+
+        $customsRemoved = CustomGapQuestion::forOrg($orgId)
+            ->forRegulation($code)
+            ->delete();
+
+        AuditLog::log('gap', $orgId, 'questions_factory_reset', [
+            'regulation_code' => $code,
+            'overrides_removed' => (int) $overridesRemoved,
+            'customs_removed' => (int) $customsRemoved,
+        ]);
+
+        return response()->json([
+            'message' => 'Semua pertanyaan dikembalikan ke default pabrikan.',
+            'overrides_removed' => (int) $overridesRemoved,
+            'customs_removed' => (int) $customsRemoved,
         ]);
     }
 }
