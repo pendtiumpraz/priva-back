@@ -16,11 +16,14 @@ class MaturityAssessment extends Model
         'recommendations', 'status', 'created_by',
         'input_method', 'domain_scores', 'uploaded_doc_ids',
         'submitted_at', 'submitted_by', 'auto_derived_at', 'auto_derive_metadata',
+        'attachments', 'ai_analyses',
     ];
 
     protected $casts = [
         'dimensions' => 'array',
         'recommendations' => 'array',
+        'attachments' => 'array',
+        'ai_analyses' => 'array',
         'overall_level' => 'integer',
         'overall_score' => 'decimal:2',
         'domain_scores' => 'array',
@@ -75,6 +78,38 @@ class MaturityAssessment extends Model
     public function levelLabel(): string
     {
         return self::LEVEL_LABELS[$this->overall_level] ?? 'Ad-hoc';
+    }
+
+    /**
+     * Agregasi hasil AI analysis untuk satu pertanyaan ke 1 verdict
+     * (mirror GapAssessment::aggregateAiVerdict). Banyak dokumen per
+     * pertanyaan → pilih WORST status (paling konservatif). `unsure`
+     * di-skip; kalau semua unsure return null.
+     *
+     * PENTING: di Maturity verdict ini ADVISORY ONLY — tidak pernah
+     * meng-override skor slider 1-10 user dan tidak dipakai di
+     * recompute(). UI menampilkannya sebagai badge per pertanyaan.
+     *
+     * @param  mixed  $value  Bisa null, single object (legacy), atau array of objects.
+     */
+    public static function aggregateAiVerdict(mixed $value): ?string
+    {
+        if (empty($value) || ! is_array($value)) return null;
+        // Legacy single object
+        $entries = isset($value['status']) ? [$value] : array_values($value);
+        $rank = ['non_comply' => 3, 'partial' => 2, 'comply' => 1];
+        $worst = null;
+        $worstRank = 0;
+        foreach ($entries as $e) {
+            $st = is_array($e) ? ($e['status'] ?? null) : null;
+            if (! $st || $st === 'unsure') continue;
+            $r = $rank[$st] ?? 0;
+            if ($r > $worstRank) {
+                $worst = $st;
+                $worstRank = $r;
+            }
+        }
+        return $worst;
     }
 
     /**

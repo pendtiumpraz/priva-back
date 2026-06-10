@@ -1361,6 +1361,10 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::post('/{id}/responses', [MaturityController::class, 'upsertResponse']);
         Route::post('/{id}/responses/bulk', [MaturityController::class, 'bulkUpsertResponses']);
         Route::post('/{id}/auto-derive', [MaturityController::class, 'autoDerive']);
+        // Per-question evidence upload + AI document analysis (parity dgn GAP)
+        Route::post('/{id}/upload-evidence', [MaturityController::class, 'uploadEvidence']);
+        Route::post('/{id}/analyze-evidence', [MaturityController::class, 'analyzeEvidence']);
+        Route::post('/{id}/analyze-evidence-bulk', [MaturityController::class, 'bulkAnalyzeEvidence']);
         Route::post('/{id}/submit', [MaturityController::class, 'submit']);
         Route::post('/{id}/publish', [MaturityController::class, 'publish']);
         Route::get('/{id}/recommendations', [MaturityController::class, 'recommendations']);
