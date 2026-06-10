@@ -4,15 +4,21 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\Organization;
 use App\Models\Vendor;
 use App\Models\VendorAssessment;
 use App\Models\VendorAssessmentAdjustment;
 use App\Models\VendorAssessmentEvidence;
 use App\Models\VendorQuestionnaire;
+use App\Services\AiDocumentAnalyzer;
+use App\Services\CreditService;
+use App\Services\FileUploadValidator;
+use App\Services\TenantStorageService;
 use App\Services\ThirdPartyAssessmentScorer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 /**
  * TPRM Phase 2 — Reviewer workflow (stage 2 dari 3-stage approval).
@@ -159,6 +165,10 @@ class TprmReviewController extends Controller
                     'reviewer_note' => $assessment->reviewer_note,
                     'assigned_approver_id' => $assessment->assigned_approver_id,
                     'workflow_locked' => $assessment->workflow_locked,
+                    // Hasil AI document analysis per pertanyaan — ADVISORY
+                    // ONLY (tidak pernah masuk scorer). FE render badge +
+                    // accordion per attachment dari sini.
+                    'ai_analyses' => $assessment->ai_analyses ?? (object) [],
                 ],
                 'vendor' => $vendor ? [
                     'id' => $vendor->id,
@@ -181,6 +191,9 @@ class TprmReviewController extends Controller
                 'evidence_by_question' => $evidenceRows->map(fn ($items) => $items->map(fn ($e) => [
                     'id' => $e->id,
                     'original_name' => $e->original_name,
+                    // file_path dibutuhkan FE sebagai attachment_path untuk
+                    // POST /analyze-evidence (internal-only, authed).
+                    'file_path' => $e->file_path,
                     'mime_type' => $e->mime_type,
                     'file_size' => $e->file_size,
                     'uploaded_at' => $e->created_at?->toIso8601String(),
@@ -425,6 +438,596 @@ class TprmReviewController extends Controller
         return response()->json([
             'message' => 'Assessment dikembalikan ke pihak ketiga untuk diisi ulang.',
         ]);
+    }
+
+    // =============================================
+    // Per-question Evidence Upload (internal) + AI Analysis
+    // (parity dgn GAP/Maturity/TIA — blueprint TiaController)
+    // =============================================
+    //
+    // Catatan keamanan (LOCKED DECISION): endpoint analisis AI HANYA hidup
+    // di sini, di belakang auth:sanctum + permission:vendor_risk,write.
+    // JANGAN pernah expose ke group public /asesmen-publik/* — public user
+    // tidak boleh bisa membakar kredit AI org.
+
+    /**
+     * POST /tprm/review/{id}/upload-evidence — upload bukti per pertanyaan
+     * oleh user INTERNAL (supplement terhadap bukti yang dikirim pihak
+     * ketiga via public token flow).
+     *
+     * Storage shape mirror AsesmenPublikController::uploadEvidence PERSIS:
+     *   answers[question_id].evidence[] = { id, path, driver, original_name,
+     *   size, mime, uploaded_at } + row vendor_assessment_evidence
+     *   (uploaded_by_user_id terisi, uploaded_by_token=false) — supaya
+     *   reviewer UI & analyzer melihat kedua sumber secara seragam.
+     *
+     * Lock semantics: upload ditolak 423 saat workflow_locked=true atau
+     * status final (approved/rejected). Status draft/sent/submitted/
+     * review_in_progress/pending_approval boleh upload (mirror adjust()
+     * yang juga masih boleh menulis sampai final).
+     */
+    public function uploadEvidence(Request $request, string $id, TenantStorageService $storage, FileUploadValidator $validator)
+    {
+        // Kalau body request melebihi `post_max_size` PHP, $_POST + $_FILES
+        // dibuang dan request seolah kosong — tanpa pesan jelas. Cek
+        // CONTENT_LENGTH manual supaya error message-nya actionable.
+        $contentLength = (int) $request->server('CONTENT_LENGTH');
+        $postMax = $this->bytesFromIni((string) ini_get('post_max_size'));
+        if ($postMax > 0 && $contentLength > $postMax) {
+            return response()->json([
+                'message' => sprintf(
+                    'Ukuran upload (%s) melebihi batas server PHP post_max_size (%s). Minta admin naikkan post_max_size & upload_max_filesize di php.ini hosting.',
+                    $this->humanBytes($contentLength),
+                    ini_get('post_max_size'),
+                ),
+            ], 413);
+        }
+
+        $assessment = $this->findInOrg($id, $request->user()->org_id);
+
+        if ($assessment->workflow_locked || $assessment->isFinal()) {
+            return response()->json([
+                'message' => "Assessment sudah final / terkunci (status={$assessment->status}). Bukti tidak dapat ditambahkan lagi.",
+            ], 423);
+        }
+
+        $request->validate([
+            'question_id' => 'required|string|max:64',
+            'file' => 'required|file|max:10240', // 10MB
+        ]);
+
+        // Validasi question_id terhadap set pertanyaan EFEKTIF assessment ini
+        // (library kalau library_id terisi, else effectiveForOrg legacy).
+        $qId = $request->input('question_id');
+        $question = $this->questionsForAssessment($assessment)->get($qId);
+        if (! $question) {
+            return response()->json([
+                'message' => 'Pertanyaan tidak ditemukan di kuesioner assessment ini.',
+            ], 422);
+        }
+
+        $file = $request->file('file');
+        $ext = strtolower($file->getClientOriginalExtension());
+
+        // Mirror whitelist + preset public uploadEvidence supaya format bukti
+        // konsisten antara jalur public token dan jalur internal.
+        $allowed = ['pdf', 'docx', 'jpg', 'jpeg', 'png'];
+        if (! in_array($ext, $allowed, true)) {
+            return response()->json([
+                'message' => 'Format file tidak diizinkan. Hanya PDF, DOCX, JPG, atau PNG.',
+            ], 422);
+        }
+
+        try {
+            $preset = in_array($ext, ['jpg', 'jpeg', 'png'], true)
+                ? FileUploadValidator::PRESET_IMAGE
+                : FileUploadValidator::PRESET_DOCUMENT;
+            $validator->validate($file, $preset);
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        $org = Organization::findOrFail($assessment->org_id);
+
+        try {
+            $result = $storage->storeTenantPrivateFile(
+                $org,
+                $file,
+                "tprm/assessments/{$assessment->id}/evidence"
+            );
+        } catch (\Throwable $e) {
+            report($e);
+            return response()->json([
+                'message' => 'Gagal menyimpan file ke storage: '.$e->getMessage(),
+            ], 500);
+        }
+
+        if (empty($result['path'])) {
+            return response()->json([
+                'message' => 'Gagal menyimpan file (path kosong). Periksa konfigurasi storage.',
+            ], 500);
+        }
+
+        // JSON-embed — shape PERSIS sama dengan public flow.
+        $answers = is_array($assessment->answers) ? $assessment->answers : [];
+        if (! isset($answers[$qId]) || ! is_array($answers[$qId])) {
+            $answers[$qId] = [];
+        }
+        if (! isset($answers[$qId]['evidence']) || ! is_array($answers[$qId]['evidence'])) {
+            $answers[$qId]['evidence'] = [];
+        }
+
+        $entry = [
+            'id' => (string) Str::uuid(),
+            'path' => $result['path'] ?? null,
+            'driver' => $result['driver'] ?? null,
+            'original_name' => $file->getClientOriginalName(),
+            'size' => $file->getSize(),
+            'mime' => $file->getMimeType(),
+            'uploaded_at' => now()->toIso8601String(),
+        ];
+        $answers[$qId]['evidence'][] = $entry;
+
+        $assessment->forceFill(['answers' => $answers])->save();
+
+        // Mirror ke tabel vendor_assessment_evidence (source of truth untuk
+        // Reviewer/Approver UI) — uploaded_by_user_id terisi (internal).
+        try {
+            VendorAssessmentEvidence::create([
+                'id' => $entry['id'],
+                'org_id' => $assessment->org_id,
+                'assessment_id' => $assessment->id,
+                'question_id' => $qId,
+                'file_path' => $entry['path'],
+                'original_name' => $entry['original_name'],
+                'mime_type' => $entry['mime'],
+                'file_size' => $entry['size'] ?? 0,
+                'uploaded_by_user_id' => $request->user()->id,
+                'uploaded_by_token' => false,
+                'uploaded_ip' => $request->ip(),
+                'is_active' => true,
+            ]);
+        } catch (\Throwable $e) {
+            \Log::warning('TPRM internal evidence mirror to table failed: '.$e->getMessage(), [
+                'assessment_id' => $assessment->id,
+                'question_id' => $qId,
+            ]);
+        }
+
+        AuditLog::create([
+            'org_id' => $assessment->org_id,
+            'user_id' => $request->user()->id,
+            'user_name' => $request->user()->name,
+            'user_role' => 'reviewer',
+            'module' => 'tprm.review',
+            'action' => 'evidence_uploaded',
+            'record_id' => $assessment->id,
+            'changes' => [
+                'question_id' => $qId,
+                'name' => $entry['original_name'],
+            ],
+        ]);
+
+        return response()->json([
+            'message' => 'Bukti berhasil diunggah.',
+            // `name` + `url` extra untuk komponen FE EvidenceUpload (file
+            // private — tidak ada public URL, FE render nama saja).
+            'data' => array_merge($entry, [
+                'name' => $entry['original_name'],
+                'url' => null,
+            ]),
+            'evidence' => $answers[$qId]['evidence'],
+        ], 201);
+    }
+
+    /**
+     * POST /tprm/review/{id}/analyze-evidence — AI document analysis untuk
+     * satu (question_id, attachment_path). INTERNAL ONLY (auth:sanctum).
+     *
+     * Bekerja untuk evidence dari KEDUA jalur (public token flow + upload
+     * internal) karena storage shape-nya sama: attachment_path dicocokkan
+     * ke answers[qid].evidence[] dengan fallback tabel
+     * vendor_assessment_evidence.
+     *
+     * Teks "pertanyaan" untuk analyzer di-compose dari pertanyaan efektif:
+     *   "Pertanyaan TPRM ({section}): {question_text}. {description}"
+     * regulation_ref pertanyaan diteruskan sebagai regulationRef.
+     *
+     * Hasil disimpan ke ai_analyses[question_id][] keyed attachment_path.
+     * 1 kredit per analisis (deduct di AiDocumentAnalyzer untuk panggilan
+     * sukses non-cache); 402 kalau kredit habis. Verdict ADVISORY ONLY —
+     * TIDAK menyentuh ThirdPartyAssessmentScorer / skor assessment.
+     */
+    public function analyzeEvidence(Request $request, string $id, AiDocumentAnalyzer $analyzer)
+    {
+        $request->validate([
+            'question_id' => 'required|string|max:64',
+            'attachment_path' => 'required|string|max:1024',
+        ]);
+
+        $assessment = $this->findInOrg($id, $request->user()->org_id);
+
+        $qId = $request->input('question_id');
+        $question = $this->questionsForAssessment($assessment)->get($qId);
+        if (! $question) {
+            return response()->json(['message' => 'Pertanyaan tidak ditemukan.'], 404);
+        }
+
+        // Verifikasi attachment_path memang milik pertanyaan ini — defence
+        // against tampering. Layer 1: JSON embed; layer 2: evidence table.
+        if (! $this->attachmentBelongsToQuestion($assessment, $qId, $request->attachment_path)) {
+            return response()->json([
+                'message' => 'Lampiran tidak ditemukan pada pertanyaan ini.',
+            ], 404);
+        }
+
+        $localPath = $this->resolveAttachmentPath($assessment, $request->attachment_path);
+        if (! $localPath || ! is_file($localPath)) {
+            return response()->json([
+                'message' => 'File tidak ditemukan pada penyimpanan.',
+            ], 404);
+        }
+
+        // Credit gate (skip for superadmin / on-prem).
+        $orgId = $request->user()->org_id;
+        if ($orgId) {
+            CreditService::resetIfNeeded($orgId);
+            if (! CreditService::hasCredit($orgId, 'ai_doc_analyze')) {
+                $cost = CreditService::getCost('ai_doc_analyze');
+                return response()->json([
+                    'message' => "Kredit AI Anda habis. Dibutuhkan {$cost} kredit untuk analisis ini. Silakan top up kredit melalui menu Konfigurasi Platform.",
+                    'credits_exhausted' => true,
+                ], 402);
+            }
+        }
+
+        $result = $analyzer->analyze(
+            documentPath: $localPath,
+            question: $this->questionTextFor($question),
+            regulationRef: (string) ($question->regulation_ref ?? ''),
+            orgId: $orgId,
+        );
+
+        $newEntry = array_merge($result->toArray(), [
+            'analyzed_at' => now()->toIso8601String(),
+            'attachment_path' => $request->attachment_path,
+        ]);
+
+        // ai_analyses[qId] = ARRAY (satu entri per attachment).
+        $analyses = $assessment->ai_analyses ?? [];
+        $listForQ = $this->normalizeAnalysesForQuestion($analyses[$qId] ?? null);
+        $found = false;
+        foreach ($listForQ as $i => $item) {
+            if (($item['attachment_path'] ?? null) === $request->attachment_path) {
+                $listForQ[$i] = $newEntry;
+                $found = true;
+                break;
+            }
+        }
+        if (! $found) {
+            $listForQ[] = $newEntry;
+        }
+        $analyses[$qId] = $listForQ;
+
+        // Advisory only — TANPA recompute scorer; skor assessment tidak berubah.
+        $assessment->forceFill(['ai_analyses' => $analyses])->save();
+
+        AuditLog::create([
+            'org_id' => $assessment->org_id,
+            'user_id' => $request->user()->id,
+            'user_name' => $request->user()->name,
+            'user_role' => 'reviewer',
+            'module' => 'tprm.review',
+            'action' => 'evidence_analyzed',
+            'record_id' => $assessment->id,
+            'changes' => [
+                'question_id' => $qId,
+                'attachment_path' => $request->attachment_path,
+                'status' => $newEntry['status'] ?? null,
+            ],
+        ]);
+
+        return response()->json($newEntry);
+    }
+
+    /**
+     * POST /tprm/review/{id}/analyze-evidence-bulk — mirror
+     * TiaController::bulkAnalyzeEvidence.
+     *
+     * Iterasi setiap (question, attachment) dari answers[qid].evidence[].
+     * Skip: pertanyaan tak dikenal, pasangan yang sudah cached di
+     * ai_analyses (no re-charge), dan file gambar (OCR belum didukung).
+     * Stop early kalau kredit habis — return stats + flag credits_exhausted.
+     */
+    public function bulkAnalyzeEvidence(Request $request, string $id, AiDocumentAnalyzer $analyzer)
+    {
+        $assessment = $this->findInOrg($id, $request->user()->org_id);
+        $orgId = $request->user()->org_id;
+
+        $questionMap = $this->questionsForAssessment($assessment);
+
+        $answers = is_array($assessment->answers) ? $assessment->answers : [];
+        $existing = $assessment->ai_analyses ?? [];
+        $newAnalyses = $existing;
+
+        $stats = ['analyzed' => 0, 'cached' => 0, 'skipped' => 0, 'failed' => 0];
+        $creditsExhausted = false;
+        $imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'];
+
+        foreach ($answers as $qId => $answer) {
+            $files = is_array($answer) ? ($answer['evidence'] ?? []) : [];
+            if (empty($files) || ! is_array($files)) {
+                continue;
+            }
+
+            $question = $questionMap->get($qId);
+            if (! $question) {
+                $stats['skipped'] += count($files);
+                continue;
+            }
+
+            $prevList = $this->normalizeAnalysesForQuestion($existing[$qId] ?? null);
+            $prevByPath = [];
+            foreach ($prevList as $p) {
+                if (! empty($p['attachment_path'])) {
+                    $prevByPath[$p['attachment_path']] = $p;
+                }
+            }
+
+            $newListForQ = [];
+            foreach ($files as $att) {
+                $attachmentPath = is_array($att) ? ($att['path'] ?? null) : $att;
+                if (! $attachmentPath) {
+                    $stats['skipped']++;
+                    continue;
+                }
+
+                // Cache hit: skip kalau hasil analysis sudah ada untuk attachment sama.
+                $prev = $prevByPath[$attachmentPath] ?? null;
+                if ($prev && ! empty($prev['status'])) {
+                    $newListForQ[] = $prev;
+                    $stats['cached']++;
+                    continue;
+                }
+
+                // Image: skip (OCR not supported)
+                $ext = strtolower(pathinfo($attachmentPath, PATHINFO_EXTENSION));
+                if (in_array($ext, $imageExts, true)) {
+                    $newListForQ[] = [
+                        'status' => 'unsure',
+                        'analysis' => 'Gambar belum didukung untuk analisis AI (perlu OCR engine).',
+                        'cited_passages' => [],
+                        'confidence' => 0,
+                        'analyzed_at' => now()->toIso8601String(),
+                        'attachment_path' => $attachmentPath,
+                    ];
+                    $stats['skipped']++;
+                    continue;
+                }
+
+                // Credit gate per-item supaya tidak bocor kuota.
+                if ($orgId) {
+                    CreditService::resetIfNeeded($orgId);
+                    if (! CreditService::hasCredit($orgId, 'ai_doc_analyze')) {
+                        $creditsExhausted = true;
+                        break 2; // break out of inner+outer loops
+                    }
+                }
+
+                $localPath = $this->resolveAttachmentPath($assessment, $attachmentPath);
+                if (! $localPath || ! is_file($localPath)) {
+                    $newListForQ[] = [
+                        'status' => 'unsure',
+                        'analysis' => 'File tidak ditemukan di storage.',
+                        'cited_passages' => [],
+                        'confidence' => 0,
+                        'analyzed_at' => now()->toIso8601String(),
+                        'attachment_path' => $attachmentPath,
+                    ];
+                    $stats['failed']++;
+                    continue;
+                }
+
+                try {
+                    $result = $analyzer->analyze(
+                        documentPath: $localPath,
+                        question: $this->questionTextFor($question),
+                        regulationRef: (string) ($question->regulation_ref ?? ''),
+                        orgId: $orgId,
+                    );
+                    $newListForQ[] = array_merge($result->toArray(), [
+                        'analyzed_at' => now()->toIso8601String(),
+                        'attachment_path' => $attachmentPath,
+                    ]);
+                    $stats['analyzed']++;
+                } catch (\Throwable $e) {
+                    $newListForQ[] = [
+                        'status' => 'unsure',
+                        'analysis' => 'Gagal analisis: '.$e->getMessage(),
+                        'cited_passages' => [],
+                        'confidence' => 0,
+                        'analyzed_at' => now()->toIso8601String(),
+                        'attachment_path' => $attachmentPath,
+                    ];
+                    $stats['failed']++;
+                }
+            }
+
+            if (! empty($newListForQ)) {
+                $newAnalyses[$qId] = $newListForQ;
+            }
+        }
+
+        // Advisory only — TANPA recompute scorer.
+        $assessment->forceFill(['ai_analyses' => $newAnalyses])->save();
+
+        $msg = "Bulk analisis selesai: {$stats['analyzed']} baru, {$stats['cached']} cache, {$stats['skipped']} skip, {$stats['failed']} gagal.";
+        if ($creditsExhausted) {
+            $msg .= ' Kredit habis di tengah — sebagian belum dianalisis. Top up dan klik analisis ulang untuk lanjut.';
+        }
+
+        return response()->json([
+            'message' => $msg,
+            'stats' => $stats,
+            'credits_exhausted' => $creditsExhausted,
+            'ai_analyses' => $newAnalyses,
+        ]);
+    }
+
+    /**
+     * Set pertanyaan EFEKTIF untuk satu assessment, keyed by question id.
+     * Dual path mirror doShow(): library_id (TPRM Phase 1+) atau legacy
+     * effectiveForOrg + filter versi scorer.
+     */
+    private function questionsForAssessment(VendorAssessment $assessment): \Illuminate\Support\Collection
+    {
+        if (! empty($assessment->library_id)) {
+            return VendorQuestionnaire::query()
+                ->withoutGlobalScope('org')
+                ->where('library_id', $assessment->library_id)
+                ->where('is_active', true)
+                ->get()
+                ->keyBy('id');
+        }
+
+        return VendorQuestionnaire::effectiveForOrg($assessment->org_id)
+            ->filter(fn ($q) => $q->is_active && $q->version === ThirdPartyAssessmentScorer::VERSION)
+            ->keyBy('id');
+    }
+
+    /**
+     * Compose teks "pertanyaan" untuk AiDocumentAnalyzer:
+     * "Pertanyaan TPRM ({section}): {question_text}. {description}".
+     */
+    private function questionTextFor(VendorQuestionnaire $q): string
+    {
+        $section = trim((string) ($q->section ?? ''));
+        $text = 'Pertanyaan TPRM'.($section !== '' ? " ({$section})" : '').': '.$q->question_text;
+        if (! empty($q->description)) {
+            $text .= '. '.$q->description;
+        }
+
+        return $text;
+    }
+
+    /**
+     * Cek attachment_path memang ter-attach ke pertanyaan ini. Layer 1:
+     * answers[qid].evidence[] (JSON embed — ditulis baik oleh public token
+     * flow maupun upload internal). Layer 2: tabel vendor_assessment_evidence
+     * (fallback untuk row lama yang JSON embed-nya hilang).
+     */
+    private function attachmentBelongsToQuestion(VendorAssessment $assessment, string $qId, string $attachmentPath): bool
+    {
+        $answers = is_array($assessment->answers) ? $assessment->answers : [];
+        $files = is_array($answers[$qId] ?? null) ? ($answers[$qId]['evidence'] ?? []) : [];
+        foreach ((array) $files as $att) {
+            $path = is_array($att) ? ($att['path'] ?? null) : $att;
+            if ($path === $attachmentPath) {
+                return true;
+            }
+        }
+
+        return VendorAssessmentEvidence::query()
+            ->withoutGlobalScope('org')
+            ->where('assessment_id', $assessment->id)
+            ->where('question_id', $qId)
+            ->where('file_path', $attachmentPath)
+            ->exists();
+    }
+
+    /**
+     * Normalisasi nilai ai_analyses[qId] ke array entries.
+     * Format lama: object tunggal { status, analysis, attachment_path, ... }
+     * Format baru: array [ { ... }, { ... } ]
+     */
+    private function normalizeAnalysesForQuestion(mixed $value): array
+    {
+        if (empty($value) || ! is_array($value)) {
+            return [];
+        }
+        if (isset($value['status'])) {
+            return [$value];
+        }
+
+        return array_values($value);
+    }
+
+    /** Convert PHP ini shorthand (50M, 8K, 2G) ke byte integer. */
+    private function bytesFromIni(string $val): int
+    {
+        $val = trim($val);
+        if ($val === '') return 0;
+        $unit = strtolower(substr($val, -1));
+        $num = (int) $val;
+        return match ($unit) {
+            'g' => $num * 1024 * 1024 * 1024,
+            'm' => $num * 1024 * 1024,
+            'k' => $num * 1024,
+            default => $num,
+        };
+    }
+
+    /** Format byte ke MB/KB human-readable. */
+    private function humanBytes(int $bytes): string
+    {
+        if ($bytes >= 1048576) return number_format($bytes / 1048576, 1).'MB';
+        if ($bytes >= 1024) return number_format($bytes / 1024, 1).'KB';
+        return $bytes.'B';
+    }
+
+    /**
+     * Resolve attachment relative path ke absolute filesystem path (mirror
+     * TiaController::resolveAttachmentPath). Layer 1: local public/app
+     * disk; Layer 2: tenant disk (S3/GCS/local default) → download ke temp
+     * file supaya analyzer (PdfParser/PhpWord/PhpSpreadsheet) bisa baca.
+     * Evidence TPRM disimpan via storeTenantPrivateFile sehingga layer 2
+     * adalah jalur utama.
+     */
+    private function resolveAttachmentPath(VendorAssessment $assessment, string $relativePath): ?string
+    {
+        $rel = ltrim($relativePath, '/');
+
+        $localCandidates = [
+            storage_path('app/public/'.$rel),
+            storage_path('app/private/'.$rel),
+            storage_path('app/'.$rel),
+        ];
+        foreach ($localCandidates as $candidate) {
+            if (is_file($candidate) && is_readable($candidate)) {
+                return $candidate;
+            }
+        }
+
+        try {
+            $org = Organization::find($assessment->org_id);
+            if (! $org) {
+                return null;
+            }
+            /** @var TenantStorageService $svc */
+            $svc = app(TenantStorageService::class);
+            $disk = $svc->getDisk($org);
+            if (! $disk->exists($rel)) {
+                return null;
+            }
+            $contents = $disk->get($rel);
+            if ($contents === null || $contents === '') {
+                return null;
+            }
+            $ext = pathinfo($rel, PATHINFO_EXTENSION) ?: 'bin';
+            $tmpDir = sys_get_temp_dir();
+            $tmpPath = $tmpDir.DIRECTORY_SEPARATOR.'tprm_evidence_'.substr(hash('sha256', $rel), 0, 16).'.'.$ext;
+            if (file_put_contents($tmpPath, $contents) === false) {
+                return null;
+            }
+            return $tmpPath;
+        } catch (\Throwable $e) {
+            \Log::warning('[TPRM resolveAttachmentPath] tenant disk fetch failed', [
+                'org_id' => $assessment->org_id,
+                'path' => $rel,
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
     }
 
     private function findInOrg(string $id, ?string $orgId): VendorAssessment

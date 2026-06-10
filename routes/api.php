@@ -740,6 +740,17 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
             ->middleware('permission:vendor_risk,write');
         Route::post('/{id}/reject-to-vendor', [TprmReviewController::class, 'rejectToVendor'])
             ->middleware('permission:vendor_risk,write');
+
+        // Sprint G follow-up — per-question evidence upload (internal) + AI
+        // document analysis. INTERNAL ONLY (auth:sanctum): public token flow
+        // (/asesmen-publik/*) sengaja TIDAK diberi endpoint analisis supaya
+        // pihak luar tidak bisa membakar kredit AI org. {id} = assessment id.
+        Route::post('/{id}/upload-evidence', [TprmReviewController::class, 'uploadEvidence'])
+            ->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/analyze-evidence', [TprmReviewController::class, 'analyzeEvidence'])
+            ->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/analyze-evidence-bulk', [TprmReviewController::class, 'bulkAnalyzeEvidence'])
+            ->middleware('permission:vendor_risk,write');
     });
 
     // =============================================

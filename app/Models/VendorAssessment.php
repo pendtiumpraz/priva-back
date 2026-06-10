@@ -72,10 +72,15 @@ class VendorAssessment extends Model
         'approver_note',
         'rejection_reason',
         'workflow_locked',
+        // Sprint X5 follow-up — hasil AI document analysis per pertanyaan
+        // (ai_analyses[question_id][] keyed by attachment_path). ADVISORY
+        // ONLY — tidak pernah masuk ThirdPartyAssessmentScorer.
+        'ai_analyses',
     ];
 
     protected $casts = [
         'answers' => 'array',
+        'ai_analyses' => 'array',
         'recommendations' => 'array',
         'score_breakdown' => 'array',
         'score' => 'integer',
@@ -119,6 +124,38 @@ class VendorAssessment extends Model
     public function isFinal(): bool
     {
         return in_array($this->status, self::STATUS_FINAL, true);
+    }
+
+    /**
+     * Agregasi hasil AI analysis untuk satu pertanyaan ke 1 verdict (mirror
+     * TiaAssessment::aggregateAiVerdict). Banyak dokumen per pertanyaan →
+     * pilih WORST status (paling konservatif). `unsure` di-skip; kalau semua
+     * unsure return null.
+     *
+     * PENTING: verdict ini ADVISORY ONLY — tidak pernah mengubah jawaban
+     * vendor / reviewer dan TIDAK dipakai ThirdPartyAssessmentScorer.
+     * UI menampilkannya sebagai badge per pertanyaan di halaman review.
+     *
+     * @param  mixed  $value  Bisa null, single object (legacy), atau array of objects.
+     */
+    public static function aggregateAiVerdict(mixed $value): ?string
+    {
+        if (empty($value) || ! is_array($value)) return null;
+        // Legacy single object
+        $entries = isset($value['status']) ? [$value] : array_values($value);
+        $rank = ['non_comply' => 3, 'partial' => 2, 'comply' => 1];
+        $worst = null;
+        $worstRank = 0;
+        foreach ($entries as $e) {
+            $st = is_array($e) ? ($e['status'] ?? null) : null;
+            if (! $st || $st === 'unsure') continue;
+            $r = $rank[$st] ?? 0;
+            if ($r > $worstRank) {
+                $worst = $st;
+                $worstRank = $r;
+            }
+        }
+        return $worst;
     }
 
     public function evidence()
