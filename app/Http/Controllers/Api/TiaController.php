@@ -74,9 +74,9 @@ class TiaController extends Controller
     {
         $record = TiaAssessment::query()
             ->with([
-                'crossBorder:id,destination_country,activity_name,sender_organization,recipient_organization',
+                'crossBorder:id,destination_country,destination_entity,transfer_purpose,status,risk_level',
                 'ropa:id,custom_number,registration_number,processing_activity,division,risk_level',
-                'vendor:id,vendor_name,country,risk_level,is_data_processor',
+                'vendor:id,name,country,risk_level,type',
                 'maker:id,name,email', 'checker:id,name,email', 'approver:id,name,email',
             ])
             ->withTrashed()
@@ -204,13 +204,17 @@ class TiaController extends Controller
             abort(403, 'Vendor belongs to another org.');
         }
 
-        $unit = strtoupper(substr(preg_replace('/[^a-zA-Z0-9]/', '', $vendor->vendor_name ?? 'VND'), 0, 4));
+        // Kolom Vendor sebenarnya: `name` & `type` (bukan vendor_name/
+        // is_data_processor yang tidak ada → dulu bikin title kosong).
+        $vendorName = $vendor->name ?? 'Vendor';
+        $isProcessor = in_array((string) ($vendor->type ?? ''), ['processor', 'sub-processor'], true);
+        $unit = strtoupper(substr(preg_replace('/[^a-zA-Z0-9]/', '', $vendorName ?: 'VND'), 0, 4));
         $code = $this->suggestCode($orgId, $unit, 'TIA');
 
         $record = TiaAssessment::create([
             'org_id' => $orgId,
             'tia_code' => $code,
-            'title' => "TIA — Vendor: {$vendor->vendor_name}",
+            'title' => "TIA — Vendor: {$vendorName}",
             'linked_vendor_id' => $vendor->id,
             'destination_country' => $vendor->country ?? null,
             'maker_id' => $request->user()->id,
@@ -220,9 +224,9 @@ class TiaController extends Controller
                 'source' => 'vendor',
                 'vendor_id' => $vendor->id,
                 'vendor_snapshot' => [
-                    'vendor_name' => $vendor->vendor_name,
+                    'vendor_name' => $vendorName,
                     'country' => $vendor->country ?? null,
-                    'is_data_processor' => $vendor->is_data_processor ?? null,
+                    'is_data_processor' => $isProcessor,
                     'risk_level' => $vendor->risk_level ?? null,
                 ],
                 'snapshot_taken_at' => now()->toIso8601String(),
