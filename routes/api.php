@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\ApiKeyController;
 use App\Http\Controllers\Api\ApprovalConfigController;
 use App\Http\Controllers\Api\ApprovalController;
 use App\Http\Controllers\Api\AsesmenPublikController;
+use App\Http\Controllers\Api\PraAsesmenPublikController;
 use App\Http\Controllers\Api\AssessmentsController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AutomationController;
@@ -102,6 +103,8 @@ use App\Http\Controllers\Api\TprmIncidentController;
 use App\Http\Controllers\Api\TprmLibraryController;
 use App\Http\Controllers\Api\TprmMonitoringController;
 use App\Http\Controllers\Api\TprmReviewController;
+use App\Http\Controllers\Api\TriageQuestionController;
+use App\Http\Controllers\Api\VendorPreAssessmentController;
 use App\Http\Controllers\Api\VendorScreeningController;
 use App\Http\Controllers\Api\ThreatIntelController;
 use App\Http\Controllers\Api\TiaController;
@@ -188,6 +191,20 @@ Route::middleware('throttle:api')->group(function () {
             Route::post('/upload', [AsesmenPublikController::class, 'uploadEvidence']);
             Route::post('/submit', [AsesmenPublikController::class, 'submit']);
             Route::get('/result', [AsesmenPublikController::class, 'result']);
+        });
+
+    // =============================================
+    // Pra-Asesmen Publik — TPRM Pre-Assessment (Penyaringan Lingkup PDP)
+    // Pihak ketiga isi triage tanpa login, akses via UUID token. Middleware
+    // `public-pre-assessment-token` (sibling dari public-assessment-token):
+    // resolve pre-assessment dari token, validasi expiry, single-use guard
+    // untuk write, set tenant context, rate-limit 30 RPM (bucket terpisah).
+    // =============================================
+    Route::prefix('pra-asesmen-publik/{token}')
+        ->middleware('public-pre-assessment-token')
+        ->group(function () {
+            Route::get('/', [PraAsesmenPublikController::class, 'show']);
+            Route::post('/submit', [PraAsesmenPublikController::class, 'submit']);
         });
 
     // SSO Public Routes
@@ -636,6 +653,19 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         // Re-assessment (manual override atau AI re-run) — legacy path
         Route::post('/{id}/reassess', [VendorRiskController::class, 'reassess'])->middleware('permission:vendor_risk,write');
 
+        // Pre-Assessment (triage / Penyaringan Lingkup PDP) per vendor.
+        // {id} = vendor id. Reads: vendor_risk,read; mutasi: vendor_risk,write.
+        Route::get('/{id}/pre-assessment', [VendorPreAssessmentController::class, 'show'])
+            ->middleware('permission:vendor_risk,read');
+        Route::post('/{id}/pre-assessment', [VendorPreAssessmentController::class, 'save'])
+            ->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/pre-assessment/decide', [VendorPreAssessmentController::class, 'decide'])
+            ->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/pre-assessment/approve-out-of-scope', [VendorPreAssessmentController::class, 'approveOutOfScope'])
+            ->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/pre-assessment/public-link', [VendorPreAssessmentController::class, 'publicLink'])
+            ->middleware('permission:vendor_risk,write');
+
         // Sprint G.6 — Generate public assessment link untuk pihak ketiga
         Route::post('/{id}/generate-public-link', [VendorRiskController::class, 'generatePublicLink'])
             ->middleware('permission:vendor_risk,write');
@@ -677,6 +707,38 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::put('/{id}', [ThirdPartyQuestionController::class, 'update'])
             ->middleware('permission:vendor_risk,write');
         Route::delete('/{id}', [ThirdPartyQuestionController::class, 'destroy'])
+            ->middleware('permission:vendor_risk,write');
+    });
+
+    // =============================================
+    // Pre-Assessment Triage — Kelola Pertanyaan Penyaringan Lingkup PDP
+    // Catalog default editable per-org + custom + factory-reset (mirror LIA
+    // question bank). Permission slug: vendor_risk. CUSTOM routes MUST precede
+    // {code}/{id} wildcards.
+    // =============================================
+    // Custom triage questions CRUD — separate prefix so the literal
+    // 'triage-questions-custom' path never collides with the {code} wildcard
+    // under 'triage-questions'.
+    Route::prefix('third-party/triage-questions-custom')->group(function () {
+        Route::get('/', [TriageQuestionController::class, 'customIndex'])
+            ->middleware('permission:vendor_risk,read');
+        Route::post('/', [TriageQuestionController::class, 'storeCustom'])
+            ->middleware('permission:vendor_risk,write');
+        Route::put('/{id}', [TriageQuestionController::class, 'updateCustom'])
+            ->middleware('permission:vendor_risk,write');
+        Route::delete('/{id}', [TriageQuestionController::class, 'destroyCustom'])
+            ->middleware('permission:vendor_risk,write');
+    });
+
+    Route::prefix('third-party/triage-questions')->group(function () {
+        Route::get('/', [TriageQuestionController::class, 'index'])
+            ->middleware('permission:vendor_risk,read');
+        // Factory reset — MUST precede {code} wildcards.
+        Route::post('/factory-reset', [TriageQuestionController::class, 'factoryResetQuestions'])
+            ->middleware('permission:vendor_risk,write');
+        Route::put('/{code}', [TriageQuestionController::class, 'updateDefaultQuestion'])
+            ->middleware('permission:vendor_risk,write');
+        Route::post('/{code}/reset', [TriageQuestionController::class, 'resetDefaultQuestion'])
             ->middleware('permission:vendor_risk,write');
     });
 

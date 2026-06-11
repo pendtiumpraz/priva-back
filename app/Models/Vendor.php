@@ -36,6 +36,14 @@ class Vendor extends Model
         'data_shared',
         'services_provided',
         'documents',
+        // TPRM Pre-Assessment — PDP scope gate
+        'pdp_scope_status',
+        'scope_decided_at',
+        'scope_decided_by',
+        'scope_justification',
+        'scope_overridden',
+        'scope_approved_by',
+        'scope_approved_at',
     ];
 
     protected $casts = [
@@ -51,7 +59,20 @@ class Vendor extends Model
         // PII Encryption — AES-256-CBC
         'contact_name' => EncryptedString::class,
         'contact_email' => EncryptedString::class,
+        // TPRM Pre-Assessment — PDP scope gate
+        'scope_overridden' => 'boolean',
+        'scope_decided_at' => 'datetime',
+        'scope_approved_at' => 'datetime',
     ];
+
+    // PDP scope gate states.
+    public const SCOPE_UNSCREENED = 'unscreened';
+
+    public const SCOPE_IN = 'in_scope';
+
+    public const SCOPE_OUT_PENDING = 'out_of_scope_pending';
+
+    public const SCOPE_OUT = 'out_of_scope';
 
     public function organization()
     {
@@ -66,5 +87,16 @@ class Vendor extends Model
     public function getLatestAssessment()
     {
         return $this->assessments()->first();
+    }
+
+    public function preAssessments()
+    {
+        return $this->hasMany(VendorPreAssessment::class, 'vendor_id')->orderBy('created_at', 'desc');
+    }
+
+    /** Latest (non-trashed) pre-assessment row for this vendor. */
+    public function latestPreAssessment()
+    {
+        return $this->preAssessments()->first();
     }
 }

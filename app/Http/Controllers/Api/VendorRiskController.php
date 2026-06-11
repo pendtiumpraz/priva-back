@@ -32,14 +32,28 @@ class VendorRiskController extends Controller
     {
         $orgId = $request->user()->org_id;
 
+        // Pre-Assessment tabs/badges: filter by PDP scope status. Accept the
+        // four state-machine values; ignore anything else.
+        $scopeFilter = $request->get('scope');
+        $validScopes = [
+            Vendor::SCOPE_UNSCREENED, Vendor::SCOPE_IN,
+            Vendor::SCOPE_OUT_PENDING, Vendor::SCOPE_OUT,
+        ];
+
         $vendors = Vendor::where('org_id', $orgId)
-            ->with(['assessments' => function ($q) {
-                $q->orderBy('created_at', 'desc')->limit(1);
-            }])
+            ->when(in_array($scopeFilter, $validScopes, true), fn ($q) => $q->where('pdp_scope_status', $scopeFilter))
+            ->with([
+                'assessments' => function ($q) {
+                    $q->orderBy('created_at', 'desc')->limit(1);
+                },
+                'preAssessments' => function ($q) {
+                    $q->orderBy('created_at', 'desc')->limit(1);
+                },
+            ])
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($vendor) {
-                $assessment = $vendor->assessments->first();
+                $pre = $vendor->preAssessments->first();
 
                 return [
                     'id' => $vendor->id,
@@ -50,6 +64,15 @@ class VendorRiskController extends Controller
                     'dpa_status' => $vendor->dpa_status,
                     'dpa_expires_at' => $vendor->dpa_expires_at,
                     'last_assessed' => $vendor->last_assessed_at ? $vendor->last_assessed_at->format('Y-m-d') : '-',
+                    // Pre-Assessment / PDP scope gate — drives FE tabs + badges.
+                    'pdp_scope_status' => $vendor->pdp_scope_status,
+                    'scope_overridden' => (bool) $vendor->scope_overridden,
+                    'pre_assessment' => $pre ? [
+                        'id' => $pre->id,
+                        'status' => $pre->status,
+                        'suggested_scope' => $pre->suggested_scope,
+                        'final_scope' => $pre->final_scope,
+                    ] : null,
                 ];
             });
 
@@ -357,6 +380,12 @@ class VendorRiskController extends Controller
         // Resolve or create the vendor
         if ($id) {
             $vendor = Vendor::where('org_id', $orgId)->findOrFail($id);
+            // SCOPE GATE: out-of-scope third parties don't need a full assessment.
+            if ($vendor->pdp_scope_status === Vendor::SCOPE_OUT) {
+                return response()->json([
+                    'message' => 'Pihak ketiga ini Di Luar Lingkup PDP — tidak memerlukan assessment.',
+                ], 422);
+            }
             $vendor->category = $data['category'];
         } else {
             $vendor = Vendor::create([
@@ -659,6 +688,13 @@ class VendorRiskController extends Controller
     {
         $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($id);
 
+        // SCOPE GATE: out-of-scope third parties don't need a full assessment.
+        if ($vendor->pdp_scope_status === Vendor::SCOPE_OUT) {
+            return response()->json([
+                'message' => 'Pihak ketiga ini Di Luar Lingkup PDP — tidak memerlukan assessment.',
+            ], 422);
+        }
+
         $validated = $request->validate([
             'mode' => 'required|in:manual,ai',
             'answers' => 'nullable|array',
@@ -899,6 +935,15 @@ class VendorRiskController extends Controller
     public function generatePublicLink(Request $request, string $vendorId, AssessmentTokenService $tokenSvc)
     {
         $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($vendorId);
+
+        // SCOPE GATE (Pre-Assessment): pihak ketiga yang sudah ditetapkan Di
+        // Luar Lingkup PDP tidak memerlukan asesmen penuh. unscreened/in_scope
+        // tetap diizinkan (FE hanya mendorong screening dulu, tidak hard-block).
+        if ($vendor->pdp_scope_status === Vendor::SCOPE_OUT) {
+            return response()->json([
+                'message' => 'Pihak ketiga ini Di Luar Lingkup PDP — tidak memerlukan assessment.',
+            ], 422);
+        }
 
         // GUARD: tolak generate tautan baru bila ada assessment yang sudah
         // ter-submit. Skor sudah final — re-share tautan justru membingungkan
