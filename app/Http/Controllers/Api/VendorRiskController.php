@@ -71,6 +71,10 @@ class VendorRiskController extends Controller
                     // Pre-Assessment / PDP scope gate — drives FE tabs + badges.
                     'pdp_scope_status' => $vendor->pdp_scope_status,
                     'scope_overridden' => (bool) $vendor->scope_overridden,
+                    // Assignment + division-scoped visibility (mirrors RoPA) —
+                    // drives the Assign Group column + quick-edit modal in FE.
+                    'assign_group' => $vendor->assign_group,
+                    'assignees' => is_array($vendor->assignees) ? $vendor->assignees : [],
                     'pre_assessment' => $pre ? [
                         'id' => $pre->id,
                         'status' => $pre->status,
