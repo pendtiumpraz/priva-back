@@ -238,7 +238,9 @@ class ModuleCrudController extends Controller
      */
     private function applyRopaUserScope($query, Request $request, string $module): void
     {
-        if ($module !== 'ropa') return;
+        // Visibilitas berbasis assignment berlaku utk RoPA & DPIA. Modul lain
+        // (DSR/consent/breach/data-discovery) tidak di-scope di sini.
+        if (! in_array($module, ['ropa', 'dpia'], true)) return;
         $user = $request->user();
         if (! $user) return;
         $role = $user->role ?? '';
@@ -250,21 +252,27 @@ class ModuleCrudController extends Controller
         $userId = $user->id;
         $deptName = optional($user->department)->name;
 
-        $query->where(function ($w) use ($userId, $deptName) {
-            // (a) All-group
+        $query->where(function ($w) use ($userId, $deptName, $module) {
+            // (a) All-group (assign_group kosong atau "(All Group)")
             $w->where(function ($a) {
                 $a->whereNull('assign_group')
                   ->orWhere('assign_group', '(All Group)');
             });
-            // (b) Explicit assignee
+            // (b) Assignee eksplisit (user ada di daftar assignees)
             $w->orWhereJsonContains('assignees', $userId);
-            // (d) Creator
+            // (d) Pembuat record
             $w->orWhere('created_by', $userId);
-            // (c) Divisi user terlibat di RoPA
+            // (c) Divisi: user lihat record yang di-assign ke divisinya.
             if ($deptName) {
-                $w->orWhereJsonContains('wizard_data->detail_pemrosesan->divisi_list', $deptName);
-                $w->orWhere('wizard_data->detail_pemrosesan->divisi', $deptName);
-                $w->orWhere('division', $deptName);
+                // Mode "Per Divisi" (AssignScopeModal) menyimpan nama divisi di
+                // assign_group utk RoPA & DPIA → match keduanya.
+                $w->orWhere('assign_group', $deptName);
+                if ($module === 'ropa') {
+                    // RoPA: + divisi terlibat di wizard (multi-divisi, kompat lama).
+                    $w->orWhereJsonContains('wizard_data->detail_pemrosesan->divisi_list', $deptName);
+                    $w->orWhere('wizard_data->detail_pemrosesan->divisi', $deptName);
+                    $w->orWhere('division', $deptName);
+                }
             }
         });
     }
