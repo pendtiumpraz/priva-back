@@ -730,19 +730,20 @@ class ModuleCrudController extends Controller
                         metadata: ['record_id' => $record->id]
                     );
                 }
-                // RoPA with assignees → per-user info notification.
-                if ($module === 'ropa' && ! empty($data['assignees']) && is_array($data['assignees'])) {
+                // RoPA/DPIA with assignees → per-user info notification.
+                if (in_array($module, ['ropa', 'dpia'], true) && ! empty($data['assignees']) && is_array($data['assignees'])) {
+                    $assignLabel = ['ropa' => 'RoPA', 'dpia' => 'DPIA'][$module];
                     foreach ($data['assignees'] as $uid) {
                         NotificationService::dispatch(
                             kind: 'info',
                             severity: 'low',
-                            module: 'ropa',
-                            type: 'ropa.assigned',
+                            module: $module,
+                            type: "{$module}.assigned",
                             recipient: 'user:'.$uid,
                             orgId: $record->org_id,
-                            title: "RoPA {$record->registration_number} di-assign ke Anda",
-                            body: $record->processing_activity ?? '',
-                            actionUrl: "/ropa/{$record->id}",
+                            title: "{$assignLabel} {$record->registration_number} di-assign ke Anda",
+                            body: $record->processing_activity ?? $record->description ?? '',
+                            actionUrl: "/{$module}/{$record->id}",
                             metadata: ['record_id' => $record->id]
                         );
                     }
