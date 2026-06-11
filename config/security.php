@@ -45,11 +45,20 @@ return [
     '2fa_max_verify_attempts' => 5,         // Per-challenge brute-force protection
 
     /**
+     * Per-user API rate limit (throttle:api). SPA ini fire 12-18 request per
+     * page-load (layout: menu-registry/license/alerts/credits/theme + page:
+     * list/trash/master-data) — 60/menit lama bikin reload 3-4x dalam semenit
+     * kena 429 → datatable tampil kosong ("Belum ada RoPA").
+     */
+    'api_rate_limit_per_minute' => env('API_RATE_LIMIT_PER_MINUTE', 240),
+
+    /**
      * Per-tenant rate limit — layer di atas global throttle:api. Mencegah
-     * satu tenant flood seluruh platform. Bucket key = org_id.
+     * satu tenant flood seluruh platform. Bucket key = org_id. Harus muat
+     * banyak user satu org reload bersamaan (mis. 10 user x 15 req).
      */
     'tenant_rate_limit_enabled' => true,
-    'tenant_rate_limit_per_minute' => 300,
+    'tenant_rate_limit_per_minute' => env('TENANT_RATE_LIMIT_PER_MINUTE', 1200),
 
     /**
      * AI prompt size guard. Cegah biaya tak terduga + abuse — attacker

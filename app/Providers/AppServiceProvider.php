@@ -54,9 +54,14 @@ class AppServiceProvider extends ServiceProvider
         // 1. Prevent N+1 Lazy Loading in Dev
         \Illuminate\Database\Eloquent\Model::preventLazyLoading(! $this->app->isProduction());
 
-        // 2. Global Rate Limiting for API
+        // 2. Global Rate Limiting for API — default 240/menit (configurable
+        // via security.api_rate_limit_per_minute). 60/menit lama terlalu ketat
+        // untuk SPA yang fire belasan request per page-load: beberapa reload
+        // beruntun → 429 → datatable tampil kosong.
         \Illuminate\Support\Facades\RateLimiter::for('api', function (\Illuminate\Http\Request $request) {
-            return \Illuminate\Cache\RateLimiting\Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
+            $perMinute = (int) config('security.api_rate_limit_per_minute', 240);
+
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute($perMinute)->by($request->user()?->id ?: $request->ip());
         });
 
         // 2a. Per-tenant rate limit — layer kedua di atas 'api'. Mencegah
