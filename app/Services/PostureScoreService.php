@@ -715,20 +715,81 @@ class PostureScoreService
     {
         $result = $this->compute((string) $orgId);
 
+        return $this->toPostureShape(
+            $result['overall_score'],
+            $result['status'],
+            $result['layer_scores'],
+            $result['pillars'],
+        );
+    }
+
+    /**
+     * Return the LAST SAVED snapshot for an org in the FE posture shape
+     * (so a page reload renders the persisted state — including
+     * `computed_at` — without recomputing live).
+     *
+     * If no snapshot exists yet (day-1 tenant), take one now so the page
+     * is never empty, then return it. This guarantees: load → shows last
+     * saved snapshot; refresh → recompute + persist + update.
+     */
+    public function getLastSnapshotPosture(string $orgId): array
+    {
+        $snap = PostureSnapshot::query()
+            ->withoutGlobalScope('org')
+            ->where('org_id', $orgId)
+            ->orderByDesc('taken_at')
+            ->first();
+
+        if (! $snap) {
+            $snap = $this->takeSnapshot($orgId, PostureSnapshot::SOURCE_EVENT);
+        }
+
+        return $this->snapshotToPostureShape($snap);
+    }
+
+    /**
+     * Rebuild the FE posture shape from a persisted snapshot row. The
+     * `pillar_breakdown` JSON already carries label/layer/weight/score/
+     * health/raw/reason per pillar (see compute()).
+     */
+    public function snapshotToPostureShape(PostureSnapshot $snap): array
+    {
+        $layerScores = [
+            'data' => (int) $snap->layer_data_score,
+            'process' => (int) $snap->layer_process_score,
+            'response' => (int) $snap->layer_response_score,
+        ];
+
+        return $this->toPostureShape(
+            (int) $snap->overall_score,
+            $this->scoreToStatus((int) $snap->overall_score),
+            $layerScores,
+            $snap->pillar_breakdown ?? [],
+            $snap->taken_at?->toIso8601String(),
+        );
+    }
+
+    /**
+     * Shared FE-shape builder used by both the live compute path and the
+     * persisted-snapshot path so they stay identical.
+     */
+    private function toPostureShape(int $overall, string $status, array $layerScores, array $pillars, ?string $computedAt = null): array
+    {
         return [
-            'overall_score' => $result['overall_score'],
-            'status' => $result['status'],
-            'layer_scores' => $result['layer_scores'],
-            'factors' => collect($result['pillars'])->map(fn ($p) => [
-                'id' => $p['pillar'],
-                'label' => $p['label'],
-                'score' => $p['score'],
+            'overall_score' => $overall,
+            'status' => $status,
+            'layer_scores' => $layerScores,
+            'computed_at' => $computedAt,
+            'factors' => collect($pillars)->map(fn ($p) => [
+                'id' => $p['pillar'] ?? ($p['id'] ?? ''),
+                'label' => $p['label'] ?? '',
+                'score' => $p['score'] ?? 0,
                 'max' => 100,
-                'health' => $p['health'],
-                'recommendation' => $p['reason'] ?? '',
-                'layer' => $p['layer'],
-                'weight' => $p['weight'],
-                'raw' => $p['raw'],
+                'health' => $p['health'] ?? $this->scoreToHealth((int) ($p['score'] ?? 0)),
+                'recommendation' => $p['reason'] ?? ($p['recommendation'] ?? ''),
+                'layer' => $p['layer'] ?? '',
+                'weight' => $p['weight'] ?? 0,
+                'raw' => $p['raw'] ?? [],
             ])->all(),
         ];
     }

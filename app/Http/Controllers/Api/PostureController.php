@@ -12,15 +12,20 @@ class PostureController extends Controller
     public function __construct(protected PostureScoreService $postureService) {}
 
     /**
-     * Live posture — computed on-the-fly from current data.
-     * Used by the Security page hero gauge.
+     * Persisted posture — returns the LAST SAVED snapshot so a page
+     * reload shows the previously-computed posture (with its
+     * `computed_at`) without recomputing. If the org has no snapshot yet
+     * (day-1 tenant), one is taken on the fly so the page is never empty.
+     *
+     * "Refresh Snapshot" (POST /snapshot) recomputes + persists + the FE
+     * reloads this endpoint to show the fresh saved state.
      */
     public function getPosture(Request $request)
     {
         $orgId = $request->user()->org_id;
         if (!$orgId) return response()->json(['message' => 'Organization context required'], 400);
 
-        $posture = $this->postureService->calculatePosture($orgId);
+        $posture = $this->postureService->getLastSnapshotPosture($orgId);
         return response()->json(['posture' => $posture]);
     }
 
