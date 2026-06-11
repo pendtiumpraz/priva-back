@@ -792,8 +792,31 @@ class ModuleCrudController extends Controller
                             'risk_assessment' => ['likelihood' => 0, 'impact' => 0, 'risks' => []],
                             'mitigation_measures' => [],
                             'created_by' => $data['created_by'],
+                            // DPIA hasil auto-create MEWARISI assignment RoPA induknya.
+                            'assign_group' => $data['assign_group'] ?? null,
+                            'assignees' => $data['assignees'] ?? [],
                         ]);
                         $autoDpiaId = $autoDpia->id;
+
+                        // Notifikasi ke assignee warisan (sama seperti create DPIA manual).
+                        foreach ((array) ($data['assignees'] ?? []) as $assigneeId) {
+                            try {
+                                NotificationService::dispatch(
+                                    kind: 'info',
+                                    severity: 'medium',
+                                    module: 'dpia',
+                                    type: 'dpia.assigned',
+                                    recipient: 'user:'.$assigneeId,
+                                    orgId: $record->org_id,
+                                    title: "DPIA {$autoDpia->registration_number} di-assign ke Anda",
+                                    body: 'DPIA otomatis dari RoPA high-risk '.($record->registration_number ?? '').' — assignment mengikuti RoPA.',
+                                    actionUrl: "/dpia/{$autoDpia->id}",
+                                    metadata: ['record_id' => $autoDpia->id, 'ropa_id' => $record->id]
+                                );
+                            } catch (\Exception $e) {
+                                \Log::warning('Auto-DPIA assignee notification failed: '.$e->getMessage());
+                            }
+                        }
 
                         // Notify DPO: high-risk RoPA spawned an auto-DPIA.
                         try {
@@ -1177,7 +1200,7 @@ class ModuleCrudController extends Controller
                 $dpiaModel = $this->getModel('dpia');
                 $existingDpia = $dpiaModel->where('ropa_id', $record->id)->first();
                 if (! $existingDpia) {
-                    $dpiaModel->create([
+                    $autoDpia = $dpiaModel->create([
                         'org_id' => $record->org_id,
                         'category_id' => $record->category_id,
                         'registration_number' => $this->nextCode('DPIA', $dpiaModel, $record->org_id, $record->category_id),
@@ -1188,7 +1211,28 @@ class ModuleCrudController extends Controller
                         'risk_assessment' => ['likelihood' => 0, 'impact' => 0, 'risks' => []],
                         'mitigation_measures' => [],
                         'created_by' => $request->user()->id,
+                        // Warisi assignment RoPA induk + notifikasi assignee.
+                        'assign_group' => $record->assign_group,
+                        'assignees' => $record->assignees ?? [],
                     ]);
+                    foreach ((array) ($record->assignees ?? []) as $assigneeId) {
+                        try {
+                            NotificationService::dispatch(
+                                kind: 'info',
+                                severity: 'medium',
+                                module: 'dpia',
+                                type: 'dpia.assigned',
+                                recipient: 'user:'.$assigneeId,
+                                orgId: $record->org_id,
+                                title: "DPIA {$autoDpia->registration_number} di-assign ke Anda",
+                                body: 'DPIA otomatis dari RoPA high-risk '.($record->registration_number ?? '').' — assignment mengikuti RoPA.',
+                                actionUrl: "/dpia/{$autoDpia->id}",
+                                metadata: ['record_id' => $autoDpia->id, 'ropa_id' => $record->id]
+                            );
+                        } catch (\Exception $e) {
+                            \Log::warning('Auto-DPIA assignee notification failed: '.$e->getMessage());
+                        }
+                    }
                 }
             } catch (\Throwable $e) {
                 \Log::warning('Auto-DPIA creation for RoPA '.$record->id.' failed: '.$e->getMessage());
