@@ -1570,9 +1570,17 @@ class ExportController extends Controller
             ['key' => 'ropa_no', 'label' => 'RoPA Terkait', 'width' => 18],
             ['key' => 'ropa_activity', 'label' => 'Aktivitas RoPA', 'width' => 32],
             ['key' => 'risk_level', 'label' => 'Level Risiko', 'width' => 14],
-            ['key' => 'likelihood', 'label' => 'Likelihood', 'format' => 'number', 'width' => 12],
-            ['key' => 'impact', 'label' => 'Impact', 'format' => 'number', 'width' => 12],
-            ['key' => 'risk_score', 'label' => 'Risk Score', 'format' => 'number', 'width' => 12],
+            // Agregat NYATA dari matriks risk-events (probabilitas x dampak per
+            // kejadian risiko) + ringkasan 21 kategori. Menggantikan kolom
+            // likelihood/impact top-level lama yang cuma placeholder 0 (tak
+            // pernah diisi alur DPIA).
+            ['key' => 'jumlah_risiko', 'label' => 'Risiko Teridentifikasi', 'format' => 'number', 'width' => 18],
+            ['key' => 'likelihood_max', 'label' => 'Likelihood Tertinggi', 'format' => 'number', 'width' => 16],
+            ['key' => 'impact_max', 'label' => 'Impact Tertinggi', 'format' => 'number', 'width' => 14],
+            ['key' => 'skor_max', 'label' => 'Skor Risiko Tertinggi (LxI)', 'format' => 'number', 'width' => 22],
+            ['key' => 'kat_belum', 'label' => 'Kategori Belum Memenuhi', 'format' => 'number', 'width' => 20],
+            ['key' => 'kat_sebagian', 'label' => 'Kategori Sebagian', 'format' => 'number', 'width' => 16],
+            ['key' => 'kat_sudah', 'label' => 'Kategori Sudah Memenuhi', 'format' => 'number', 'width' => 20],
             ['key' => 'status', 'label' => 'Status', 'width' => 16],
             ['key' => 'approved_at', 'label' => 'Tanggal Approval', 'format' => 'datetime', 'width' => 22],
             ['key' => 'created_at', 'label' => 'Dibuat', 'format' => 'datetime', 'width' => 20],
@@ -1580,7 +1588,43 @@ class ExportController extends Controller
         ];
 
         $rows = $items->map(function ($d) {
-            $ra = $d->risk_assessment ?? [];
+            // Agregasi dari matriks risk-events di wizard_data.potensi_risiko[*].
+            // Tiap kategori punya `answer` (sudah|sebagian|belum|tidak_berlaku)
+            // dan `risk_events[]` dengan {probabilitas, dampak}.
+            $pr = $d->wizard_data['potensi_risiko'] ?? [];
+            $eventCount = 0;
+            $maxL = 0;
+            $maxI = 0;
+            $maxScore = 0;
+            $katBelum = 0;
+            $katSebagian = 0;
+            $katSudah = 0;
+            if (is_array($pr)) {
+                foreach ($pr as $cat) {
+                    if (! is_array($cat)) {
+                        continue;
+                    }
+                    $ans = $cat['answer'] ?? null;
+                    if ($ans === 'belum') {
+                        $katBelum++;
+                    } elseif ($ans === 'sebagian') {
+                        $katSebagian++;
+                    } elseif ($ans === 'sudah') {
+                        $katSudah++;
+                    }
+                    foreach (($cat['risk_events'] ?? []) as $ev) {
+                        $l = is_numeric($ev['probabilitas'] ?? null) ? (int) $ev['probabilitas'] : 0;
+                        $i = is_numeric($ev['dampak'] ?? null) ? (int) $ev['dampak'] : 0;
+                        if ($l <= 0 && $i <= 0) {
+                            continue;
+                        }
+                        $eventCount++;
+                        $maxL = max($maxL, $l);
+                        $maxI = max($maxI, $i);
+                        $maxScore = max($maxScore, $l * $i);
+                    }
+                }
+            }
 
             return [
                 'registration_number' => $d->registration_number,
@@ -1588,9 +1632,13 @@ class ExportController extends Controller
                 'ropa_no' => $d->ropa?->registration_number ?? '-',
                 'ropa_activity' => $d->ropa?->processing_activity ?? '-',
                 'risk_level' => strtoupper((string) $d->risk_level),
-                'likelihood' => $ra['likelihood'] ?? '',
-                'impact' => $ra['impact'] ?? '',
-                'risk_score' => isset($ra['likelihood'], $ra['impact']) ? ($ra['likelihood'] * $ra['impact']) : '',
+                'jumlah_risiko' => $eventCount,
+                'likelihood_max' => $eventCount > 0 ? $maxL : '',
+                'impact_max' => $eventCount > 0 ? $maxI : '',
+                'skor_max' => $eventCount > 0 ? $maxScore : '',
+                'kat_belum' => $katBelum,
+                'kat_sebagian' => $katSebagian,
+                'kat_sudah' => $katSudah,
                 'status' => $d->status,
                 'approved_at' => $d->approved_at?->toIso8601String(),
                 'created_at' => $d->created_at?->toIso8601String(),
