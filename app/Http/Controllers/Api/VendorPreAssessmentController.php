@@ -46,7 +46,12 @@ class VendorPreAssessmentController extends Controller
     public function show(Request $request, string $vendorId)
     {
         $orgId = $request->user()->org_id;
-        $vendor = Vendor::where('org_id', $orgId)->findOrFail($vendorId);
+        // Division-scoped: a user from another division can't open a vendor's
+        // pre-assessment by guessing its id — visibleTo narrows the query so
+        // findOrFail returns 404 (consistent with RoPA single-record gating).
+        $vendor = Vendor::where('org_id', $orgId)
+            ->visibleTo($request->user())
+            ->findOrFail($vendorId);
 
         $pre = VendorPreAssessment::forOrg($orgId)
             ->where('vendor_id', $vendor->id)

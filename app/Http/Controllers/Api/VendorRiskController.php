@@ -40,8 +40,12 @@ class VendorRiskController extends Controller
             Vendor::SCOPE_OUT_PENDING, Vendor::SCOPE_OUT,
         ];
 
-        $vendors = Vendor::where('org_id', $orgId)
-            ->when(in_array($scopeFilter, $validScopes, true), fn ($q) => $q->where('pdp_scope_status', $scopeFilter))
+        $vendorsQuery = Vendor::where('org_id', $orgId)
+            ->when(in_array($scopeFilter, $validScopes, true), fn ($q) => $q->where('pdp_scope_status', $scopeFilter));
+        // Division-scoped visibility: non-admin only sees assigned/own-division.
+        $this->applyVendorScope($vendorsQuery, $request);
+
+        $vendors = $vendorsQuery
             ->with([
                 'assessments' => function ($q) {
                     $q->orderBy('created_at', 'desc')->limit(1);
@@ -91,6 +95,29 @@ class VendorRiskController extends Controller
             'org_id' => $request->user()->org_id,
         ]));
 
+        // Notify assignees (penanggung jawab) on create — mirror RoPA/DPIA
+        // assignee-notify block. Wrapped so notif failures don't fail create.
+        try {
+            if (! empty($data['assignees']) && is_array($data['assignees'])) {
+                foreach ($data['assignees'] as $uid) {
+                    NotificationService::dispatch(
+                        kind: 'info',
+                        severity: 'low',
+                        module: 'vendor_risk',
+                        type: 'vendor.assigned',
+                        recipient: 'user:'.$uid,
+                        orgId: $vendor->org_id,
+                        title: "Pihak ketiga {$vendor->name} di-assign ke Anda",
+                        body: $vendor->description ?? '',
+                        actionUrl: "/vendor-risk/{$vendor->id}",
+                        metadata: ['record_id' => $vendor->id]
+                    );
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Vendor assignee notification failed on create: '.$e->getMessage());
+        }
+
         // Sprint X4 — high-risk OR offshore vendor → auto-seed draft TIA.
         // Service handles both criteria + try/catch wrap.
         $autoTiaId = null;
@@ -115,7 +142,7 @@ class VendorRiskController extends Controller
         // mengangkat seluruh row vendor_assessments yang punya JSON columns
         // besar (answers, recommendations, score_breakdown) — pernah memicu
         // MySQL sort_buffer overflow di shared hosting.
-        $vendor = Vendor::where('org_id', $request->user()->org_id)
+        $showQuery = Vendor::where('org_id', $request->user()->org_id)
             ->with(['assessments' => function ($q) {
                 $q->select([
                     'id', 'vendor_id', 'org_id', 'status',
@@ -123,8 +150,12 @@ class VendorRiskController extends Controller
                     'score', 'risk_level', 'submitted_at', 'created_at',
                     'recommendations', 'notes',
                 ])->orderBy('created_at', 'desc')->limit(20);
-            }])
-            ->findOrFail($id);
+            }]);
+        // Division-scoped: a user from another division can't open a vendor by
+        // guessing its id — applyVendorScope narrows the query so findOrFail
+        // returns 404 (consistent with RoPA single-record gating).
+        $this->applyVendorScope($showQuery, $request);
+        $vendor = $showQuery->findOrFail($id);
 
         $data = $vendor->toArray();
         $data['active_assessment_token'] = null;
@@ -176,7 +207,41 @@ class VendorRiskController extends Controller
     {
         $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($id);
         $data = $request->validate($this->writeRules(true));
+
+        // Assign-lock: RoPA blocks assign changes unless status in_progress/draft.
+        // Vendors have no equivalent assign-lock status lifecycle (their state
+        // machine is pdp_scope_status / assessment workflow, not an editable
+        // draft→waiting gate on the vendor row itself), so assign changes are
+        // always allowed here — intentionally no lock.
+        $oldAssignees = is_array($vendor->assignees) ? $vendor->assignees : [];
+
         $vendor->update($data);
+
+        // Notify newly-added assignees (array_diff vs old) — mirror RoPA update.
+        try {
+            if ($request->has('assignees')) {
+                $newAssignees = $request->input('assignees', []);
+                if (is_array($newAssignees)) {
+                    $added = array_values(array_diff($newAssignees, $oldAssignees));
+                    foreach ($added as $uid) {
+                        NotificationService::dispatch(
+                            kind: 'info',
+                            severity: 'low',
+                            module: 'vendor_risk',
+                            type: 'vendor.assigned',
+                            recipient: 'user:'.$uid,
+                            orgId: $vendor->org_id,
+                            title: "Pihak ketiga {$vendor->name} di-assign ke Anda",
+                            body: $vendor->description ?? '',
+                            actionUrl: "/vendor-risk/{$vendor->id}",
+                            metadata: ['record_id' => $vendor->id]
+                        );
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Vendor assignee notification failed on update: '.$e->getMessage());
+        }
 
         return response()->json(['message' => 'Vendor berhasil diupdate', 'data' => $vendor->fresh()]);
     }
@@ -272,7 +337,32 @@ class VendorRiskController extends Controller
             'contact_email' => "{$opt}|email|max:200",
             // Phase 2 — TPRM category
             'category' => "{$opt}|in:".implode(',', VendorQuestionnaire::ALL_CATEGORIES),
+            // Assignment + division-scoped visibility (mirrors RoPA).
+            'assign_group' => "{$opt}|string|max:255",
+            'assignees' => "{$opt}|array",
+            'assignees.*' => 'uuid',
         ];
+    }
+
+    /**
+     * Per-user/divisi access scope for vendors (pihak ketiga) — mirrors
+     * ModuleCrudController::applyRopaUserScope. Non-admin/non-DPO hanya lihat
+     * vendor:
+     *   (a) assign_group NULL atau '(All Group)' — terbuka untuk semua user
+     *       di tenant yang sama (tenant boundary tetap via org_id),
+     *   (b) user.id ada di kolom JSON assignees,
+     *   (c) user.department.name === vendor.assign_group (saat Per Divisi,
+     *       assign_group menyimpan nama divisi seperti RoPA),
+     * Vendor TIDAK punya kolom created_by sehingga klausa creator RoPA
+     * dihilangkan (di-skip secara sengaja).
+     *
+     * Role exemption disamakan persis dengan RoPA: role kolom
+     * superadmin/admin/dpo ATAU tenantRole.name (case-insensitive) admin/dpo
+     * bypass. Tenant boundary tetap dijaga oleh where('org_id', ...) pemanggil.
+     */
+    private function applyVendorScope($query, Request $request): void
+    {
+        $query->visibleTo($request->user());
     }
 
     // =========================================================
@@ -482,8 +572,9 @@ class VendorRiskController extends Controller
 
     public function trashed(Request $request)
     {
-        $vendors = Vendor::onlyTrashed()->where('org_id', $request->user()->org_id)
-            ->orderBy('deleted_at', 'desc')->get();
+        $query = Vendor::onlyTrashed()->where('org_id', $request->user()->org_id);
+        $this->applyVendorScope($query, $request);
+        $vendors = $query->orderBy('deleted_at', 'desc')->get();
 
         return response()->json(['data' => $vendors]);
     }
