@@ -1,0 +1,185 @@
+{
+  "_meta": {
+    "regulation": "Undang-Undang Republik Indonesia Nomor 27 Tahun 2022 tentang Pelindungan Data Pribadi",
+    "short": "UU PDP",
+    "total_bab": 16,
+    "total_pasal": 76,
+    "diundangkan": "17 Oktober 2022",
+    "source_note": "STRUKTUR Bab + Pasal (nomor, topik) adalah informasi publik faktual. Field \"content\" SENGAJA DIKOSONGKAN untuk pasal yang teks verbatim-nya belum tersedia di repo. JANGAN mengisi content dengan teks karangan/parafrase yang diklaim sebagai bunyi pasal. Salin teks resmi dari Lembaran Negara RI Tahun 2022 Nomor 196 / salinan resmi UU 27/2022 ke field \"content\" (format markdown). Selama content kosong, seeder akan menanam summary topik + label \"[Teks verbatim belum tersedia — lihat naskah resmi UU 27/2022]\".",
+    "official_text_url": "https://peraturan.bpk.go.id/Details/229798/uu-no-27-tahun-2022"
+  },
+  "bab": [
+    {
+      "nomor": "I",
+      "judul": "Ketentuan Umum",
+      "pasal": [
+        { "no": 1, "topik": "Definisi/istilah (Data Pribadi, Subjek Data Pribadi, Pengendali Data Pribadi, Prosesor Data Pribadi, Pemrosesan, Persetujuan, Pelindungan Data Pribadi, dll)", "content": "" }
+      ]
+    },
+    {
+      "nomor": "II",
+      "judul": "Asas",
+      "pasal": [
+        { "no": 2, "topik": "Asas pelindungan data pribadi & ruang lingkup berlaku (termasuk ekstrateritorial)", "content": "" }
+      ]
+    },
+    {
+      "nomor": "III",
+      "judul": "Jenis Data Pribadi",
+      "pasal": [
+        { "no": 3, "topik": "Lingkup data pribadi", "content": "" },
+        { "no": 4, "topik": "Data Pribadi yang bersifat spesifik (sensitif) dan Data Pribadi yang bersifat umum", "content": "" }
+      ]
+    },
+    {
+      "nomor": "IV",
+      "judul": "Hak Subjek Data Pribadi",
+      "pasal": [
+        { "no": 5, "topik": "Hak atas informasi tentang kejelasan identitas, dasar kepentingan hukum, akuntabilitas pemrosesan", "content": "" },
+        { "no": 6, "topik": "Hak melengkapi, memperbarui, dan/atau memperbaiki kesalahan/ketidakakuratan Data Pribadi (koreksi)", "content": "" },
+        { "no": 7, "topik": "Hak mendapatkan akses dan salinan Data Pribadi", "content": "" },
+        { "no": 8, "topik": "Hak mengakhiri pemrosesan, menghapus, dan/atau memusnahkan Data Pribadi (penghapusan)", "content": "" },
+        { "no": 9, "topik": "Hak menarik kembali persetujuan pemrosesan Data Pribadi", "content": "" },
+        { "no": 10, "topik": "Hak mengajukan keberatan atas tindakan pengambilan keputusan yang hanya didasarkan pada pemrosesan otomatis (termasuk profiling)", "content": "" },
+        { "no": 11, "topik": "Hak menunda atau membatasi pemrosesan Data Pribadi secara proporsional", "content": "" },
+        { "no": 12, "topik": "Hak menuntut dan menerima ganti rugi atas pelanggaran pemrosesan Data Pribadi", "content": "" },
+        { "no": 13, "topik": "Hak mendapatkan dan/atau menggunakan Data Pribadi dari Pengendali dalam bentuk yang dapat dibaca/dipindahkan (portabilitas) & pengecualian hak", "content": "" },
+        { "no": 14, "topik": "Pelaksanaan hak Subjek Data Pribadi diajukan melalui permohonan tertulis (lisan); ketentuan lebih lanjut", "content": "" },
+        { "no": 15, "topik": "Pengecualian/pembatasan hak Subjek Data Pribadi (kepentingan pertahanan, keamanan, penegakan hukum, kepentingan umum, pengawasan sektor jasa keuangan/moneter, statistik/penelitian)", "content": "" }
+      ]
+    },
+    {
+      "nomor": "V",
+      "judul": "Pemrosesan Data Pribadi",
+      "pasal": [
+        { "no": 16, "topik": "Lingkup pemrosesan (perolehan, pengumpulan, pengolahan, penganalisisan, penyimpanan, perbaikan, penampilan, pengumuman, transfer, penyebarluasan, penghapusan/pemusnahan) & prinsip pemrosesan", "content": "" },
+        { "no": 17, "topik": "Kewajiban pemrosesan sesuai prinsip pelindungan data pribadi", "content": "" },
+        { "no": 18, "topik": "Pemrosesan untuk tujuan tertentu yang sah", "content": "" },
+        { "no": 19, "topik": "Pemberitahuan kepada Subjek Data Pribadi sebelum/selama pemrosesan", "content": "" },
+        { "no": 20, "topik": "Dasar pemrosesan Data Pribadi (persetujuan; pemenuhan kontrak; kewajiban hukum; kepentingan vital; tugas/kewenangan publik; kepentingan sah)", "content": "" },
+        { "no": 21, "topik": "Penyampaian informasi saat meminta persetujuan (legalitas, tujuan, jenis & relevansi, retensi, hak subjek, jangka waktu pemrosesan)", "content": "" },
+        { "no": 22, "topik": "Persetujuan tertulis/terekam, dalam Bahasa Indonesia, dapat dibedakan dari hal lain", "content": "" },
+        { "no": 23, "topik": "Persetujuan yang batal/tidak sah (penyampaian tujuan tidak terpenuhi)", "content": "" }
+      ]
+    },
+    {
+      "nomor": "VI",
+      "judul": "Kewajiban Pengendali Data Pribadi dan Prosesor Data Pribadi dalam Pemrosesan Data Pribadi",
+      "pasal": [
+        { "no": 24, "topik": "Kewajiban Pengendali menunjukkan keabsahan/persetujuan pemrosesan", "content": "" },
+        { "no": 25, "topik": "Kewajiban menyampaikan informasi legalitas, tujuan, dan akuntabilitas saat memperoleh persetujuan", "content": "" },
+        { "no": 26, "topik": "Kewajiban menyampaikan informasi saat pemrosesan tidak berdasarkan persetujuan & perubahan informasi", "content": "" },
+        { "no": 27, "topik": "Kewajiban pemrosesan sesuai tujuan", "content": "" },
+        { "no": 28, "topik": "Kewajiban menjaga kerahasiaan Data Pribadi", "content": "" },
+        { "no": 29, "topik": "Kewajiban melakukan pengawasan terhadap setiap pihak yang terlibat pemrosesan", "content": "" },
+        { "no": 30, "topik": "Kewajiban melindungi & memastikan keamanan Data Pribadi (pencegahan akses tidak sah)", "content": "" },
+        { "no": 31, "topik": "Kewajiban menjaga keamanan dengan menyusun & menerapkan langkah teknis operasional/menjamin keamanan", "content": "" },
+        { "no": 32, "topik": "Kewajiban menjaga Data Pribadi dari pemrosesan tidak sah", "content": "" },
+        { "no": 33, "topik": "Kewajiban mencegah Data Pribadi diakses secara tidak sah", "content": "" },
+        { "no": 34, "topik": "Kewajiban melakukan penilaian dampak pelindungan data pribadi (DPIA) untuk pemrosesan berisiko tinggi", "content": "" },
+        { "no": 35, "topik": "Kewajiban menjaga Data Pribadi dengan penyusunan & penerapan langkah teknis dan/atau pencegahan kegagalan pelindungan", "content": "" },
+        { "no": 36, "topik": "Kewajiban melakukan perekaman terhadap seluruh kegiatan pemrosesan (catatan pemrosesan/RoPA)", "content": "" },
+        { "no": 37, "topik": "Kewajiban menghentikan pemrosesan jika subjek menarik persetujuan", "content": "" },
+        { "no": 38, "topik": "Kewajiban melindungi Data Pribadi dari pemrosesan yang melanggar ketentuan", "content": "" },
+        { "no": 39, "topik": "Pengecualian kewajiban memberitahukan tujuan & aktivitas pemrosesan (kepentingan tertentu)", "content": "" },
+        { "no": 40, "topik": "Kewajiban memperbarui & memverifikasi keakuratan Data Pribadi", "content": "" },
+        { "no": 41, "topik": "Kewajiban memberikan akses kepada Subjek Data Pribadi terhadap Data Pribadi yang diproses & rekam jejak", "content": "" },
+        { "no": 42, "topik": "Kewajiban menolak pemberian akses dalam hal tertentu", "content": "" },
+        { "no": 43, "topik": "Kewajiban menunda/membatasi pemrosesan atas permintaan subjek", "content": "" },
+        { "no": 44, "topik": "Kewajiban mengakhiri pemrosesan (jangka waktu terpenuhi, tujuan tercapai, penarikan persetujuan, permintaan subjek)", "content": "" },
+        { "no": 45, "topik": "Kewajiban melakukan penghentian/pemusnahan Data Pribadi (penghapusan) & ketentuannya", "content": "" },
+        { "no": 46, "topik": "Kewajiban memberitahukan secara tertulis kegagalan pelindungan Data Pribadi (breach) kepada Subjek Data Pribadi & lembaga dalam 3x24 jam", "content": "" },
+        { "no": 47, "topik": "Kewajiban bertanggung jawab atas pemrosesan & menunjukkan pertanggungjawaban pemenuhan prinsip pelindungan", "content": "" },
+        { "no": 48, "topik": "Prosesor Data Pribadi memproses berdasarkan perintah Pengendali Data Pribadi", "content": "" },
+        { "no": 49, "topik": "Tanggung jawab Pengendali atas pemrosesan oleh Prosesor; pelibatan prosesor lain", "content": "" },
+        { "no": 50, "topik": "Pemrosesan oleh dua atau lebih Pengendali secara bersama (joint controller) & tanggung jawab", "content": "" },
+        { "no": 51, "topik": "Kewajiban Pengendali/Prosesor dalam pemrosesan bersama & perjanjian", "content": "" },
+        { "no": 52, "topik": "Pelindungan terhadap data anak — persetujuan orang tua/wali, kepentingan terbaik anak", "content": "" },
+        { "no": 53, "topik": "Pelindungan terhadap data penyandang disabilitas — komunikasi yang dapat diakses & dengan persetujuan", "content": "" }
+      ]
+    },
+    {
+      "nomor": "VII",
+      "judul": "Transfer Data Pribadi",
+      "pasal": [
+        { "no": 54, "topik": "Transfer Data Pribadi di dalam wilayah hukum Republik Indonesia", "content": "" },
+        { "no": 55, "topik": "Transfer Data Pribadi kepada Pengendali/Prosesor di dalam wilayah hukum RI", "content": "" },
+        { "no": 56, "topik": "Transfer Data Pribadi ke luar wilayah hukum RI — syarat tingkat pelindungan setara, perjanjian/safeguards, atau persetujuan subjek", "content": "" }
+      ]
+    },
+    {
+      "nomor": "VIII",
+      "judul": "Sanksi Administratif",
+      "pasal": [
+        { "no": 57, "topik": "Sanksi administratif atas pelanggaran kewajiban (peringatan tertulis, penghentian sementara, penghapusan/pemusnahan, denda administratif maks 2% pendapatan tahunan)", "content": "" }
+      ]
+    },
+    {
+      "nomor": "IX",
+      "judul": "Larangan dalam Penggunaan Data Pribadi",
+      "pasal": [
+        { "no": 58, "topik": "Pemulihan Data Pribadi/larangan terkait penggunaan (pengantar bab larangan)", "content": "" },
+        { "no": 59, "topik": "Larangan memperoleh/mengumpulkan Data Pribadi yang bukan miliknya untuk menguntungkan diri/orang lain secara melawan hukum", "content": "" },
+        { "no": 60, "topik": "Larangan mengungkapkan Data Pribadi yang bukan miliknya", "content": "" },
+        { "no": 61, "topik": "Larangan menggunakan Data Pribadi yang bukan miliknya", "content": "" }
+      ]
+    },
+    {
+      "nomor": "X",
+      "judul": "Pembentukan Pedoman Perilaku Pengendali Data Pribadi",
+      "pasal": [
+        { "no": 62, "topik": "Pengendali Data Pribadi dalam lingkup publik & privat menyusun pedoman perilaku pemrosesan", "content": "" }
+      ]
+    },
+    {
+      "nomor": "XI",
+      "judul": "Penyelesaian Sengketa dan Hukum Acara",
+      "pasal": [
+        { "no": 63, "topik": "Penyelesaian sengketa pelindungan data pribadi melalui arbitrase, pengadilan, atau lembaga alternatif", "content": "" },
+        { "no": 64, "topik": "Hukum acara penyelesaian sengketa Data Pribadi mengikuti ketentuan hukum acara", "content": "" }
+      ]
+    },
+    {
+      "nomor": "XII",
+      "judul": "Kerja Sama Internasional",
+      "pasal": [
+        { "no": 65, "topik": "Kerja sama internasional dalam pelindungan data pribadi (catatan: penomoran lihat naskah resmi)", "content": "" }
+      ]
+    },
+    {
+      "nomor": "XIII",
+      "judul": "Peran Pemerintah dan Masyarakat",
+      "pasal": [
+        { "no": 66, "topik": "Peran pemerintah dan masyarakat dalam pelindungan data pribadi (catatan: penomoran lihat naskah resmi)", "content": "" }
+      ]
+    },
+    {
+      "nomor": "XIV",
+      "judul": "Ketentuan Pidana",
+      "pasal": [
+        { "no": 67, "topik": "Pidana atas perbuatan memperoleh/mengumpulkan, mengungkapkan, atau menggunakan Data Pribadi yang bukan miliknya secara melawan hukum (Pasal 65 ayat (1),(2),(3)) — pidana penjara & denda", "content": "" },
+        { "no": 68, "topik": "Pidana atas membuat Data Pribadi palsu atau memalsukan Data Pribadi untuk menguntungkan diri/orang lain yang merugikan", "content": "" },
+        { "no": 69, "topik": "Pidana tambahan: perampasan keuntungan/aset & pembayaran ganti rugi", "content": "" },
+        { "no": 70, "topik": "Pertanggungjawaban pidana korporasi & pidana denda terhadap korporasi (maksimum, pidana tambahan)", "content": "" }
+      ]
+    },
+    {
+      "nomor": "XV",
+      "judul": "Ketentuan Peralihan",
+      "pasal": [
+        { "no": 71, "topik": "Penyesuaian pemrosesan Data Pribadi terhadap ketentuan UU ini dalam jangka waktu paling lama 2 tahun sejak diundangkan", "content": "" }
+      ]
+    },
+    {
+      "nomor": "XVI",
+      "judul": "Ketentuan Penutup",
+      "pasal": [
+        { "no": 72, "topik": "Lembaga penyelenggara pelindungan data pribadi ditetapkan oleh Presiden", "content": "" },
+        { "no": 73, "topik": "Pelaksanaan ketentuan UU diatur lebih lanjut dengan Peraturan Pemerintah (paling lama 2 tahun)", "content": "" },
+        { "no": 74, "topik": "Ketentuan peraturan perundang-undangan terkait Data Pribadi tetap berlaku sepanjang tidak bertentangan", "content": "" },
+        { "no": 75, "topik": "Penyesuaian peraturan pelaksanaan", "content": "" },
+        { "no": 76, "topik": "UU mulai berlaku pada tanggal diundangkan (17 Oktober 2022)", "content": "" }
+      ]
+    }
+  ]
+}
