@@ -1029,6 +1029,26 @@ class ModuleCrudController extends Controller
                     'status' => $currentStatus,
                 ], 409);
             }
+
+            // Review lock: RoPA/DPIA berstatus 'waiting' (sudah di-submit /
+            // di-Selesaikan untuk review) tidak boleh diedit kontennya lagi —
+            // hanya read-only review mode. Satu-satunya update yang diizinkan
+            // lewat endpoint ini adalah PURE status-transition (payload hanya
+            // berisi status + metadata review), supaya flow re-open/approve
+            // berbasis status tetap jalan. Approve/reject resmi memakai jalur
+            // terpisah (RopaApprovalController / ApprovalController) yang
+            // update model langsung — tidak terdampak gate ini.
+            if ($currentStatus === 'waiting') {
+                $allowedTransitionKeys = ['status', 'review_notes', 'approver_id', 'approved_at'];
+                $extraKeys = array_diff(array_keys($request->all()), $allowedTransitionKeys);
+                $isPureTransition = $request->has('status') && count($extraKeys) === 0;
+                if (! $isPureTransition) {
+                    return response()->json([
+                        'message' => strtoupper($module).' berstatus "waiting" (menunggu review) — konten terkunci dan tidak bisa diedit. Gunakan mode review (read-only) atau jalur approve/reject.',
+                        'status' => $currentStatus,
+                    ], 409);
+                }
+            }
         }
 
         // Detect wizard_data changes for audit logging
