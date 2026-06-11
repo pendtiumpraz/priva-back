@@ -461,7 +461,8 @@ class ExportController extends Controller
         $headers = [
             'No. Registrasi', 'Deskripsi', 'Level Risiko', 'Status',
             'RoPA Terkait', 'RoPA Aktivitas',
-            'Likelihood (1-5)', 'Impact (1-5)', 'Risk Score',
+            'Likelihood Tertinggi', 'Impact Tertinggi', 'Skor Risiko Tertinggi (LxI)',
+            'Kategori Belum', 'Kategori Sebagian', 'Kategori Sudah',
             'Risiko #1', 'Risiko #2', 'Risiko #3',
             'Mitigasi #1', 'Mitigasi #2', 'Mitigasi #3',
             'Approver', 'Tanggal Approval', 'Dibuat', 'Diperbarui',
@@ -480,12 +481,30 @@ class ExportController extends Controller
             $risks = $ra['risks'] ?? [];
             $mitigations = $d->mitigation_measures ?? [];
 
-            // Aggregate wizard_data.potensi_risiko[*].risk_events[]
+            // Aggregate wizard_data.potensi_risiko[*].risk_events[] + ringkasan
+            // 21 kategori. Agregat NYATA dari matriks (likelihood/impact top-level
+            // lama cuma placeholder 0).
             $potensi = ($d->wizard_data ?? [])['potensi_risiko'] ?? [];
             $totalEvents = 0;
             $categoriesCovered = [];
             $detailedLines = [];
+            $maxL = 0;
+            $maxI = 0;
+            $maxScore = 0;
+            $katBelum = 0;
+            $katSebagian = 0;
+            $katSudah = 0;
             foreach ($potensi as $categoryName => $categoryData) {
+                if (is_array($categoryData)) {
+                    $ans = $categoryData['answer'] ?? null;
+                    if ($ans === 'belum') {
+                        $katBelum++;
+                    } elseif ($ans === 'sebagian') {
+                        $katSebagian++;
+                    } elseif ($ans === 'sudah') {
+                        $katSudah++;
+                    }
+                }
                 $events = $categoryData['risk_events'] ?? [];
                 if (! is_array($events) || empty($events)) {
                     continue;
@@ -496,6 +515,9 @@ class ExportController extends Controller
                     $dampak = $ev['dampak'] ?? null;
                     $probab = $ev['probabilitas'] ?? null;
                     $score = (is_numeric($dampak) && is_numeric($probab)) ? ((int) $dampak * (int) $probab) : null;
+                    $maxL = max($maxL, is_numeric($probab) ? (int) $probab : 0);
+                    $maxI = max($maxI, is_numeric($dampak) ? (int) $dampak : 0);
+                    $maxScore = max($maxScore, $score ?? 0);
                     $line = '['.$categoryName.'] '
                         .($ev['risk_event'] ?? '-')
                         .' — Dampak:'.($dampak ?? '-')
@@ -524,9 +546,12 @@ class ExportController extends Controller
                 $d->status,
                 $d->ropa?->registration_number ?? '-',
                 $d->ropa?->processing_activity ?? '-',
-                $ra['likelihood'] ?? '-',
-                $ra['impact'] ?? '-',
-                isset($ra['likelihood'], $ra['impact']) ? ($ra['likelihood'] * $ra['impact']) : '-',
+                $totalEvents > 0 ? $maxL : '-',
+                $totalEvents > 0 ? $maxI : '-',
+                $totalEvents > 0 ? $maxScore : '-',
+                $katBelum,
+                $katSebagian,
+                $katSudah,
                 isset($risks[0]) ? ($risks[0]['category'] ?? '').': '.($risks[0]['description'] ?? '') : '',
                 isset($risks[1]) ? ($risks[1]['category'] ?? '').': '.($risks[1]['description'] ?? '') : '',
                 isset($risks[2]) ? ($risks[2]['category'] ?? '').': '.($risks[2]['description'] ?? '') : '',
