@@ -24,7 +24,7 @@ class SimulationController extends Controller
         $query = $this->getQuery($request);
         if ($request->get('trash'))
             $query->onlyTrashed();
-        return response()->json(['data' => $query->orderBy('created_at', 'desc')->get()]);
+        return response()->json(['data' => $query->with('creator:id,name')->orderBy('created_at', 'desc')->get()]);
     }
 
     /**
@@ -196,6 +196,68 @@ class SimulationController extends Controller
             'detailed_results' => $detailedResults,
             'data' => $sim->fresh(),
         ]);
+    }
+
+    /**
+     * Persist a client-side-scored run (LIVE Visual Fire Drill, Tabletop,
+     * Walkthrough). Unlike Quiz mode, these modes compute the score in the
+     * browser, so they don't go through store()/start()/submit(). This single
+     * endpoint records the completed run so it appears in the history table.
+     */
+    public function complete(Request $request)
+    {
+        $request->validate([
+            'scenario_type' => 'required|string|max:255',
+            'scenario_title' => 'required|string|max:255',
+            'mode' => 'nullable|string|max:32',
+            'overall_score' => 'required|integer|min:0|max:100',
+            'score_breakdown' => 'nullable|array',
+            'findings' => 'nullable|array',
+            'duration_seconds' => 'nullable|integer|min:0',
+            'started_at' => 'nullable|date',
+        ]);
+
+        $orgId = $request->user()->org_id;
+        if ($request->user()->role === 'superadmin' && $request->filled('org_id')) {
+            $orgId = $request->org_id;
+        }
+        if (empty($orgId)) {
+            return response()->json(['message' => 'Organization ID is required'], 422);
+        }
+
+        $now = now();
+        $duration = (int) ($request->input('duration_seconds') ?? 0);
+        $startedAt = $request->filled('started_at')
+            ? \Illuminate\Support\Carbon::parse($request->input('started_at'))
+            : ($duration > 0 ? $now->copy()->subSeconds($duration) : $now);
+
+        $findings = $request->input('findings', []);
+        $findings = array_merge([
+            'participant_id' => $request->user()->id,
+            'participant_name' => $request->user()->name,
+            'mode' => $request->input('mode', $request->input('scenario_type')),
+            'completed_at' => $now->toISOString(),
+            'duration_seconds' => $duration,
+        ], is_array($findings) ? $findings : []);
+
+        $simulation = BreachSimulation::create([
+            'org_id' => $orgId,
+            'scenario_title' => $request->input('scenario_title'),
+            'scenario_type' => $request->input('scenario_type'),
+            'scenario_description' => $request->input('mode', ''),
+            'status' => 'completed',
+            'overall_score' => $request->input('overall_score'),
+            'score_breakdown' => $request->input('score_breakdown', []),
+            'findings' => $findings,
+            'started_at' => $startedAt,
+            'ended_at' => $now,
+            'created_by' => $request->user()->id,
+        ]);
+
+        return response()->json([
+            'message' => 'Drill recorded',
+            'data' => $simulation->load('creator:id,name'),
+        ], 201);
     }
 
     public function destroy(string $id)

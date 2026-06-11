@@ -363,8 +363,10 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     Route::prefix('simulations')->group(
         function () {
 
+            Route::get('/', [SimulationController::class, 'index'])->middleware('permission:simulation,read');
             Route::get('/scenarios', [SimulationController::class, 'scenarios'])->middleware('permission:simulation,read');
             Route::post('/', [SimulationController::class, 'store'])->middleware('permission:simulation,write');
+            Route::post('/complete', [SimulationController::class, 'complete'])->middleware('permission:simulation,write');
             Route::get('/{id}', [SimulationController::class, 'show'])->middleware('permission:simulation,read');
             Route::post('/{id}/start', [SimulationController::class, 'start'])->middleware('permission:simulation,write');
             Route::post('/{id}/submit', [SimulationController::class, 'submitResponses'])->middleware('permission:simulation,write');
