@@ -934,6 +934,13 @@ PROMPT;
             'discovery' => InformationSystem::where('org_id', $orgId)->select('id', 'name as label', 'source_type')->orderBy('created_at', 'desc')->limit(20)->get(),
             'drill' => BreachSimulation::where('org_id', $orgId)->select('id', 'scenario_title as label', 'scenario_type')->orderBy('created_at', 'desc')->limit(20)->get(),
 
+            // New modules (keys must match COMPLIANCE_MENTIONS on the frontend)
+            'lia' => \App\Models\LiaAssessment::where('org_id', $orgId)->select('id', 'lia_code as registration_number', 'title as label')->orderBy('created_at', 'desc')->limit(20)->get(),
+            'tia' => \App\Models\TiaAssessment::where('org_id', $orgId)->select('id', 'tia_code as registration_number', 'title as label')->orderBy('created_at', 'desc')->limit(20)->get(),
+            'maturity' => \App\Models\MaturityAssessment::where('org_id', $orgId)->select('id', 'version as registration_number', 'title as label')->orderBy('created_at', 'desc')->limit(20)->get(),
+            'pihak-ketiga' => \App\Models\Vendor::where('org_id', $orgId)->select('id', 'risk_level as registration_number', 'name as label')->orderBy('created_at', 'desc')->limit(20)->get(),
+            'cross-border' => \App\Models\CrossBorderTransfer::where('org_id', $orgId)->select('id', 'destination_country as registration_number', 'destination_entity as label')->orderBy('created_at', 'desc')->limit(20)->get(),
+
             // SuperAdmin admin tools
             'users' => \App\Models\User::select('id', 'name as label', 'role as registration_number')->orderBy('created_at', 'desc')->limit(30)->get(),
             'licenses' => \App\Models\License::select('id', 'license_key as registration_number', 'package_type as label')->orderBy('created_at', 'desc')->limit(20)->get(),
