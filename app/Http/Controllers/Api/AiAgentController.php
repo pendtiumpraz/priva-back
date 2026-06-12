@@ -925,6 +925,17 @@ PROMPT;
         $user = $request->user();
         $orgId = $user->org_id;
 
+        // Platform/admin mention types expose cross-tenant data — restrict to
+        // root/superadmin. 'menu' (feature entitlement) is root-only, matching
+        // the platform tool gating. Anyone else gets an empty list.
+        $adminTypes = ['users', 'licenses', 'chat', 'organizations', 'menu'];
+        if (in_array($type, $adminTypes, true) && ! in_array($user->role, ['root', 'superadmin'], true)) {
+            return response()->json([]);
+        }
+        if ($type === 'menu' && $user->role !== 'root') {
+            return response()->json([]);
+        }
+
         $items = match ($type) {
             // Compliance modules (for regular users). RoPA/DPIA/pihak-ketiga are
             // assignment-scoped: a user only @mentions records visible to them or
@@ -945,7 +956,9 @@ PROMPT;
             'pihak-ketiga' => \App\Models\Vendor::where('org_id', $orgId)->visibleTo($user)->select('id', 'risk_level as registration_number', 'name as label')->orderBy('created_at', 'desc')->limit(20)->get(),
             'cross-border' => \App\Models\CrossBorderTransfer::where('org_id', $orgId)->select('id', 'destination_country as registration_number', 'destination_entity as label')->orderBy('created_at', 'desc')->limit(20)->get(),
 
-            // SuperAdmin admin tools
+            // SuperAdmin / root platform-management tools
+            'organizations' => Organization::select('id', 'name as label', 'lifecycle_status as registration_number')->orderBy('created_at', 'desc')->limit(40)->get(),
+            'menu' => \App\Models\MenuItem::select('id', 'label', 'menu_key as registration_number')->orderBy('section')->orderBy('sort_order')->limit(100)->get(),
             'users' => \App\Models\User::select('id', 'name as label', 'role as registration_number')->orderBy('created_at', 'desc')->limit(30)->get(),
             'licenses' => \App\Models\License::select('id', 'license_key as registration_number', 'package_type as label')->orderBy('created_at', 'desc')->limit(20)->get(),
             'chat' => \App\Models\ChatConversation::select('id', 'user_name as label', 'user_email as registration_number')->orderBy('last_message_at', 'desc')->limit(20)->get(),
