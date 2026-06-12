@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\AssignmentVisibility;
 use App\Models\Concerns\BelongsToOrg;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -10,7 +11,13 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Ropa extends Model
 {
-    use BelongsToOrg, HasUuids, SoftDeletes;
+    use AssignmentVisibility, BelongsToOrg, HasUuids, SoftDeletes;
+
+    /** RoPA also resolves division from wizard_data + legacy `division` column. */
+    protected function assignmentUsesRopaWizard(): bool
+    {
+        return true;
+    }
 
     protected static function booted(): void
     {

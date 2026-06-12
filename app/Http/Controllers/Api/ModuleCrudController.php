@@ -240,43 +240,14 @@ class ModuleCrudController extends Controller
     {
         // Visibilitas berbasis assignment berlaku utk RoPA & DPIA. Modul lain
         // (DSR/consent/breach/data-discovery) tidak di-scope di sini.
+        // Visibilitas berbasis assignment berlaku utk RoPA & DPIA. Logikanya
+        // sekarang tinggal di trait AssignmentVisibility (scopeVisibleTo) supaya
+        // SATU sumber kebenaran dipakai juga oleh AI Agent + @mention.
         if (! in_array($module, ['ropa', 'dpia'], true)) return;
         $user = $request->user();
         if (! $user) return;
-        $role = $user->role ?? '';
-        $tenantRoleName = optional($user->tenantRole)->name;
-        $isAdminish = in_array($role, ['superadmin', 'admin', 'dpo'], true)
-            || in_array(strtolower((string) $tenantRoleName), ['admin', 'dpo'], true);
-        if ($isAdminish) return;
 
-        $userId = $user->id;
-        $deptName = optional($user->department)->name;
-
-        $query->where(function ($w) use ($userId, $deptName, $module) {
-            // (a) All-group (assign_group kosong atau "(All Group)")
-            $w->where(function ($a) {
-                $a->whereNull('assign_group')
-                  ->orWhere('assign_group', '(All Group)');
-            });
-            // (b) Assignee eksplisit (user ada di daftar assignees)
-            $w->orWhereJsonContains('assignees', $userId);
-            // (d) Pembuat record
-            $w->orWhere('created_by', $userId);
-            // (c) Divisi: user lihat record yang di-assign ke divisinya.
-            if ($deptName) {
-                // Mode "Per Divisi" (AssignScopeModal) menyimpan nama divisi di
-                // assign_group. Bisa SATU nama (warisan) atau BANYAK nama yang
-                // di-join ' | ' (multi-divisi). Match anchored pada delimiter
-                // supaya 'HR' tidak ikut match 'HRD' / 'HR Operations'.
-                self::applyDivisionMatch($w, $deptName);
-                if ($module === 'ropa') {
-                    // RoPA: + divisi terlibat di wizard (multi-divisi, kompat lama).
-                    $w->orWhereJsonContains('wizard_data->detail_pemrosesan->divisi_list', $deptName);
-                    $w->orWhere('wizard_data->detail_pemrosesan->divisi', $deptName);
-                    $w->orWhere('division', $deptName);
-                }
-            }
-        });
+        $query->visibleTo($user);
     }
 
     /**

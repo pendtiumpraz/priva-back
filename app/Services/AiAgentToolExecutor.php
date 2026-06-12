@@ -64,9 +64,29 @@ class AiAgentToolExecutor
     /** UUID ChatConversation yang sedang aktif. */
     private ?string $conversationId = null;
 
+    /**
+     * User yang sedang menjalankan AI Agent. Dipakai untuk division/assignment
+     * visibility scoping (RoPA/DPIA/pihak ketiga) — AI hanya boleh membaca
+     * record yang user-nya boleh lihat di UI normal. Null = tidak di-scope
+     * (mis. dipanggil dari konteks sistem tanpa user).
+     */
+    private ?User $actingUser = null;
+
     public function __construct(string $orgId)
     {
         $this->orgId = $orgId;
+    }
+
+    /**
+     * Set user pelaksana untuk assignment-scoping. Bila di-set, list/detail/
+     * update RoPA/DPIA/pihak-ketiga difilter via scopeVisibleTo($user) — admin/
+     * dpo/superadmin otomatis bypass (lihat trait AssignmentVisibility).
+     */
+    public function actingAs(?User $user): self
+    {
+        $this->actingUser = $user;
+
+        return $this;
     }
 
     /**
@@ -317,6 +337,7 @@ class AiAgentToolExecutor
     private function listRopa(array $args): array
     {
         $records = Ropa::where('org_id', $this->orgId)
+            ->when($this->actingUser, fn ($q) => $q->visibleTo($this->actingUser))
             ->select('id', 'registration_number', 'processing_activity', 'status', 'risk_level', 'progress', 'created_at')
             ->orderBy('created_at', 'desc')->limit(20)->get();
 
@@ -325,9 +346,11 @@ class AiAgentToolExecutor
 
     private function getRopaDetail(array $args): array
     {
-        $r = Ropa::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        $r = Ropa::where('org_id', $this->orgId)
+            ->when($this->actingUser, fn ($q) => $q->visibleTo($this->actingUser))
+            ->find($args['id'] ?? '');
         if (! $r) {
-            return [['error' => 'RoPA tidak ditemukan'], '❌ RoPA dengan ID tersebut tidak ditemukan'];
+            return [['error' => 'RoPA tidak ditemukan'], '❌ RoPA tidak ditemukan atau bukan dalam cakupan akses Anda'];
         }
 
         return [$r->toArray(), "📋 Membaca detail RoPA: {$r->processing_activity}"];
@@ -394,9 +417,11 @@ class AiAgentToolExecutor
 
     private function updateRopa(array $args): array
     {
-        $r = Ropa::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        $r = Ropa::where('org_id', $this->orgId)
+            ->when($this->actingUser, fn ($q) => $q->visibleTo($this->actingUser))
+            ->find($args['id'] ?? '');
         if (! $r) {
-            return [['error' => 'RoPA tidak ditemukan'], '❌ RoPA tidak ditemukan untuk diupdate'];
+            return [['error' => 'RoPA tidak ditemukan'], '❌ RoPA tidak ditemukan atau bukan dalam cakupan akses Anda'];
         }
         $forbidden = ['org_id', 'id'];
         $data = array_diff_key($args, array_flip($forbidden));
@@ -455,6 +480,7 @@ class AiAgentToolExecutor
     private function listDpia(array $args): array
     {
         $records = Dpia::where('org_id', $this->orgId)
+            ->when($this->actingUser, fn ($q) => $q->visibleTo($this->actingUser))
             ->select('id', 'registration_number', 'risk_level', 'status', 'progress', 'created_at')
             ->orderBy('created_at', 'desc')->limit(20)->get();
 
@@ -463,9 +489,11 @@ class AiAgentToolExecutor
 
     private function getDpiaDetail(array $args): array
     {
-        $r = Dpia::where('org_id', $this->orgId)->with('ropa:id,processing_activity')->find($args['id'] ?? '');
+        $r = Dpia::where('org_id', $this->orgId)
+            ->when($this->actingUser, fn ($q) => $q->visibleTo($this->actingUser))
+            ->with('ropa:id,processing_activity')->find($args['id'] ?? '');
         if (! $r) {
-            return [['error' => 'DPIA tidak ditemukan'], '❌ DPIA tidak ditemukan'];
+            return [['error' => 'DPIA tidak ditemukan'], '❌ DPIA tidak ditemukan atau bukan dalam cakupan akses Anda'];
         }
 
         return [$r->toArray(), "⚠️ Membaca detail DPIA: {$r->registration_number}"];
@@ -527,9 +555,11 @@ class AiAgentToolExecutor
 
     private function updateDpia(array $args): array
     {
-        $r = Dpia::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        $r = Dpia::where('org_id', $this->orgId)
+            ->when($this->actingUser, fn ($q) => $q->visibleTo($this->actingUser))
+            ->find($args['id'] ?? '');
         if (! $r) {
-            return [['error' => 'DPIA tidak ditemukan'], '❌ DPIA tidak ditemukan'];
+            return [['error' => 'DPIA tidak ditemukan'], '❌ DPIA tidak ditemukan atau bukan dalam cakupan akses Anda'];
         }
         $data = array_diff_key($args, array_flip(['org_id', 'id']));
 
@@ -795,6 +825,7 @@ class AiAgentToolExecutor
     private function listThirdParty(array $args): array
     {
         $records = Vendor::where('org_id', $this->orgId)
+            ->when($this->actingUser, fn ($q) => $q->visibleTo($this->actingUser))
             ->select('id', 'name', 'type', 'country', 'category', 'risk_score', 'risk_level', 'dpa_status', 'pdp_scope_status', 'created_at')
             ->orderBy('created_at', 'desc')->limit(20)->get();
 
@@ -803,9 +834,11 @@ class AiAgentToolExecutor
 
     private function getThirdPartyDetail(array $args): array
     {
-        $r = Vendor::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        $r = Vendor::where('org_id', $this->orgId)
+            ->when($this->actingUser, fn ($q) => $q->visibleTo($this->actingUser))
+            ->find($args['id'] ?? '');
         if (! $r) {
-            return [['error' => 'Pihak ketiga tidak ditemukan'], '❌ Pihak ketiga tidak ditemukan'];
+            return [['error' => 'Pihak ketiga tidak ditemukan'], '❌ Pihak ketiga tidak ditemukan atau bukan dalam cakupan akses Anda'];
         }
         $data = $r->toArray();
         // contact_email is encrypted PII — drop before it reaches the LLM.
@@ -817,9 +850,11 @@ class AiAgentToolExecutor
     private function getThirdPartyPreAssessment(array $args): array
     {
         $vendorId = $args['vendor_id'] ?? $args['id'] ?? '';
-        $vendor = Vendor::where('org_id', $this->orgId)->find($vendorId);
+        $vendor = Vendor::where('org_id', $this->orgId)
+            ->when($this->actingUser, fn ($q) => $q->visibleTo($this->actingUser))
+            ->find($vendorId);
         if (! $vendor) {
-            return [['error' => 'Pihak ketiga tidak ditemukan'], '❌ Pihak ketiga tidak ditemukan'];
+            return [['error' => 'Pihak ketiga tidak ditemukan'], '❌ Pihak ketiga tidak ditemukan atau bukan dalam cakupan akses Anda'];
         }
         $pre = VendorPreAssessment::where('org_id', $this->orgId)
             ->where('vendor_id', $vendor->id)
@@ -959,9 +994,11 @@ class AiAgentToolExecutor
 
     private function updateThirdParty(array $args): array
     {
-        $v = Vendor::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        $v = Vendor::where('org_id', $this->orgId)
+            ->when($this->actingUser, fn ($q) => $q->visibleTo($this->actingUser))
+            ->find($args['id'] ?? '');
         if (! $v) {
-            return [['error' => 'Pihak ketiga tidak ditemukan'], '❌ Pihak ketiga tidak ditemukan'];
+            return [['error' => 'Pihak ketiga tidak ditemukan'], '❌ Pihak ketiga tidak ditemukan atau bukan dalam cakupan akses Anda'];
         }
         $safe = ['name', 'description', 'website', 'privacy_policy_url', 'country', 'services_provided', 'data_shared', 'risk_level', 'risk_score', 'dpa_status', 'contact_name', 'contact_email', 'category'];
         $data = array_intersect_key($args, array_flip($safe));

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\AssignmentVisibility;
 use App\Models\Concerns\BelongsToOrg;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -11,7 +12,7 @@ use Illuminate\Support\Str;
 
 class Dpia extends Model
 {
-    use BelongsToOrg, HasUuids, SoftDeletes;
+    use AssignmentVisibility, BelongsToOrg, HasUuids, SoftDeletes;
 
     protected $fillable = [
         'org_id', 'regulation_code', 'category_id', 'custom_number', 'registration_number',

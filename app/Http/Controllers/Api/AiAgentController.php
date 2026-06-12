@@ -264,7 +264,8 @@ class AiAgentController extends Controller
         }
 
         $executor = (new AiAgentToolExecutor($orgId ?? ''))
-            ->withContext($user->id, $user->name, $conversation->id);
+            ->withContext($user->id, $user->name, $conversation->id)
+            ->actingAs($user); // division/assignment visibility for RoPA/DPIA/pihak ketiga
 
         // Platform-scoped executor for root/superadmin control tools (not org-scoped).
         $platformExecutor = $isSuperAdmin
@@ -861,7 +862,8 @@ PROMPT;
                 ->withContext($conversation->id);
         } else {
             $executor = (new AiAgentToolExecutor($orgId ?? ''))
-                ->withContext($user->id, $user->name, $conversation->id);
+                ->withContext($user->id, $user->name, $conversation->id)
+                ->actingAs($user);
         }
         [$result, $stepDesc] = $executor->execute($tool, $args, approved: true);
 
@@ -924,9 +926,11 @@ PROMPT;
         $orgId = $user->org_id;
 
         $items = match ($type) {
-            // Compliance modules (for regular users)
-            'ropa' => Ropa::where('org_id', $orgId)->select('id', 'registration_number', 'processing_activity as label')->orderBy('created_at', 'desc')->limit(20)->get(),
-            'dpia' => Dpia::where('org_id', $orgId)->select('id', 'registration_number', 'description as label')->orderBy('created_at', 'desc')->limit(20)->get(),
+            // Compliance modules (for regular users). RoPA/DPIA/pihak-ketiga are
+            // assignment-scoped: a user only @mentions records visible to them or
+            // their division (same scopeVisibleTo used by the list pages + AI tools).
+            'ropa' => Ropa::where('org_id', $orgId)->visibleTo($user)->select('id', 'registration_number', 'processing_activity as label')->orderBy('created_at', 'desc')->limit(20)->get(),
+            'dpia' => Dpia::where('org_id', $orgId)->visibleTo($user)->select('id', 'registration_number', 'description as label')->orderBy('created_at', 'desc')->limit(20)->get(),
             'gap' => GapAssessment::where('org_id', $orgId)->selectRaw("id, CONCAT('GAP v', version, ' - Score: ', overall_score, '%') as label")->orderBy('created_at', 'desc')->limit(10)->get(),
             'breach' => BreachIncident::where('org_id', $orgId)->select('id', 'incident_code as registration_number', 'title as label')->orderBy('created_at', 'desc')->limit(20)->get(),
             'dsr' => DsrRequest::where('org_id', $orgId)->select('id', 'request_id as registration_number', 'requester_name as label')->orderBy('created_at', 'desc')->limit(20)->get(),
@@ -938,7 +942,7 @@ PROMPT;
             'lia' => \App\Models\LiaAssessment::where('org_id', $orgId)->select('id', 'lia_code as registration_number', 'title as label')->orderBy('created_at', 'desc')->limit(20)->get(),
             'tia' => \App\Models\TiaAssessment::where('org_id', $orgId)->select('id', 'tia_code as registration_number', 'title as label')->orderBy('created_at', 'desc')->limit(20)->get(),
             'maturity' => \App\Models\MaturityAssessment::where('org_id', $orgId)->select('id', 'version as registration_number', 'title as label')->orderBy('created_at', 'desc')->limit(20)->get(),
-            'pihak-ketiga' => \App\Models\Vendor::where('org_id', $orgId)->select('id', 'risk_level as registration_number', 'name as label')->orderBy('created_at', 'desc')->limit(20)->get(),
+            'pihak-ketiga' => \App\Models\Vendor::where('org_id', $orgId)->visibleTo($user)->select('id', 'risk_level as registration_number', 'name as label')->orderBy('created_at', 'desc')->limit(20)->get(),
             'cross-border' => \App\Models\CrossBorderTransfer::where('org_id', $orgId)->select('id', 'destination_country as registration_number', 'destination_entity as label')->orderBy('created_at', 'desc')->limit(20)->get(),
 
             // SuperAdmin admin tools
