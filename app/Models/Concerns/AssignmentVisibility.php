@@ -29,9 +29,15 @@ trait AssignmentVisibility
             return $query;
         }
         $role = $user->role ?? '';
-        $tenantRoleName = optional($user->tenantRole)->name;
-        $isAdminish = in_array($role, ['superadmin', 'admin', 'dpo'], true)
-            || in_array(strtolower((string) $tenantRoleName), ['admin', 'dpo'], true);
+        $tenantRole = $user->tenantRole;
+        $tenantRoleName = optional($tenantRole)->name;
+        $tenantPerms = $tenantRole?->permissions;
+        $isAdminish = in_array($role, ['root', 'superadmin', 'admin', 'dpo'], true)
+            || in_array(strtolower((string) $tenantRoleName), ['admin', 'dpo'], true)
+            // Tenant admin sering pakai NAMA role kustom tapi permission '*' (full
+            // access) — itu cara kanonik app menandai "boleh lihat semua" (lihat
+            // CheckPermission). Tanpa cek ini, admin tenant ikut ke-scope → kosong.
+            || (is_array($tenantPerms) && in_array('*', $tenantPerms, true));
         if ($isAdminish) {
             return $query;
         }

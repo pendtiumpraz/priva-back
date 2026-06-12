@@ -121,9 +121,13 @@ class Vendor extends Model
             return $query;
         }
         $role = $user->role ?? '';
-        $tenantRoleName = optional($user->tenantRole)->name;
-        $isAdminish = in_array($role, ['superadmin', 'admin', 'dpo'], true)
-            || in_array(strtolower((string) $tenantRoleName), ['admin', 'dpo'], true);
+        $tenantRole = $user->tenantRole;
+        $tenantRoleName = optional($tenantRole)->name;
+        $tenantPerms = $tenantRole?->permissions;
+        $isAdminish = in_array($role, ['root', 'superadmin', 'admin', 'dpo'], true)
+            || in_array(strtolower((string) $tenantRoleName), ['admin', 'dpo'], true)
+            // Tenant admin dengan permission '*' (full access) — bypass scoping.
+            || (is_array($tenantPerms) && in_array('*', $tenantPerms, true));
         if ($isAdminish) {
             return $query;
         }
