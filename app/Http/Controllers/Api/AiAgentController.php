@@ -317,12 +317,33 @@ class AiAgentController extends Controller
             $toolSelectionReason = 'full tools' . ($currentModule ? " for module {$currentModule}" : '');
         }
 
+        // ============================================
+        // ENTITLEMENT GATING (tenant users only)
+        // ============================================
+        // Tool calling MUST follow the user's visible menu. If a role/license/
+        // entitlement can't see /ropa, the AI gets NO RoPA tools and cannot act
+        // on RoPA — even if the page-context or intent filter would have included
+        // them. MenuRegistryService::forUser already resolves role whitelist +
+        // license package + tenant entitlement + tenant override. SuperAdmin/root
+        // bypass this (their surface is platform-scoped, gated by role instead).
+        $allowedToolNames = null;
+        if (!$isSuperAdmin) {
+            $visibleMenuKeys = collect(\App\Services\MenuRegistryService::forUser($user))
+                ->pluck('menu_key')->filter()->values()->all();
+            $allowedToolNames = AiAgentToolExecutor::allowedToolNamesForMenus($visibleMenuKeys);
+            if ($tools !== null) {
+                $tools = AiAgentToolExecutor::filterToolsByAllowed($tools, $allowedToolNames);
+            }
+        }
+
         \Log::info('AI Agent tool selection', [
             'intent' => $intentResult['intent'],
             'reason' => $intentResult['reason'],
             'current_module' => $currentModule,
             'tool_count' => $tools ? count($tools) : 0,
             'selection_reason' => $toolSelectionReason,
+            'entitlement_filtered' => !$isSuperAdmin,
+            'allowed_tool_count' => $allowedToolNames !== null ? count($allowedToolNames) : null,
         ]);
 
         $languageDirective = ($user->locale === 'en')
@@ -505,7 +526,7 @@ PROMPT;
         $agentMaxTokens = $outputGuard->clampMaxTokens(3000);
 
         // Function calling loop
-        return response()->stream(function () use ($messages, $tools, $apiKey, $agentModel, $agentBaseUrl, $agentAuthHeader, $agentAuthPrefix, $executor, $platformExecutor, $conversation, $user, $orgId, $isSuperAdmin, $outputGuard, $agentMaxTokens, $toolNonce) {
+        return response()->stream(function () use ($messages, $tools, $apiKey, $agentModel, $agentBaseUrl, $agentAuthHeader, $agentAuthPrefix, $executor, $platformExecutor, $allowedToolNames, $conversation, $user, $orgId, $isSuperAdmin, $outputGuard, $agentMaxTokens, $toolNonce) {
             $steps = [];
             $iteration = 0;
 
@@ -596,6 +617,29 @@ PROMPT;
 
                             // Emit step to frontend immediately
                             $stepDesc = "Menjalankan internal proses..."; // Fallback temporarily
+
+                            // ENTITLEMENT GATE (defense in depth): even if a tool
+                            // somehow leaked into the list, or the LLM hallucinated a
+                            // name, block execution of any tool the user's menu doesn't
+                            // entitle. Platform tools (superadmin/root) are role-gated
+                            // inside their own executor, so skip them here.
+                            if (!$isSuperAdmin && $allowedToolNames !== null
+                                && !in_array($fnName, $allowedToolNames, true)) {
+                                $stepDesc = "⛔ Modul untuk '{$fnName}' tidak aktif untuk akun Anda.";
+                                $result = ['error' => 'tool_not_entitled', 'message' => 'Modul ini tidak tersedia untuk role/paket Anda. Hubungi admin jika perlu akses.'];
+
+                                $stepData = ['tool' => $fnName, 'description' => $stepDesc, 'args' => $fnArgs];
+                                $steps[] = $stepData;
+                                echo json_encode(array_merge(['type' => 'step'], $stepData)) . "\n";
+                                if (ob_get_level() > 0) ob_flush(); flush();
+
+                                $messages[] = [
+                                    'role' => 'tool',
+                                    'tool_call_id' => $toolCall['id'],
+                                    'content' => json_encode($result, JSON_UNESCAPED_UNICODE),
+                                ];
+                                continue;
+                            }
 
                             // Let the executor handle it and get the translated description.
                             // Platform-control tools (root/superadmin) route to the
@@ -792,6 +836,16 @@ PROMPT;
         // Platform-control approvals are restricted to root/superadmin.
         if ($isPlatformTool && !in_array($user->role, ['root', 'superadmin'], true)) {
             return response()->json(['error' => 'Hanya root/superadmin yang bisa approve aksi platform.'], 403);
+        }
+        // Tenant mutation approvals must respect entitlement — a user can't approve
+        // an action on a module their menu doesn't grant.
+        if (!$isPlatformTool && !in_array($user->role, ['root', 'superadmin'], true)) {
+            $visibleMenuKeys = collect(\App\Services\MenuRegistryService::forUser($user))
+                ->pluck('menu_key')->filter()->values()->all();
+            $allowed = AiAgentToolExecutor::allowedToolNamesForMenus($visibleMenuKeys);
+            if (!in_array($tool, $allowed, true)) {
+                return response()->json(['error' => 'Modul untuk aksi ini tidak aktif untuk akun Anda.'], 403);
+            }
         }
 
         $conversation = ChatConversation::where('id', $request->conversation_id)

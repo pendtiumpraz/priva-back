@@ -1632,6 +1632,65 @@ class AiAgentToolExecutor
         'search_knowledge_base',
     ];
 
+    /**
+     * menu_key (dari MenuRegistryService::forUser) → tool names.
+     *
+     * Ini sumber kebenaran untuk ENTITLEMENT GATING: kalau menu sebuah modul
+     * tidak terlihat oleh role/license/entitlement user, tool modul itu TIDAK
+     * dikirim ke LLM dan TIDAK boleh dieksekusi. Keyed by menu_key (catat:
+     * 'gap-assessment', bukan 'gap'; 'cookie' terpisah dari 'consent').
+     */
+    private const MENU_TOOL_MAP = [
+        'ropa' => ['list_ropa', 'get_ropa_detail', 'create_ropa', 'update_ropa', 'search_similar_ropa', 'find_related_records'],
+        'dpia' => ['list_dpia', 'get_dpia_detail', 'create_dpia', 'update_dpia', 'search_similar_dpia', 'find_related_records'],
+        'breach' => ['list_breach', 'get_breach_detail', 'create_breach', 'search_similar_breach', 'find_related_records'],
+        'dsr' => ['list_dsr', 'get_dsr_detail', 'update_dsr', 'find_related_records'],
+        'gap-assessment' => ['list_gap', 'get_gap_detail'],
+        'consent' => ['list_consent', 'get_consent_stats'],
+        'cookie' => ['get_cookie_stats'],
+        'data-discovery' => ['list_discovery', 'get_discovery_detail', 'list_leak_detection'],
+        'simulation' => ['list_drill', 'get_drill_detail'],
+        'lia' => ['list_lia', 'get_lia_detail', 'create_lia', 'update_lia'],
+        'tia' => ['list_tia', 'get_tia_detail', 'create_tia', 'update_tia'],
+        'maturity' => ['list_maturity', 'get_maturity_detail', 'create_maturity', 'update_maturity'],
+        'vendor-risk' => ['list_third_party', 'get_third_party_detail', 'get_third_party_pre_assessment', 'create_third_party', 'update_third_party'],
+        'cross-border' => ['list_cross_border', 'get_cross_border_detail', 'create_cross_border', 'update_cross_border'],
+        'security' => ['get_security_posture', 'list_posture_findings'],
+    ];
+
+    /**
+     * Daftar nama tool yang boleh dipakai user berdasarkan menu_key yang
+     * TERLIHAT olehnya (hasil MenuRegistryService::forUser). Universal tools
+     * selalu termasuk. Dipakai untuk (a) filter tools sebelum dikirim ke LLM,
+     * dan (b) gate eksekusi (defense in depth) di controller.
+     *
+     * @param  array<int,string>  $menuKeys  menu_key yang terlihat oleh user
+     * @return array<int,string>
+     */
+    public static function allowedToolNamesForMenus(array $menuKeys): array
+    {
+        $allowed = self::UNIVERSAL_TOOLS;
+        foreach ($menuKeys as $key) {
+            if (isset(self::MENU_TOOL_MAP[$key])) {
+                $allowed = array_merge($allowed, self::MENU_TOOL_MAP[$key]);
+            }
+        }
+
+        return array_values(array_unique($allowed));
+    }
+
+    /**
+     * Filter array tool definitions menjadi hanya yang namanya ada di
+     * $allowedNames. Dipakai setelah intent/page filtering untuk menerapkan
+     * entitlement gating.
+     */
+    public static function filterToolsByAllowed(array $tools, array $allowedNames): array
+    {
+        return array_values(array_filter($tools, function ($tool) use ($allowedNames) {
+            return in_array($tool['function']['name'] ?? '', $allowedNames, true);
+        }));
+    }
+
     /** Read-only tool names (filter saat intent = READ_ONLY atau widget mode). */
     public const READ_ONLY_TOOLS = [
         'list_ropa', 'get_ropa_detail',
