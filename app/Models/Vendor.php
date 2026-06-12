@@ -138,8 +138,22 @@ class Vendor extends Model
             });
             $w->orWhereJsonContains('assignees', $userId);
             if ($deptName) {
-                $w->orWhere('assign_group', $deptName);
+                // assign_group bisa SATU nama divisi (warisan) atau BANYAK nama
+                // yang di-join ' | ' (multi-divisi, lihat ASSIGN_DIV_DELIM di FE).
+                // Match anchored pada delimiter supaya 'HR' tidak match 'HRD'.
+                $d = self::ASSIGN_DIV_DELIM;
+                $esc = addcslashes($deptName, '%_\\');
+                $w->orWhere('assign_group', $deptName)
+                    ->orWhere('assign_group', 'like', $esc.$d.'%')
+                    ->orWhere('assign_group', 'like', '%'.$d.$esc)
+                    ->orWhere('assign_group', 'like', '%'.$d.$esc.$d.'%');
             }
         });
     }
+
+    /**
+     * Delimiter multi-divisi pada `assign_group` — HARUS identik dengan
+     * konstanta FE `ASSIGN_DIV_DELIM` (AssignScopeModal.tsx).
+     */
+    public const ASSIGN_DIV_DELIM = ' | ';
 }

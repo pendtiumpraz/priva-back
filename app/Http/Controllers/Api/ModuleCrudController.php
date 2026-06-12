@@ -265,8 +265,10 @@ class ModuleCrudController extends Controller
             // (c) Divisi: user lihat record yang di-assign ke divisinya.
             if ($deptName) {
                 // Mode "Per Divisi" (AssignScopeModal) menyimpan nama divisi di
-                // assign_group utk RoPA & DPIA → match keduanya.
-                $w->orWhere('assign_group', $deptName);
+                // assign_group. Bisa SATU nama (warisan) atau BANYAK nama yang
+                // di-join ' | ' (multi-divisi). Match anchored pada delimiter
+                // supaya 'HR' tidak ikut match 'HRD' / 'HR Operations'.
+                self::applyDivisionMatch($w, $deptName);
                 if ($module === 'ropa') {
                     // RoPA: + divisi terlibat di wizard (multi-divisi, kompat lama).
                     $w->orWhereJsonContains('wizard_data->detail_pemrosesan->divisi_list', $deptName);
@@ -275,6 +277,37 @@ class ModuleCrudController extends Controller
                 }
             }
         });
+    }
+
+    /**
+     * Delimiter multi-divisi pada kolom `assign_group` — HARUS identik dengan
+     * konstanta FE `ASSIGN_DIV_DELIM` di AssignScopeModal.tsx.
+     */
+    public const ASSIGN_DIV_DELIM = ' | ';
+
+    /**
+     * Tambahkan klausa orWhere yang mencocokkan $deptName pada `assign_group`
+     * baik sebagai nilai tunggal (warisan single-division) MAUPUN sebagai salah
+     * satu elemen dari daftar multi-divisi yang di-join ' | '.
+     *
+     * Anchored pada delimiter ' | ' supaya tidak ada false positive substring
+     * (mis. 'HR' tidak match 'HRD'):
+     *   - exact            : assign_group = 'HR'
+     *   - awal daftar      : assign_group LIKE 'HR | %'
+     *   - akhir daftar     : assign_group LIKE '% | HR'
+     *   - tengah daftar    : assign_group LIKE '% | HR | %'
+     *
+     * Karakter wildcard LIKE ('%', '_') di-escape supaya nama divisi yang
+     * mengandungnya tidak melebar.
+     */
+    private static function applyDivisionMatch($w, string $deptName): void
+    {
+        $d = self::ASSIGN_DIV_DELIM;
+        $esc = addcslashes($deptName, '%_\\');
+        $w->orWhere('assign_group', $deptName)
+          ->orWhere('assign_group', 'like', $esc.$d.'%')
+          ->orWhere('assign_group', 'like', '%'.$d.$esc)
+          ->orWhere('assign_group', 'like', '%'.$d.$esc.$d.'%');
     }
 
     private function getQuery(Request $request, string $module)
