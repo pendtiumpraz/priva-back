@@ -1658,6 +1658,10 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     Route::prefix('export-doc')->group(function () {
         Route::get('/ropa/{id}', [TemplateExportController::class, 'exportRopa']);
         Route::get('/dpia/{id}', [TemplateExportController::class, 'exportDpia']);
+        // Bulk download → .zip with per-division folders. Optional ?ids=a,b,c
+        // (else all records visible to the user). Streamed; nothing persisted.
+        Route::get('/ropa-bulk', [TemplateExportController::class, 'exportRopaBulk']);
+        Route::get('/dpia-bulk', [TemplateExportController::class, 'exportDpiaBulk']);
         Route::get('/gap/{id}', [TemplateExportController::class, 'exportGap']);
         Route::get('/gap/{id}/report', [TemplateExportController::class, 'exportGapReport']);
         Route::get('/compliance-report', [TemplateExportController::class, 'exportComplianceReport']);

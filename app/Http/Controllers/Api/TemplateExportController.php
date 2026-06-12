@@ -573,6 +573,7 @@ class TemplateExportController extends Controller
                     while (ob_get_level() > 0) {
                         ob_end_clean();
                     }
+
                     return response()->download($tempFile, $baseFileName, [
                         'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                     ])->deleteFileAfterSend(true);
@@ -584,6 +585,7 @@ class TemplateExportController extends Controller
         }
 
         \Log::info("[export] Active template '{$docTpl->name}' (id={$docTpl->id}) tanpa DOCX upload untuk kind={$kind}; falling back to built-in PhpWord.");
+
         return null;
     }
 
@@ -601,172 +603,11 @@ class TemplateExportController extends Controller
         }
 
         try {
-            $phpWord = new PhpWord;
-            $this->applyDefaultFont($phpWord);
+            $phpWord = $this->buildRopaWord($ropa);
 
-            $wiz = $ropa->wizard_data ?? [];
-            $detail = $wiz['detail_pemrosesan'] ?? [];
-            $dpo = $wiz['dpo_team'] ?? [];
-            $info = $wiz['informasi_pemrosesan'] ?? [];
-            $pengumpulan = $wiz['pengumpulan_data'] ?? [];
-            $penggunaan = $wiz['penggunaan_penyimpanan'] ?? [];
-            $pengiriman = $wiz['pengiriman_data'] ?? [];
-            $retensi = $wiz['retensi_keamanan'] ?? [];
-            $orgMeta = $this->resolveOrgMeta(auth()->user()->organization);
-
-            // Cover Page
-            $this->addCoverPage(
-                $phpWord, 'Record of Processing Activities (RoPA)',
-                $ropa->processing_activity ?? $detail['nama_pemrosesan'] ?? 'Untitled RoPA',
-                $ropa->registration_number ?? '-',
-                $ropa->status ?? 'draft',
-                $ropa->risk_level ?? 'low',
-                $orgMeta
-            );
-
-            // Content Page
-            $sec = $this->addContentSection($phpWord, 'RoPA · '.($ropa->registration_number ?? ''), $orgMeta);
-
-            // 1. Detail Pemrosesan
-            $this->addSectionTitle($sec, '1. Detail Pemrosesan');
-            $t = $this->makeInfoTable($sec);
-            $this->addInfoRow($t, 'Nama Pemrosesan', $ropa->processing_activity ?? $detail['nama_pemrosesan'] ?? '-');
-            $this->addInfoRow($t, 'Entitas', $ropa->entity ?? $detail['entitas'] ?? '-');
-            $this->addInfoRow($t, 'Divisi / Departemen', $ropa->division ?? $detail['divisi'] ?? '-');
-            $this->addInfoRow($t, 'Unit Kerja', $ropa->work_unit ?? $detail['unit_kerja'] ?? '-');
-            $this->addInfoRow($t, 'Deskripsi Pemrosesan', $detail['deskripsi'] ?? $ropa->description ?? '-');
-            $this->addInfoRow($t, 'Risk Level', strtoupper($ropa->risk_level ?? '-').($ropa->risk_level_locked ? ' (override manual)' : ' (otomatis)'));
-
-            // Multi-system via accessor
-            $sistems = $ropa->sistem_list;
-            if (! empty($sistems)) {
-                $sistemText = implode("\n", array_map(fn ($s) => '• '.$s['name'].($s['lokasi'] ? " ({$s['lokasi']})" : ''), $sistems));
-                $this->addInfoRow($t, 'Sistem / Aplikasi Terkait', $sistemText);
-            }
-
-            // 2. Tim DPO dan PIC — multi-row via accessor (Sprint E2)
-            $this->addSectionTitle($sec, '2. Tim DPO dan PIC');
-            $t = $this->makeInfoTable($sec);
-            $this->addInfoRow($t, 'Kategori Pemrosesan', $ropa->kategori_pemrosesan ?? $dpo['kategori_pemrosesan'] ?? '-');
-            foreach ($ropa->dpo_list as $i => $d) {
-                $label = 'DPO #'.($i + 1);
-                $lines = array_filter([
-                    $d['name'] ?? '',
-                    $d['jabatan'] ? "Jabatan: {$d['jabatan']}" : '',
-                    $d['email'] ? "Email: {$d['email']}" : '',
-                    $d['phone'] ? "Telepon: {$d['phone']}" : '',
-                ]);
-                $this->addInfoRow($t, $label, implode("\n", $lines) ?: '-');
-            }
-            foreach ($ropa->pic_list as $i => $p) {
-                $label = 'PIC #'.($i + 1);
-                $lines = array_filter([
-                    $p['name'] ?? '',
-                    $p['jabatan'] ? "Jabatan: {$p['jabatan']}" : '',
-                    $p['divisi'] ? "Divisi: {$p['divisi']}" : '',
-                    $p['email'] ? "Email: {$p['email']}" : '',
-                ]);
-                $this->addInfoRow($t, $label, implode("\n", $lines) ?: '-');
-            }
-
-            // 3. Informasi Pemrosesan + AI usage triggers (Sprint E4)
-            $this->addSectionTitle($sec, '3. Informasi Pemrosesan');
-            $t = $this->makeInfoTable($sec);
-            $this->addInfoRow($t, 'Tujuan Pemrosesan', $ropa->purpose ?? $info['tujuan'] ?? '-');
-            $this->addInfoRow($t, 'Dasar Hukum Pemrosesan', $ropa->legal_basis ?? $info['dasar_pemrosesan'] ?? '-');
-            $this->addInfoRow($t, 'Detail / Keterangan Dasar Hukum', $ropa->legal_basis_detail ?? $info['legal_basis_detail'] ?? $info['keterangan_dasar'] ?? '-');
-            // Risk trigger fields — append with ⚠ when they contribute to HIGH
-            $aiLabel = $info['bantuan_ai'] ?? 'Tidak disebutkan';
-            $this->addInfoRow($t, 'Bantuan AI', $aiLabel.($this->isHighAi($aiLabel) ? ' ⚠ HIGH trigger' : ''));
-            $otoLabel = $info['otomatis'] ?? 'Tidak disebutkan';
-            $this->addInfoRow($t, 'Pengambilan Otomatis', $otoLabel.($this->isHighAuto($otoLabel) ? ' ⚠ HIGH trigger' : ''));
-            $profLabel = is_array($info['pemrofilan'] ?? null) ? implode(', ', $info['pemrofilan']) : ($info['pemrofilan'] ?? 'Tidak disebutkan');
-            $this->addInfoRow($t, 'Pemrofilan', $profLabel.($this->isProfilingTrigger($info['pemrofilan'] ?? null) ? ' ⚠ HIGH trigger' : ''));
-            $newTechLabel = $info['teknologi_baru'] ?? 'Tidak disebutkan';
-            $this->addInfoRow($t, 'Teknologi Baru', $newTechLabel.($newTechLabel === 'Ya' ? ' ⚠ HIGH trigger' : ''));
-
-            // 4. Pengumpulan Data
-            $this->addSectionTitle($sec, '4. Pengumpulan Data');
-            $t = $this->makeInfoTable($sec);
-            $this->addInfoRow($t, 'Sumber Data', $pengumpulan['sumber_data'] ?? '-');
-            $this->addInfoRow($t, 'Jumlah Subjek', $pengumpulan['jumlah_subjek'] ?? '-');
-            $this->addInfoRow($t, 'Jenis Data - Umum', $this->fmtArray($pengumpulan['jenis_data_umum'] ?? []));
-            $this->addInfoRow($t, 'Jenis Data - Spesifik', $this->fmtArray($pengumpulan['jenis_data_spesifik'] ?? []));
-            $this->addInfoRow($t, 'Jenis Data - PII', $this->fmtArray($pengumpulan['jenis_data_pii'] ?? []));
-
-            // 5. Penggunaan dan Penyimpanan
-            $this->addSectionTitle($sec, '5. Penggunaan dan Penyimpanan');
-            $t = $this->makeInfoTable($sec);
-            $this->addInfoRow($t, 'Kategori Pihak', $this->fmtArray($penggunaan['kategori_pihak'] ?? []));
-            $this->addInfoRow($t, 'Cara Pemrosesan', $penggunaan['cara_pemrosesan'] ?? '-');
-            $this->addInfoRow($t, 'Lokasi Penyimpanan', $penggunaan['lokasi_penyimpanan'] ?? '-');
-            $this->addInfoRow($t, 'Pihak Ketiga', $penggunaan['pihak_ketiga'] ?? '-');
-            $this->addInfoRow($t, 'Nama Pihak Ketiga', $penggunaan['nama_pihak_ketiga'] ?? '-');
-
-            // 6. Pengiriman Data
-            $this->addSectionTitle($sec, '6. Pengiriman Data');
-            $t = $this->makeInfoTable($sec);
-            $this->addInfoRow($t, 'Ada Penerima Data', $pengiriman['ada_penerima'] ?? '-');
-            $this->addInfoRow($t, 'Penerima Data', $pengiriman['penerima_data'] ?? '-');
-            $this->addInfoRow($t, 'Transfer ke Luar Negeri', $pengiriman['transfer_luar'] ?? '-');
-            $this->addInfoRow($t, 'Negara Tujuan', $pengiriman['negara_tujuan'] ?? '-');
-            $this->addInfoRow($t, 'Safeguards', $pengiriman['safeguards'] ?? '-');
-            $penerima = $pengiriman['penerima'] ?? [];
-            if (is_array($penerima) && count($penerima) > 0) {
-                $this->addInfoRow($t, 'Daftar Penerima', $this->fmtArray(array_map(fn ($p) => is_array($p) ? ($p['nama'] ?? $p['name'] ?? json_encode($p)) : $p, $penerima)));
-            }
-
-            // 7. Retensi dan Keamanan — master data retensi_list (Sprint E3)
-            $this->addSectionTitle($sec, '7. Retensi dan Keamanan Data');
-            $t = $this->makeInfoTable($sec);
-            foreach ($ropa->retensi_rows as $i => $row) {
-                $label = count($ropa->retensi_rows) > 1 ? 'Retensi #'.($i + 1) : 'Retensi';
-                $dur = ($row['duration_unit'] ?? null) === 'indefinite'
-                    ? 'Tidak terbatas'
-                    : (($row['duration_value'] ?? '?').' '.($row['duration_unit'] ?? ''));
-                $trigger = $row['trigger_event'] ?? null;
-                $disposal = $row['disposal_method'] ?? null;
-                $legalBasis = $row['legal_basis'] ?? null;
-                $lines = array_filter([
-                    $row['name'] ?? '',
-                    "Durasi: {$dur}",
-                    $trigger ? "Trigger: {$trigger}" : '',
-                    $disposal ? 'Metode: '.$disposal : '',
-                    $legalBasis ? "Dasar hukum: {$legalBasis}" : '',
-                ]);
-                $this->addInfoRow($t, $label, implode("\n", $lines) ?: '-');
-            }
-            if (empty($ropa->retensi_rows)) {
-                $this->addInfoRow($t, 'Masa Retensi', $ropa->retention_period ?? $retensi['masa_retensi'] ?? '-');
-            }
-            $this->addInfoRow($t, 'Prosedur Pemusnahan', $retensi['prosedur_pemusnahan'] ?? '-');
-            $pernahInsiden = $retensi['pernah_insiden'] ?? '-';
-            $this->addInfoRow($t, 'Pernah Insiden', $pernahInsiden.(strtolower(trim((string) $pernahInsiden)) === 'ya' ? ' ⚠ HIGH trigger' : ''));
-            $this->addInfoRow($t, 'Kontrol Keamanan', $this->fmtArray($retensi['kontrol_keamanan'] ?? []));
-
-            // Risk triggers summary box (Sprint E5)
-            $triggers = $wiz['risk_triggers'] ?? null;
-            if ($triggers && ! empty($triggers['reasons'])) {
-                $this->addSectionTitle($sec, 'Ringkasan Risiko (Otomatis)');
-                $t = $this->makeInfoTable($sec);
-                $this->addInfoRow($t, 'Level Terkomputasi', strtoupper($triggers['level'] ?? '-'));
-                $this->addInfoRow($t, 'Alasan', implode("\n• ", array_merge([''], $triggers['reasons'])));
-                $this->addInfoRow($t, 'Di-compute', $triggers['computed_at'] ?? '-');
-            }
-
-            // Status
-            $this->addSectionTitle($sec, 'Status Dokumen');
-            $t = $this->makeInfoTable($sec);
-            $this->addInfoRow($t, 'Status', strtoupper($ropa->status ?? '-'));
-            $this->addInfoRow($t, 'Progress', ($ropa->progress ?? 0).'%');
-            $this->addInfoRow($t, 'Regulasi', $ropa->regulation_code ?? '-');
-            $this->addInfoRow($t, 'Dibuat', $ropa->created_at ? $ropa->created_at->format('d F Y H:i') : '-');
-            $this->addInfoRow($t, 'Terakhir Diupdate', $ropa->updated_at ? $ropa->updated_at->format('d F Y H:i') : '-');
-
-            $outputFileName = 'RoPA_'.($ropa->registration_number ?? 'export').'.docx';
+            $outputFileName = $this->docFileName($ropa->registration_number, $ropa->processing_activity);
             $tempFile = tempnam(sys_get_temp_dir(), 'ropa_');
-            $writer = IOFactory::createWriter($phpWord, 'Word2007');
-            $writer->save($tempFile);
+            IOFactory::createWriter($phpWord, 'Word2007')->save($tempFile);
 
             while (ob_get_level() > 0) {
                 ob_end_clean();
@@ -778,6 +619,174 @@ class TemplateExportController extends Controller
         } catch (\Throwable $e) {
             return response()->json(['message' => 'Export error: '.$e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
         }
+    }
+
+    /** Build the RoPA Word document (shared by single + bulk export). */
+    private function buildRopaWord(Ropa $ropa): PhpWord
+    {
+        $phpWord = new PhpWord;
+        $this->applyDefaultFont($phpWord);
+
+        $wiz = $ropa->wizard_data ?? [];
+        $detail = $wiz['detail_pemrosesan'] ?? [];
+        $dpo = $wiz['dpo_team'] ?? [];
+        $info = $wiz['informasi_pemrosesan'] ?? [];
+        $pengumpulan = $wiz['pengumpulan_data'] ?? [];
+        $penggunaan = $wiz['penggunaan_penyimpanan'] ?? [];
+        $pengiriman = $wiz['pengiriman_data'] ?? [];
+        $retensi = $wiz['retensi_keamanan'] ?? [];
+        $orgMeta = $this->resolveOrgMeta(auth()->user()->organization);
+
+        // Cover Page
+        $this->addCoverPage(
+            $phpWord, 'Record of Processing Activities (RoPA)',
+            $ropa->processing_activity ?? $detail['nama_pemrosesan'] ?? 'Untitled RoPA',
+            $ropa->registration_number ?? '-',
+            $ropa->status ?? 'draft',
+            $ropa->risk_level ?? 'low',
+            $orgMeta
+        );
+
+        // Content Page
+        $sec = $this->addContentSection($phpWord, 'RoPA · '.($ropa->registration_number ?? ''), $orgMeta);
+
+        // 1. Detail Pemrosesan
+        $this->addSectionTitle($sec, '1. Detail Pemrosesan');
+        $t = $this->makeInfoTable($sec);
+        $this->addInfoRow($t, 'Nama Pemrosesan', $ropa->processing_activity ?? $detail['nama_pemrosesan'] ?? '-');
+        $this->addInfoRow($t, 'Entitas', $ropa->entity ?? $detail['entitas'] ?? '-');
+        $this->addInfoRow($t, 'Divisi / Departemen', $ropa->division ?? $detail['divisi'] ?? '-');
+        $this->addInfoRow($t, 'Unit Kerja', $ropa->work_unit ?? $detail['unit_kerja'] ?? '-');
+        $this->addInfoRow($t, 'Deskripsi Pemrosesan', $detail['deskripsi'] ?? $ropa->description ?? '-');
+        $this->addInfoRow($t, 'Risk Level', strtoupper($ropa->risk_level ?? '-').($ropa->risk_level_locked ? ' (override manual)' : ' (otomatis)'));
+
+        // Multi-system via accessor
+        $sistems = $ropa->sistem_list;
+        if (! empty($sistems)) {
+            $sistemText = implode("\n", array_map(fn ($s) => '• '.$s['name'].($s['lokasi'] ? " ({$s['lokasi']})" : ''), $sistems));
+            $this->addInfoRow($t, 'Sistem / Aplikasi Terkait', $sistemText);
+        }
+
+        // 2. Tim DPO dan PIC — multi-row via accessor (Sprint E2)
+        $this->addSectionTitle($sec, '2. Tim DPO dan PIC');
+        $t = $this->makeInfoTable($sec);
+        $this->addInfoRow($t, 'Kategori Pemrosesan', $ropa->kategori_pemrosesan ?? $dpo['kategori_pemrosesan'] ?? '-');
+        foreach ($ropa->dpo_list as $i => $d) {
+            $label = 'DPO #'.($i + 1);
+            $lines = array_filter([
+                $d['name'] ?? '',
+                $d['jabatan'] ? "Jabatan: {$d['jabatan']}" : '',
+                $d['email'] ? "Email: {$d['email']}" : '',
+                $d['phone'] ? "Telepon: {$d['phone']}" : '',
+            ]);
+            $this->addInfoRow($t, $label, implode("\n", $lines) ?: '-');
+        }
+        foreach ($ropa->pic_list as $i => $p) {
+            $label = 'PIC #'.($i + 1);
+            $lines = array_filter([
+                $p['name'] ?? '',
+                $p['jabatan'] ? "Jabatan: {$p['jabatan']}" : '',
+                $p['divisi'] ? "Divisi: {$p['divisi']}" : '',
+                $p['email'] ? "Email: {$p['email']}" : '',
+            ]);
+            $this->addInfoRow($t, $label, implode("\n", $lines) ?: '-');
+        }
+
+        // 3. Informasi Pemrosesan + AI usage triggers (Sprint E4)
+        $this->addSectionTitle($sec, '3. Informasi Pemrosesan');
+        $t = $this->makeInfoTable($sec);
+        $this->addInfoRow($t, 'Tujuan Pemrosesan', $ropa->purpose ?? $info['tujuan'] ?? '-');
+        $this->addInfoRow($t, 'Dasar Hukum Pemrosesan', $ropa->legal_basis ?? $info['dasar_pemrosesan'] ?? '-');
+        $this->addInfoRow($t, 'Detail / Keterangan Dasar Hukum', $ropa->legal_basis_detail ?? $info['legal_basis_detail'] ?? $info['keterangan_dasar'] ?? '-');
+        // Risk trigger fields — append with ⚠ when they contribute to HIGH
+        $aiLabel = $info['bantuan_ai'] ?? 'Tidak disebutkan';
+        $this->addInfoRow($t, 'Bantuan AI', $aiLabel.($this->isHighAi($aiLabel) ? ' ⚠ HIGH trigger' : ''));
+        $otoLabel = $info['otomatis'] ?? 'Tidak disebutkan';
+        $this->addInfoRow($t, 'Pengambilan Otomatis', $otoLabel.($this->isHighAuto($otoLabel) ? ' ⚠ HIGH trigger' : ''));
+        $profLabel = is_array($info['pemrofilan'] ?? null) ? implode(', ', $info['pemrofilan']) : ($info['pemrofilan'] ?? 'Tidak disebutkan');
+        $this->addInfoRow($t, 'Pemrofilan', $profLabel.($this->isProfilingTrigger($info['pemrofilan'] ?? null) ? ' ⚠ HIGH trigger' : ''));
+        $newTechLabel = $info['teknologi_baru'] ?? 'Tidak disebutkan';
+        $this->addInfoRow($t, 'Teknologi Baru', $newTechLabel.($newTechLabel === 'Ya' ? ' ⚠ HIGH trigger' : ''));
+
+        // 4. Pengumpulan Data
+        $this->addSectionTitle($sec, '4. Pengumpulan Data');
+        $t = $this->makeInfoTable($sec);
+        $this->addInfoRow($t, 'Sumber Data', $pengumpulan['sumber_data'] ?? '-');
+        $this->addInfoRow($t, 'Jumlah Subjek', $pengumpulan['jumlah_subjek'] ?? '-');
+        $this->addInfoRow($t, 'Jenis Data - Umum', $this->fmtArray($pengumpulan['jenis_data_umum'] ?? []));
+        $this->addInfoRow($t, 'Jenis Data - Spesifik', $this->fmtArray($pengumpulan['jenis_data_spesifik'] ?? []));
+        $this->addInfoRow($t, 'Jenis Data - PII', $this->fmtArray($pengumpulan['jenis_data_pii'] ?? []));
+
+        // 5. Penggunaan dan Penyimpanan
+        $this->addSectionTitle($sec, '5. Penggunaan dan Penyimpanan');
+        $t = $this->makeInfoTable($sec);
+        $this->addInfoRow($t, 'Kategori Pihak', $this->fmtArray($penggunaan['kategori_pihak'] ?? []));
+        $this->addInfoRow($t, 'Cara Pemrosesan', $penggunaan['cara_pemrosesan'] ?? '-');
+        $this->addInfoRow($t, 'Lokasi Penyimpanan', $penggunaan['lokasi_penyimpanan'] ?? '-');
+        $this->addInfoRow($t, 'Pihak Ketiga', $penggunaan['pihak_ketiga'] ?? '-');
+        $this->addInfoRow($t, 'Nama Pihak Ketiga', $penggunaan['nama_pihak_ketiga'] ?? '-');
+
+        // 6. Pengiriman Data
+        $this->addSectionTitle($sec, '6. Pengiriman Data');
+        $t = $this->makeInfoTable($sec);
+        $this->addInfoRow($t, 'Ada Penerima Data', $pengiriman['ada_penerima'] ?? '-');
+        $this->addInfoRow($t, 'Penerima Data', $pengiriman['penerima_data'] ?? '-');
+        $this->addInfoRow($t, 'Transfer ke Luar Negeri', $pengiriman['transfer_luar'] ?? '-');
+        $this->addInfoRow($t, 'Negara Tujuan', $pengiriman['negara_tujuan'] ?? '-');
+        $this->addInfoRow($t, 'Safeguards', $pengiriman['safeguards'] ?? '-');
+        $penerima = $pengiriman['penerima'] ?? [];
+        if (is_array($penerima) && count($penerima) > 0) {
+            $this->addInfoRow($t, 'Daftar Penerima', $this->fmtArray(array_map(fn ($p) => is_array($p) ? ($p['nama'] ?? $p['name'] ?? json_encode($p)) : $p, $penerima)));
+        }
+
+        // 7. Retensi dan Keamanan — master data retensi_list (Sprint E3)
+        $this->addSectionTitle($sec, '7. Retensi dan Keamanan Data');
+        $t = $this->makeInfoTable($sec);
+        foreach ($ropa->retensi_rows as $i => $row) {
+            $label = count($ropa->retensi_rows) > 1 ? 'Retensi #'.($i + 1) : 'Retensi';
+            $dur = ($row['duration_unit'] ?? null) === 'indefinite'
+                ? 'Tidak terbatas'
+                : (($row['duration_value'] ?? '?').' '.($row['duration_unit'] ?? ''));
+            $trigger = $row['trigger_event'] ?? null;
+            $disposal = $row['disposal_method'] ?? null;
+            $legalBasis = $row['legal_basis'] ?? null;
+            $lines = array_filter([
+                $row['name'] ?? '',
+                "Durasi: {$dur}",
+                $trigger ? "Trigger: {$trigger}" : '',
+                $disposal ? 'Metode: '.$disposal : '',
+                $legalBasis ? "Dasar hukum: {$legalBasis}" : '',
+            ]);
+            $this->addInfoRow($t, $label, implode("\n", $lines) ?: '-');
+        }
+        if (empty($ropa->retensi_rows)) {
+            $this->addInfoRow($t, 'Masa Retensi', $ropa->retention_period ?? $retensi['masa_retensi'] ?? '-');
+        }
+        $this->addInfoRow($t, 'Prosedur Pemusnahan', $retensi['prosedur_pemusnahan'] ?? '-');
+        $pernahInsiden = $retensi['pernah_insiden'] ?? '-';
+        $this->addInfoRow($t, 'Pernah Insiden', $pernahInsiden.(strtolower(trim((string) $pernahInsiden)) === 'ya' ? ' ⚠ HIGH trigger' : ''));
+        $this->addInfoRow($t, 'Kontrol Keamanan', $this->fmtArray($retensi['kontrol_keamanan'] ?? []));
+
+        // Risk triggers summary box (Sprint E5)
+        $triggers = $wiz['risk_triggers'] ?? null;
+        if ($triggers && ! empty($triggers['reasons'])) {
+            $this->addSectionTitle($sec, 'Ringkasan Risiko (Otomatis)');
+            $t = $this->makeInfoTable($sec);
+            $this->addInfoRow($t, 'Level Terkomputasi', strtoupper($triggers['level'] ?? '-'));
+            $this->addInfoRow($t, 'Alasan', implode("\n• ", array_merge([''], $triggers['reasons'])));
+            $this->addInfoRow($t, 'Di-compute', $triggers['computed_at'] ?? '-');
+        }
+
+        // Status
+        $this->addSectionTitle($sec, 'Status Dokumen');
+        $t = $this->makeInfoTable($sec);
+        $this->addInfoRow($t, 'Status', strtoupper($ropa->status ?? '-'));
+        $this->addInfoRow($t, 'Progress', ($ropa->progress ?? 0).'%');
+        $this->addInfoRow($t, 'Regulasi', $ropa->regulation_code ?? '-');
+        $this->addInfoRow($t, 'Dibuat', $ropa->created_at ? $ropa->created_at->format('d F Y H:i') : '-');
+        $this->addInfoRow($t, 'Terakhir Diupdate', $ropa->updated_at ? $ropa->updated_at->format('d F Y H:i') : '-');
+
+        return $phpWord;
     }
 
     // ================================================================
@@ -793,167 +802,11 @@ class TemplateExportController extends Controller
         }
 
         try {
-            $phpWord = new PhpWord;
-            $this->applyDefaultFont($phpWord);
+            $phpWord = $this->buildDpiaWord($dpia);
 
-            $wiz = $dpia->wizard_data ?? [];
-            $infoD = $wiz['informasi_dpia'] ?? [];
-            $koneksi = $wiz['koneksi_ropa'] ?? [];
-            $risiko = $wiz['potensi_risiko'] ?? [];
-            $ra = $dpia->risk_assessment ?? [];
-            $orgMeta = $this->resolveOrgMeta(auth()->user()->organization);
-
-            // Cover Page
-            $this->addCoverPage(
-                $phpWord, 'Data Protection Impact Assessment (DPIA)',
-                $dpia->description ?? $infoD['description'] ?? 'Untitled DPIA',
-                $dpia->registration_number ?? '-',
-                $dpia->status ?? 'draft',
-                $dpia->risk_level ?? 'low',
-                $orgMeta
-            );
-
-            // Content Page
-            $sec = $this->addContentSection($phpWord, 'DPIA · '.($dpia->registration_number ?? ''), $orgMeta);
-
-            // 1. Informasi DPIA
-            $this->addSectionTitle($sec, '1. Informasi DPIA');
-            $t = $this->makeInfoTable($sec);
-            $this->addInfoRow($t, 'Nomor DPIA', $dpia->registration_number ?? '-');
-            $this->addInfoRow($t, 'Deskripsi', $dpia->description ?? $infoD['description'] ?? '-');
-            $this->addInfoRow($t, 'Nama PIC', $infoD['pic_name'] ?? '-');
-            $this->addInfoRow($t, 'DPO In Charge', $infoD['dpo_name'] ?? '-');
-            $this->addInfoRow($t, 'Email DPO', $infoD['dpo_email'] ?? '-');
-            $this->addInfoRow($t, 'Risk Level', strtoupper($dpia->risk_level ?? '-'));
-            $this->addInfoRow($t, 'Regulasi', $dpia->regulation_code ?? '-');
-
-            // 2. Koneksi RoPA
-            $this->addSectionTitle($sec, '2. Koneksi RoPA');
-            $connectedRopas = $koneksi['connected_ropas'] ?? [];
-            $hasRopaConnection = false;
-            if (! empty($connectedRopas)) {
-                $ropaRecords = Ropa::whereIn('id', $connectedRopas)->get();
-                if ($ropaRecords->isNotEmpty()) {
-                    $hasRopaConnection = true;
-                    $rt = $sec->addTable(['borderSize' => 4, 'borderColor' => 'e0e0e0', 'cellMargin' => 80]);
-                    $headerRow = $rt->addRow();
-                    foreach (['No. RoPA', 'Nama Pemrosesan', 'Divisi', 'Risk'] as $h) {
-                        $headerRow->addCell(2500, ['bgColor' => '6366f1', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
-                            ->addText($h, ['size' => 9, 'bold' => true, 'color' => 'ffffff']);
-                    }
-                    foreach ($ropaRecords as $ropaRec) {
-                        $row = $rt->addRow();
-                        $row->addCell(2500, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($ropaRec->registration_number ?? '-'), ['size' => 9]);
-                        $row->addCell(2500, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($ropaRec->processing_activity ?? '-'), ['size' => 9]);
-                        $row->addCell(2500, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($ropaRec->division ?? '-'), ['size' => 9]);
-                        $row->addCell(2500, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t(strtoupper($ropaRec->risk_level ?? '-')), ['size' => 9, 'bold' => true]);
-                    }
-                }
-            }
-            if (! $hasRopaConnection && $dpia->ropa) {
-                $t = $this->makeInfoTable($sec);
-                $this->addInfoRow($t, 'RoPA Terhubung', $this->t(($dpia->ropa->registration_number ?? '').' - '.($dpia->ropa->processing_activity ?? '')));
-            } elseif (! $hasRopaConnection) {
-                $sec->addText($this->t('Tidak ada RoPA yang terhubung.'), ['size' => 10, 'color' => '888888', 'italic' => true]);
-            }
-
-            // 3. Tabel 21 Kategori Risiko
-            $this->addSectionTitle($sec, '3. Penilaian Potensi Risiko (21 Kategori)');
-
-            $RISK_CATEGORIES = [
-                'Dasar Hukum Pemrosesan', 'Pemrosesan Data Pribadi yang Sah',
-                'Kesesuaian Tujuan Pemrosesan', 'Minimisasi Data', 'Keakuratan Data',
-                'Pembatasan Penyimpanan', 'Integritas dan Kerahasiaan', 'Akuntabilitas',
-                'Hak Subjek Data - Akses', 'Hak Subjek Data - Koreksi',
-                'Hak Subjek Data - Hapus', 'Hak Subjek Data - Portabilitas',
-                'Persetujuan dan Consent', 'Transfer Data Lintas Batas',
-                'Enkripsi dan Pseudonymization', 'Kontrol Akses', 'Monitoring dan Logging',
-                'Retensi Data', 'Manajemen Insiden', 'Pelatihan dan Kesadaran',
-                'Penilaian Dampak Berkala',
-            ];
-
-            $answerLabels = [
-                'sudah' => 'Sudah Memenuhi', 'sebagian' => 'Memenuhi Sebagian',
-                'belum' => 'Belum Memenuhi', 'tidak_berlaku' => 'Tidak Berlaku',
-            ];
-            $answerColors = ['sudah' => '22c55e', 'sebagian' => 'f59e0b', 'belum' => 'ef4444', 'tidak_berlaku' => '94a3b8'];
-
-            $riskTable = $sec->addTable(['borderSize' => 4, 'borderColor' => 'e0e0e0', 'cellMargin' => 60]);
-            $hRow = $riskTable->addRow();
-            $hRow->addCell(800, ['bgColor' => '6366f1', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
-                ->addText('No', ['size' => 8, 'bold' => true, 'color' => 'ffffff'], ['alignment' => Jc::CENTER]);
-            $hRow->addCell(3500, ['bgColor' => '6366f1', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
-                ->addText('Kategori Risiko', ['size' => 8, 'bold' => true, 'color' => 'ffffff']);
-            $hRow->addCell(2000, ['bgColor' => '6366f1', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
-                ->addText('Status', ['size' => 8, 'bold' => true, 'color' => 'ffffff'], ['alignment' => Jc::CENTER]);
-            $hRow->addCell(3700, ['bgColor' => '6366f1', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
-                ->addText('Deskripsi / Keterangan', ['size' => 8, 'bold' => true, 'color' => 'ffffff']);
-
-            foreach ($RISK_CATEGORIES as $idx => $cat) {
-                $r = $risiko[$cat] ?? [];
-                $answer = $r['answer'] ?? '-';
-                $desc = $r['description'] ?? '-';
-                $color = $answerColors[$answer] ?? '333333';
-                $label = $answerLabels[$answer] ?? '-';
-                $bgColor = ($idx % 2 === 0) ? 'ffffff' : 'f8f9fa';
-
-                $row = $riskTable->addRow();
-                $row->addCell(800, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
-                    ->addText($this->t((string) ($idx + 1)), ['size' => 8, 'color' => '666666'], ['alignment' => Jc::CENTER]);
-                $row->addCell(3500, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
-                    ->addText($this->t($cat), ['size' => 8, 'bold' => true, 'color' => '333333']);
-                $row->addCell(2000, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
-                    ->addText($this->t($label), ['size' => 8, 'bold' => true, 'color' => $color], ['alignment' => Jc::CENTER]);
-                $row->addCell(3700, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
-                    ->addText($this->t($desc), ['size' => 8, 'color' => '555555']);
-            }
-
-            // 4. Ringkasan
-            $sudah = count(array_filter($risiko, fn ($r) => ($r['answer'] ?? '') === 'sudah'));
-            $sebagian = count(array_filter($risiko, fn ($r) => ($r['answer'] ?? '') === 'sebagian'));
-            $belum = count(array_filter($risiko, fn ($r) => ($r['answer'] ?? '') === 'belum'));
-            $tidakBerlaku = count(array_filter($risiko, fn ($r) => ($r['answer'] ?? '') === 'tidak_berlaku'));
-
-            $this->addSectionTitle($sec, '4. Ringkasan Penilaian');
-            $t = $this->makeInfoTable($sec);
-            $this->addInfoRow($t, 'Sudah Memenuhi', "$sudah kategori");
-            $this->addInfoRow($t, 'Memenuhi Sebagian', "$sebagian kategori");
-            $this->addInfoRow($t, 'Belum Memenuhi', "$belum kategori");
-            $this->addInfoRow($t, 'Tidak Berlaku', "$tidakBerlaku kategori");
-
-            // 5. Risk Assessment Matrix
-            if (! empty($ra['risks']) && is_array($ra['risks'])) {
-                $this->addSectionTitle($sec, '5. Risk Assessment Matrix');
-                $raTable = $sec->addTable(['borderSize' => 4, 'borderColor' => 'e0e0e0', 'cellMargin' => 60]);
-                $h = $raTable->addRow();
-                foreach (['Risiko', 'Likelihood', 'Impact', 'Score', 'Mitigasi', 'Status'] as $hdr) {
-                    $h->addCell(1667, ['bgColor' => '6366f1', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
-                        ->addText($hdr, ['size' => 8, 'bold' => true, 'color' => 'ffffff'], ['alignment' => Jc::CENTER]);
-                }
-                foreach ($ra['risks'] as $risk) {
-                    $row = $raTable->addRow();
-                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($risk['risk'] ?? '-'), ['size' => 8]);
-                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t((string) ($risk['likelihood'] ?? '-')), ['size' => 8], ['alignment' => Jc::CENTER]);
-                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t((string) ($risk['impact'] ?? '-')), ['size' => 8], ['alignment' => Jc::CENTER]);
-                    $score = (int) ($risk['likelihood'] ?? 0) * (int) ($risk['impact'] ?? 0);
-                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t((string) $score), ['size' => 8, 'bold' => true], ['alignment' => Jc::CENTER]);
-                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($risk['mitigation'] ?? '-'), ['size' => 8]);
-                    $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($risk['status'] ?? '-'), ['size' => 8], ['alignment' => Jc::CENTER]);
-                }
-            }
-
-            // 6. Status Dokumen
-            $this->addSectionTitle($sec, 'Status Dokumen');
-            $t = $this->makeInfoTable($sec);
-            $this->addInfoRow($t, 'Status', strtoupper($dpia->status ?? '-'));
-            $this->addInfoRow($t, 'Progress', ($dpia->progress ?? 0).'%');
-            $this->addInfoRow($t, 'Dibuat', $dpia->created_at ? $dpia->created_at->format('d F Y H:i') : '-');
-            $this->addInfoRow($t, 'Terakhir Diupdate', $dpia->updated_at ? $dpia->updated_at->format('d F Y H:i') : '-');
-
-            $outputFileName = 'DPIA_'.($dpia->registration_number ?? 'export').'.docx';
+            $outputFileName = $this->docFileName($dpia->registration_number, $dpia->description ?? optional($dpia->ropa)->processing_activity);
             $tempFile = tempnam(sys_get_temp_dir(), 'dpia_');
-            $writer = IOFactory::createWriter($phpWord, 'Word2007');
-            $writer->save($tempFile);
+            IOFactory::createWriter($phpWord, 'Word2007')->save($tempFile);
 
             while (ob_get_level() > 0) {
                 ob_end_clean();
@@ -965,6 +818,326 @@ class TemplateExportController extends Controller
         } catch (\Throwable $e) {
             return response()->json(['message' => 'Export error: '.$e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
         }
+    }
+
+    /** Build the DPIA Word document (shared by single + bulk export). */
+    private function buildDpiaWord(Dpia $dpia): PhpWord
+    {
+        $phpWord = new PhpWord;
+        $this->applyDefaultFont($phpWord);
+
+        $wiz = $dpia->wizard_data ?? [];
+        $infoD = $wiz['informasi_dpia'] ?? [];
+        $koneksi = $wiz['koneksi_ropa'] ?? [];
+        $risiko = $wiz['potensi_risiko'] ?? [];
+        $ra = $dpia->risk_assessment ?? [];
+        $orgMeta = $this->resolveOrgMeta(auth()->user()->organization);
+
+        // Cover Page
+        $this->addCoverPage(
+            $phpWord, 'Data Protection Impact Assessment (DPIA)',
+            $dpia->description ?? $infoD['description'] ?? 'Untitled DPIA',
+            $dpia->registration_number ?? '-',
+            $dpia->status ?? 'draft',
+            $dpia->risk_level ?? 'low',
+            $orgMeta
+        );
+
+        // Content Page
+        $sec = $this->addContentSection($phpWord, 'DPIA · '.($dpia->registration_number ?? ''), $orgMeta);
+
+        // 1. Informasi DPIA
+        $this->addSectionTitle($sec, '1. Informasi DPIA');
+        $t = $this->makeInfoTable($sec);
+        $this->addInfoRow($t, 'Nomor DPIA', $dpia->registration_number ?? '-');
+        $this->addInfoRow($t, 'Deskripsi', $dpia->description ?? $infoD['description'] ?? '-');
+        $this->addInfoRow($t, 'Nama PIC', $infoD['pic_name'] ?? '-');
+        $this->addInfoRow($t, 'DPO In Charge', $infoD['dpo_name'] ?? '-');
+        $this->addInfoRow($t, 'Email DPO', $infoD['dpo_email'] ?? '-');
+        $this->addInfoRow($t, 'Risk Level', strtoupper($dpia->risk_level ?? '-'));
+        $this->addInfoRow($t, 'Regulasi', $dpia->regulation_code ?? '-');
+
+        // 2. Koneksi RoPA
+        $this->addSectionTitle($sec, '2. Koneksi RoPA');
+        $connectedRopas = $koneksi['connected_ropas'] ?? [];
+        $hasRopaConnection = false;
+        if (! empty($connectedRopas)) {
+            $ropaRecords = Ropa::whereIn('id', $connectedRopas)->get();
+            if ($ropaRecords->isNotEmpty()) {
+                $hasRopaConnection = true;
+                $rt = $sec->addTable(['borderSize' => 4, 'borderColor' => 'e0e0e0', 'cellMargin' => 80]);
+                $headerRow = $rt->addRow();
+                foreach (['No. RoPA', 'Nama Pemrosesan', 'Divisi', 'Risk'] as $h) {
+                    $headerRow->addCell(2500, ['bgColor' => '6366f1', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                        ->addText($h, ['size' => 9, 'bold' => true, 'color' => 'ffffff']);
+                }
+                foreach ($ropaRecords as $ropaRec) {
+                    $row = $rt->addRow();
+                    $row->addCell(2500, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($ropaRec->registration_number ?? '-'), ['size' => 9]);
+                    $row->addCell(2500, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($ropaRec->processing_activity ?? '-'), ['size' => 9]);
+                    $row->addCell(2500, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($ropaRec->division ?? '-'), ['size' => 9]);
+                    $row->addCell(2500, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t(strtoupper($ropaRec->risk_level ?? '-')), ['size' => 9, 'bold' => true]);
+                }
+            }
+        }
+        if (! $hasRopaConnection && $dpia->ropa) {
+            $t = $this->makeInfoTable($sec);
+            $this->addInfoRow($t, 'RoPA Terhubung', $this->t(($dpia->ropa->registration_number ?? '').' - '.($dpia->ropa->processing_activity ?? '')));
+        } elseif (! $hasRopaConnection) {
+            $sec->addText($this->t('Tidak ada RoPA yang terhubung.'), ['size' => 10, 'color' => '888888', 'italic' => true]);
+        }
+
+        // 3. Tabel 21 Kategori Risiko
+        $this->addSectionTitle($sec, '3. Penilaian Potensi Risiko (21 Kategori)');
+
+        $RISK_CATEGORIES = [
+            'Dasar Hukum Pemrosesan', 'Pemrosesan Data Pribadi yang Sah',
+            'Kesesuaian Tujuan Pemrosesan', 'Minimisasi Data', 'Keakuratan Data',
+            'Pembatasan Penyimpanan', 'Integritas dan Kerahasiaan', 'Akuntabilitas',
+            'Hak Subjek Data - Akses', 'Hak Subjek Data - Koreksi',
+            'Hak Subjek Data - Hapus', 'Hak Subjek Data - Portabilitas',
+            'Persetujuan dan Consent', 'Transfer Data Lintas Batas',
+            'Enkripsi dan Pseudonymization', 'Kontrol Akses', 'Monitoring dan Logging',
+            'Retensi Data', 'Manajemen Insiden', 'Pelatihan dan Kesadaran',
+            'Penilaian Dampak Berkala',
+        ];
+
+        $answerLabels = [
+            'sudah' => 'Sudah Memenuhi', 'sebagian' => 'Memenuhi Sebagian',
+            'belum' => 'Belum Memenuhi', 'tidak_berlaku' => 'Tidak Berlaku',
+        ];
+        $answerColors = ['sudah' => '22c55e', 'sebagian' => 'f59e0b', 'belum' => 'ef4444', 'tidak_berlaku' => '94a3b8'];
+
+        $riskTable = $sec->addTable(['borderSize' => 4, 'borderColor' => 'e0e0e0', 'cellMargin' => 60]);
+        $hRow = $riskTable->addRow();
+        $hRow->addCell(800, ['bgColor' => '6366f1', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+            ->addText('No', ['size' => 8, 'bold' => true, 'color' => 'ffffff'], ['alignment' => Jc::CENTER]);
+        $hRow->addCell(3500, ['bgColor' => '6366f1', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+            ->addText('Kategori Risiko', ['size' => 8, 'bold' => true, 'color' => 'ffffff']);
+        $hRow->addCell(2000, ['bgColor' => '6366f1', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+            ->addText('Status', ['size' => 8, 'bold' => true, 'color' => 'ffffff'], ['alignment' => Jc::CENTER]);
+        $hRow->addCell(3700, ['bgColor' => '6366f1', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+            ->addText('Deskripsi / Keterangan', ['size' => 8, 'bold' => true, 'color' => 'ffffff']);
+
+        foreach ($RISK_CATEGORIES as $idx => $cat) {
+            $r = $risiko[$cat] ?? [];
+            $answer = $r['answer'] ?? '-';
+            $desc = $r['description'] ?? '-';
+            $color = $answerColors[$answer] ?? '333333';
+            $label = $answerLabels[$answer] ?? '-';
+            $bgColor = ($idx % 2 === 0) ? 'ffffff' : 'f8f9fa';
+
+            $row = $riskTable->addRow();
+            $row->addCell(800, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                ->addText($this->t((string) ($idx + 1)), ['size' => 8, 'color' => '666666'], ['alignment' => Jc::CENTER]);
+            $row->addCell(3500, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                ->addText($this->t($cat), ['size' => 8, 'bold' => true, 'color' => '333333']);
+            $row->addCell(2000, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                ->addText($this->t($label), ['size' => 8, 'bold' => true, 'color' => $color], ['alignment' => Jc::CENTER]);
+            $row->addCell(3700, ['bgColor' => $bgColor, 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                ->addText($this->t($desc), ['size' => 8, 'color' => '555555']);
+        }
+
+        // 4. Ringkasan
+        $sudah = count(array_filter($risiko, fn ($r) => ($r['answer'] ?? '') === 'sudah'));
+        $sebagian = count(array_filter($risiko, fn ($r) => ($r['answer'] ?? '') === 'sebagian'));
+        $belum = count(array_filter($risiko, fn ($r) => ($r['answer'] ?? '') === 'belum'));
+        $tidakBerlaku = count(array_filter($risiko, fn ($r) => ($r['answer'] ?? '') === 'tidak_berlaku'));
+
+        $this->addSectionTitle($sec, '4. Ringkasan Penilaian');
+        $t = $this->makeInfoTable($sec);
+        $this->addInfoRow($t, 'Sudah Memenuhi', "$sudah kategori");
+        $this->addInfoRow($t, 'Memenuhi Sebagian', "$sebagian kategori");
+        $this->addInfoRow($t, 'Belum Memenuhi', "$belum kategori");
+        $this->addInfoRow($t, 'Tidak Berlaku', "$tidakBerlaku kategori");
+
+        // 5. Risk Assessment Matrix
+        if (! empty($ra['risks']) && is_array($ra['risks'])) {
+            $this->addSectionTitle($sec, '5. Risk Assessment Matrix');
+            $raTable = $sec->addTable(['borderSize' => 4, 'borderColor' => 'e0e0e0', 'cellMargin' => 60]);
+            $h = $raTable->addRow();
+            foreach (['Risiko', 'Likelihood', 'Impact', 'Score', 'Mitigasi', 'Status'] as $hdr) {
+                $h->addCell(1667, ['bgColor' => '6366f1', 'borderSize' => 4, 'borderColor' => 'e0e0e0'])
+                    ->addText($hdr, ['size' => 8, 'bold' => true, 'color' => 'ffffff'], ['alignment' => Jc::CENTER]);
+            }
+            foreach ($ra['risks'] as $risk) {
+                $row = $raTable->addRow();
+                $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($risk['risk'] ?? '-'), ['size' => 8]);
+                $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t((string) ($risk['likelihood'] ?? '-')), ['size' => 8], ['alignment' => Jc::CENTER]);
+                $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t((string) ($risk['impact'] ?? '-')), ['size' => 8], ['alignment' => Jc::CENTER]);
+                $score = (int) ($risk['likelihood'] ?? 0) * (int) ($risk['impact'] ?? 0);
+                $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t((string) $score), ['size' => 8, 'bold' => true], ['alignment' => Jc::CENTER]);
+                $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($risk['mitigation'] ?? '-'), ['size' => 8]);
+                $row->addCell(1667, ['borderSize' => 4, 'borderColor' => 'e0e0e0'])->addText($this->t($risk['status'] ?? '-'), ['size' => 8], ['alignment' => Jc::CENTER]);
+            }
+        }
+
+        // 6. Status Dokumen
+        $this->addSectionTitle($sec, 'Status Dokumen');
+        $t = $this->makeInfoTable($sec);
+        $this->addInfoRow($t, 'Status', strtoupper($dpia->status ?? '-'));
+        $this->addInfoRow($t, 'Progress', ($dpia->progress ?? 0).'%');
+        $this->addInfoRow($t, 'Dibuat', $dpia->created_at ? $dpia->created_at->format('d F Y H:i') : '-');
+        $this->addInfoRow($t, 'Terakhir Diupdate', $dpia->updated_at ? $dpia->updated_at->format('d F Y H:i') : '-');
+
+        return $phpWord;
+    }
+
+    // ================================================================
+    //  BULK EXPORT (zip, per-division folders) — RoPA & DPIA
+    // ================================================================
+    /**
+     * Build a filename "CODE - Title.ext", sanitized for filesystem/zip.
+     * e.g. "ROPA-2026-001 - Rekrutmen Karyawan.docx".
+     */
+    private function docFileName(?string $code, ?string $title, string $ext = 'docx'): string
+    {
+        $code = trim((string) ($code ?: 'export'));
+        $title = trim((string) ($title ?: 'Untitled'));
+        $base = $code.' - '.$title;
+        // Drop characters illegal in file names / zip paths.
+        $base = preg_replace('/[\/\\\\:*?"<>|\x00-\x1F]+/', '-', $base);
+        $base = trim(preg_replace('/\s+/', ' ', $base));
+
+        return mb_substr($base, 0, 150).'.'.$ext;
+    }
+
+    /** Resolve a safe division folder name for grouping inside the zip. */
+    private function divisionFolder(?string $division): string
+    {
+        $d = trim((string) ($division ?: ''));
+        if ($d === '' || $d === '(All Group)') {
+            $d = 'Tanpa Divisi';
+        }
+        // assign_group may join multiple divisions with ' | ' — keep the first.
+        $d = trim(explode('|', $d)[0]);
+        $d = preg_replace('/[\/\\\\:*?"<>|\x00-\x1F]+/', '-', $d);
+
+        return mb_substr(trim($d) ?: 'Tanpa Divisi', 0, 80);
+    }
+
+    public function exportRopaBulk(Request $request)
+    {
+        $records = $this->bulkRopaQuery($request)->get();
+
+        return $this->streamBulkZip($records, 'RoPA', function (Ropa $r) {
+            return [
+                'doc' => $this->buildRopaWord($r),
+                'file' => $this->docFileName($r->registration_number, $r->processing_activity),
+                'division' => $this->divisionFolder($r->division ?: data_get($r->wizard_data, 'detail_pemrosesan.divisi') ?: $r->assign_group),
+            ];
+        });
+    }
+
+    public function exportDpiaBulk(Request $request)
+    {
+        $records = $this->bulkDpiaQuery($request)->get();
+
+        return $this->streamBulkZip($records, 'DPIA', function (Dpia $d) {
+            $division = optional($d->ropa)->division ?: $d->assign_group;
+
+            return [
+                'doc' => $this->buildDpiaWord($d),
+                'file' => $this->docFileName($d->registration_number, $d->description ?? optional($d->ropa)->processing_activity),
+                'division' => $this->divisionFolder($division),
+            ];
+        });
+    }
+
+    private function bulkRopaQuery(Request $request)
+    {
+        $q = Ropa::where('org_id', auth()->user()->org_id)->visibleTo($request->user());
+        if ($ids = $this->parseIds($request)) {
+            $q->whereIn('id', $ids);
+        }
+
+        return $q->orderBy('registration_number');
+    }
+
+    private function bulkDpiaQuery(Request $request)
+    {
+        $q = Dpia::with('ropa')->where('org_id', auth()->user()->org_id)->visibleTo($request->user());
+        if ($ids = $this->parseIds($request)) {
+            $q->whereIn('id', $ids);
+        }
+
+        return $q->orderBy('registration_number');
+    }
+
+    /** Optional ?ids=a,b,c filter (else export everything visible). */
+    private function parseIds(Request $request): array
+    {
+        $raw = $request->query('ids');
+        if (! $raw) {
+            return [];
+        }
+
+        return array_values(array_filter(array_map('trim', explode(',', (string) $raw))));
+    }
+
+    /**
+     * Stream a zip of generated Word docs grouped into per-division folders.
+     * Everything lives in the OS temp dir for the request only — the zip is
+     * deleted after send and per-doc temp files are removed once zipped. No
+     * tenant/Laravel storage is touched.
+     */
+    private function streamBulkZip($records, string $label, callable $render)
+    {
+        if ($records->isEmpty()) {
+            return response()->json(['message' => "Tidak ada {$label} yang bisa diekspor."], 404);
+        }
+
+        $zipPath = tempnam(sys_get_temp_dir(), 'bulk_');
+        $zip = new \ZipArchive;
+        if ($zip->open($zipPath, \ZipArchive::OVERWRITE) !== true) {
+            return response()->json(['message' => 'Gagal membuat arsip ZIP.'], 500);
+        }
+
+        $docTemps = [];
+        $usedNames = [];
+        try {
+            foreach ($records as $record) {
+                $built = $render($record);
+                $docTmp = tempnam(sys_get_temp_dir(), 'doc_');
+                IOFactory::createWriter($built['doc'], 'Word2007')->save($docTmp);
+                $docTemps[] = $docTmp;
+
+                $folder = $built['division'];
+                $entry = $folder.'/'.$built['file'];
+                // De-dup identical paths within the zip.
+                if (isset($usedNames[$entry])) {
+                    $usedNames[$entry]++;
+                    $entry = $folder.'/'.preg_replace('/\.docx$/', '', $built['file']).' ('.$usedNames[$entry].').docx';
+                } else {
+                    $usedNames[$entry] = 1;
+                }
+                $zip->addFile($docTmp, $entry);
+            }
+            $zip->close(); // reads the doc temp files now
+        } catch (\Throwable $e) {
+            @$zip->close();
+            foreach ($docTemps as $t) {
+                @unlink($t);
+            }
+            @unlink($zipPath);
+
+            return response()->json(['message' => 'Bulk export error: '.$e->getMessage()], 500);
+        }
+
+        // Safe to delete per-doc temps now that the zip is finalized.
+        foreach ($docTemps as $t) {
+            @unlink($t);
+        }
+
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        $zipName = $label.'_bulk_'.date('Ymd_His').'.zip';
+
+        return response()->download($zipPath, $zipName, [
+            'Content-Type' => 'application/zip',
+        ])->deleteFileAfterSend(true);
     }
 
     // ================================================================
