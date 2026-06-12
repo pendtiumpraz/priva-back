@@ -1,490 +1,490 @@
 {
-  "_meta": {
-    "regulation": "Undang-Undang Republik Indonesia Nomor 27 Tahun 2022 tentang Pelindungan Data Pribadi",
-    "short": "UU PDP",
-    "total_bab": 16,
-    "total_pasal": 76,
-    "diundangkan": "17 Oktober 2022",
-    "source_note": "STRUKTUR Bab + Pasal (nomor, topik) adalah informasi publik faktual. Field \"content\" SENGAJA DIKOSONGKAN untuk pasal yang teks verbatim-nya belum tersedia di repo. JANGAN mengisi content dengan teks karangan/parafrase yang diklaim sebagai bunyi pasal. Salin teks resmi dari Lembaran Negara RI Tahun 2022 Nomor 196 / salinan resmi UU 27/2022 ke field \"content\" (format markdown). Selama content kosong, seeder akan menanam summary topik + label \"[Teks verbatim belum tersedia — lihat naskah resmi UU 27/2022]\".",
-    "official_text_url": "https://peraturan.bpk.go.id/Details/229798/uu-no-27-tahun-2022",
-    "extraction_note": "Diekstrak dari PDF resmi BPK (peraturan.bpk.go.id) via OCR — koreksi tipografi minor, verifikasi terhadap naskah resmi untuk penggunaan hukum."
-  },
-  "bab": [
-    {
-      "nomor": "I",
-      "judul": "Ketentuan Umum",
-      "pasal": [
-        {
-          "no": 1,
-          "topik": "Definisi/istilah (Data Pribadi, Subjek Data Pribadi, Pengendali Data Pribadi, Prosesor Data Pribadi, Pemrosesan, Persetujuan, Pelindungan Data Pribadi, dll)",
-          "content": "Dalam Undang-Undang ini yang dimaksud dengan:\n\n1. Data Pribadi adalah data tentang ora.ng perseorangan yang teridentifikasi atau dapat diidentifikasi secara tersendiri atau dikombinasi dengan informasi lainnya baik secara langsung maupun tidak langsung melalui sistem elektronik atau nonelektronik.\n\n2. Pelindungan Data Pribadi adalah keseluruhan upaya untuk melindungi Data Pribadi dalam rangkaian pemrosesan Data Pribadi guna menjamin hak konstitusional subjek Data Pribadi.\n\n3. Informasi adalah keterangan, pernyataan, gagasan, dan tanda-tanda yang mengandung nilai, makna, dan pesan, baik data, fakta, maupun penjelasannya yang dapat dilihat, didengar, dan dibaca yang disajikan dalam berbagai kemasan dan format sesuai dengan perkembangan teknologi informasi dan komunikasi secara elektronik ataupun nonelektronik.\n\n4. Pengendali Data Pribadi adalah setiap orang, badan publik, dan organisasi internasional yang bertindak . sendiri-sendiri atau bersama-sama dalam menentukan tujuan dan melakukan kendali pemrosesan Data Pribadi.\n\n5. Prosesor Data Pribadi adalah setiap orang, badan publik, dan organisasi internasional yang bertindak sendiri-sendiri atau bersama-sama dalam melakukan pemrosesan Data Pribadi atas nama Pengendali Data Pribadi.\n\n6. Subjek Data Pribadi adalah orang perseorangan yang pada dirinya melekat Data Pribadi.\n\n7. Setiap Orang adalah orang perseorangan atau korporasi.\n\ns. Korporasi adalah kumpulan orang dan/ atau kekayaan yang terorganisasi baik yang berbadan hukum maupun tidak berbadan hukum.\n\n9. Badan Publik adalah lembaga eksekutif, legislatif, yudikatif, dan badan lain yang fungsi dan tugas pokoknya berkaitan dengan penyelenggaraan negara, yang sebagian atau seluruh dananya bersumber dari Anggaran Pendapatan dan Belanja Negara dan/ atau Anggaran Pendapatan dan Belanja Daerah, atau organisasi nonpemerintah sepanjang sebagian atau seluruh dananya bersumber dari Anggaran Pendapatan dan Belanja Negara dan/ atau Anggaran . Pendapatan dan Belanja Daerah, sumbangan masyarakat, dan/atau luar negeri. 1O. Organisasi Internasional adalah organisasi yang diakui sebagai subjek hukum internasional dan mempunyai kapasitas untuk membuat perjanjian internasional. 1 1. Pemerintah Pusat yang selanjutnya disebut Pemerintah adalah Presiden Republik Indonesia yang memegang kekuasaan pemerintahan Negara Republik Indonesia sebagaimana dimaksud dalam Undang- Undang Dasar Negara Republik Indonesia Tahun 1945."
-        }
-      ]
+    "_meta": {
+        "regulation": "Undang-Undang Republik Indonesia Nomor 27 Tahun 2022 tentang Pelindungan Data Pribadi",
+        "short": "UU PDP",
+        "total_bab": 16,
+        "total_pasal": 76,
+        "diundangkan": "17 Oktober 2022",
+        "source_note": "STRUKTUR Bab + Pasal (nomor, topik) adalah informasi publik faktual. Field \"content\" SENGAJA DIKOSONGKAN untuk pasal yang teks verbatim-nya belum tersedia di repo. JANGAN mengisi content dengan teks karangan/parafrase yang diklaim sebagai bunyi pasal. Salin teks resmi dari Lembaran Negara RI Tahun 2022 Nomor 196 / salinan resmi UU 27/2022 ke field \"content\" (format markdown). Selama content kosong, seeder akan menanam summary topik + label \"[Teks verbatim belum tersedia — lihat naskah resmi UU 27/2022]\".",
+        "official_text_url": "https://peraturan.bpk.go.id/Details/229798/uu-no-27-tahun-2022",
+        "extraction_note": "Diekstrak dari PDF resmi BPK (peraturan.bpk.go.id, UU 27/2022) via OCR, lalu artefak OCR dikoreksi manual (restorasi kata, tanpa parafrase substansi). Untuk penggunaan hukum, verifikasi terhadap naskah resmi Lembaran Negara."
     },
-    {
-      "nomor": "II",
-      "judul": "Asas",
-      "pasal": [
+    "bab": [
         {
-          "no": 2,
-          "topik": "Asas pelindungan data pribadi & ruang lingkup berlaku (termasuk ekstrateritorial)",
-          "content": "(1) Undang-Undang ini berlaku untuk Setiap Orang, Badan Publik, dan Organisasi Internasional yang melakukan perbuatan hukum sebagaimana diatur dalam Undang-Undang ini:\n\na. yang berada di wilayah hukum Negara Republik Indonesia; dan\n\nb. di luar rvilayah hukum Negara Republik Indonesia, yang memiliki akibat hukum:\n\n1. di wilayah hukum Negara Republik Indonesia; dan/atau\n\n2. bag Subjek Data Pribadi warga negara Indonesia di luar wilayah hukum Negara Republik Indonesia.\n\n(2) Undang-Undang ini tidak berlaku untuk pemrosesan Data Pribadi oleh orang perseorangan dalam kegiatan pribadi atau rumah tangga."
+            "nomor": "I",
+            "judul": "Ketentuan Umum",
+            "pasal": [
+                {
+                    "no": 1,
+                    "topik": "Definisi/istilah (Data Pribadi, Subjek Data Pribadi, Pengendali Data Pribadi, Prosesor Data Pribadi, Pemrosesan, Persetujuan, Pelindungan Data Pribadi, dll)",
+                    "content": "Dalam Undang-Undang ini yang dimaksud dengan:\n\n1. Data Pribadi adalah data tentang orang perseorangan yang teridentifikasi atau dapat diidentifikasi secara tersendiri atau dikombinasi dengan informasi lainnya baik secara langsung maupun tidak langsung melalui sistem elektronik atau nonelektronik.\n\n2. Pelindungan Data Pribadi adalah keseluruhan upaya untuk melindungi Data Pribadi dalam rangkaian pemrosesan Data Pribadi guna menjamin hak konstitusional subjek Data Pribadi.\n\n3. Informasi adalah keterangan, pernyataan, gagasan, dan tanda-tanda yang mengandung nilai, makna, dan pesan, baik data, fakta, maupun penjelasannya yang dapat dilihat, didengar, dan dibaca yang disajikan dalam berbagai kemasan dan format sesuai dengan perkembangan teknologi informasi dan komunikasi secara elektronik ataupun nonelektronik.\n\n4. Pengendali Data Pribadi adalah setiap orang, badan publik, dan organisasi internasional yang bertindak . sendiri-sendiri atau bersama-sama dalam menentukan tujuan dan melakukan kendali pemrosesan Data Pribadi.\n\n5. Prosesor Data Pribadi adalah setiap orang, badan publik, dan organisasi internasional yang bertindak sendiri-sendiri atau bersama-sama dalam melakukan pemrosesan Data Pribadi atas nama Pengendali Data Pribadi.\n\n6. Subjek Data Pribadi adalah orang perseorangan yang pada dirinya melekat Data Pribadi.\n\n7. Setiap Orang adalah orang perseorangan atau korporasi.\n\ns. Korporasi adalah kumpulan orang dan/atau kekayaan yang terorganisasi baik yang berbadan hukum maupun tidak berbadan hukum.\n\n9. Badan Publik adalah lembaga eksekutif, legislatif, yudikatif, dan badan lain yang fungsi dan tugas pokoknya berkaitan dengan penyelenggaraan negara, yang sebagian atau seluruh dananya bersumber dari Anggaran Pendapatan dan Belanja Negara dan/atau Anggaran Pendapatan dan Belanja Daerah, atau organisasi nonpemerintah sepanjang sebagian atau seluruh dananya bersumber dari Anggaran Pendapatan dan Belanja Negara dan/atau Anggaran . Pendapatan dan Belanja Daerah, sumbangan masyarakat, dan/atau luar negeri. 1O. Organisasi Internasional adalah organisasi yang diakui sebagai subjek hukum internasional dan mempunyai kapasitas untuk membuat perjanjian internasional. 1 1. Pemerintah Pusat yang selanjutnya disebut Pemerintah adalah Presiden Republik Indonesia yang memegang kekuasaan pemerintahan Negara Republik Indonesia sebagaimana dimaksud dalam Undang- Undang Dasar Negara Republik Indonesia Tahun 1945."
+                }
+            ]
+        },
+        {
+            "nomor": "II",
+            "judul": "Asas",
+            "pasal": [
+                {
+                    "no": 2,
+                    "topik": "Asas pelindungan data pribadi & ruang lingkup berlaku (termasuk ekstrateritorial)",
+                    "content": "(1) Undang-Undang ini berlaku untuk Setiap Orang, Badan Publik, dan Organisasi Internasional yang melakukan perbuatan hukum sebagaimana diatur dalam Undang-Undang ini:\n\na. yang berada di wilayah hukum Negara Republik Indonesia; dan\n\nb. di luar rvilayah hukum Negara Republik Indonesia, yang memiliki akibat hukum:\n\n1. di wilayah hukum Negara Republik Indonesia; dan/atau\n\n2. bag Subjek Data Pribadi warga negara Indonesia di luar wilayah hukum Negara Republik Indonesia.\n\n(2) Undang-Undang ini tidak berlaku untuk pemrosesan Data Pribadi oleh orang perseorangan dalam kegiatan pribadi atau rumah tangga."
+                }
+            ]
+        },
+        {
+            "nomor": "III",
+            "judul": "Jenis Data Pribadi",
+            "pasal": [
+                {
+                    "no": 3,
+                    "topik": "Lingkup data pribadi",
+                    "content": "Undang-Undang ini berasaskan : a.\n\nb. kepastian hukum;\n\nc. kepentingan umum;\n\nd. kemanfaatan;\n\ne. kehati-hatian;\n\nf. keseimbangan;\n\ng. pertanggungjawaban; dan\n\nh. kerahasiaan."
+                },
+                {
+                    "no": 4,
+                    "topik": "Data Pribadi yang bersifat spesifik (sensitif) dan Data Pribadi yang bersifat umum",
+                    "content": "(l) Data Pribadi terdiri atas:\n\na. Data Pribadi yang bersifat spesifik; dan\n\nb. Data Pribadi yang bersifat umum. l2l Data Pribadi yang bersifat spesifik sebagaimana dimaksud pada ayat (l) huruf a meliputi: . a. data dan informasi kesehatan;\n\nb. data biometrik;\n\nc. data genetika;\n\nd. catatan kejahatan;\n\ne. data anak;\n\nf. data kerrangan pribadi; dan/atau\n\ng. data lainnya sesuai dengan ketentuan peraturan perundang-undangan.\n\n(3) Data Pribadi yang bersifat umum sebagaimana dimaksud pada ayat (l) huruf b meliputi:\n\na. nama lengkap;\n\nb. jenis kelamin; c.\n\nd. agama;\n\ne. status perkawinan; dan/atau untuk\n\nf. Data Pribadi yang dikombinasikan mengidentifikasi seseorang."
+                }
+            ]
+        },
+        {
+            "nomor": "IV",
+            "judul": "Hak Subjek Data Pribadi",
+            "pasal": [
+                {
+                    "no": 5,
+                    "topik": "Hak atas informasi tentang kejelasan identitas, dasar kepentingan hukum, akuntabilitas pemrosesan",
+                    "content": "Subjek Data Pribadi berhak mendapatkan Informasi tentang kejelasan identitas, dasar kepentingan hukum, tujuan permintaan dan penggunaan Data Pribadi, dan akuntabilitas pihak yang meminta Data Pribadi."
+                },
+                {
+                    "no": 6,
+                    "topik": "Hak melengkapi, memperbarui, dan/atau memperbaiki kesalahan/ketidakakuratan Data Pribadi (koreksi)",
+                    "content": "Subjek Data Pribadi berhak melengkapi, memperbarui, dan/atau memperbaiki kesalahan dan/atau ketidakakuratan Data Pribadi tentang dirinya sesuai dengan tujuan pemrosesan Data Pribadi."
+                },
+                {
+                    "no": 7,
+                    "topik": "Hak mendapatkan akses dan salinan Data Pribadi",
+                    "content": "Subjek Data Pribadi berhak mendapatkan akses dan memperoleh salinan Data Pribadi tentang dirinya sesuai dengan ketentuan peraturan perundang-undangan."
+                },
+                {
+                    "no": 8,
+                    "topik": "Hak mengakhiri pemrosesan, menghapus, dan/atau memusnahkan Data Pribadi (penghapusan)",
+                    "content": "Subjek Data Pribadi berhak untuk mengakhiri pemrosesan, menghapus, dan/atau memusnahkan Data Pribadi tentang dirinya sesuai dengan ketentuan peraturan perundang-undangan."
+                },
+                {
+                    "no": 9,
+                    "topik": "Hak menarik kembali persetujuan pemrosesan Data Pribadi",
+                    "content": "Subjek Data Pribadi berhak menarik kembali persetujuan pemrosesan Data Pribadi tentang dirinya yang telah diberikan kepada Pengendali Data Pribadi."
+                },
+                {
+                    "no": 10,
+                    "topik": "Hak mengajukan keberatan atas tindakan pengambilan keputusan yang hanya didasarkan pada pemrosesan otomatis (termasuk profiling)",
+                    "content": "(1) Subjek Data Pribadi berhak untuk mengajukan keberatan atas tindakan pengambilan keputusan yang hanya didasarkan pada pemrosesan secara otomatis, termasuk pemrofilan, yang menimbulkan akibat hukum atau berdampak signifrkan pada Subjek Data Pribadi.\n\n(2) Ketentuan lebih lanjut mengenai pengajuan keberatan atas pemrosesan secara otomatis sebagaimana dimaksud pada ayat (l) diatur dalam Peraturan Pemerintah."
+                },
+                {
+                    "no": 11,
+                    "topik": "Hak menunda atau membatasi pemrosesan Data Pribadi secara proporsional",
+                    "content": "Subjek Data Pribadi berhak menunda atau membatasi pemrosesan Data Pribadi secara sesual dengan tujuan pemrosesan Data Pribadi."
+                },
+                {
+                    "no": 12,
+                    "topik": "Hak menuntut dan menerima ganti rugi atas pelanggaran pemrosesan Data Pribadi",
+                    "content": "(I) Subjek Data Pribadi berhak menggugat dan menerima ganti rugi atas pelanggaran pemrosesan Data Pribadi tentang dirinya sesuai dengan ketentuan peraturan perundang-undangan.\n\n(2) Ketentuan lebih lanjut mengenai pelanggaran pemrosesan Data Pribadi dan tata cara pengenaan ganti rugi sebagaimana dimaksud pada ayat (1) diatur dalam Peraturan Pemerintah."
+                },
+                {
+                    "no": 13,
+                    "topik": "Hak mendapatkan dan/atau menggunakan Data Pribadi dari Pengendali dalam bentuk yang dapat dibaca/dipindahkan (portabilitas) & pengecualian hak",
+                    "content": "(1) Subjek Data Pribadi berhak mendapatkan dan/atau menggunakan Data Pribadi tentang dirinya dari Pengendali Data Pribadi dalam bentuk yang sesuai dengan struktur dan/atau format yang lazim digunakan atau dapat dibaca oleh sistem elektronik.\n\n(2) Subjek Data Pribadi berhak dan Data Pribadi tentang dirinya ke Pengendali Data Pribadi lainnya, sepanjang sistem yang digunakan dapat saling berkomunikasi secara aman sesuai dengan prinsip Pelindungan Data Pribadi berdasarkan Undang-Undang ini.\n\n(3) Ketentuan lebih lanjut mengenai hak Subjek Data Pribadi untuk menggunakan dan Data Pribadi sebagaimana dimaksud pada ayat (2) diatur dalam Peraturan Pemerintah."
+                },
+                {
+                    "no": 14,
+                    "topik": "Pelaksanaan hak Subjek Data Pribadi diajukan melalui permohonan tertulis (lisan); ketentuan lebih lanjut",
+                    "content": "Pelaksanaan hak Subjek Data Pribadi sebagaimana dimaksud dalam Pasal 6 sampai dengan Pasal 11 diajukan melalui permohonan tercatat yang disampaikan secara elektronik atau nonelektronik kepada Pengendali Data Pribadi."
+                },
+                {
+                    "no": 15,
+                    "topik": "Pengecualian/pembatasan hak Subjek Data Pribadi (kepentingan pertahanan, keamanan, penegakan hukum, kepentingan umum, pengawasan sektor jasa keuangan/moneter, statistik/penelitian)",
+                    "content": "(1) Hak-hak Subjek Data Pribadi sebagaimana dimaksud dalam Pasal 8, Pasal 9, Pasal 1O ayat (1), Pasal 11, dan Pasal 13 ayat (1) dan ayat (2) dikecualikan untuk:\n\na. kepentingan pertahanan dan keamanan nasional;\n\nb. kepentingan proses penegakan hukum;\n\nc. kepentingan umum dalam rangka penyelenggaraan negara;\n\nd. kepentingan pengawasan sektor jasa keuangan, moneter, sistem pembayaran, dan stabilitas sistem keuangan yang dilakukan dalam rangka penyelenggaraan negara; atau ' e. kepentingan statistik dan penelitian ilmiah.\n\n(2) Pengecualian sebagaimana dimaksud pada ayat (1) dilaksanakan hanya dalam rangka pelaksanaan ketentuan Undang-Undang."
+                }
+            ]
+        },
+        {
+            "nomor": "V",
+            "judul": "Pemrosesan Data Pribadi",
+            "pasal": [
+                {
+                    "no": 16,
+                    "topik": "Lingkup pemrosesan (perolehan, pengumpulan, pengolahan, penganalisisan, penyimpanan, perbaikan, penampilan, pengumuman, transfer, penyebarluasan, penghapusan/pemusnahan) & prinsip pemrosesan",
+                    "content": "(1) Pemrosesan Data Pribadi meliputi: ' a. pemerolehan dan pengumpulan;\n\nb. pengolahan dan penganalisisan;\n\nc. penyimpanan;\n\nd. perbaikan dan pembaruan;\n\ne. penampilan, pengumuman, transfer, penyebarluasan, atau pengungkapan; dan/atau\n\nf. penghapusan atau pemusnahan.\n\n(2) Pemrosesan Data Pribadi sebagaimana dimaksud pada ayat (l) dilakukan sesuai dengan prinsip Pelindungan Data Pribadi meliputi:\n\na. Data Pribadi dilakukan secara terbatas dan spesifik, sah secara hukum, dan transparan;\n\nb. pemrosesan Data Pribadi dilakukan sesuai dengan tujuannya;\n\nc. pemrosesan Data Pribadi dilakukan dengan menjamin hak Subjek Data Pribadi;\n\nd. pemrosesan Data Pribadi dilakukan secara akurat, lengkap, tidak menyesatkan, mutakhir, dan dapat dipertan ggungi awabkan ;\n\ne. pemrosesan Data Pribadi dilakukan dengan melindungi keamanan Data Pribadi dari pengaksesan yang tidak sah, pengungkapan yang tidak sah, pengubahan yang tidak sah, perusakan, dan/atau penghilangan Data Pribadi;\n\nf. pemrosesan Data Pribadi dilakukan dengan memberitahukan tujuan dan aktivitas pemrosesan, serta kegagalan Pelindungan Data Pribadi;\n\ng. Data Pribadi dimusnahkan dan/atau dihapus setelah masa retensi berakhir atau berdasarkan permintaan Subjek Data Pribadi, kecuali ditentukan lain oleh peraturan perundang- undangan; dan\n\nh. pemrosesan Data Pribadi dilakukan secara bertanggung jawab dan dapat dibuktikan secara jelas.\n\n(3) Ketentuan lebih lanjut mengenai pelaksanaan pemrosesan Data Pribadi sebagaimana dimaksud pada ayat (1) diatur dalam Peraturan Pemerintah."
+                },
+                {
+                    "no": 17,
+                    "topik": "Kewajiban pemrosesan sesuai prinsip pelindungan data pribadi",
+                    "content": "(l) Pemasangan alat pemroses atau pengolah data visual di tempat umum dan/atau pada fasilitas pelayanan publik dilakukan dengan ketentuan:\n\na. untuk tujuan keamanan, pencegahan bencana, lalu lintas atau dan/atau pengumpulan, analisis, dan pengaturan Informasi lalu lintas;\n\nb. harus Informasi pada area yang telah dipasang alat pemroses atau pengolah data visual; dan\n\nc. tidak digunakan untuk seseorang.\n\n(2) Ketentuan sebagaimana dimaksud pada ayat (1) huruf b dan huruf c dikecualikan untuk pencegahan tindak pidana dan proses penegakan hukum sesuai dengan ketentuan peraturan perundang-undangan."
+                },
+                {
+                    "no": 18,
+                    "topik": "Pemrosesan untuk tujuan tertentu yang sah",
+                    "content": "(1) Pemrosesan Data Pribadi dapat dilakukan oleh 2 (dua) atau lebih Pengendali Data Pribadi.\n\n(2) Dalam hal Pemrosesan Data Pribadi dilakukan oleh 2 (dua) atau lebih Pengendali Data Pribadi harus memenuhi syarat minimal:\n\na. terdapat perjanjian antara para Pengendali Data Pribadi yang memuat peran, tanggung jawab, dan hubungan antar-Pengendali Data Pribadi;\n\nb. terdapat tujuan yang saling berkaitan dan cara pemrosesan Data Pribadi yang ditentukan secara bersama; dan\n\nc. terdapat narahubung yang ditunjuk secara bersama-sama."
+                },
+                {
+                    "no": 19,
+                    "topik": "Pemberitahuan kepada Subjek Data Pribadi sebelum/selama pemrosesan",
+                    "content": "Pengendali Data Pribadi dan Prosesor Data Pribadi meliputi:\n\na. Setiap Orang;\n\nb. Badan Publik; dan\n\nc. Organisasi Internasional."
+                },
+                {
+                    "no": 20,
+                    "topik": "Dasar pemrosesan Data Pribadi (persetujuan; pemenuhan kontrak; kewajiban hukum; kepentingan vital; tugas/kewenangan publik; kepentingan sah)",
+                    "content": "(1) Pengendali Data Pribadi wajib memiliki dasar pemrosesan Data Pribadi.\n\n(2) Dasar pemrosesan Data Pribadi sebagaimana dimaksud pada ayat (1) meliputi:\n\na. persetujuan yang sah secara eksplisit dari Subjek Data Pribadi untuk 1 (satu) atau beberapa tujuan tertentu yang telah disampaikan oleh Pengendali Data Pribadi kepada Subjek Data Pribadi;\n\nb. pemenuhan kewajiban perjanjian dalam hal Subjek Data Pribadi merupakan salah satu pihak atau untuk memenuhi permintaan Subjek Data Pribadi pada saat akan melakukan perjanjian;\n\nc. pemenuhan kewajiban hukum dari Pengendali Data Pribadi sesuai dengan ketentuan peraturan perundang-undangan;\n\nd. pemenuhan pelindungan kepentingan vital Subjek Data Pribadi;\n\ne. pelaksanaan tugas dalam rangka kepentingan umum, pelayanan publik, atau pelaksanaan kewenangan Pengendali Data Pribadi berdasarkan peraturan perundang-undangan; dan/atau\n\nf. pemenuhan kepentingan yang sah lainnya dengan memperhatikan tujuan, kebutuhan, dan keseimbangan kepentingan Pengendali Data Pribadi dan hak Subjek Data Pribadi."
+                },
+                {
+                    "no": 21,
+                    "topik": "Penyampaian informasi saat meminta persetujuan (legalitas, tujuan, jenis & relevansi, retensi, hak subjek, jangka waktu pemrosesan)",
+                    "content": "(1) Dalam hal pemrosesan Data Pribadi berdasarkan persetujuan sebagaimana dimaksud dalam Pasal 2O ayat (21 huruf a, Pengendali Data Pribadi wajib menyampaikan Informasi mengenai:\n\na. legalitas dari pemrosesan Data Pribadi;\n\nb. tujuan pemrosesan Data Pribadi;\n\nc. jenis dan relevansi Data Pribadi yang akan diproses;\n\nd. jangka waktu retensi dokumen yang memuat Data Pribadi;\n\ne. rincian mengenai Informasi yang\n\nf. jangka waktu pemrosesan Data Pribadi; dan\n\nc. hak Subjek Data Pribadi. REPUBLIK INOONESIA\n\n(2) Dalam hal terdapat perubahan Informasi sebagaimana dimaksud pada ayat (1), Pengendali Data Pribadi wajib . memberitahukan kepada Subjek Data Pribadi sebelum terjadi perubahan Informasi."
+                },
+                {
+                    "no": 22,
+                    "topik": "Persetujuan tertulis/terekam, dalam Bahasa Indonesia, dapat dibedakan dari hal lain",
+                    "content": "(1) Persetujuan pemrosesan Data Pribadi dilakukan melalui persetujuan tertulis atau terekam.\n\n(2) Persetujuan sebagaimana dimaksud pada ayat (1) dapat disampaikan secara elektronik atau nonelektronik.\n\n(3) Persetujuan sebagaimana dimaksud pada ayat (1) mempunyai kekuatan hukum yang sama.\n\n(4) Dalam hal persetujuan sebagaimana dimaksud pada ayat (1) memuat tujuan lain, permintaan persetujuan harus memenuhi ketentuan:\n\na. dapat dibedakan secara jelas dengan hal lainnya;\n\nb. dibuat dengan forrnat yang dapat dipahami dan mudah diakses; dan\n\nc. menggunalan bahasa yang sederhana dan jelas.\n\n(5) Persetujuan yang tidak memenuhi ketentuan sebagaimana dimaksud pada ayat (1) dan ayat (4) dinyatakan batal demi hukum."
+                },
+                {
+                    "no": 23,
+                    "topik": "Persetujuan yang batal/tidak sah (penyampaian tujuan tidak terpenuhi)",
+                    "content": "Klausul perjanjian yang di dalamnya terdapat permintaan pemrosesan Data Pribadi yang tidak memuat persetujuan yang sah secara eksplisit dari Subjek Data Pribadi dinyatakan batal demi hukum."
+                }
+            ]
+        },
+        {
+            "nomor": "VI",
+            "judul": "Kewajiban Pengendali Data Pribadi dan Prosesor Data Pribadi dalam Pemrosesan Data Pribadi",
+            "pasal": [
+                {
+                    "no": 24,
+                    "topik": "Kewajiban Pengendali menunjukkan keabsahan/persetujuan pemrosesan",
+                    "content": "Dalam melakukan pemrosesan Data Pribadi, Pengendali Data Pribadi wajib menunjukkan bukti persetujuan yang telah diberikan oleh Subjek Data Pribadi."
+                },
+                {
+                    "no": 25,
+                    "topik": "Kewajiban menyampaikan informasi legalitas, tujuan, dan akuntabilitas saat memperoleh persetujuan",
+                    "content": "(1) Pemrosesan Data Pribadi anak secara khusus.\n\n(2) Pemrosesan Data Pribadi anak sebagaimana dimaksud pada ayat (1) wajib mendapat persetujuan dari orang tua anak dan/atau wali anak sesuai dengan ketentuan peraturan perundang-undangan."
+                },
+                {
+                    "no": 26,
+                    "topik": "Kewajiban menyampaikan informasi saat pemrosesan tidak berdasarkan persetujuan & perubahan informasi",
+                    "content": "(1) Pemrosesan Data Pribadi disabilitas ' diselenggarakan secara khusus.\n\n(2) Pemrosesan Data Pribadi penyandang disabilitas sebagaimana dimaksud pada ayat (1) dilakukan melalui komunikasi dengan tertentu sesuai dengan ketentuan cara undangan.\n\n(3) Pemrosesalr Data Pribadi penyandang disabilitas sebagaimana dimaksud pada ayat (2) wajib mendapat persetujuan dari penyandang disabilitas dan/atau wali penyandang disabilitas sesuai dengan ketentuan peraturan perundang-undangan."
+                },
+                {
+                    "no": 27,
+                    "topik": "Kewajiban pemrosesan sesuai tujuan",
+                    "content": "Pengendali Data Pribadi wajib melakukan pemrosesan Data Pribadi secara terbatas dan spesifik, sah secara hukum, dan transparan."
+                },
+                {
+                    "no": 28,
+                    "topik": "Kewajiban menjaga kerahasiaan Data Pribadi",
+                    "content": "Pengendali Data Pribadi wajib melakukan pemrosesan Data Pribadi sesuai dengan tujuan pemrosesan Data Pribadi."
+                },
+                {
+                    "no": 29,
+                    "topik": "Kewajiban melakukan pengawasan terhadap setiap pihak yang terlibat pemrosesan",
+                    "content": "(1) Pengendali Data Pribadi wajib memastikan akurasi, kelengkapan, dan konsistensi Data Pribadi sesuai dengan ketentuan peraturan perundang-undangan.\n\n(2) Dalam memastikan akurasi, kelengkapan, dan konsistensi Data Pribadi sebagaimana dimaksud pada ayat (l) Pengendali Data Pribadi wajib melakukan verifikasi."
+                },
+                {
+                    "no": 30,
+                    "topik": "Kewajiban melindungi & memastikan keamanan Data Pribadi (pencegahan akses tidak sah)",
+                    "content": "(1) ' Pengendali Data Pribadi wajib memperbarui dan/atau memperbaiki kesalahan dan/atau ketidakakuratan Data Pribadi paling lambat 3 x 24 (tiga kali dua puluh empat) jam terhitung sejak Pengendali Data Pribadi menerima permintaan pembaruan dan/atau perbaikan Data Pribadi.\n\n(2) Pengendali Data Pribadi wajib memberitahukan hasil pembaruan dan/atau perbaikan Data Pribadi kepada Subjek Data Pribadi."
+                },
+                {
+                    "no": 31,
+                    "topik": "Kewajiban menjaga keamanan dengan menyusun & menerapkan langkah teknis operasional/menjamin keamanan",
+                    "content": "Pengendali Data Pribadi wajib melakukan perekaman terhadap seluruh kegiatan pemrosesan Data Pribadi."
+                },
+                {
+                    "no": 32,
+                    "topik": "Kewajiban menjaga Data Pribadi dari pemrosesan tidak sah",
+                    "content": "(1) Pengendali Data Pribadi wajib memberikan akses kepada Subjek Data Pribadi terhadap Data Pribadi yang diproses beserta rekam jejak pemrosesan Data Pribadi sesuai dengan jangka waktu penyimpanan Data Pribadi.\n\n(2) Akses sebagaimana dimaksud pada ayat (1) diberikan paling lambat 3 x 24 (tiga kali dua puluh empat) jam terhitung sejak Pengendali Data Pribadi menerima permintaan akses."
+                },
+                {
+                    "no": 33,
+                    "topik": "Kewajiban mencegah Data Pribadi diakses secara tidak sah",
+                    "content": "Pengendali Data Pribadi wajib menolak memberikan akses perubahan terhadap Data Pribadi kepada Subjek Data Pribadi dalam hal:\n\na. membahayakan keamanan, kesehatan fisik, atau kesehatan mental Subjek Data Pribadi dan/atau orang lain;\n\nb. berdampak pada pengungkapan Data Pribadi milik orang lain; dan/atau c bertentangan dengan kepentingan pertahanan dan keamanan nasional."
+                },
+                {
+                    "no": 34,
+                    "topik": "Kewajiban melakukan penilaian dampak pelindungan data pribadi (DPIA) untuk pemrosesan berisiko tinggi",
+                    "content": "(1) Pengendali Data Pribadi wajib melakukan penilaian dampak Pelindungan Data Pribadi dalam hal pemrosesan Data Pribadi memiliki potensi risiko tinggi terhadap Subjek Data Pribadi.\n\n(2) Pemrosesan Data Pribadi memiliki potensi risiko tinggi sebagaimana dimaksud pada ayat (1) meliputi:\n\na. pengambilan keputusan secara otomatis yang memiliki akibat hukum atau dampak yang . signifikan terhadap Subjek Data Pribadi;\n\nb. pemrosesan atas Data Pribadi yang bersifat spesifik;\n\nc. pemrosesan Data Pribadi dalam skala besar;\n\nd. pemrosesan Data Pribadi untuk kegiatan evaluasi, penskoran, atau pemantauan yang sistematis terhadap Subjek Data Pribadi;\n\ne. pemrosesan Data Pribadi untuk kegiatan pencocokan atau penggabungan sekelompok data;\n\nf. penggunaan teknologi baru dalam pemrosesan Data Pribadi; dan/atau\n\ng. pemrosescrn Data Pribadi yang membatasi pelaksanaan hak Subjek Data Pribadi.\n\n(3) Ketentuan lebih lanjut mengenai penilaian dampak Pelindungan Data Pribadi diatur dalam Peraturan Pemerintah."
+                },
+                {
+                    "no": 35,
+                    "topik": "Kewajiban menjaga Data Pribadi dengan penyusunan & penerapan langkah teknis dan/atau pencegahan kegagalan pelindungan",
+                    "content": "Pengendali Data Pribadi wajib melindungi dan memastikan keamanan Data Pribadi yang diprosesnya, dengan melakukan: a.' penyusunan dan penerapan langkah teknis operasional untuk melindungi Data Pribadi dari gangguan pemrosesan Data Pribadi yang bertentangan dengan ketentuan peraturan perundang-undangan; dan\n\nb. penentuan tingkat keamanan Data Pribadi dengan memperhatikan sifat dan risiko dari Data Pribadi yang harus dilindungi dalam pemrosesan Data Pribadi."
+                },
+                {
+                    "no": 36,
+                    "topik": "Kewajiban melakukan perekaman terhadap seluruh kegiatan pemrosesan (catatan pemrosesan/RoPA)",
+                    "content": "Dalam melakukan pemrosesan Data Pribadi, Pengendali Data Pribadi wajib menjaga kerahasiaan Data Pribadi."
+                },
+                {
+                    "no": 37,
+                    "topik": "Kewajiban menghentikan pemrosesan jika subjek menarik persetujuan",
+                    "content": "Pengendali Data Pribadi wajib melakukan pengawasan terhadap setiap pihak yang terlibat dalam pemrosesan Data Pribadi di bawah kendali Pengendali Data Pribadi."
+                },
+                {
+                    "no": 38,
+                    "topik": "Kewajiban melindungi Data Pribadi dari pemrosesan yang melanggar ketentuan",
+                    "content": "Pengendali Data Pribadi wajib melindungi Data Pribadi dari pemrosesan yang tidak sah."
+                },
+                {
+                    "no": 39,
+                    "topik": "Pengecualian kewajiban memberitahukan tujuan & aktivitas pemrosesan (kepentingan tertentu)",
+                    "content": "(1) Pengendali Data Pribadi wajib mencegah Data Pribadi diakses secara tidak sah.\n\n(2) Pencegahan sebagaimana dimaksud pada ayat (1) dilakukan dengan sistem keamanan terhadap Data Pribadi yang diproses dan/atau memproses Data Pribadi sistem elektronik secara andal, aman, dan bertanggung jawab.\n\n(3) Pencegahan sebagaimana dimaksud pada ayat (21 dilakukan sesuai dengan ketentuan peraturan perundang-undangan."
+                },
+                {
+                    "no": 40,
+                    "topik": "Kewajiban memperbarui & memverifikasi keakuratan Data Pribadi",
+                    "content": "(1) Pengendali Data Pribadi wajib menghentikan pemrosesan Data Pribadi dalam hal Subjek Data Pribadi menarik kembali persetujuan pemrosesan Data Pribadi.\n\n(2) Penghentian pemrosesan Data Pribadi sebagaimana dimaksud pada ayat (1) dilakukan paling lambat 3 x 24 (tiga kali dua puluh empat) jam terhitung sejak Pengendali Data Pribadi menerima permintaan penarikan kembdi persetujuan pemrosesan Data Pribadi."
+                },
+                {
+                    "no": 41,
+                    "topik": "Kewajiban memberikan akses kepada Subjek Data Pribadi terhadap Data Pribadi yang diproses & rekam jejak",
+                    "content": "(1) Pengendali Data Pribadi wajib melakukan penundaan dan pembatasan pemrosesan Data Pribadi baik sebagian maupun seluruhnya paling lambat 3 x 24 (tiga kali dua puluh empat) jam terhitung sejak Pengendali Data Pribadi menerima permintaan penundaan dan pembatasan pemrosesan Data Pribadi.\n\n(2) Penundaan dan pembatasan pemrosesan Data Pribadi sebagaimana dimaksud pada ayat (1) dikecualikan . dalam hal: a terdapat ketentuan peraturan perundang- undangan yang tidak dilakukan penundaan dan pemrosesan Data Pribadi;\n\nb. dapat membahayakan keselamatan pihak lain; dan/atau\n\nc. Subjek Data Pribadi terikat perjanjian tertulis dengan Pengendali Data Pribadi yang tidak dilakukan dan pembatasan pemrosesan Data Pribadi.\n\n(3) Pengendali Data Pribadi wajib memberitahukan telah dilaksanakan penundaan dan pembatasan pemrosesan Data Pribadi kepada Subjek Data Pribadi."
+                },
+                {
+                    "no": 42,
+                    "topik": "Kewajiban menolak pemberian akses dalam hal tertentu",
+                    "content": "(1) Pengendali Data Pribadi wajib mengakhiri pemrosesan Data Pribadi dalam hal:\n\na. telah mencapai masa retensi;\n\nb. tujuan pemrosesan Data Pribadi telah tercapai; atau\n\nc. terdapat permintaan dari Subjek Data Pribadi.\n\n(2) Pengakhiran pemrosesan Data Pribadi sebagaimana dimaksud pada ayat (1) dilakukan sesuai dengan ketentuan peraturan perundang-undangan."
+                },
+                {
+                    "no": 43,
+                    "topik": "Kewajiban menunda/membatasi pemrosesan atas permintaan subjek",
+                    "content": "(l) Pengendali Data Pribadi wajib menghapus Data Pribadi dalam hal:\n\na. Data Pribadi tidak lagi diperlukan untuk pencapaian tujuan pemrosesan Data Pribadi;\n\nb. Subjek Data Pribadi telah melakukan penarikan kembali persetujuan pemrosesan Data Pribadi;\n\nc. terdapat permintaan dari Subjek Data Pribadi; atau\n\nd. Data Pribadi diperoleh dan/atau diproses dengan cara melawan hukum. (21 Data Pribadi sebagaimana dimaksud pada ayat (1) dilakukan sesuai dengan ketentuan peraturan perundang-undangan."
+                },
+                {
+                    "no": 44,
+                    "topik": "Kewajiban mengakhiri pemrosesan (jangka waktu terpenuhi, tujuan tercapai, penarikan persetujuan, permintaan subjek)",
+                    "content": "(1) Pengendali Data Pribadi wajib memusnahkan Data Pribadi dalam hal:\n\na. telah habis masa retensinya dan berketerangan dimusnahkan berdasarkarr jadwal retensi arsip; . b. terdapat permintaan dari Subjek Data Pribadi;\n\nc. tidak berkaitan dengan penyelesaian proses hukum suatu perkara; dan/atau\n\nd. Data Pribadi diperoleh dan/atau diproses dengan cara melawan hukum.\n\n(2) Pemusnahan Data Pribadi sebagaimana dimaksud pada ayat (1) dilakukan sesuai dengan ketentuan peraturan perundang-undangan."
+                },
+                {
+                    "no": 45,
+                    "topik": "Kewajiban melakukan penghentian/pemusnahan Data Pribadi (penghapusan) & ketentuannya",
+                    "content": "Pengendali Data Pribadi wajib memberitahukan penghapusan dan/atau pemusnahan Data Pribadi kepada Subjek Data Pribadi."
+                },
+                {
+                    "no": 46,
+                    "topik": "Kewajiban memberitahukan secara tertulis kegagalan pelindungan Data Pribadi (breach) kepada Subjek Data Pribadi & lembaga dalam 3x24 jam",
+                    "content": "(1) Dalam hal terjadi kegagalan Pelindungan Data Pribadi, Pengendali Data Pribadi wajib pemberitahuan secara tertulis paling lambat 3 x 24 (tiga kali dua puluh empat) jam kepada:\n\na. Subjek Data Pribadi; dan\n\nb. lembaga.\n\n(2) Pemberitahuan tertulis sebagaimana dimaksud pada ayat (1) minimal memuat:\n\na. Data Pribadi yang terungkap;\n\nb. kapan dan bagaimana Data Pribadi terungkap; dan\n\nc. upaya penanganan dan pemulihan atas terungkapnya Data Pribadi oleh Pengendali Data Pribadi.\n\n(3) Dalam hal tertentu, Pengendali Data Pribadi wajib memberitahukan kepada masyarakat mengenai kegagalan Pelindungan Data Pribadi."
+                },
+                {
+                    "no": 47,
+                    "topik": "Kewajiban bertanggung jawab atas pemrosesan & menunjukkan pertanggungjawaban pemenuhan prinsip pelindungan",
+                    "content": "Pengendali Data Pribadi wajib bertanggung jawab atas pemrosesan Data Pribadi dan menunjukkan pertanggungiawaban dalam kewajiban pelaksanaan prinsip Pelindungan Data Pribadi."
+                },
+                {
+                    "no": 48,
+                    "topik": "Prosesor Data Pribadi memproses berdasarkan perintah Pengendali Data Pribadi",
+                    "content": "(1) Pengendali Data Pribadi berbentuk badan hukum yang melakukan penggabungan, pemisahan, pengambilalihan, peleburan, atau pembubaran badan hukum wajib pemberitahuan pengalihan Data Pribadi kepada Subjek Data Pribadi.\n\n(2) Pemberitahuan pengalihan Data Pribadi sebagaimana dimaksud pada ayat (1) dilakukan sebelum dan sesudah penggabungan, pemisahan, pengambilalihan, peleburan, atau pembubaran badan hukum.\n\n(3) Dalam hal Pengendali Data Pribadi berbentuk badan hukum melakukan pembubaran atau dibubarkan, penyimpanan, pentransferan, atau pemusnahan Data Pribadi dilaksanakan sesuai dengan ketentuan peraturan perundang-undangan.\n\n(4) Penyimpanan, pentransferan, penghapusan, atau pemusnahan Data Pribadi sebagaimana dimaksud pada ayat (3) diberitahukan kepada Subjek Data Pribadi.\n\n(5) Ketentuan lebih lanjut mengenai tata cara pemberitahuan sebagaimana dimaksud pada ayat (1), ayat (2), dan ayat (4) diatur dalam Peraturan Pemerintah."
+                },
+                {
+                    "no": 49,
+                    "topik": "Tanggung jawab Pengendali atas pemrosesan oleh Prosesor; pelibatan prosesor lain",
+                    "content": "Pengendali Data Pribadi dan/atau Prosesor Data Pribadi wajib melaksanakan perintah lembaga dalam rangka penyelenggaraan Pelindungan Data Pribadi sesuai dengan Undang-Undang ini."
+                },
+                {
+                    "no": 50,
+                    "topik": "Pemrosesan oleh dua atau lebih Pengendali secara bersama (joint controller) & tanggung jawab",
+                    "content": "(1) Kewajiban Pengendali Data Pribadi sebagaimana dimaksud dalam Pasal 30, Pasal 32, Pasal 36, PasaJ42, Pasal 43 ayat (1) huruf a sampai dengan huruf c, Pasal 44 ayat (1) huruf b, Pasal 45, dan Pasal 46 ayat (1) huruf a, dikecualikan untuk:\n\na. kepentingan pertahanan dan keamanan nasional'\n\nb. kepentingan proses penegakan hukum;\n\nc. kepentingan urnum dalam rangka negara; atau\n\nd. kepentingan pengawasan sektor jasa keuangan, moneter, sistem pembayaran, dan stabilitas sistem keuangan yang dilakukan dalam rangka penyelenggaraan negara.\n\n(2) Pengecualian\n\n(2) Pengecualian sebagaimana dimaksud pada ayat (1) dilaksanakan hanya dalam rangka pelaksanaan ketentuan Undang-Undang."
+                },
+                {
+                    "no": 51,
+                    "topik": "Kewajiban Pengendali/Prosesor dalam pemrosesan bersama & perjanjian",
+                    "content": "(1) Dalam hal Pengendali Data Pribadi menunjuk Prosesor Data Pribadi, Prosesor Data Pribadi wajib melakukan pemrosesan Data Pribadi berdasarkan perintah Pengendali Data Pribadi.\n\n(2) Pemrosesan Data Pribadi sebagaimana dimaksud pada ayat (1), dilaksanakan sesuai ketentuan yang diatur dalam Undang-Undang ini.\n\n(3) Pemrosesan Data Pribadi sebagaimana dimaksud pada ayat (1) termasuk dalam tanggung jawab Pengendali Data Pribadi.\n\n(4) Prosesor Data Pribadi dapat melibatkan Prosesor Data Pribadi lain dalam melakukan pemrosesan Data Pribadi.\n\n(5) Prosesor Data Pribadi wajib mendapatkan persetujuan tertulis dari Pengendali Data Pribadi sebelum melibatkan Prosesor Data Pribadi lain sebagaimana dimaksud pada ayat (4).\n\n(6) Dalam hal Prosesor Data Pribadi melakukan pemrosesan Data Pribadi di luar perintah dan tujuan yang ditetapkan Pengendali Data Pribadi, pemosesan Data Pribadi menjadi tanggung jawab Prosesor Data Pribadi."
+                },
+                {
+                    "no": 52,
+                    "topik": "Pelindungan terhadap data anak — persetujuan orang tua/wali, kepentingan terbaik anak",
+                    "content": "Ketentuan mengenai kewajiban Pengendali Data Pribadi sebagaimana dimaksud dalam Pasal 29, Pasal 31, Pasal 35, Pasal 36, Pasal 37, Pasal 38, dan Pasal 39 berlaku juga terhadap Prosesor Data Pribadi."
+                },
+                {
+                    "no": 53,
+                    "topik": "Pelindungan terhadap data penyandang disabilitas — komunikasi yang dapat diakses & dengan persetujuan",
+                    "content": "(1) Pengendali Data Pribadi dan Prosesor Data Pribadi wajib menunjuk pejabat atau petugas yang melaksanakan fungsi Pelindungan Data Pribadi dalam hal:\n\na. pemros(:san Data Pribadi untuk kepentingan pelayanan publik;\n\nb. kegiatan inti Pengendali Data Pribadi memiliki sifat, ruang lingkup, dan/atau tujuan yang memerlukan pemantauan secara teratur dan ' sistematis atas Data Pribadi dengan skala besar; dan\n\nc. kegiatan inti Pengendali Data Pribadi terdiri dari pemrosesan Data Pribadi dalam skala besar untuk Data Pribadi yang bersifat spesifik dan/atau Data Pribadi yang berkaitan dengan tindak pidana.\n\n(2) Pejabat atau petugas yang melaksanakan fungsi Pelindungan Data Pribadi sebagaimana dimaksud pada ayat (1) ditunjuk berdasarkan profesionalitas, pengetahuan mengenai hukum, praktik Pelindungan Data Pribadi, dan kemampuan untuk memenuhi tugas-tugasnya.\n\n(3) Pejabat atau petugas yang melaksanakan fungsi Pelindungan Data Pribadi sebagaimana dimaksud pada ayat (2) dapat berasal dari dalam dan/atau luar Pengendali Data Pribadi atau Prosesor Data Pribadi."
+                }
+            ]
+        },
+        {
+            "nomor": "VII",
+            "judul": "Transfer Data Pribadi",
+            "pasal": [
+                {
+                    "no": 54,
+                    "topik": "Transfer Data Pribadi di dalam wilayah hukum Republik Indonesia",
+                    "content": "(1) Pejabat atau petugas yang melaksanakan fungsi Pelindungan Data Pribadi memiliki tugas paling sedikit: a menginformasikan\n\na. dan memberikan saran kepada Pengendali Data Pribadi atau Frosesor Data Pribadi agar mematuhi ketentuan dalam Undang-Undang ini;\n\nb. memantau dan memastikan kepatuhan terhadap Undang-Undang ini dan kebljakan Pengendali Data Pribadi atau Prosesor Data Pribadi;\n\nc. memberikan saran mengenai penilaian dampak Pelindungan Data Pribadi dan memantau kinerja Pengendali Data Pribadi dan Prosesor Data Pribadi; dan\n\nd. berkoordinasi dan bertindak sebagai narahubung ' untuk isu yang berkaitan dengan pemrosesan Data Pribadi.\n\n(2) Dalam melaksanakan tugas sebagaimana dimaksud pada ayat (l), pejabat atau petugas yang melaksanakan fungsi Pelindungan Data Pribadi memperhatikan risiko terkait pemrosesan Data Pribadi, dengan mempertimbangkan sifat, ruang lingkup, konteks, dan tujuan pemrosesan.\n\n(3) Ketentuan lebih lanjut mengenai pejabat atau petugas yang melaksanakan fungsi Pelindungan Data Pribadi diatur dalam Peraturan Pemerintah."
+                },
+                {
+                    "no": 55,
+                    "topik": "Transfer Data Pribadi kepada Pengendali/Prosesor di dalam wilayah hukum RI",
+                    "content": "(1) Pengendali Data Pribadi dapat melakukan transfer . Data Pribadi kepada Pengendali Data Pribadi lainnya dalam wilayah hukum Negara Republik Indonesia.\n\n(2) Pengendali Data Pribadi yang melakukan transfer Data Pribadi dan yang menerima transfer Data Pribadi wajib melakukan Pelindungan Data Pribadi sebagaimana dimaksud dalam Undang-Undang ini."
+                },
+                {
+                    "no": 56,
+                    "topik": "Transfer Data Pribadi ke luar wilayah hukum RI — syarat tingkat pelindungan setara, perjanjian/safeguards, atau persetujuan subjek",
+                    "content": "(1) Pengendali Data Pribadi dapat melakukan transfer Data Pribadi kepada Pengendali Data Pribadi dan/atau Prosesor Data Pribadi di luar wilayah hukum Negara Republik Indonesia sesuai dengan ketentuan yang diatur dalarn Undang- Undang ini.\n\n(2) Dalam melakukan transfer Data Pribadi sebagaimana dimaksud pada ayat (l), Pengendali Data Pribadi wajib memastikan negara tempat kedudukan Pengendali Data Pribadi dan/atau Prosesor Data Pribadi yang . menerima transfer Data Pribadi memiliki tingkat Pelindungan Data Pribadi yang setara atau lebih tinggi dari yang diatur dalam Undang-Undang ini.\n\n(3) Dalam hal ketentuan sebagaimana dimaksud pada ayat (21 tidak terpenuhi, Pengendali Data Pribadi wajib memastikan terdapat Pelindungan Data Pribadi yang memadai dan bersifat mengikat.\n\n(4) Dalam hal ketentuan sebagaimana dimaksud pada ayat (21 dan ayat (3) tidak terpenuhi, Pengendali Data Pribadi wajib mendapatkan persetujuan Subjek Data Pribadi.\n\n(5) ' Ketentuan lebih lanjut mengenai transfer Data Pribadi diatur dalam Peraturan Pemerintah."
+                }
+            ]
+        },
+        {
+            "nomor": "VIII",
+            "judul": "Sanksi Administratif",
+            "pasal": [
+                {
+                    "no": 57,
+                    "topik": "Sanksi administratif atas pelanggaran kewajiban (peringatan tertulis, penghentian sementara, penghapusan/pemusnahan, denda administratif maks 2% pendapatan tahunan)",
+                    "content": "(1) ' Pelanggaran terhadap ketentuan Pasal 2O ayat (l), Pasal 21, Pasal 24, Pasal 25 ayat (2), Pasal 26ayat(31, Pasal 27, Pasal 28, Pasal 29, Pasal 30, Pasal 31, Pasal 32 ayat (1), Pasal 33, Pasal 34 ayat (1), Pasal 35, Pasal 36, Pasal 37, Pasal 38, Pasal 39 ayat (1), Pasal 4O ayat (1), Pasal 41 ayat (1) dan ayat (3), Pasal 42 ayat (1), Pasal 43 ayat (1), Pasal 44 ayat (1), Pasal 45, Pasal 46 ayat (1) dan ayat (3), Pasal 47, Pasal 48 ayat (l), Pasal 49, Pasal 51 ayat (1) dan ayat (5), Pasal 52, Pasal 53 ayat (l), Pasal 55 ayat (21, dan Pasal 56 ayat (2) sampai dengan ayat (4) dikenai sanksi administratif.\n\n(2) Sanksi administratif sebagaimana dimaksud pada ayat (l) berupa:\n\na. peringatantertulis;\n\nb. penghentian sementara kegiatan pemrosesan Data Pribadi;\n\nc. penghapusan atau pemusnahan Data Pribadi; dan/atau\n\nd. dendaadministratif.\n\n(3) Sanksi administratif berupa denda administratif sebagaimana dimaksud pada ayat (2) huruf d paling tinggi 2 (dua) persen dari perrdapatan tahunan atau . penerimaan tahunan terhadap variabel pelanggaran.\n\n(4) Penjatuhan sanksi administratif sebagaimana dimaksud pada ayat (2) diberikan oleh lembaga.\n\n(5) Ketentuan lebih lanjut mengenai tata cara pengenaan sanksi administratif selagaimana dimaksud pada ayat (3) diatur dalam Peraturan Pemerintah."
+                }
+            ]
+        },
+        {
+            "nomor": "IX",
+            "judul": "Larangan dalam Penggunaan Data Pribadi",
+            "pasal": [
+                {
+                    "no": 58,
+                    "topik": "Pemulihan Data Pribadi/larangan terkait penggunaan (pengantar bab larangan)",
+                    "content": "(1) Pemerintah berperan dalam penyelenggaraan Pelindungan Data Pribadi sesuai dengan ketentuan Undang-Undang ini.\n\n(2) Penyelenggaraan Pelindungan Data Pribadi sebagaimana dimaksud pada ayat (1) dilaksanakan oleh lembaga.\n\n(3) lembaga sebagaimana dimaksud pada ayat (21 ditetapkan oleh Presiden.\n\n(4) ' lembaga sebagaimana dimaksud pada ayat (21 bertanggung jawab kepada Presiden.\n\n(5) Ketentuan lebih lanjut mengenai lembaga sebagaimana dimalsud pada ayat (2) diatur dengan Peraturan Presiden."
+                },
+                {
+                    "no": 59,
+                    "topik": "Larangan memperoleh/mengumpulkan Data Pribadi yang bukan miliknya untuk menguntungkan diri/orang lain secara melawan hukum",
+                    "content": "lembaga sebagaimana dimaksud dalam Pasal 58 ayat (2) melaksanakan:\n\na. perumusan dan penetapan kebijakan dan strategi Pelindungan Data Pribadi yang menjadi panduan bagi ' Subjek Data Pribadi, Pengendali Data Pribadi, dan Pribadi; Prosesor Data\n\nb. pengawasan terhadap penyelenggaraan Pelindungan Data Pribadi;\n\nc. penegakan hukum administratif terhadap pelanggaran Undang-Undang ini; dan\n\nd. fasilitasi penyelesaian sengketa di luar pengadilan."
+                },
+                {
+                    "no": 60,
+                    "topik": "Larangan mengungkapkan Data Pribadi yang bukan miliknya",
+                    "content": "Lembaga sebagaimana dimaksud dalam Pasal 58 ayat (2) berwenang: a.. merumuskan dan menetapkan kebijakan di bidang Pelindungan Data Pribadi;\n\nb. melakukan pengawasan terhadap kepatuhan Pengendali Data Pribadi;\n\nc. menjatuhkan sanksi administratif atas pelanggaran Pelindungan Data Pribadi yang dilakukan Pengendali Data Pribadi dan/atau Prosesor Data Pribadi;\n\nd. membantu aparat penegak hukum dalam penanganan dugaan tindak pidana Data Pribadi sebagaimana dimaksud dalam Undang-Undang ini;\n\ne. bekerja sama dengan lembaga Pelindungan Data Pribadi negara lain dalam rangka penyelesaian dugaan . pelanggaran Pelindungan Data Pribadi lintas negara;\n\nf. melakukan penilaian terhadap pemenuhan persyaratan transfer Data Pribadi ke luar wilayah hukum Negara Republik Indonesia;\n\ng. memberikan perintah dalam rangka tindak lanjut hasil pengawasan kepada Pengendali Data Pribadi dan/atau Prosesor Data Pribadi;\n\nh. melakukan publikasi hasil pelaksanaan pengawasan Pelindungan Data Pribadi sesuai dengan ketentuan peraturan perundang-undangan ;\n\ni. menerima aduan dan/atau laporan tentang dugaan terjadinya pelanggaran Pelindungan Data Pribadi;\n\nj. melakukan dan atas pengaduan, laporan, dan/atau hasil pengawasan terhadap dugaan terjadinya pelanggaran Pelindungan Data Pribadi;\n\nk. memanggil dan menghadirkan Setiap Orang dan/atau Badan Publik yang terkait dengan dugaan pelanggaran Pelindungan Data Pribadi;\n\nl. meminta keterangan, data, Informasi, dan dokumen dari Setiap Orang dan/atau Badan Publik terkait dugaan pelanggaran Pelindungan Data Pribadi;\n\nm. memanggil dan menghadirkan ahli yang diperlukan dalam pemeriksaan dan penelusuran terkait dugaan pelanggaran Pelindungan Data Pribadi; n melakukan pemeriksaan dan penelusuran terhadap sistem elektronik, sarana, ruang, dan/atau tempat yang digunakan Pengendali Data Pribadi dan/atau Prosesor Data Pribadi, termasuk memperoleh akses terhadap data dan/atau menunjuk pihak ketiga; dan o meminta bantuan hukum kepada kejaksaan dalam penyelesaian sengketa Pelindungan Data Pribadi."
+                },
+                {
+                    "no": 61,
+                    "topik": "Larangan menggunakan Data Pribadi yang bukan miliknya",
+                    "content": "Ketentuan mengenai tata cara pelaksanaan wewenang lembaga sebagaimana dimaksud dalam Pasal 60 diatur dalam Peraturan Pemerintah."
+                }
+            ]
+        },
+        {
+            "nomor": "X",
+            "judul": "Pembentukan Pedoman Perilaku Pengendali Data Pribadi",
+            "pasal": [
+                {
+                    "no": 62,
+                    "topik": "Pengendali Data Pribadi dalam lingkup publik & privat menyusun pedoman perilaku pemrosesan",
+                    "content": "(1) Kerja sama internasional dilakukan oleh Pemerintah dengan pemerintah negara lain atau Organisasi Internasional terkait dengan Pelindungan Data Pribadi.\n\n(2) Kerja sama internasional dalam rangka pelaksanaan Undang-Undang ini dilaksanakan sesuai dengan ketentuan peraturan perundang-undangan dan prinsip hukum internasional."
+                }
+            ]
+        },
+        {
+            "nomor": "XI",
+            "judul": "Penyelesaian Sengketa dan Hukum Acara",
+            "pasal": [
+                {
+                    "no": 63,
+                    "topik": "Penyelesaian sengketa pelindungan data pribadi melalui arbitrase, pengadilan, atau lembaga alternatif",
+                    "content": "(1) Masyarakat dapat berperan baik secara langsung maupun tidak langsung dalam mendukung terselenggaranya Pelindungan Data Pribadi.\n\n(2) Pelaksanaan peran sebagaimana dimaksud pada ayat (1) dapat dilakukan melalui pendidikan, pelatihan, advokasi, sosialisasi, dan/atau pengawasan sesuai dengan ketentuan peraturan perundang- undangan."
+                },
+                {
+                    "no": 64,
+                    "topik": "Hukum acara penyelesaian sengketa Data Pribadi mengikuti ketentuan hukum acara",
+                    "content": "(1) Penyelesaian sengketa Data Pribadi dilakukan melalui arbitrase, pengadilan, atau lembaga penyelesaian sengketa alternatif lainnya sesuai dengan ketentuan peraturan perundang-undangan.\n\n(2) Hukum acara yang berlaku dalam penyelesaian sengketa dan/atau proses peradilan Pelindungan Data Pribadi sebagaimana dimaksud pada ayat (1) dilaksanakan berdasarkan hukum acara yang berlaku sesuai dengan ketentuan peraturan perundang- undangan.\n\n(3) Alat bukti yang sah dalam Undang-Undang ini meliputi:\n\na. alat bukti sebagaimana dimaksud dalam hukum acara; dan\n\nb. alat bukti lain berupa informasi elektronik dan/atau dokumen elektronik sesuai dengan ketentuan peraturan perundang-undangan.\n\n(4) Dalam hal diperlukan untuk melindungi Data Pribadi, proses persidangan dilakukan secara tertutup."
+                }
+            ]
+        },
+        {
+            "nomor": "XII",
+            "judul": "Kerja Sama Internasional",
+            "pasal": [
+                {
+                    "no": 65,
+                    "topik": "Kerja sama internasional dalam pelindungan data pribadi (catatan: penomoran lihat naskah resmi)",
+                    "content": "(1) Setiap Orang dilarang secara melawan hukum memperoleh atau mengumpulkan Data Pribadi yang bukan miliknya dengan maksud untuk menguntungkan diri sendiri atau orang lain yang dapat mengakibatkan kerugian Subjek Data Pribadi.\n\n(2) Setiap Orang dilarang secara melawan hukum mengungkapkan Data Pribadi yang bukan miliknya.\n\n(3) Setiap Orang dilarang secara melawan hukum menggunakan Data Pribadi yang bukan miliknya."
+                }
+            ]
+        },
+        {
+            "nomor": "XIII",
+            "judul": "Peran Pemerintah dan Masyarakat",
+            "pasal": [
+                {
+                    "no": 66,
+                    "topik": "Peran pemerintah dan masyarakat dalam pelindungan data pribadi (catatan: penomoran lihat naskah resmi)",
+                    "content": "Setiap Orang dilarang membuat Data Pribadi palsu atau memalsukan Data Pribadi dengan maksud rrntuk diri sendiri atau orang lain yang dapat mengakibatkan kerugian bagi orang lain."
+                }
+            ]
+        },
+        {
+            "nomor": "XIV",
+            "judul": "Ketentuan Pidana",
+            "pasal": [
+                {
+                    "no": 67,
+                    "topik": "Pidana atas perbuatan memperoleh/mengumpulkan, mengungkapkan, atau menggunakan Data Pribadi yang bukan miliknya secara melawan hukum (Pasal 65 ayat (1),(2),(3)) — pidana penjara & denda",
+                    "content": "(1) Setiap Orang yang dengan sengaja dan melawan hukum memperoleh atau mengumpulkan Data Pribadi yang bukan mililoeya dengan maksud untuk menguntungkan diri sendiri atau orang lain yang dapat mengakibatkan kerugian Subjek Data Pribadi sebagaimana dimaksud dalam Pasal 65 ayat (1) dipidana dengan pidana penjara paling lama 5 (lima) tahun dan/atau pidana denda paling banyak Rp5.000.000.000,00 (lima miliar rupiah).\n\n(2) Setiap Orang yang dengan sengaja dan melawan hukum mengunglapkan Data Pribadi yang bukan miliknya sebagaimana dimaksud dalam Pasal 65 ayat (2) dipidana dengan pidana penjara paling lama 4 (empat) tahun dan/atau pidana denda paling banyak Rp4.000.000.000,00 (empat miliar rupiah).\n\n(3) Setiap Orang yang dengan senqaja dan melawan hukum menggunakan Data Pribadi yang bukan miliknya sebagaimana dimaksud dalam Pasal 65 ayat (3) dipidana dengan pidana penjara paling lama 5 (lima) tahun dan/atau pidana denda paling banyak Rp5.00O.OOO.000,00 (lima miliar rupiah)."
+                },
+                {
+                    "no": 68,
+                    "topik": "Pidana atas membuat Data Pribadi palsu atau memalsukan Data Pribadi untuk menguntungkan diri/orang lain yang merugikan",
+                    "content": "Setiap Orang yang dengan sengaja membuat Data Pribadi palsu atau memalsukan Data Pribadi dengan maksud untuk menguntrrngkan diri sendiri atau orang lain yang dapat mengakibatkan kerugian bagi orang lain sebagaimana dimaksud dalam Pasal 66 .tipidana dengan pidana penjara paling tama 6 (enam) tahun dan/atau pidana denda paling banyak Rp6.0OO. 000.000,00 (enam miliar rupiah)."
+                },
+                {
+                    "no": 69,
+                    "topik": "Pidana tambahan: perampasan keuntungan/aset & pembayaran ganti rugi",
+                    "content": "Selain dijatuhi pidana ssfagaimana dimaksud dalam Pasal 67 dan Pasal 68 juga dapat dijatuhi pidana tambahan berupa perampasan keuntungan dan/atau harta kekayaan yang diperoleh atau hasil dari tindak pidana dan pembayaran ganti kerugian."
+                },
+                {
+                    "no": 70,
+                    "topik": "Pertanggungjawaban pidana korporasi & pidana denda terhadap korporasi (maksimum, pidana tambahan)",
+                    "content": "(1) Dalam hal tindak pidana sebagaimana dimaksud dalam Pasal 67 dan Pasal 68 dilakukan oleh Korporasi, pidana dapat dljatuhkan kepada pengurus, pemegang kendali, pemberi perintah, pemilik manfaat, dan/atau Korporasi.\n\n(2) Pidana yang dapat dijatuhkan terhadap Korporasi hanya pidana denda.\n\n(3) Pidana denda yang dijatuhkan kepada Korporasi paling banyak 10 (sepuluh) kali dari maksimal pidana denda yang diancamkan.\n\n(4) Selain dijatuhi pidana denda sebagaimana dimaksud pada ayat (2), Korporasi dapat dijatuhi pidana ' tambahan berupa:\n\na. perampasan keuntungan dan/atau harta kekayaan yang diperoleh atau hasil dari tindak pidana;\n\nb. pembekuan seluruh atau sebagian usaha Korporasi;\n\nc. pelarangan permanen melakukan perbuatan tertentu;\n\nd. penutupan seluruh atau sebagian tempat usaha dan/atau kegiatan Korporasi;\n\ne. melaksanakan kewajiban yang telah dilalaikan;\n\nf. pembayaran ganti kerugian;\n\ng. pencabutan izin; dan/atala\n\nh. pembubaranKorporasi."
+                }
+            ]
+        },
+        {
+            "nomor": "XV",
+            "judul": "Ketentuan Peralihan",
+            "pasal": [
+                {
+                    "no": 71,
+                    "topik": "Penyesuaian pemrosesan Data Pribadi terhadap ketentuan UU ini dalam jangka waktu paling lama 2 tahun sejak diundangkan",
+                    "content": "(1) Dalam hal pengadilan menjatuhkan putusan pidana denda, terpidana diberikan jangka waktu 1 (satu) bulan sejak putusan telah memperoleh kekuatan hukum tetap untuk membayar denda tersebut.\n\n(2) Dalam hal terdapat alasan kuat, jangka waktu sebagaimana dimaksud pada ayat (1) dapat diperpanjang untuk waktu paling lama I (satu) bulan.\n\n(3) Dalam hal terpidana tidak membayar pidana denda dalam jangka waktu sebagaimana dimaksud pada ayat (1) atau ayat (2) maka harta kekayaan atau pendapatan terpidana dapat disita dan dilelang oleh jaksa untuk melunasi pidana denda yang tidak dibayar.\n\n(4) Dalam hal penyitaan dan pelelangan harta kekayaan atau pendapatan sebagaimana dimaksud pada ayat (3) tidak cukup atau tidak untuk dilaksanakan, pidana denda yang tidak dibayar diganti dengan pidana penjara paling lama sebagaimana diancamkan untuk tindak pidana yang bersangkutan.\n\n(5) Lamanya pidana penjara sebagaimspa dimaksud pada ayat (4) yang ditentukan oleh hakim, dicantumkan dalam putusan pengadilan."
+                }
+            ]
+        },
+        {
+            "nomor": "XVI",
+            "judul": "Ketentuan Penutup",
+            "pasal": [
+                {
+                    "no": 72,
+                    "topik": "Lembaga penyelenggara pelindungan data pribadi ditetapkan oleh Presiden",
+                    "content": "(1) Dalam hal penyitaan dan pelelangan harta kekayaan atau pendapatan sebagaimana dimaksud dalam Pasal 71 ayat (4) dilakukan terhadap terpidana Korporasi dan tidak cukup untuk melunasi pidana . denda, Korporasi dikenakan pidana pengganti berupa pembekuan sebagian atau seluruh kegiatan usaha Korporasi untuk jangka waktu paling lama 5 (lima) tahun.\n\n(2) I.arnanya pembekuan s6lagian atau seluruh kegiatan usaha Korporasi sebagaimana dimaksud pada ayat (1) yang ditentukan oleh hakim, dicantumkan dalam putusan pengadilan."
+                },
+                {
+                    "no": 73,
+                    "topik": "Pelaksanaan ketentuan UU diatur lebih lanjut dengan Peraturan Pemerintah (paling lama 2 tahun)",
+                    "content": "Ketentuan sebagaimana dimaksud dalam Pasal 7L dan Pasal 72 juga berlaku dalam hal penjatuhan pidana tambahan berupa pembayaran ganti kerugian."
+                },
+                {
+                    "no": 74,
+                    "topik": "Ketentuan peraturan perundang-undangan terkait Data Pribadi tetap berlaku sepanjang tidak bertentangan",
+                    "content": "Pada saat Undang-Undang ini mulai berlaku, Pengendali Data Pribadi, Prosesor Data Pribadi, dan pihak lain yang terkait dengan pemrosesan Data Pribadi, wajib menyesuaikan dengan ketentuan pemrosesan Data Pribadi berdasarkan Undang-Undang ini paling lama 2 (dua) tahun sejak Undang-Undang ini diundangkan."
+                },
+                {
+                    "no": 75,
+                    "topik": "Penyesuaian peraturan pelaksanaan",
+                    "content": "Pada saat Undang-Undang ini mulai berlaku, semua ketentuan peraturan perundang-undangan yang mengatur mengenai Pelindungan Data Pribadi, dinyatakan masih tetap berlaku sepanjang tidak bertentangan dengan ketentuan dalam Undang-Undang ini."
+                },
+                {
+                    "no": 76,
+                    "topik": "UU mulai berlaku pada tanggal diundangkan (17 Oktober 2022)",
+                    "content": "Undang-Undang ini mulai berlaku pada tanggal diundangkan."
+                }
+            ]
         }
-      ]
-    },
-    {
-      "nomor": "III",
-      "judul": "Jenis Data Pribadi",
-      "pasal": [
-        {
-          "no": 3,
-          "topik": "Lingkup data pribadi",
-          "content": "Undang-Undang ini berasaskan : a.\n\nb. kepastian hukum;\n\nc. kepentingan umum;\n\nd. kemanfaatan;\n\ne. kehati-hatian;\n\nf. keseimbangan;\n\ng. pertanggungjawaban; dan\n\nh. kerahasiaan."
-        },
-        {
-          "no": 4,
-          "topik": "Data Pribadi yang bersifat spesifik (sensitif) dan Data Pribadi yang bersifat umum",
-          "content": "(l) Data Pribadi terdiri atas:\n\na. Data Pribadi yang bersifat spesifik; dan\n\nb. Data Pribadi yang bersifat umum. l2l Data Pribadi yang bersifat spesifik sebagaimana dimaksud pada ayat (l) huruf a meliputi: . a. data dan informasi kesehatan;\n\nb. data biometrik;\n\nc. data genetika;\n\nd. catatan kejahatan;\n\ne. data anak;\n\nf. data ker.rangan pribadi; dan/ atau\n\ng. data lainnya sesuai dengan ketentuan peraturan perundang-undangan.\n\n(3) Data Pribadi yang bersifat umum sebagaimana dimaksud pada ayat (l) huruf b meliputi:\n\na. nama lengkap;\n\nb. jenis kelamin; c.\n\nd. agama;\n\ne. status perkawinan; dan/ atau untuk\n\nf. Data Pribadi yang dikombinasikan mengidentifikasi seseorang."
-        }
-      ]
-    },
-    {
-      "nomor": "IV",
-      "judul": "Hak Subjek Data Pribadi",
-      "pasal": [
-        {
-          "no": 5,
-          "topik": "Hak atas informasi tentang kejelasan identitas, dasar kepentingan hukum, akuntabilitas pemrosesan",
-          "content": "Subjek Data Pribadi berhak mendapatkan Informasi tentang kejelasan identitas, dasar kepentingan hukum, tujuan permintaan dan penggu.naan Data Pribadi, dan akuntabilitas pihak yang meminta Data Pribadi."
-        },
-        {
-          "no": 6,
-          "topik": "Hak melengkapi, memperbarui, dan/atau memperbaiki kesalahan/ketidakakuratan Data Pribadi (koreksi)",
-          "content": "Subjek Data Pribadi berhak melengkapi, memperbarui, dan/atau memperbaiki kesalahan dan/atau ketidakakuratan Data Pribadi tentang dirinya sesuai dengan tujuan pemrosesan Data Pribadi."
-        },
-        {
-          "no": 7,
-          "topik": "Hak mendapatkan akses dan salinan Data Pribadi",
-          "content": "Subjek Data Pribadi berhak mendapatkan akses dan memperoleh salinan Data Pribadi tentang dirinya sesuai dengan ketentuan peraturan perundang-undangan."
-        },
-        {
-          "no": 8,
-          "topik": "Hak mengakhiri pemrosesan, menghapus, dan/atau memusnahkan Data Pribadi (penghapusan)",
-          "content": "Subjek Data Pribadi berhak untuk mengakhiri pemrosesan, menghapus, dan/ atau memusnahkan Data Pribadi tentang dirinya sesuai dengan ketentuan peraturan perundang-undangan."
-        },
-        {
-          "no": 9,
-          "topik": "Hak menarik kembali persetujuan pemrosesan Data Pribadi",
-          "content": "Subjek Data Pribadi berhak menarik kembali persetujuan pemrosesan Data Pribadi tentang dirinya yang telah diberikan kepada Pengendali Data Pribadi."
-        },
-        {
-          "no": 10,
-          "topik": "Hak mengajukan keberatan atas tindakan pengambilan keputusan yang hanya didasarkan pada pemrosesan otomatis (termasuk profiling)",
-          "content": "(1) Subjek Data Pribadi berhak untuk mengajukan keberatan atas tindakan pengambilan keputusan yang hanya didasarkan pada pemrosesan secara otomatis, termasuk pemrofilan, yang menimbulkan akibat hukum atau berdampak signifrkan pada Subjek Data Pribadi.\n\n(2) Ketentuan lebih lanjut mengenai pengajuan keberatan atas pemrosesan secara otomatis sebagaimana dimaksud pada ayat (l) diatur dalam Peraturan Pemerintah."
-        },
-        {
-          "no": 11,
-          "topik": "Hak menunda atau membatasi pemrosesan Data Pribadi secara proporsional",
-          "content": "Subjek Data Pribadi berhak menunda atau membatasi pemrosesan Data Pribadi secara sesual dengan tujuan pemrosesan Data Pribadi."
-        },
-        {
-          "no": 12,
-          "topik": "Hak menuntut dan menerima ganti rugi atas pelanggaran pemrosesan Data Pribadi",
-          "content": "(I) Subjek Data Pribadi berhak menggugat dan menerima ganti rugi atas pelanggaran pemrosesan Data Pribadi tentang dirinya sesuai dengan ketentuan peraturan perundang-undangan.\n\n(2) Ketentuan lebih lanjut mengenai pelanggaran pemrosesan Data Pribadi dan tata cara pengenaan ganti rugi sebagaimana dimaksud pada ayat (1) diatur dalam Peraturan Pemerintah."
-        },
-        {
-          "no": 13,
-          "topik": "Hak mendapatkan dan/atau menggunakan Data Pribadi dari Pengendali dalam bentuk yang dapat dibaca/dipindahkan (portabilitas) & pengecualian hak",
-          "content": "(1) Subjek Data Pribadi berhak mendapatkan dan/atau menggunakan Data Pribadi tentang dirinya dari Pengendali Data Pribadi dalam bentuk yang sesuai dengan struktur dan/ atau format yang lazim digunakan atau dapat dibaca oleh sistem elektronik.\n\n(2) Subjek Data Pribadi berhak dan Data Pribadi tentang dirinya ke Pengendali Data Pribadi lainnya, sepanjang sistem yang digunakan dapat saling berkomunikasi secara aman sesuai dengan prinsip Pelindungan Data Pribadi berdasarkan Undang-Undang ini.\n\n(3) Ketentuan lebih lanjut mengenai hak Subjek Data Pribadi untuk menggunakan dan Data Pribadi sebagaimana dimaksud pada ayat (2) diatur dalam Peraturan Pemerintah."
-        },
-        {
-          "no": 14,
-          "topik": "Pelaksanaan hak Subjek Data Pribadi diajukan melalui permohonan tertulis (lisan); ketentuan lebih lanjut",
-          "content": "Pelaksanaan hak Subjek Data Pribadi sebagaimana dimaksud dalam Pasal 6 sampai dengan Pasal 11 diajukan melalui permohonan tercatat yang disampaikan secara elektronik atau nonelektronik kepada Pengendali Data Pribadi."
-        },
-        {
-          "no": 15,
-          "topik": "Pengecualian/pembatasan hak Subjek Data Pribadi (kepentingan pertahanan, keamanan, penegakan hukum, kepentingan umum, pengawasan sektor jasa keuangan/moneter, statistik/penelitian)",
-          "content": "(1) Hak-hak Subjek Data Pribadi sebagaimana dimaksud dalam Pasal 8, Pasal 9, Pasal 1O ayat (1), Pasal 11, dan Pasal 13 ayat (1) dan ayat (2) dikecualikan untuk:\n\na. kepentingan pertahanan dan keamanan nasional;\n\nb. kepentingan proses penegakan hukum;\n\nc. kepentingan umum dalam rangka penyelenggaraan negara;\n\nd. kepentingan pengawasan sektor jasa keuangan, moneter, sistem pembayaran, dan stabilitas sistem keuangan yang dilakukan dalam rangka penyelenggaraan negara; atau ' e. kepentingan statistik dan penelitian ilmiah.\n\n(2) Pengecualian sebagaimana dimaksud pada ayat (1) dilaksanakan hanya dalam rangka pelaksanaan ketentuan Undang-Undang."
-        }
-      ]
-    },
-    {
-      "nomor": "V",
-      "judul": "Pemrosesan Data Pribadi",
-      "pasal": [
-        {
-          "no": 16,
-          "topik": "Lingkup pemrosesan (perolehan, pengumpulan, pengolahan, penganalisisan, penyimpanan, perbaikan, penampilan, pengumuman, transfer, penyebarluasan, penghapusan/pemusnahan) & prinsip pemrosesan",
-          "content": "(1) Pemrosesan Data Pribadi meliputi: ' a. pemerolehan dan pengumpulan;\n\nb. pengolahan dan penganalisisan;\n\nc. penyimpanan;\n\nd. perbaikan dan pembaruan;\n\ne. penampilan, pengumuman, transfer, penyebarluasan, atau pengungkapan; dan/ atau\n\nf. penghapusan atau pemusnahan.\n\n(2) Pemrosesan Data Pribadi sebagaimana dimaksud pada ayat (l) dilakukan sesuai dengan prinsip Pelindungan Data Pribadi meliputi:\n\na. Data Pribadi dilakukan secara terbatas dan spesifik, sah secara hukum, dan transparan;\n\nb. pemrosesan Data Pribadi dilakukan sesuai dengan tujuannya;\n\nc. pemrosesan Data Pribadi dilakukan dengan menjamin hak Subjek Data Pribadi;\n\nd. pemrosesan Data Pribadi dilakukan secara akurat, lengkap, tidak menyesatkan, mutakhir, dan dapat dipertan ggungi awabkan ;\n\ne. pemrosesan Data Pribadi dilakukan dengan melindungi keamanan Data Pribadi dari pengaksesan yang tidak sah, pengungkapan yang tidak sah, pengubahan yar:g tidak sah, perusakan, dan/atau penghilangan Data Pribadi;\n\nf. pemrosesan Data Pribadi dilakukan dengan memberitahukan tujuan dan aktivitas pemrosesan, serta kegagalan Pelindungan Data Pribadi;\n\ng. Data Pribadi dimusnahkan dan/atau dihapus setelah masa retensi beralhir atau berdasarkan permintaan Subjek Data Pribadi, kecuali ditentukan lain oleh peraturan perundang- undangan; dan\n\nh. pemrosesan Data Pribadi dilakukan secara bertanggung jawab dan dapat dibulrtikan secara jelas.\n\n(3) Ketentuan lebih lanjut mengenai pelaksanaan pemrosesan Data Pribadi sebagaimana dimaksud pada ayat (1) diatur dalam Peraturan Pemerintah."
-        },
-        {
-          "no": 17,
-          "topik": "Kewajiban pemrosesan sesuai prinsip pelindungan data pribadi",
-          "content": "(l) Pemasangan alat pemroses atau pengolah data visual di tempat umum dan/ atau pada fasilitas pelayanan publik dilakukan dengan ketentuan:\n\na. untuk tujuan keamanan, pencegahan bencana, lalu lintas atau dan/atau pengumpulan, analisis, dan pengaturan Informasi lalu lintas;\n\nb. harus Informasi pada area yang telah dipasang alat pemroses atau pengolah data visual; dan\n\nc. tidak digunakan untuk seseorang.\n\n(2) Ketentuan sebagaimana dimaksud pada ayat (1) huruf b dan huruf c dikecualikan untuk pencegahan tindak pidana dan proses penegakan hukum sesuai dengan ketentuan peraturan perundang-undangan."
-        },
-        {
-          "no": 18,
-          "topik": "Pemrosesan untuk tujuan tertentu yang sah",
-          "content": "(1) Pemrosesan Data Pribadi dapat dilalrukan oleh 2 (dua) atau lebih Pengendali Data Pribadi.\n\n(2) Dalam hal Pemrosesan Data Pribadi dilakukan oleh 2 (dua) atau lebih Pengendali Data Pribadi harus memenuhi syarat minimal:\n\na. terdapat perjanjian antara para Pengendali Data Pribadi yang memuat peran, tanggung jawab, dan hubungan antar-Pengendali Data Pribadi;\n\nb. terdapat tujuan yang saling berkaitan dan cara pemrosesan Data Pribadi yang ditentukan secara bersama; dan\n\nc. terdapat narahubung yang ditunjuk secara bersama-sama."
-        },
-        {
-          "no": 19,
-          "topik": "Pemberitahuan kepada Subjek Data Pribadi sebelum/selama pemrosesan",
-          "content": "Pengendali Data Pribadi dan Prosesor Data Pribadi meliputi:\n\na. Setiap Orang;\n\nb. Badan Publik; dan\n\nc. Organisasi Internasional."
-        },
-        {
-          "no": 20,
-          "topik": "Dasar pemrosesan Data Pribadi (persetujuan; pemenuhan kontrak; kewajiban hukum; kepentingan vital; tugas/kewenangan publik; kepentingan sah)",
-          "content": "(1) Pengendali Data Pribadi wajib memiliki dasar pemrosesan Data Pribadi.\n\n(2) Dasar pernmsesan Data Pribadi sebagaimana dimaksud pada ayat (1) meliputi:\n\na. persetujuan yang sah secara eksplisit dari Subjek Data Pribadi untuk 1 (sahr) atau beberapa tujuan tertentu yang telah disampait<an oleh Pengendali Data Pribadi kepada Subjek Data Pribadi;\n\nb. pemenuhan kewajiban perjanjian dalam hal Subjek Data Pribadi merupakan salah satu pihak atau untuk memenuhi permintaan Subjek Data Pribadi pada saat akan melalrukan pedanjian;\n\nc. pemenuhan kewajiban hukum dari Pengendali Data Pribadi sesuai dengan ketentuan peraturan perundang-undangan;\n\nd. pemenuhan pelindungan kepentingan vital Subjek Data Pribadi;\n\ne. pelaksanaan tugas dalam rangka kepentJngan umum, pelayanan publik, atau pelaksanaan . kewenangan Pengendali Data Pribadi berdasarkan peraturan perundang-undangan; dan/atau\n\nf. pemenuhan kepentingan yang sah lainnya dengan memperhatikan tujuan, kebututran, dan keseimbangan kepentingan Pengendali Data Pribadi dan hak Subjek Data Pribadi."
-        },
-        {
-          "no": 21,
-          "topik": "Penyampaian informasi saat meminta persetujuan (legalitas, tujuan, jenis & relevansi, retensi, hak subjek, jangka waktu pemrosesan)",
-          "content": "(1) Dalam hal pemrosesan Data Pribadi berdasarkan persetujuan sebagaimana dimaksud dalam Pasal 2O ayat (21 huruf a, Pengendali Data Pribadi wajib menyampaikan Informasi mengenai:\n\na. legalitas dari pemrosesan Data Pribadi;\n\nb. tujuan pemrosesan Data Pribadi;\n\nc. jenis dan relevansi Data Pribadi yang akan diproses;\n\nd. jangka waktu retensi dokumen yang memuat Data Pribadi;\n\ne. rincian mengenai Informasi yang\n\nf. jangka waktu pemrosesan Data Pribadi; dan\n\nc. hak Subjek Data Pribadi. REPUBLIK INOONESIA\n\n(2) Dalam hal terdapat perubahan Informasi sebagaimana dimaksud pada ayat (1), Pengendali Data Pribadi wajib . memberitahukan kepada Subjek Data Pribadi sebelum terjadi perubahan Informasi."
-        },
-        {
-          "no": 22,
-          "topik": "Persetujuan tertulis/terekam, dalam Bahasa Indonesia, dapat dibedakan dari hal lain",
-          "content": "(1) Persetujuan pemrosesan Data Pribadi dilakukan melalui persetujuan tertulis atau terekam.\n\n(2) Persetujuan sebagaimana dimaksud pada ayat (1) dapat disampaikan secara elektronik atau nonelektronik.\n\n(3) Persetujuan sebagaimana dimaksud pada ayat (1) mempunyai kekuatan hukum yang sama.\n\n(4) Dalam hal persetujuan sebagaimana dimaksud pada ayat (1) memuat tujuan lain, permintaan persetujuan harus memenuhi ketentuan:\n\na. dapat dibedakan secara jelas dengan hal lainnya;\n\nb. dibuat dengan forrnat yang dapat dipahami dan mudah diakses; dan\n\nc. menggunalan bahasa yang sederhana dan jelas.\n\n(5) Persetujuan yang tidak memenuhi ketentuan sebagaimana dimaksud pada ayat (1) dan ayat (4) dinyatakan batal demi hukum."
-        },
-        {
-          "no": 23,
-          "topik": "Persetujuan yang batal/tidak sah (penyampaian tujuan tidak terpenuhi)",
-          "content": "Klausul perjanjian yang di dalamnya terdapat permintaan pemrosesan Data Pribadi yang tidak memuat persetujuan yang sah secara eksplisit dari Subjek Data Pribadi dinyatakan batal demi hukum."
-        }
-      ]
-    },
-    {
-      "nomor": "VI",
-      "judul": "Kewajiban Pengendali Data Pribadi dan Prosesor Data Pribadi dalam Pemrosesan Data Pribadi",
-      "pasal": [
-        {
-          "no": 24,
-          "topik": "Kewajiban Pengendali menunjukkan keabsahan/persetujuan pemrosesan",
-          "content": "Dalam melakukan pemrosesan Data Pribadi, Pengendali Data Pribadi wajib menunjukkan bukti persetujuan yang telah diberikan oleh Subjek Data Pribadi."
-        },
-        {
-          "no": 25,
-          "topik": "Kewajiban menyampaikan informasi legalitas, tujuan, dan akuntabilitas saat memperoleh persetujuan",
-          "content": "(1) Pemrosesan Data Pribadi anak secara khusus.\n\n(2) Pemrosesan Data Pribadi anak sebagaimana dimaksud pada ayat (1) wajib mendapat persetujuan dari orang tua anak dan/ atau wali anak sesuai dengan ketentuan peraturan perundang-undangan."
-        },
-        {
-          "no": 26,
-          "topik": "Kewajiban menyampaikan informasi saat pemrosesan tidak berdasarkan persetujuan & perubahan informasi",
-          "content": "(1) Pemrosesan Data Pribadi disabilitas ' diselenggarakan secara khusus.\n\n(2) Pemrosesan Data Pribadi penyandang disabilitas sebagaimana dimaksud pada ayat (1) dilakukan melalui komunikasi dengan tertentu sesuai dengan ketentuan cara undangan.\n\n(3) Pemrosesalr Data Pribadi penyandang disabilitas sebagaimana dimaksud pada ayat (2) wajib mendapat persetujuan dari penyandang disabilitas dan/ atau wali penyandang disabilitas sesuai dengan ketentuan peraturan perundang-undangan."
-        },
-        {
-          "no": 27,
-          "topik": "Kewajiban pemrosesan sesuai tujuan",
-          "content": "Pengendali Data Pribadi wajib melakukan pemrosesan Data Pribadi secara terbatas dan spesifik, sah secara hukum, dan transparan."
-        },
-        {
-          "no": 28,
-          "topik": "Kewajiban menjaga kerahasiaan Data Pribadi",
-          "content": "Pengendali Data Pribadi wajib melakukan pemrosesan Data Pribadi sesuai dengan tujuan pemrosesan Data Pribadi."
-        },
-        {
-          "no": 29,
-          "topik": "Kewajiban melakukan pengawasan terhadap setiap pihak yang terlibat pemrosesan",
-          "content": "(1) Pengendali Data Pribadi wajib memastikan akurasi, kelengkapan, dan konsistensi Data Pribadi sesuai dengan ketentuan peraturan perundang-undangan.\n\n(2) Dalam memastikan akurasi, kelengkapan, dan konsistensi Data Pribadi sebagaimana dimaksud pada ayat (l) Pengendali Data Pribadi wajib melakukan verifikasi."
-        },
-        {
-          "no": 30,
-          "topik": "Kewajiban melindungi & memastikan keamanan Data Pribadi (pencegahan akses tidak sah)",
-          "content": "(1) ' Pengendali Data Pribadi wajib memperbarui dan/ atau memperbaiki kesalahan dan/atau ketidakakuratan Data Pribadi paling lambat 3 x 24 (tiga kali dua puluh empat) jam terhitung sejak Pengendali Data Pribadi menerima permintaan pembaruan dan/atau perbaikan Data Pribadi.\n\n(2) Pengendali Data Pribadi wajib memberitahukan hasil pembaruan dan/atau perbaikan Data Pribadi kepada Subjek Data Pribadi."
-        },
-        {
-          "no": 31,
-          "topik": "Kewajiban menjaga keamanan dengan menyusun & menerapkan langkah teknis operasional/menjamin keamanan",
-          "content": "Pengendali Data Pribadi wajib melakukan perekaman terhadap seluruh kegiatan pemrosesan Data Pribadi."
-        },
-        {
-          "no": 32,
-          "topik": "Kewajiban menjaga Data Pribadi dari pemrosesan tidak sah",
-          "content": "(1) Pengendali Data Pribadi wajib memberikan akses kepada Subjek Data Pribadi terhadap Data Pribadi yang diproses beserta rekam jejak pemrosesan Data Pribadi sesuai dengan jangka waktu penyimpanan Data Pribadi.\n\n(2) Akses sebagaimana dimaksud pada ayat (1) diberikan paling lambat 3 x 24 (tiga kali dua puluh empat) jam terhitung sejak Pengendali Data Pribadi menerima permintaan akses."
-        },
-        {
-          "no": 33,
-          "topik": "Kewajiban mencegah Data Pribadi diakses secara tidak sah",
-          "content": "Pengendali Data Pribadi wajib menolak memberikan akses perubahan terhadap Data Pribadi kepada Subjek Data Pribadi dalam hal:\n\na. membahayakan keamanan, kesehatan fisik, atau kesehatan mental Subjek Data Pribadi dan/ atau orang lain;\n\nb. berdampak pada pengungkapan Data Pribadi milik orang lain; dan/ atau c bertentangan dengan kepentingan pertahanan dan keamanan nasional."
-        },
-        {
-          "no": 34,
-          "topik": "Kewajiban melakukan penilaian dampak pelindungan data pribadi (DPIA) untuk pemrosesan berisiko tinggi",
-          "content": "(1) Pengendali Data Pribadi wajib melakukan penilaian dampak Pelindungan Data Pribadi dalam hal pemrosesan Data Pribadi memiliki potensi risiko tinggi terhadap Subjek Data Pribadi.\n\n(2) Pemrosesan Data Pribadi memiliki potensi risiko tinggi sebagaimana dimaksud pada ayat (1) meliputi:\n\na. pengambilan keputusan secara otomatis yang memiliki akibat hukum atau dampak yang . signifikan terhadap Subjek Data Pribadi;\n\nb. pemrosesan atas Data Pribadi yang bersifat spesifik;\n\nc. pemrosesan Data Pribadi dalam skala besar;\n\nd. pemrosesan Data Pribadi untuk kegiatan evaluasi, penskoran, atau pemantauan yang sistematis terhadap Subjek Data Pribadi;\n\ne. pemrosesan Data Pribadi untuk kegiatan pencocokan atau penggabungan sekelompok data;\n\nf. penggunaan teknologi baru dalam pemrosesan Data Pribadi; dan/ atau\n\ng. pemrosescrn Data Pribadi yang membatasi pelaksanaan hak Subjek Data Pribadi.\n\n(3) Ketentuan lebih lanjut mengenai penilaian dampak Pelindungan Data Pribadi diatur dalam Peraturan Pemerintah."
-        },
-        {
-          "no": 35,
-          "topik": "Kewajiban menjaga Data Pribadi dengan penyusunan & penerapan langkah teknis dan/atau pencegahan kegagalan pelindungan",
-          "content": "Pengendali Data Pribadi wajib melindungi dan memastikan keamanan Data Pribadi yang diprosesnya, dengan melakukan: a.' penyusunan dan penerapan langkah teknis operasional untuk melindungi Data Pribadi dari gangguan pemrosesan Data Pribadi yang bertentangan dengan ketentuan peraturan perundang-undangan; dan\n\nb. penentuan tingkat keamanan Data Pribadi dengan memperhatikan sifat dan risiko dari Data Pribadi yang harus dilindungi dalam pemrosesan Data Pribadi."
-        },
-        {
-          "no": 36,
-          "topik": "Kewajiban melakukan perekaman terhadap seluruh kegiatan pemrosesan (catatan pemrosesan/RoPA)",
-          "content": "Dalam melakukan pemrosesan Data Pribadi, Pengendali Data Pribadi wajib menjaga kerahasiaan Data Pribadi."
-        },
-        {
-          "no": 37,
-          "topik": "Kewajiban menghentikan pemrosesan jika subjek menarik persetujuan",
-          "content": "Pengendali Data Pribadi wajib melakukan pengawasan terhadap setiap pihak yang terlibat dalam pemrosesan Data Pribadi di bawah kendali Pengendali Data Pribadi."
-        },
-        {
-          "no": 38,
-          "topik": "Kewajiban melindungi Data Pribadi dari pemrosesan yang melanggar ketentuan",
-          "content": "Pengendali Data Pribadi wajib melindungi Data Pribadi dari pemrosesan yang tidak sah."
-        },
-        {
-          "no": 39,
-          "topik": "Pengecualian kewajiban memberitahukan tujuan & aktivitas pemrosesan (kepentingan tertentu)",
-          "content": "(1) Pengendali Data Pribadi wajib mencegah Data Pribadi diakses secara tidak sah.\n\n(2) Pencegahan sebagaimana dimaksud pada ayat (1) dilakukan dengan sistem keamanan terhadap Data Pribadi yang diproses dan/ atau memproses Data Pribadi sistem elektronik secara andal, aman, dan bertanggung jawab.\n\n(3) Pencegahan sebagaimana dimaksud pada ayat (21 dilakukan sesuai dengan ketentuan peraturan perundang-undangan."
-        },
-        {
-          "no": 40,
-          "topik": "Kewajiban memperbarui & memverifikasi keakuratan Data Pribadi",
-          "content": "(1) Pengendali Data Pribadi wajib menghentikan pemrosesan Data Pribadi dalam hal Subjek Data Pribadi menarik kembali persetujuan pemrosesan Data Pribadi.\n\n(2) Penghentian pemrosesan Data Pribadi sebagaimana dimaksud pada ayat (1) dilakukan paling lambat 3 x 24 (tiga kali dua puluh empat) jam terhitung sejak Pengendali Data Pribadi menerima permintaan penarikan kembdi persetujuan pemrosesan Data Pribadi."
-        },
-        {
-          "no": 41,
-          "topik": "Kewajiban memberikan akses kepada Subjek Data Pribadi terhadap Data Pribadi yang diproses & rekam jejak",
-          "content": "(1) Pengendali Data Pribadi wajib melakukan penundaan dan pembatasan pemrosesan Data Pribadi baik sebagian maupun seluruhnya paling lambat 3 x 24 (tiga kali dua puluh empat) jam terhitung sejak Pengendali Data Pribadi menerima permintaan penundaan dan pembatasan pemrosesan Data Pribadi.\n\n(2) Penundaan dan pembatasan pemrosesan Data Pribadi sebagaimana dimaksud pada ayat (1) dikecualikan . dalam hal: a terdapat ketentuan peraturan perundang- undangan yang tidak dilakukan penundaan dan pemrosesan Data Pribadi;\n\nb. dapat membahayakan keselamatan pihak lain; dan/ata.u\n\nc. Subjek Data Pribadi terikat perjanjian tertulis dengan Pengendali Data Pribadi yang tidak dilalrukan dan pembatasan pemrosesan Data Pribadi.\n\n(3) Pengendali Data Pribadi wajib memberitahukan telah dilaksanakan penundaan dan pembatasan pemrosesan Data Pribadi kepada Subjek Data Pribadi."
-        },
-        {
-          "no": 42,
-          "topik": "Kewajiban menolak pemberian akses dalam hal tertentu",
-          "content": "(1) Pengendali Data Pribadi wajib mengakhiri pemrosesan Data Pribadi dalam hal:\n\na. telah mencapai masa retensi;\n\nb. tujuan pemrosesan Data Pribadi telah tercapai; atau\n\nc. terdapat permintaan dari Subjek Data Pribadi.\n\n(2) Pengakhiran pemrosesan Data Pribadi sebagaimana dimaksud pada ayat (1) dilakukan sesuai dengan ketentuan peraturan perundang-undangan."
-        },
-        {
-          "no": 43,
-          "topik": "Kewajiban menunda/membatasi pemrosesan atas permintaan subjek",
-          "content": "(l) Pengendali Data Pribadi wajib menghapus Data Pribadi dalam hal:\n\na. Data Pribadi tidak lagi diperlukan untuk pencapaian tujuan pemrosesan Data Pribadi;\n\nb. Subjek Data Pribadi telah melakukan penarikan kembali persetujuan pemrosesan Data Pribadi;\n\nc. terdapat permintaan dari Subjek Data Pribadi; atau\n\nd. Data Pribadi diperoleh dan/ atau diproses dengan cara melawan hukum. (21 Data Pribadi sebagaimana dimaksud pada ayat (1) dilakukan sesuai dengan ketentuan peraturan perundang-undangan."
-        },
-        {
-          "no": 44,
-          "topik": "Kewajiban mengakhiri pemrosesan (jangka waktu terpenuhi, tujuan tercapai, penarikan persetujuan, permintaan subjek)",
-          "content": "(1) Pengendali Data Pribadi wajib memusnahkan Data Pribadi dalam hal:\n\na. telah habis masa retensinya dan berketerangan dimusnahkan berdasarkarr jadwal retensi arsip; . b. terdapat permintaan dari Subjek Data Pribadi;\n\nc. tidak berkaitan dengan penyelesaian proses hukum suatu perkara; dan/ atau\n\nd. Data Pribadi diperoleh dan/ atau diproses dengan cara melawan hukum.\n\n(2) Pemusnahan Data Pribadi sebagaimana dimaksud pada ayat (1) dilakukan sesuai dengan ketentuan peraturan perundang-undangan."
-        },
-        {
-          "no": 45,
-          "topik": "Kewajiban melakukan penghentian/pemusnahan Data Pribadi (penghapusan) & ketentuannya",
-          "content": "Pengendali Data Pribadi wajib memberitahukan penghapusan dan/atau pemusnahan Data Pribadi kepada Subjek Data Pribadi."
-        },
-        {
-          "no": 46,
-          "topik": "Kewajiban memberitahukan secara tertulis kegagalan pelindungan Data Pribadi (breach) kepada Subjek Data Pribadi & lembaga dalam 3x24 jam",
-          "content": "(1) Dalam hal terjadi kegagalan Pelindungan Data Pribadi, Pengendali Data Pribadi wajib pemberitahuan secara tertulis paling lambat 3 x 24 (tiga kali dua puluh empat) jam kepada:\n\na. Subjek Data Pribadi; dan\n\nb. lembaga.\n\n(2) Pemberitahuan tertulis sebagaimana dimaksud pada ayat (1) minimal memuat:\n\na. Data Pribadi yang terungkap;\n\nb. kapan dan bagaimana Data Pribadi terungkap; dan\n\nc. upaya penanganan dan pemulihan atas terungkapnya Data Pribadi oleh Pengendali Data Pribadi.\n\n(3) Dalam hal tertentu, Pengendali Data Pribadi wajib memberitahukan kepada masyarakat mengenai kegagalan Pelindungan Data Pribadi."
-        },
-        {
-          "no": 47,
-          "topik": "Kewajiban bertanggung jawab atas pemrosesan & menunjukkan pertanggungjawaban pemenuhan prinsip pelindungan",
-          "content": "Pengendali Data Pribadi wajib bertanggung jawab atas pemrosesan Data Pribadi dan menunjukkan pertanggungiawaban dalam kewajiban pelaksanaan prinsip Pelindungan Data Pribadi."
-        },
-        {
-          "no": 48,
-          "topik": "Prosesor Data Pribadi memproses berdasarkan perintah Pengendali Data Pribadi",
-          "content": "(1) Pengendali Data Pribadi berbentuk badan hukum yang melakukan penggabungan, pemisahan, pengambilalihan, peleburan, atau pembubaran badan hukum wajib pemberitahuan pengalihan Data Pribadi kepada Subjek Data Pribadi.\n\n(2) Pemberitahuan pengalihan Data Pribadi sebagaimana dimaksud pada ayat (1) dilakukan sebelum dan sesudah penggabungan, pemisahan, pengambilalihan, peleburan, atau pembubaran badan hukum.\n\n(3) Dalam hal Pengendali Data Pribadi berbentuk badan hukum melakukan pembubaran atau dibubarkan, penyimpanan, pentransferan, , atau pemusnahan Data Pribadi dilalsanakan sesuai dengan ketentuan peraturan perundang-undangan.\n\n(4) Penyimpanan, pentransferan, penghapusan, atau 'ppaedmausanyaahtan(3D) daitbaePritraibhaudkiansekbeagpaaidmaanSaubdjiemkakDsautda Pribadi.\n\n(5) Ketentuan lebih lanjut mengenai tata cara pemberitahuan sebagaimana dimaksud pada ayat (l), ayat (21, dan ayat (4) diatur dalam Peraturan Pemerintah."
-        },
-        {
-          "no": 49,
-          "topik": "Tanggung jawab Pengendali atas pemrosesan oleh Prosesor; pelibatan prosesor lain",
-          "content": "Pengendali Data Pribadi dan/ atau Prosesor Data Pribadi wajib melaksanakan perintah lembaga dalam rangka penyelenggaraan Pelindungan Data Pribadi sesuai dengan Undang-Undang ini."
-        },
-        {
-          "no": 50,
-          "topik": "Pemrosesan oleh dua atau lebih Pengendali secara bersama (joint controller) & tanggung jawab",
-          "content": "(1) Kewajiban Pengendali Data Pribadi sebagaimana dimaksud dalam Pasal 30, Pasal 32, Pasal 36, PasaJ42, Pasal 43 ayat (1) huruf a sampai dengan huruf c, Pasal 44 ayat (1) huruf b, Pasal 45, dan Pasal 46 ayat (1) huruf a, dikecualikan untuk:\n\na. kepentingan pertahanan dan keamanan nasional'\n\nb. kepentingan proses penegakan hukum;\n\nc. kepentingan urnum dalam rangka negara; atau\n\nd. kepentingan pengawasan sektor jasa keuangan, moneter, sistem pembayaran, dan stabilitas sistem keuangan yang dilakukan dalam rangka penyelenggaraan negara.\n\n(2) Pengecualian\n\n(2) Pengecualian sebagaimana dimaksud pada ayat (1) dilaksanakan hanya dalam rangka pelaksanaan ketentuan Undang-Undang."
-        },
-        {
-          "no": 51,
-          "topik": "Kewajiban Pengendali/Prosesor dalam pemrosesan bersama & perjanjian",
-          "content": "(1) Dalam hal Pengendali Data Pribadi menunjuk Prosesor Data Pribadi, Prosesor Data Pribadi wajib melakukan pemrosesan Data Pribadi berdasarkan perintah Pengendali Data Pribadi.\n\n(2) Pemrosesan Data Pribadi sebagaimana dimaksud pada ayat (1), dilaksanakan sesuai ketentuan yang diatur dalam Undang-Undang ini.\n\n(3) Pemrosesan Data Pribadi sebagaimana dimaksud pada ayat (1) termasuk dalam tanggung jawab Pengendali Data Pribadi.\n\n(4) Prosesor Data Pribadi dapat melibatkan Prosesor Data Pribadi lain dalam melakukan pemrosesan Data Pribadi.\n\n(5) Prosesor Data Pribadi wajib mendapatkan persetujuan tertulis dari Pengendali Data Pribadi sebelum melibatkan Prosesor Data Pribadi lain sebagaimana dimaksud pada ayat (4).\n\n(6) Dalam hal Prosesor Data Pribadi melakukan pemrosesan Data Pribadi di luar perintah dan tujuan yang ditetapkan Pengendali Data Pribadi, pemosesan Data Pribadi menjadi tanggung jawab Prosesor Data Pribadi."
-        },
-        {
-          "no": 52,
-          "topik": "Pelindungan terhadap data anak — persetujuan orang tua/wali, kepentingan terbaik anak",
-          "content": "Ketentuan mengenai kewajiban Pengendali Data Pribadi sebagaimana dimaksud dalam Pasal 29, Pasal 31, Pasal 35, Pasal 36, Pasal 37, Pasal 38, dan Pasal 39 berlaku juga terhadap Prosesor Data Pribadi."
-        },
-        {
-          "no": 53,
-          "topik": "Pelindungan terhadap data penyandang disabilitas — komunikasi yang dapat diakses & dengan persetujuan",
-          "content": "(1) Pengendali Data Pribadi dan Prosesor Data Pribadi wajib menunjuk pejabat atau petugas yang melaksanakan fungsi Pelindungan Data Pribadi dalam hal:\n\na. pemros(:san Data Pribadi untuk kepentingan pelayanan publik;\n\nb. kegiatan inti Pengendali Data Pribadi memiliki sifat, ruang lingkup, dan/ atau tujuan yang memerlukan pemantauan secara teratur dan ' sistematis atas Data Pribadi dengan skala besar; dan\n\nc. kegiatan inti Pengendali Data Pribadi terdiri dari pemrosesan Data Pribadi dalam skala besar untuk Data Pribadi yang bersifat spesifik dan/ atau Data Pribadi yang berkaitan dengan tindak pidana.\n\n(2) Pejabat atau petugas yang melaksanakan fungsi Pelindungan Data Pribadi sebagaimana dimaksud pada ayat (1) ditunjuk berdasarkan profesionalitas, pengetahuan mengenai hukum, praktik Pelindungan Data Pribadi, dan kemampuan untuk memenuhi tugas-tugasnya.\n\n(3) Pejabat atau petugas yang melaksanakan fungsi Pelindungan Data Pribadi sebagaimana dimaksud pada ayat (2) dapat berasal dari dalam dan/ atau luar Pengendali Data Pribadi atau Prosesor Data Pribadi."
-        }
-      ]
-    },
-    {
-      "nomor": "VII",
-      "judul": "Transfer Data Pribadi",
-      "pasal": [
-        {
-          "no": 54,
-          "topik": "Transfer Data Pribadi di dalam wilayah hukum Republik Indonesia",
-          "content": "(1) Pejabat atau petugas yang melaksanakan fungsi Pelindungan Data Pribadi memiliki tugas paling sedikit: a menginformasikan\n\na. dan memberikan saran kepada Pengendali Data Pribadi atau Frosesor Data Pribadi agar mematuhi ketentuan dalam Undang-Undang ini;\n\nb. memantau dan memastikan kepatuhan terhadap Undang-Undang ini dan kebljakan Pengendali Data Pribadi atau Prosesor Data Pribadi;\n\nc. memberikan saran mengenai penilaian dampak Pelindungan Data Pribadi dan memantau kine{a Pengendali Data Pribadi dan Prosesor Data Pribadi; dan\n\nd. berkoordinasi dan bertindak sebagai narahubung ' untuk isu yang berkaitan dengan pemrosesan Data Pribadi.\n\n(2) Dalam melaksanakan tugas sebagaimana dimaksud pada ayat (l), pejabat atau petugas yang melaksanakan fungsi Pelindungan Data Pribadi memperhatikan risiko terkait pemrosesan Data Pribadi, dengan mempertimbangkan sifat, ruang lingkup, konteks, dan tujuan pemrosesan.\n\n(3) Ketentuan lebih lanjut mengenai pejabat atau petugas yang melaksanakan fungsi Pelindungan Data Pribadi diatur dalam Peraturan Pemerintah."
-        },
-        {
-          "no": 55,
-          "topik": "Transfer Data Pribadi kepada Pengendali/Prosesor di dalam wilayah hukum RI",
-          "content": "(1) Pengendali Data Pribadi dapat melakukan transfer . Data Pribadi kepada Pengendali Data Pribadi lainnya dalam wilayah hukum Negara Republik Indonesia.\n\n(2) Pengendali Data Pribadi yang melakukan transfer Data Pribadi dan yang menerima transfer Data Pribadi wajib melakukan Pelindungan Data Pribadi sebagaimana dimaksud dalam Undang-Undang ini."
-        },
-        {
-          "no": 56,
-          "topik": "Transfer Data Pribadi ke luar wilayah hukum RI — syarat tingkat pelindungan setara, perjanjian/safeguards, atau persetujuan subjek",
-          "content": "(1) Pengendali Data Pribadi dapat melakukan transfer Data Pribadi kepada Pengendali Data Pribadi dan/atau Prosesor Data Pribadi di luar wilayah hukum Negara Republik Indonesia sesuai dengan ketentuan yang diatur dalarn Undang- Undang ini.\n\n(2) Dalam melakukan transfer Data Pribadi sebagaimana dimaksud pada ayat (l), Pengendali Data Pribadi wajib memastikan negara tempat kedudukan Pengendali Data Pribadi dan/ atau Prosesor Data Pribadi yang . menerima transfer Data Pribadi memiliki tingkat Pelindungan Data Pribadi yang setara atau lebih tinggi dari yang diatur dalam Undang-Undang ini.\n\n(3) Dalam hal ketentuan sebagaimana dimaksud pada ayat (21 tidak terpenuhi, Pengendali Data Pribadi wajib memastikan terdapat Pelindungan Data Pribadi yang memadai dan bersifat mengikat.\n\n(4) Dalam hal ketentuan sebagaimana dimaksud pada ayat (21 dan ayat (3) tidak terpenuhi, Pengendali Data Pribadi wajib mendapatkan persetujuan Subjek Data Pribadi.\n\n(5) ' Ketentuan lebih lanjut mengenai transfer Data Pribadi diatur dalam Peraturan Pemerintah."
-        }
-      ]
-    },
-    {
-      "nomor": "VIII",
-      "judul": "Sanksi Administratif",
-      "pasal": [
-        {
-          "no": 57,
-          "topik": "Sanksi administratif atas pelanggaran kewajiban (peringatan tertulis, penghentian sementara, penghapusan/pemusnahan, denda administratif maks 2% pendapatan tahunan)",
-          "content": "(1) ' Pelanggaran terhadap ketentuan Pasal 2O ayat (l), Pasal 21, Pasal 24, Pasal 25 ayat (2), Pasal 26ayat(31, Pasal 27, Pasal 28, Pasal 29, Pasal 30, Pasal 31, Pasal 32 ayat (1), Pasal 33, Pasal 34 ayat (1), Pasal 35, Pasal 36, Pasal 37, Pasal 38, Pasal 39 ayat (1), Pasal 4O ayat (1), Pasal 41 ayat (1) dan ayat (3), Pasal 42 ayat (1), Pasal 43 ayat (1), Pasal 44 ayat (1), Pasal 45, Pasal 46 ayat (1) dan ayat (3), Pasal 47, Pasal 48 ayat (l), Pasal 49, Pasal 51 ayat (1) dan ayat (5), Pasal 52, Pasal 53 ayat (l), Pasal 55 ayat (21, dan Pasal 56 ayat (2) sampai dengan ayat (4) dikenai sanksi administratif.\n\n(2) Sanksi administratif sebagaimana dimaksud pada ayat (l) berupa:\n\na. peringatantertulis;\n\nb. penghentian sementara kegiatan pemrosesan Data Pribadi;\n\nc. penghapusan atau pemusnahan Data Pribadi; dan/atau\n\nd. dendaadministratif.\n\n(3) Sanksi administratif berupa denda administratif sebagaimana dimaksud pada ayat (2) huruf d paling tinggi 2 (dua) persen dari perrdapatan tahunan atau . penerimaan tahunan terhadap variabel pelanggaran.\n\n(4) Penjatuhan sanksi administratif sebagaimana dimaksud pada ayat (2) diberikan oleh lembaga.\n\n(5) Ketentuan lebih lanjut mengenai tata cara pengenaan sanksi administratif selagaimana dimaksud pada ayat (3) diatur dalam Peraturan Pemerintah."
-        }
-      ]
-    },
-    {
-      "nomor": "IX",
-      "judul": "Larangan dalam Penggunaan Data Pribadi",
-      "pasal": [
-        {
-          "no": 58,
-          "topik": "Pemulihan Data Pribadi/larangan terkait penggunaan (pengantar bab larangan)",
-          "content": "(1) Pemerintah berperan dalam penyelenggaraan Pelindungan Data Pribadi sesuai dengan ketentuan Undang-Undang ini.\n\n(2) Penyelenggaraan Pelindungan Data Pribadi sebagaimana dimaksud pada ayat (1) dilaksanakan oleh lembaga.\n\n(3) kmbaga sebagaimana dimaksud pada ayat (21 ditetapkan oleh Presiden.\n\n(4) ' lembaga sebagaimana dimaksud pada ayat (21 bertanggung jawab kepada Presiden.\n\n(5) Ketentuan lebih lanjut mengenai lembaga sebagaimana dimalsud pada ayat (2) diatur dengan Peraturan Presiden."
-        },
-        {
-          "no": 59,
-          "topik": "Larangan memperoleh/mengumpulkan Data Pribadi yang bukan miliknya untuk menguntungkan diri/orang lain secara melawan hukum",
-          "content": "l,embaga sebagaimana dimaksud dalam Pasal 58 ayat (2) melaksanakan:\n\na. perumusan dan penetapan kebijakan dan strategi Pelindungan Data Pribadi yang menjadi panduan bagi ' Subjek Data Pribadi, Pengendali Data Pribadi, dan Pribadi; Prosesor Data\n\nb. pengawasan terhadap penyelenggaraan Pelindungan Data Pribadi;\n\nc. penegakan hukum administratif terhadap pelanggaran Undang-Undang ini; dan\n\nd. fasilitasi penyelesaian sengketa di luar pengadilan."
-        },
-        {
-          "no": 60,
-          "topik": "Larangan mengungkapkan Data Pribadi yang bukan miliknya",
-          "content": "Lembaga sebagaimana dimaksud dalam Pasal 58 ayat (2) berwenang: a.. merumuskan dan menetapkan kebijakan di bidang Pelindungan Data Pribadi;\n\nb. melakukan pengawasan terhadap kepatuhan Pengendali Data Pribadi;\n\nc. menjatuhkan sanksi administratif atas pelanggaran Pelindungan Data Pribadi yang dilakukan Pengendali Data Pribadi dan/atau Prosesor Data Pribadi;\n\nd. membantu aparat penegak hukum dalam penanganan dugaan tindak pidana Data Pribadi sebagaimana dimaksud dalam Undang-Undang ini;\n\ne. bekerja sama dengan lembaga Pelindungan Data Pribadi negara lain dalam rangka penyelesaian dugaan . pelanggaran Pelindungan Data Pribadi lintas negara;\n\nf. melakukan penilaian terhadap pemenuhan persyaratan transfer Data Pribadi ke luar wilayah hukum Negara Republik Indonesia;\n\ng. memberikan perintah dalam rangka tindak lanjut hasil pengawasan kepada Pengendali Data Pribadi dan/ atau Prosesor Data Pribadi;\n\nh. melakukan publikasi hasil pelaksanaan pengawasan Pelindungan Data Pribadi sesuai dengan ketentuan peraturan perundang-undangan ;\n\ni. menerima aduan dan/atau laporan tentang dugaan terjadinya pelanggaran Pelindungan Data Pribadi;\n\nj. melakukan dan atas pengaduan, laporan, dan/atau hasil pengawasan terhadap dugaan terjadinya pelanggaran Pelindungan Data Pribadi;\n\nk. memanggil dan menghadirkan Setiap Orang dan/ atau Badan Publik yang terkait dengan dugaan pelanggaran Pelindungan Data Pribadi;\n\nl. meminta keterangan, data, Informasi, dan dokumen dari Setiap Orang dan/ atau Badan Publik terkait dugaan pelanggaran Pelindungan Data Pribadi;\n\nm. memanggil dan menghadirkan ahli yang diperlukan dalam pemeriksaan dan penelusuran terkait dugaan pelanggaran Pelindungan Data Pribadi; n melakukan pemeriksaan dan penelusuran terhadap sistem elektronik, sarana, ruang, dan/ atau tempat yang digunakan Pengendali Data Pribadi dan/atau Prosesor Data Pribadi, termasuk memperoleh akses terhadap data dan/atau menunjuk pihak ketiga; dan o meminta bantuan hukum kepada kejaksaan dalam penyelesaian sengketa Pelindungan Data Pribadi."
-        },
-        {
-          "no": 61,
-          "topik": "Larangan menggunakan Data Pribadi yang bukan miliknya",
-          "content": "Ketentuan mengenai tata cara pelaksanaan wewenang lembaga sebagaimana dimaksud dalam Pasal 60 diatur dalam Peraturan Pemerintah."
-        }
-      ]
-    },
-    {
-      "nomor": "X",
-      "judul": "Pembentukan Pedoman Perilaku Pengendali Data Pribadi",
-      "pasal": [
-        {
-          "no": 62,
-          "topik": "Pengendali Data Pribadi dalam lingkup publik & privat menyusun pedoman perilaku pemrosesan",
-          "content": "(1) Kerja sama internasional dilakukan oleh Pemerintah dengan pemerintah negara lain atau Organisasi Internasional terkait dengan Pelindungan Data Pribadi.\n\n(2) Kerja sama internasional dalam rangka pelaksanaan Undang-Undang ini dilaksanakan sesuai dengan ketentuan peraturan perundang-undangan dan prinsip hukum internasional."
-        }
-      ]
-    },
-    {
-      "nomor": "XI",
-      "judul": "Penyelesaian Sengketa dan Hukum Acara",
-      "pasal": [
-        {
-          "no": 63,
-          "topik": "Penyelesaian sengketa pelindungan data pribadi melalui arbitrase, pengadilan, atau lembaga alternatif",
-          "content": "(1) Masyarakat dapat berperan baik secara langsung maupun tidak langsung dalam mendukung terselenggaranya Pelindungan Data Pribadi.\n\n(2) Pelaksanaan peran sebagaimana dimaksud pada ayat (1) dapat dilakukan melalui pendidikan, pelatihan, advokasi, sssialis4si, dan/ atau pengawasan sesuai dengan ketentuan peraturan perundang- undangan."
-        },
-        {
-          "no": 64,
-          "topik": "Hukum acara penyelesaian sengketa Data Pribadi mengikuti ketentuan hukum acara",
-          "content": "(1) Penyelesaian sengketa Data Pribadi dilakukan melalui arbitrase, pengadilan, atau lembaga penyelesaian sengketa alternatif lainnya sesuai dengan ketentuan peraturan perundang-undangan.\n\n(2) Hukum acara yang berlaku dalam penyelesaian sengketa dan/ atau proses peradilan Pelindungan Data Pribadi sebagaimana dimaksud pada ayat (1) dilaksanakan berdasarkan hukum acara yang berlaku sesuai dengan ketentuan peraturan perundang- undangan.\n\n(3) Alat bukti yang sah dalam Undang-Undang ini meliputi:\n\na. alat bukti sebagaimana dimaksud dalam hukum acara; dan\n\nb. alat bukti lain berupa informasi elelrtronik dan/ atau dokumen elektronik sesuai dengan ketentuan peraturan perundang-undangan.\n\n(4) Dalam hal diperlukan untuk melindungi Data Pribadi, proses persidangan dilakukan secara tertutup."
-        }
-      ]
-    },
-    {
-      "nomor": "XII",
-      "judul": "Kerja Sama Internasional",
-      "pasal": [
-        {
-          "no": 65,
-          "topik": "Kerja sama internasional dalam pelindungan data pribadi (catatan: penomoran lihat naskah resmi)",
-          "content": "(1) Setiap Orang dilarang secara melawan hukum memperoleh atau mengumpulkan Data Pribadi yang bukan miliknya dengan maksud untuk menguntungkan diri sendiri atau orang lain yang dapat mengakibatkan kerugian Subjek Data Pribadi.\n\n(2) Setiap Orang dilarang secara melawan hukum mengungkapkan Data Pribadi yang bukan miliknya.\n\n(3) Setiap Orang dilarang secara melawan hukum Data Pribadi yang bukan miliknya."
-        }
-      ]
-    },
-    {
-      "nomor": "XIII",
-      "judul": "Peran Pemerintah dan Masyarakat",
-      "pasal": [
-        {
-          "no": 66,
-          "topik": "Peran pemerintah dan masyarakat dalam pelindungan data pribadi (catatan: penomoran lihat naskah resmi)",
-          "content": "Setiap Orang dilarang membuat Data Pribadi palsu atau memalsul<an Data Pribadi dengan maksud r.rntuk diri sendiri atau orang lain yang dapat mengakibatkan kerugian bagi orang lain."
-        }
-      ]
-    },
-    {
-      "nomor": "XIV",
-      "judul": "Ketentuan Pidana",
-      "pasal": [
-        {
-          "no": 67,
-          "topik": "Pidana atas perbuatan memperoleh/mengumpulkan, mengungkapkan, atau menggunakan Data Pribadi yang bukan miliknya secara melawan hukum (Pasal 65 ayat (1),(2),(3)) — pidana penjara & denda",
-          "content": "(1) Setiap Orang yang dengan sengaja dan melawan hukum memperoleh atau mengumpulkan Data Pribadi yang bukan mililoeya dengan maksud untuk menguntungkan diri sendiri atau orang lain yang dapat mengakibatkan kerugian Subjek Data Pribadi sebagaimana dimaksud dalam Pasal 65 ayat (1) dipidana dengan pidana penjara paling lama 5 (lima) tahun dan/atau pidana denda paling banyak Rp5.000.000.000,00 (lima miliar rupiah).\n\n(2) Setiap Orang yang dengan sengaja dan melawan hukum mengunglapkan Data Pribadi yang bukan miliknya sebagaimana dimaksud dalam Pasal 65 ayat (2) dipidana dengan pidana penjara paling lama 4 (empat) tahun dan/atau pidana denda paling banyak Rp4.000.000.000,00 (empat miliar rupiah).\n\n(3) Setiap Orang yang dengan senqaja dan melawan hukum menggunakan Data Pribadi yang bukan miliknya sebagaimana dimaksud dalam Pasal 65 ayat (3) dipidana dengan pidana penjara paling lama 5 (lima) tahun dan/atau pidana denda paling banyak Rp5.00O.OOO.000,00 (lima miliar rupiah)."
-        },
-        {
-          "no": 68,
-          "topik": "Pidana atas membuat Data Pribadi palsu atau memalsukan Data Pribadi untuk menguntungkan diri/orang lain yang merugikan",
-          "content": "Setiap Orang yang dengan sengaja membuat Data Pribadi palsu atau memalsukan Data Pribadi dengan maksud untuk menguntrrngkan diri sendiri atau orang lain yang dapat mengakibatkan kerugian bagi orang lain sebagaimana dimaksud dalam Pasal 66 .tipidana dengan pidana penjara paling tama 6 (enam) tahun dan/atau pidana denda paling banyak Rp6.0OO. 000.000,00 (enam miliar rupiah)."
-        },
-        {
-          "no": 69,
-          "topik": "Pidana tambahan: perampasan keuntungan/aset & pembayaran ganti rugi",
-          "content": "Selain dijatuhi pidana ssfagaimana dimaksud dalam Pasal 67 dan Pasal 68 juga dapat dijatuhi pidana tambahan berupa perampasan keuntungan dan/ atau harta kekayaan yang diperoleh atau hasil dari tindak pidana dan pembayaran ganti kerugian."
-        },
-        {
-          "no": 70,
-          "topik": "Pertanggungjawaban pidana korporasi & pidana denda terhadap korporasi (maksimum, pidana tambahan)",
-          "content": "(1) Dalam hal tindak pidana sebagaimana dimaksud dalam Pasal 67 dan Pasal 68 dilakukan oleh Korporasi, pidana dapat dljatuhkan kepada pengurus, pemegang kendali, pemberi perintah, pemilik manfaat, dan/ atau Korporasi.\n\n(2) Pidana yang dapat d[jatuhkan terhadap Korporasi hanya pidana denda.\n\n(3) Pidana denda yang dijatuhkan kepada Korporasi paling banyak 10 (sepuluh) kali dari maksimal pidana denda yang diancamkan.\n\n(4) Selain dijatuhi pidana denda sebagaimana dimaksud pada ayat (2), Korporasi dapat dijatuhi pidana ' tambahan berupa:\n\na. perampasan keuntungan dan/ atau harta kekayaan yang diperoleh atau hasil dari tindak pidana;\n\nb. pembekuan seluruh atau sebagian usaha Korporasi;\n\nc. pelarangan permanen melakukan perbuatan tertentu;\n\nd. penutupan seluruh atau sebagian tempat usaha dan/ atau kegiatan Korporasi;\n\ne. melaksanakan kewajiban yang telah dilalaikan;\n\nf. pembayaran ganti kerugian;\n\ng. pencabutan izin; dan/atala\n\nh. pembubaranKorporasi."
-        }
-      ]
-    },
-    {
-      "nomor": "XV",
-      "judul": "Ketentuan Peralihan",
-      "pasal": [
-        {
-          "no": 71,
-          "topik": "Penyesuaian pemrosesan Data Pribadi terhadap ketentuan UU ini dalam jangka waktu paling lama 2 tahun sejak diundangkan",
-          "content": "(1) Dalam hal pengadilan menjatuhkan putusan pidana denda, terpidana diberikan jangka waktu 1 (satu) bulan sejak putusan telah memperoleh kekuatan hukum tetap untuk membayar denda tersebut.\n\n(2) Dalam hal terdapat alasan kuat, jangka waktu sebagaimana dimaksud pada ayat (1) dapat diperpanjang untuk waktu paling lama I (satu) bulan.\n\n(3) Dalam hal terpidana tidak membayar pidana denda dalam jangka waktu sebagaimana dimaksud pada ayat (1) atau ayat (2) maka harta kekayaan atau pendapatan terpidana dapat disita dan dilelang oleh jaksa untuk melunasi pidana denda yang tidak dibayar.\n\n(4) Dalam hal penyitaan dan pelelangan harta kekayaan atau pendapatan sebagaimana dimaksud pada ayat (3) tidak cukup atau tidak untuk dilaksanakan, pidana denda yang tidak dibayar diganti dengan pidana penjara paling lama sebagaimana diancamkan untuk tindak pidana yang bersangkutan.\n\n(5) Lamanya pidana penjara sebagaimspa dimaksud pada ayat (4) yang ditentukan oleh hakim, dicantumkan dalam putusan pengadilan."
-        }
-      ]
-    },
-    {
-      "nomor": "XVI",
-      "judul": "Ketentuan Penutup",
-      "pasal": [
-        {
-          "no": 72,
-          "topik": "Lembaga penyelenggara pelindungan data pribadi ditetapkan oleh Presiden",
-          "content": "(1) Dalam hal penyitaan dan pelelangan harta kekayaan atau pendapatan sebagaimana dimaksud dalam Pasal 71 ayat (4) dilakukan terhadap terpidana Korporasi dan tidak cukup untuk melunasi pidana . denda, Korporasi dikenakan pidana pengganti berupa pembekuan sebagian atau seluruh kegiatan usaha Korporasi untuk jangka wa.ktu paling lama 5 (lima) tahun.\n\n(2) I.arnanya pembekuan s6lagian atau seluruh kegiatan usaha Korporasi sebagaimana dimaksud pada ayat (1) yang ditentukan oleh hakim, dicantumkan dalam putusan pengadilan."
-        },
-        {
-          "no": 73,
-          "topik": "Pelaksanaan ketentuan UU diatur lebih lanjut dengan Peraturan Pemerintah (paling lama 2 tahun)",
-          "content": "Ketentuan sebagaimana dimaksud dalam Pasal 7L dan Pasal 72 juga berlaku dalam hal penjatuhan pidana tambahan berupa pembayaran ganti kerugian."
-        },
-        {
-          "no": 74,
-          "topik": "Ketentuan peraturan perundang-undangan terkait Data Pribadi tetap berlaku sepanjang tidak bertentangan",
-          "content": "Pada saat Undang-Undang ini mulai berlaku, Pengendali Data Pribadi, Prosesor Data Pribadi, dan pihak lain yang terkait dengan pemrosesan Data Pribadi, wajib menyesuaikan dengan ketentuan pemrosesan Data Pribadi berdasarkan Undang-Undang ini paling lama 2 (dua) tahun sejak Undang-Undang ini diundangkan."
-        },
-        {
-          "no": 75,
-          "topik": "Penyesuaian peraturan pelaksanaan",
-          "content": "Pada saat Undang-Undang ini mulai berlaku, semua ketentuan peraturan perundang-undangan yang mengatur mengenai Pelindungan Data Pribadi, dinyatakan masih tetap berlaku sepanjang tidak bertentangan dengan ketentuan dalam Undang-Undang ini."
-        },
-        {
-          "no": 76,
-          "topik": "UU mulai berlaku pada tanggal diundangkan (17 Oktober 2022)",
-          "content": "Undang-Undang ini mulai berlaku pada tanggal"
-        }
-      ]
-    }
-  ]
+    ]
 }
