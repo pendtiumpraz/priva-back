@@ -10,7 +10,7 @@ class ChatConversation extends Model
     use HasUuids, BelongsToOrg;
 
     protected $fillable = [
-        'user_id', 'org_id', 'user_name', 'user_email', 'status', 'last_message_at',
+        'user_id', 'org_id', 'user_name', 'user_email', 'status', 'last_message_at', 'channel',
     ];
 
     protected $casts = [

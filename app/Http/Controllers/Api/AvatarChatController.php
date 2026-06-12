@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ChatConversation;
+use App\Models\ChatMessage;
 use App\Models\License;
 use App\Services\AiContentSanitizer;
 use Illuminate\Http\Request;
@@ -53,10 +55,45 @@ class AvatarChatController extends Controller
         $request->validate([
             'message' => 'required|string|max:2000',
             'history' => 'nullable|array',
+            'conversation_id' => 'nullable|string',
         ]);
 
         $user = $request->user();
         $orgId = $user->org_id;
+
+        // Per-user avatar conversation (isolated by user_id + channel=avatar).
+        // A user can only ever resume their OWN avatar conversation.
+        $conversation = null;
+        if ($request->conversation_id) {
+            $conversation = ChatConversation::where('id', $request->conversation_id)
+                ->where('user_id', $user->id)
+                ->where('channel', 'avatar')
+                ->first();
+        }
+        if (! $conversation) {
+            $conversation = ChatConversation::create([
+                'user_id' => $user->id,
+                'org_id' => $orgId,
+                'user_name' => $user->name,
+                'user_email' => $user->email,
+                'status' => 'open',
+                'channel' => 'avatar',
+                'last_message_at' => now(),
+            ]);
+        }
+
+        // Persist the user's message immediately.
+        try {
+            ChatMessage::create([
+                'conversation_id' => $conversation->id,
+                'role' => 'user',
+                'content' => $request->message,
+                'sender_name' => $user->name,
+            ]);
+            $conversation->update(['last_message_at' => now()]);
+        } catch (\Throwable $e) {
+            Log::warning('Avatar chat: failed to persist user message: '.$e->getMessage());
+        }
 
         // Get avatar AI provider config, fallback to chat
         $providerConfig = AiProviderController::getActiveConfig($orgId, 'avatar');
@@ -198,9 +235,24 @@ class AvatarChatController extends Controller
 
                 $usage = $data['usage'] ?? [];
 
+                // Persist Priva's reply so the conversation has full history.
+                try {
+                    ChatMessage::create([
+                        'conversation_id' => $conversation->id,
+                        'role' => 'assistant',
+                        'content' => trim($reply),
+                        'summary' => $summary,
+                        'sender_name' => 'Priva',
+                    ]);
+                    $conversation->update(['last_message_at' => now()]);
+                } catch (\Throwable $e) {
+                    Log::warning('Avatar chat: failed to persist reply: '.$e->getMessage());
+                }
+
                 return response()->json([
                     'reply' => trim($reply),
                     'summary' => $summary,  // FE include di next history item untuk memory
+                    'conversation_id' => $conversation->id,
                     'model' => $providerConfig['model']->name ?? $model,
                     'usage' => [
                         'prompt_tokens' => $usage['prompt_tokens'] ?? null,
@@ -226,6 +278,42 @@ class AvatarChatController extends Controller
                 'error' => true,
             ]);
         }
+    }
+
+    /**
+     * List the current user's OWN avatar conversations. Strictly scoped by
+     * user_id — a user can never see another user's avatar history.
+     */
+    public function history(Request $request)
+    {
+        $user = $request->user();
+        $conversations = ChatConversation::where('user_id', $user->id)
+            ->where('channel', 'avatar')
+            ->withCount('messages')
+            ->orderBy('last_message_at', 'desc')
+            ->limit(30)
+            ->get(['id', 'user_name', 'status', 'last_message_at']);
+
+        return response()->json($conversations);
+    }
+
+    /**
+     * Messages of one avatar conversation — only if it belongs to the caller.
+     */
+    public function conversationMessages(Request $request, string $id)
+    {
+        $user = $request->user();
+        $conversation = ChatConversation::where('id', $id)
+            ->where('user_id', $user->id)
+            ->where('channel', 'avatar')
+            ->with('messages')
+            ->first();
+
+        if (! $conversation) {
+            return response()->json(['message' => 'Percakapan tidak ditemukan'], 404);
+        }
+
+        return response()->json(['data' => $conversation]);
     }
 
     /**

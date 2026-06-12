@@ -203,7 +203,9 @@ class AiAgentController extends Controller
         // Get or create conversation (type=agent to separate from normal chat)
         $conversation = null;
         if ($request->conversation_id) {
-            $conversation = ChatConversation::where('user_id', $user->id)->find($request->conversation_id);
+            $conversation = ChatConversation::where('user_id', $user->id)
+                ->where('channel', 'agent')
+                ->find($request->conversation_id);
         }
         if (!$conversation) {
             $conversation = ChatConversation::create([
@@ -212,6 +214,7 @@ class AiAgentController extends Controller
                 'user_name' => $user->name,
                 'user_email' => $user->email,
                 'status' => 'open',
+                'channel' => 'agent',
                 'last_message_at' => now(),
             ]);
         }
@@ -976,6 +979,7 @@ PROMPT;
     {
         $user = $request->user();
         $conversations = ChatConversation::where('user_id', $user->id)
+            ->where('channel', 'agent') // exclude avatar conversations
             ->withCount('messages')
             ->orderBy('last_message_at', 'desc')
             ->limit(20)

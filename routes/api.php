@@ -1708,6 +1708,9 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // Avatar 3D Chat (Platform Q&A with Knowledge Base)
     // =============================================
     Route::post('/avatar/chat', [AvatarChatController::class, 'chat'])->middleware('ai-throttle');
+    // Per-user avatar chat history (isolated by user_id in the controller).
+    Route::get('/avatar/history', [AvatarChatController::class, 'history']);
+    Route::get('/avatar/conversations/{id}', [AvatarChatController::class, 'conversationMessages']);
 
     // =============================================
     // Voice TTS Synthesis (AI-powered text-to-speech)
