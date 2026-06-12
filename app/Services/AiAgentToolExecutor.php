@@ -8,14 +8,24 @@ use App\Models\BreachSimulation;
 use App\Models\ChatConversation;
 use App\Models\ConsentCollectionPoint;
 use App\Models\ConsentRecord;
+use App\Models\CookieLog;
+use App\Models\CrossBorderTransfer;
 use App\Models\Dpia;
 use App\Models\DsrRequest;
 use App\Models\GapAssessment;
 use App\Models\InformationSystem;
+use App\Models\LeakDetection;
 use App\Models\License;
+use App\Models\LiaAssessment;
+use App\Models\MaturityAssessment;
 use App\Models\Organization;
+use App\Models\PostureFinding;
+use App\Models\PostureSnapshot;
 use App\Models\Ropa;
+use App\Models\TiaAssessment;
 use App\Models\User;
+use App\Models\Vendor;
+use App\Models\VendorPreAssessment;
 
 /**
  * Executes AI Agent tool calls with strict tenant isolation.
@@ -186,6 +196,37 @@ class AiAgentToolExecutor
             'list_drill' => $this->listDrill($args),
             'get_drill_detail' => $this->getDrillDetail($args),
 
+            // LIA (Legitimate Interest Assessment)
+            'list_lia' => $this->listLia($args),
+            'get_lia_detail' => $this->getLiaDetail($args),
+
+            // TIA (Transfer Impact Assessment)
+            'list_tia' => $this->listTia($args),
+            'get_tia_detail' => $this->getTiaDetail($args),
+
+            // Maturity Level Assessment
+            'list_maturity' => $this->listMaturity($args),
+            'get_maturity_detail' => $this->getMaturityDetail($args),
+
+            // TPRM / Pihak Ketiga (Vendor)
+            'list_third_party' => $this->listThirdParty($args),
+            'get_third_party_detail' => $this->getThirdPartyDetail($args),
+            'get_third_party_pre_assessment' => $this->getThirdPartyPreAssessment($args),
+
+            // Cross-Border Data Transfer
+            'list_cross_border' => $this->listCrossBorder($args),
+            'get_cross_border_detail' => $this->getCrossBorderDetail($args),
+
+            // Security Posture
+            'get_security_posture' => $this->getSecurityPosture($args),
+            'list_posture_findings' => $this->listPostureFindings($args),
+
+            // Cookie consent
+            'get_cookie_stats' => $this->getCookieStats($args),
+
+            // Leak Detection
+            'list_leak_detection' => $this->listLeakDetection($args),
+
             // Organization
             'get_organization' => $this->getOrganization($args),
             'update_organization' => $this->updateOrganization($args),
@@ -197,6 +238,8 @@ class AiAgentToolExecutor
             'list_users' => $this->listUsers($args),
             'list_licenses' => $this->listLicenses($args),
             'list_chat_history' => $this->listChatHistory($args),
+            'list_organizations' => $this->listOrganizations($args),
+            'get_platform_stats' => $this->getPlatformStats($args),
 
             // RAG / Semantic Search (read-only)
             'search_similar_ropa' => $this->searchSimilarRopa($args),
@@ -659,6 +702,208 @@ class AiAgentToolExecutor
     }
 
     // =============================================
+    // LIA — Legitimate Interest Assessment
+    // =============================================
+    private function listLia(array $args): array
+    {
+        $records = LiaAssessment::where('org_id', $this->orgId)
+            ->select('id', 'lia_code', 'title', 'status', 'overall_score', 'assessment_result', 'created_at')
+            ->orderBy('created_at', 'desc')->limit(20)->get();
+
+        return [$records->toArray(), "🔍 Mengambil daftar LIA (Legitimate Interest Assessment)... ({$records->count()} ditemukan)"];
+    }
+
+    private function getLiaDetail(array $args): array
+    {
+        $r = LiaAssessment::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        if (! $r) {
+            return [['error' => 'LIA tidak ditemukan'], '❌ LIA tidak ditemukan'];
+        }
+
+        return [$r->toArray(), "⚖️ Membaca detail LIA: {$r->lia_code}"];
+    }
+
+    // =============================================
+    // TIA — Transfer Impact Assessment
+    // =============================================
+    private function listTia(array $args): array
+    {
+        $records = TiaAssessment::where('org_id', $this->orgId)
+            ->select('id', 'tia_code', 'title', 'status', 'overall_risk_score', 'overall_risk_level', 'conclusion_verdict', 'created_at')
+            ->orderBy('created_at', 'desc')->limit(20)->get();
+
+        return [$records->toArray(), "🔍 Mengambil daftar TIA (Transfer Impact Assessment)... ({$records->count()} ditemukan)"];
+    }
+
+    private function getTiaDetail(array $args): array
+    {
+        $r = TiaAssessment::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        if (! $r) {
+            return [['error' => 'TIA tidak ditemukan'], '❌ TIA tidak ditemukan'];
+        }
+
+        return [$r->toArray(), "🌐 Membaca detail TIA: {$r->tia_code} (risk: {$r->overall_risk_level})"];
+    }
+
+    // =============================================
+    // Maturity Level Assessment
+    // =============================================
+    private function listMaturity(array $args): array
+    {
+        $records = MaturityAssessment::where('org_id', $this->orgId)
+            ->select('id', 'title', 'version', 'status', 'overall_score', 'overall_level', 'created_at')
+            ->orderBy('created_at', 'desc')->limit(20)->get();
+
+        return [$records->toArray(), "🔍 Mengambil daftar Maturity Assessment... ({$records->count()} ditemukan)"];
+    }
+
+    private function getMaturityDetail(array $args): array
+    {
+        $r = MaturityAssessment::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        if (! $r) {
+            return [['error' => 'Maturity Assessment tidak ditemukan'], '❌ Maturity Assessment tidak ditemukan'];
+        }
+
+        return [$r->toArray(), "📈 Membaca Maturity Assessment: {$r->title} (level {$r->overall_level})"];
+    }
+
+    // =============================================
+    // TPRM — Pihak Ketiga (Vendor internal slug)
+    // =============================================
+    private function listThirdParty(array $args): array
+    {
+        $records = Vendor::where('org_id', $this->orgId)
+            ->select('id', 'name', 'type', 'country', 'category', 'risk_score', 'risk_level', 'dpa_status', 'pdp_scope_status', 'created_at')
+            ->orderBy('created_at', 'desc')->limit(20)->get();
+
+        return [$records->toArray(), "🔍 Mengambil daftar pihak ketiga... ({$records->count()} ditemukan)"];
+    }
+
+    private function getThirdPartyDetail(array $args): array
+    {
+        $r = Vendor::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        if (! $r) {
+            return [['error' => 'Pihak ketiga tidak ditemukan'], '❌ Pihak ketiga tidak ditemukan'];
+        }
+        $data = $r->toArray();
+        // contact_email is encrypted PII — drop before it reaches the LLM.
+        unset($data['contact_email'], $data['contact_name']);
+
+        return [$data, "🤝 Membaca detail pihak ketiga: {$r->name} (risk: {$r->risk_level})"];
+    }
+
+    private function getThirdPartyPreAssessment(array $args): array
+    {
+        $vendorId = $args['vendor_id'] ?? $args['id'] ?? '';
+        $vendor = Vendor::where('org_id', $this->orgId)->find($vendorId);
+        if (! $vendor) {
+            return [['error' => 'Pihak ketiga tidak ditemukan'], '❌ Pihak ketiga tidak ditemukan'];
+        }
+        $pre = VendorPreAssessment::where('org_id', $this->orgId)
+            ->where('vendor_id', $vendor->id)
+            ->select('id', 'vendor_id', 'status', 'suggested_scope', 'final_scope', 'overridden', 'justification', 'filled_by', 'decided_at', 'approved_at', 'rejection_reason', 'created_at')
+            ->orderBy('created_at', 'desc')->first();
+        if (! $pre) {
+            return [['vendor_id' => $vendor->id, 'pre_assessment' => null, 'pdp_scope_status' => $vendor->pdp_scope_status], "ℹ️ Belum ada pra-asesmen untuk {$vendor->name}"];
+        }
+
+        return [$pre->toArray(), "🧭 Membaca pra-asesmen pihak ketiga: {$vendor->name} (scope: ".($pre->final_scope ?: $pre->suggested_scope).")"];
+    }
+
+    // =============================================
+    // Cross-Border Data Transfer
+    // =============================================
+    private function listCrossBorder(array $args): array
+    {
+        $records = CrossBorderTransfer::where('org_id', $this->orgId)
+            ->select('id', 'destination_country', 'destination_entity', 'transfer_purpose', 'legal_basis', 'status', 'risk_score', 'risk_level', 'created_at')
+            ->orderBy('created_at', 'desc')->limit(20)->get();
+
+        return [$records->toArray(), "🔍 Mengambil daftar Cross-Border Transfer... ({$records->count()} ditemukan)"];
+    }
+
+    private function getCrossBorderDetail(array $args): array
+    {
+        $r = CrossBorderTransfer::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        if (! $r) {
+            return [['error' => 'Cross-Border Transfer tidak ditemukan'], '❌ Transfer lintas negara tidak ditemukan'];
+        }
+
+        return [$r->toArray(), "🌍 Membaca detail transfer ke {$r->destination_country} (risk: {$r->risk_level})"];
+    }
+
+    // =============================================
+    // Security Posture
+    // =============================================
+    private function getSecurityPosture(array $args): array
+    {
+        $snap = PostureSnapshot::where('org_id', $this->orgId)
+            ->orderBy('taken_at', 'desc')->orderBy('created_at', 'desc')->first();
+        if (! $snap) {
+            return [['error' => 'Belum ada snapshot posture'], 'ℹ️ Belum ada snapshot Privacy Posture untuk organisasi ini'];
+        }
+
+        return [
+            [
+                'overall_score' => $snap->overall_score,
+                'layer_data_score' => $snap->layer_data_score,
+                'layer_process_score' => $snap->layer_process_score,
+                'layer_response_score' => $snap->layer_response_score,
+                'pillar_breakdown' => $snap->pillar_breakdown,
+                'taken_at' => $snap->taken_at,
+                'source' => $snap->source,
+            ],
+            "🛡️ Membaca Privacy Posture terakhir (skor {$snap->overall_score}/100)",
+        ];
+    }
+
+    private function listPostureFindings(array $args): array
+    {
+        $q = PostureFinding::where('org_id', $this->orgId);
+        if (! empty($args['status'])) {
+            $q->where('status', $args['status']);
+        }
+        $records = $q->select('id', 'title', 'severity', 'status', 'source_pillar', 'sla_due_at', 'created_at')
+            ->orderBy('created_at', 'desc')->limit(20)->get();
+
+        return [$records->toArray(), "🔍 Mengambil temuan Privacy Posture... ({$records->count()} ditemukan)"];
+    }
+
+    // =============================================
+    // Cookie consent (anonymous, aggregate only)
+    // =============================================
+    private function getCookieStats(array $args): array
+    {
+        $base = CookieLog::where('org_id', $this->orgId);
+        $total = (clone $base)->count();
+        $analytics = (clone $base)->where('choices->analytics', true)->count();
+        $marketing = (clone $base)->where('choices->marketing', true)->count();
+        $preferences = (clone $base)->where('choices->preferences', true)->count();
+
+        return [
+            [
+                'total_logs' => $total,
+                'accepted_analytics' => $analytics,
+                'accepted_marketing' => $marketing,
+                'accepted_preferences' => $preferences,
+            ],
+            "🍪 Menghitung statistik consent cookie... ({$total} log)",
+        ];
+    }
+
+    // =============================================
+    // Leak Detection (scan results)
+    // =============================================
+    private function listLeakDetection(array $args): array
+    {
+        $records = LeakDetection::where('org_id', $this->orgId)
+            ->select('id', 'system_id', 'table_name', 'match_mode', 'found_count', 'leak_confirmed', 'created_at')
+            ->orderBy('created_at', 'desc')->limit(20)->get();
+
+        return [$records->toArray(), "🔍 Mengambil hasil Leak Detection... ({$records->count()} ditemukan)"];
+    }
+
+    // =============================================
     // Organization
     // =============================================
     private function getOrganization(array $args): array
@@ -746,6 +991,41 @@ class AiAgentToolExecutor
             ]);
 
         return [$chats->toArray(), "💬 Mengambil riwayat chat... ({$chats->count()} percakapan ditemukan)"];
+    }
+
+    /**
+     * Platform-wide org roster (read-only). No credentials/settings exposed —
+     * only org identity, lifecycle, and AI-credit posture.
+     */
+    private function listOrganizations(array $args): array
+    {
+        $orgs = Organization::select(
+            'id', 'name', 'slug', 'industry', 'company_size', 'org_level',
+            'lifecycle_status', 'onboarding_completed',
+            'ai_credits_remaining', 'ai_credits_monthly', 'created_at'
+        )->orderBy('created_at', 'desc')->limit(50)->get();
+
+        return [$orgs->toArray(), "🏢 Mengambil daftar organisasi platform... ({$orgs->count()} organisasi)"];
+    }
+
+    /**
+     * Platform-level aggregate stats for SuperAdmin monitoring.
+     */
+    private function getPlatformStats(array $args): array
+    {
+        $stats = [
+            'total_organizations' => Organization::count(),
+            'active_organizations' => Organization::where('lifecycle_status', 'active')->count(),
+            'total_users' => User::count(),
+            'total_licenses' => License::count(),
+            'active_licenses' => License::where('status', 'active')->count(),
+            'expired_licenses' => License::where('status', 'expired')->count(),
+            'license_by_package' => License::selectRaw('package_type, COUNT(*) as c')
+                ->groupBy('package_type')->pluck('c', 'package_type')->toArray(),
+            'total_conversations' => ChatConversation::count(),
+        ];
+
+        return [$stats, '📊 Mengumpulkan statistik platform (organisasi, user, license)...'];
     }
 
     // =============================================
@@ -956,6 +1236,37 @@ class AiAgentToolExecutor
             ['type' => 'function', 'function' => ['name' => 'list_drill', 'description' => 'List semua Fire Drill / Breach Simulation.', 'parameters' => ['type' => 'object', 'properties' => (object) [], 'required' => []]]],
             ['type' => 'function', 'function' => ['name' => 'get_drill_detail', 'description' => 'Detail Fire Drill beserta skor.', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string']], 'required' => ['id']]]],
 
+            // LIA
+            ['type' => 'function', 'function' => ['name' => 'list_lia', 'description' => 'List semua LIA (Legitimate Interest Assessment / Penilaian Kepentingan Sah) milik organisasi.', 'parameters' => ['type' => 'object', 'properties' => (object) [], 'required' => []]]],
+            ['type' => 'function', 'function' => ['name' => 'get_lia_detail', 'description' => 'Detail LIA beserta hasil uji (purpose/necessity/balancing test) dan verdict.', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string']], 'required' => ['id']]]],
+
+            // TIA
+            ['type' => 'function', 'function' => ['name' => 'list_tia', 'description' => 'List semua TIA (Transfer Impact Assessment) milik organisasi.', 'parameters' => ['type' => 'object', 'properties' => (object) [], 'required' => []]]],
+            ['type' => 'function', 'function' => ['name' => 'get_tia_detail', 'description' => 'Detail TIA beserta skor risiko transfer dan verdict (approved/conditional/rejected).', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string']], 'required' => ['id']]]],
+
+            // Maturity
+            ['type' => 'function', 'function' => ['name' => 'list_maturity', 'description' => 'List semua Maturity Level Assessment milik organisasi.', 'parameters' => ['type' => 'object', 'properties' => (object) [], 'required' => []]]],
+            ['type' => 'function', 'function' => ['name' => 'get_maturity_detail', 'description' => 'Detail Maturity Assessment beserta skor per-domain dan level keseluruhan (1-4).', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string']], 'required' => ['id']]]],
+
+            // TPRM / Pihak Ketiga
+            ['type' => 'function', 'function' => ['name' => 'list_third_party', 'description' => 'List semua pihak ketiga (third party / vendor) milik organisasi beserta skor risiko, status DPA, dan status lingkup PDP (pra-asesmen).', 'parameters' => ['type' => 'object', 'properties' => (object) [], 'required' => []]]],
+            ['type' => 'function', 'function' => ['name' => 'get_third_party_detail', 'description' => 'Detail satu pihak ketiga. TIDAK menampilkan kontak/email (data terenkripsi).', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string']], 'required' => ['id']]]],
+            ['type' => 'function', 'function' => ['name' => 'get_third_party_pre_assessment', 'description' => 'Ambil pra-asesmen (penyaringan lingkup PDP / triage) terbaru untuk satu pihak ketiga: scope yang disarankan vs final, override, dan status approval DPO.', 'parameters' => ['type' => 'object', 'properties' => ['vendor_id' => ['type' => 'string', 'description' => 'UUID pihak ketiga']], 'required' => ['vendor_id']]]],
+
+            // Cross-Border
+            ['type' => 'function', 'function' => ['name' => 'list_cross_border', 'description' => 'List semua Cross-Border Data Transfer (transfer data lintas negara) milik organisasi.', 'parameters' => ['type' => 'object', 'properties' => (object) [], 'required' => []]]],
+            ['type' => 'function', 'function' => ['name' => 'get_cross_border_detail', 'description' => 'Detail satu transfer lintas negara beserta dasar hukum, skor risiko, dan safeguards.', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string']], 'required' => ['id']]]],
+
+            // Security Posture
+            ['type' => 'function', 'function' => ['name' => 'get_security_posture', 'description' => 'Ambil snapshot Privacy/Security Posture terakhir: skor keseluruhan (0-100), skor per-layer (data/process/response), dan breakdown per-pilar.', 'parameters' => ['type' => 'object', 'properties' => (object) [], 'required' => []]]],
+            ['type' => 'function', 'function' => ['name' => 'list_posture_findings', 'description' => 'List temuan (findings) Privacy Posture yang actionable beserta severity, status, dan SLA. Bisa filter status (open/in_progress/resolved).', 'parameters' => ['type' => 'object', 'properties' => ['status' => ['type' => 'string', 'description' => 'OPSIONAL filter status']], 'required' => []]]],
+
+            // Cookie
+            ['type' => 'function', 'function' => ['name' => 'get_cookie_stats', 'description' => 'Statistik consent cookie (anonim): total log, jumlah accept analytics/marketing/preferences.', 'parameters' => ['type' => 'object', 'properties' => (object) [], 'required' => []]]],
+
+            // Leak Detection
+            ['type' => 'function', 'function' => ['name' => 'list_leak_detection', 'description' => 'List hasil scan Leak Detection: tabel yang discan, jumlah match, dan apakah kebocoran terkonfirmasi.', 'parameters' => ['type' => 'object', 'properties' => (object) [], 'required' => []]]],
+
             // Organization
             ['type' => 'function', 'function' => ['name' => 'get_organization', 'description' => 'Ambil detail organisasi (nama, alamat, industri, dll). Tidak bisa mengakses credentials.', 'parameters' => ['type' => 'object', 'properties' => (object) [], 'required' => []]]],
             ['type' => 'function', 'function' => ['name' => 'update_organization', 'description' => 'Update info organisasi. Field yang diizinkan: name, address, phone, industry, size, website, description. TIDAK BISA mengubah credentials/email/password.', 'parameters' => ['type' => 'object', 'properties' => ['name' => ['type' => 'string'], 'address' => ['type' => 'string'], 'phone' => ['type' => 'string'], 'industry' => ['type' => 'string'], 'size' => ['type' => 'string'], 'website' => ['type' => 'string'], 'description' => ['type' => 'string']], 'required' => []]]],
@@ -1038,12 +1349,18 @@ class AiAgentToolExecutor
     private const PAGE_TOOL_MAP = [
         'ropa' => ['list_ropa', 'get_ropa_detail', 'create_ropa', 'update_ropa', 'search_similar_ropa', 'find_related_records'],
         'dpia' => ['list_dpia', 'get_dpia_detail', 'create_dpia', 'update_dpia', 'search_similar_dpia', 'find_related_records'],
-        'breach' => ['list_breach', 'get_breach_detail', 'create_breach', 'update_breach', 'search_similar_breach', 'find_related_records'],
+        'breach' => ['list_breach', 'get_breach_detail', 'create_breach', 'search_similar_breach', 'find_related_records'],
         'dsr' => ['list_dsr', 'get_dsr_detail', 'update_dsr', 'find_related_records'],
-        'gap' => ['list_gap_assessment', 'get_gap_assessment_detail'],
-        'consent' => ['list_consent', 'get_consent_detail'],
-        'data-discovery' => ['list_information_systems', 'get_system_detail'],
-        'simulation' => ['list_simulations', 'get_simulation_detail'],
+        'gap' => ['list_gap', 'get_gap_detail'],
+        'consent' => ['list_consent', 'get_consent_stats', 'get_cookie_stats'],
+        'data-discovery' => ['list_discovery', 'get_discovery_detail', 'list_leak_detection'],
+        'simulation' => ['list_drill', 'get_drill_detail'],
+        'lia' => ['list_lia', 'get_lia_detail'],
+        'tia' => ['list_tia', 'get_tia_detail'],
+        'maturity' => ['list_maturity', 'get_maturity_detail'],
+        'vendor-risk' => ['list_third_party', 'get_third_party_detail', 'get_third_party_pre_assessment'],
+        'cross-border' => ['list_cross_border', 'get_cross_border_detail'],
+        'security' => ['get_security_posture', 'list_posture_findings'],
     ];
 
     /** Universal tools yang selalu tersedia (cross-module utility). */
@@ -1058,10 +1375,18 @@ class AiAgentToolExecutor
         'list_dpia', 'get_dpia_detail',
         'list_breach', 'get_breach_detail',
         'list_dsr', 'get_dsr_detail',
-        'list_gap_assessment', 'get_gap_assessment_detail',
-        'list_consent', 'get_consent_detail',
-        'list_information_systems', 'get_system_detail',
-        'list_simulations', 'get_simulation_detail',
+        'list_gap', 'get_gap_detail',
+        'list_consent', 'get_consent_stats',
+        'list_discovery', 'get_discovery_detail',
+        'list_drill', 'get_drill_detail',
+        'list_lia', 'get_lia_detail',
+        'list_tia', 'get_tia_detail',
+        'list_maturity', 'get_maturity_detail',
+        'list_third_party', 'get_third_party_detail', 'get_third_party_pre_assessment',
+        'list_cross_border', 'get_cross_border_detail',
+        'get_security_posture', 'list_posture_findings',
+        'get_cookie_stats', 'list_leak_detection',
+        'get_organization',
         'search_similar_ropa', 'search_similar_dpia', 'search_similar_breach',
         'search_knowledge_base', 'find_related_records',
         'get_compliance_summary',
@@ -1119,6 +1444,8 @@ class AiAgentToolExecutor
             ['type' => 'function', 'function' => ['name' => 'list_users', 'description' => 'List semua user di platform (read-only). Menampilkan nama, role, dan organisasi. TIDAK menampilkan email/password.', 'parameters' => ['type' => 'object', 'properties' => (object) [], 'required' => []]]],
             ['type' => 'function', 'function' => ['name' => 'list_licenses', 'description' => 'List semua license yang terdaftar. Menampilkan key, package_type, status, dan expired.', 'parameters' => ['type' => 'object', 'properties' => (object) [], 'required' => []]]],
             ['type' => 'function', 'function' => ['name' => 'list_chat_history', 'description' => 'List riwayat chat dari semua user. Menampilkan nama user, jumlah pesan, dan waktu terakhir.', 'parameters' => ['type' => 'object', 'properties' => (object) [], 'required' => []]]],
+            ['type' => 'function', 'function' => ['name' => 'list_organizations', 'description' => 'List semua organisasi (tenant) di platform: nama, industri, ukuran, status lifecycle, dan sisa AI credit. Read-only, tidak menampilkan credentials.', 'parameters' => ['type' => 'object', 'properties' => (object) [], 'required' => []]]],
+            ['type' => 'function', 'function' => ['name' => 'get_platform_stats', 'description' => 'Statistik agregat seluruh platform: total/aktif organisasi, total user, license aktif/expired, dan breakdown license per paket.', 'parameters' => ['type' => 'object', 'properties' => (object) [], 'required' => []]]],
             ['type' => 'function', 'function' => ['name' => 'get_organization', 'description' => 'Ambil detail organisasi (nama, alamat, industri, dll).', 'parameters' => ['type' => 'object', 'properties' => (object) [], 'required' => []]]],
             ['type' => 'function', 'function' => ['name' => 'get_compliance_summary', 'description' => 'Ringkasan compliance seluruh modul: jumlah RoPA, DPIA, Breach, DSR, GAP score, dll.', 'parameters' => ['type' => 'object', 'properties' => (object) [], 'required' => []]]],
         ];
