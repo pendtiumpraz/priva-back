@@ -45,6 +45,12 @@ class AiAgentToolExecutor
         'create_breach',
         'update_dsr',
         'update_organization',
+        // New tenant-module mutations (create draft / update safe fields).
+        'create_third_party', 'update_third_party',
+        'create_cross_border', 'update_cross_border',
+        'create_lia', 'update_lia',
+        'create_tia', 'update_tia',
+        'create_maturity', 'update_maturity',
     ];
 
     private string $orgId;
@@ -212,10 +218,26 @@ class AiAgentToolExecutor
             'list_third_party' => $this->listThirdParty($args),
             'get_third_party_detail' => $this->getThirdPartyDetail($args),
             'get_third_party_pre_assessment' => $this->getThirdPartyPreAssessment($args),
+            'create_third_party' => $this->createThirdParty($args),
+            'update_third_party' => $this->updateThirdParty($args),
 
             // Cross-Border Data Transfer
             'list_cross_border' => $this->listCrossBorder($args),
             'get_cross_border_detail' => $this->getCrossBorderDetail($args),
+            'create_cross_border' => $this->createCrossBorder($args),
+            'update_cross_border' => $this->updateCrossBorder($args),
+
+            // LIA mutations
+            'create_lia' => $this->createLia($args),
+            'update_lia' => $this->updateLia($args),
+
+            // TIA mutations
+            'create_tia' => $this->createTia($args),
+            'update_tia' => $this->updateTia($args),
+
+            // Maturity mutations
+            'create_maturity' => $this->createMaturity($args),
+            'update_maturity' => $this->updateMaturity($args),
 
             // Security Posture
             'get_security_posture' => $this->getSecurityPosture($args),
@@ -904,6 +926,231 @@ class AiAgentToolExecutor
     }
 
     // =============================================
+    // TENANT MUTATIONS (approval-gated via MUTATION_TOOLS)
+    // All create DRAFT records or update only safe fields; org_id is always
+    // forced to the caller's org. Locked/submitted records are not editable.
+    // =============================================
+    private function createThirdParty(array $args): array
+    {
+        $safe = ['name', 'description', 'website', 'privacy_policy_url', 'country', 'services_provided', 'data_shared', 'risk_level', 'risk_score', 'dpa_status', 'contact_name', 'contact_email', 'category'];
+        $data = array_intersect_key($args, array_flip($safe));
+        if (empty($data['name'])) {
+            return [['error' => 'name wajib'], '❌ Nama pihak ketiga wajib diisi'];
+        }
+        $data['org_id'] = $this->orgId;
+        $data['pdp_scope_status'] = 'unscreened';
+        $v = Vendor::create($data);
+
+        // Mirror controller: high/critical or offshore vendor auto-spawns draft TIA.
+        try {
+            app(\App\Services\AssessmentAutoTriggerService::class)->fromVendor($v, $this->initiatorUserId);
+        } catch (\Throwable $e) {
+        }
+        try {
+            AuditLog::create($this->auditPayload('vendor', $v->id, 'created', 'Automated AI Creation'));
+        } catch (\Exception $e) {
+        }
+
+        $out = $v->fresh()->toArray();
+        unset($out['contact_email'], $out['contact_name']);
+
+        return [$out, "✏️ Membuat pihak ketiga baru: {$v->name}"];
+    }
+
+    private function updateThirdParty(array $args): array
+    {
+        $v = Vendor::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        if (! $v) {
+            return [['error' => 'Pihak ketiga tidak ditemukan'], '❌ Pihak ketiga tidak ditemukan'];
+        }
+        $safe = ['name', 'description', 'website', 'privacy_policy_url', 'country', 'services_provided', 'data_shared', 'risk_level', 'risk_score', 'dpa_status', 'contact_name', 'contact_email', 'category'];
+        $data = array_intersect_key($args, array_flip($safe));
+        $v->update($data);
+
+        try {
+            AuditLog::create($this->auditPayload('vendor', $v->id, 'updated', 'AI Automated Edit', ['changed_fields' => array_keys($data)]));
+        } catch (\Exception $e) {
+        }
+
+        $out = $v->fresh()->toArray();
+        unset($out['contact_email'], $out['contact_name']);
+
+        return [$out, "✅ Pihak ketiga diupdate: {$v->name}"];
+    }
+
+    private function createCrossBorder(array $args): array
+    {
+        $safe = ['destination_country', 'destination_entity', 'transfer_purpose', 'legal_basis', 'data_categories', 'safeguards', 'status', 'notes', 'transfer_volume_band', 'transfer_frequency', 'data_sensitivity', 'transfer_mechanism', 'encryption_in_transit', 'encryption_at_rest', 'data_minimization_applied', 'retention_period_days', 'recipient_dpo_name', 'recipient_dpo_email', 'linked_ropa_id'];
+        $data = array_intersect_key($args, array_flip($safe));
+        foreach (['destination_country', 'destination_entity', 'transfer_purpose', 'legal_basis'] as $req) {
+            if (empty($data[$req])) {
+                return [['error' => "{$req} wajib"], "❌ Field {$req} wajib diisi untuk transfer lintas negara"];
+            }
+        }
+        $data['org_id'] = $this->orgId;
+        $data['status'] = $data['status'] ?? 'draft';
+        $t = CrossBorderTransfer::create($data);
+
+        // Pasal 56: every cross-border transfer must have a TIA — always spawn draft.
+        try {
+            app(\App\Services\AssessmentAutoTriggerService::class)->fromCrossBorder($t, $this->initiatorUserId);
+        } catch (\Throwable $e) {
+        }
+        try {
+            AuditLog::create($this->auditPayload('cross_border', $t->id, 'created', 'Automated AI Creation'));
+        } catch (\Exception $e) {
+        }
+
+        return [$t->fresh()->toArray(), "✏️ Membuat transfer lintas negara ke {$t->destination_country} (draft TIA otomatis dibuat)"];
+    }
+
+    private function updateCrossBorder(array $args): array
+    {
+        $t = CrossBorderTransfer::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        if (! $t) {
+            return [['error' => 'Cross-Border Transfer tidak ditemukan'], '❌ Transfer lintas negara tidak ditemukan'];
+        }
+        $safe = ['destination_country', 'destination_entity', 'transfer_purpose', 'legal_basis', 'data_categories', 'safeguards', 'status', 'notes', 'transfer_volume_band', 'transfer_frequency', 'data_sensitivity', 'transfer_mechanism', 'encryption_in_transit', 'encryption_at_rest', 'data_minimization_applied', 'retention_period_days', 'recipient_dpo_name', 'recipient_dpo_email'];
+        $data = array_intersect_key($args, array_flip($safe));
+        $t->update($data);
+
+        try {
+            AuditLog::create($this->auditPayload('cross_border', $t->id, 'updated', 'AI Automated Edit', ['changed_fields' => array_keys($data)]));
+        } catch (\Exception $e) {
+        }
+
+        return [$t->fresh()->toArray(), "✅ Transfer lintas negara diupdate ({$t->destination_country})"];
+    }
+
+    private function createLia(array $args): array
+    {
+        $safe = ['title', 'description', 'processing_activity', 'linked_ropa_id', 'linked_dpia_id', 'legitimate_interest_basis', 'legitimate_interest_reason', 'purpose_test', 'necessity_test', 'balancing_test', 'wizard_data'];
+        $data = array_intersect_key($args, array_flip($safe));
+        if (empty($data['title'])) {
+            return [['error' => 'title wajib'], '❌ Judul LIA wajib diisi'];
+        }
+        $data['org_id'] = $this->orgId;
+        $data['lia_code'] = $args['lia_code'] ?? 'LIA-AI-'.date('Y').'-'.rand(100, 999);
+        $data['status'] = 'draft';
+        $data['created_by'] = $this->initiatorUserId;
+        $r = LiaAssessment::create($data);
+
+        try {
+            AuditLog::create($this->auditPayload('lia', $r->id, 'created', 'Automated AI Creation'));
+        } catch (\Exception $e) {
+        }
+
+        return [$r->fresh()->toArray(), "✏️ Membuat LIA baru: {$r->lia_code}"];
+    }
+
+    private function updateLia(array $args): array
+    {
+        $r = LiaAssessment::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        if (! $r) {
+            return [['error' => 'LIA tidak ditemukan'], '❌ LIA tidak ditemukan'];
+        }
+        if ($r->is_locked || $r->status !== 'draft') {
+            return [['error' => 'LIA terkunci'], "🔒 LIA {$r->lia_code} sudah disubmit/terkunci — tidak bisa diedit AI. Buka kembali lewat dashboard dulu."];
+        }
+        $safe = ['title', 'description', 'processing_activity', 'legitimate_interest_basis', 'legitimate_interest_reason', 'purpose_test', 'necessity_test', 'balancing_test', 'wizard_data'];
+        $data = array_intersect_key($args, array_flip($safe));
+        $r->update($data);
+
+        try {
+            AuditLog::create($this->auditPayload('lia', $r->id, 'updated', 'AI Automated Edit', ['changed_fields' => array_keys($data)]));
+        } catch (\Exception $e) {
+        }
+
+        return [$r->fresh()->toArray(), "✅ LIA diupdate: {$r->lia_code}"];
+    }
+
+    private function createTia(array $args): array
+    {
+        $safe = ['title', 'linked_ropa_id', 'linked_cross_border_id', 'linked_vendor_id', 'transfer_basis', 'destination_country', 'risk_regulation_mismatch', 'risk_contractual_breach', 'risk_admin_sanctions', 'risk_data_leak', 'risk_data_integrity', 'risk_sovereign_access', 'security_protocol_score', 'security_encryption_score', 'wizard_data'];
+        $data = array_intersect_key($args, array_flip($safe));
+        if (empty($data['title'])) {
+            return [['error' => 'title wajib'], '❌ Judul TIA wajib diisi'];
+        }
+        $data['org_id'] = $this->orgId;
+        $data['tia_code'] = $args['tia_code'] ?? 'TIA-AI-'.date('Y').'-'.rand(100, 999);
+        $data['status'] = 'draft';
+        $data['created_by'] = $this->initiatorUserId;
+        $r = TiaAssessment::create($data);
+
+        try {
+            AuditLog::create($this->auditPayload('tia', $r->id, 'created', 'Automated AI Creation'));
+        } catch (\Exception $e) {
+        }
+
+        return [$r->fresh()->toArray(), "✏️ Membuat TIA baru: {$r->tia_code}"];
+    }
+
+    private function updateTia(array $args): array
+    {
+        $r = TiaAssessment::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        if (! $r) {
+            return [['error' => 'TIA tidak ditemukan'], '❌ TIA tidak ditemukan'];
+        }
+        if ($r->is_locked || $r->status !== 'draft') {
+            return [['error' => 'TIA terkunci'], "🔒 TIA {$r->tia_code} sudah disubmit/terkunci — tidak bisa diedit AI."];
+        }
+        $safe = ['title', 'transfer_basis', 'destination_country', 'risk_regulation_mismatch', 'risk_contractual_breach', 'risk_admin_sanctions', 'risk_data_leak', 'risk_data_integrity', 'risk_sovereign_access', 'security_protocol_score', 'security_encryption_score', 'wizard_data'];
+        $data = array_intersect_key($args, array_flip($safe));
+        $r->update($data);
+
+        try {
+            AuditLog::create($this->auditPayload('tia', $r->id, 'updated', 'AI Automated Edit', ['changed_fields' => array_keys($data)]));
+        } catch (\Exception $e) {
+        }
+
+        return [$r->fresh()->toArray(), "✅ TIA diupdate: {$r->tia_code}"];
+    }
+
+    private function createMaturity(array $args): array
+    {
+        $safe = ['title', 'version', 'input_method', 'dimensions', 'recommendations'];
+        $data = array_intersect_key($args, array_flip($safe));
+        if (empty($data['title'])) {
+            return [['error' => 'title wajib'], '❌ Judul Maturity Assessment wajib diisi'];
+        }
+        $data['org_id'] = $this->orgId;
+        $data['version'] = $data['version'] ?? 'v1';
+        $data['input_method'] = in_array($data['input_method'] ?? '', ['questionnaire', 'document', 'auto_derive'], true)
+            ? $data['input_method'] : 'questionnaire';
+        $data['status'] = 'draft';
+        $data['created_by'] = $this->initiatorUserId;
+        $r = MaturityAssessment::create($data);
+
+        try {
+            AuditLog::create($this->auditPayload('maturity', $r->id, 'created', 'Automated AI Creation'));
+        } catch (\Exception $e) {
+        }
+
+        return [$r->fresh()->toArray(), "✏️ Membuat Maturity Assessment baru: {$r->title}"];
+    }
+
+    private function updateMaturity(array $args): array
+    {
+        $r = MaturityAssessment::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        if (! $r) {
+            return [['error' => 'Maturity Assessment tidak ditemukan'], '❌ Maturity Assessment tidak ditemukan'];
+        }
+        if ($r->status === 'published') {
+            return [['error' => 'Maturity sudah published'], "🔒 Maturity Assessment '{$r->title}' sudah published — tidak bisa diedit."];
+        }
+        $safe = ['title', 'version', 'dimensions', 'recommendations'];
+        $data = array_intersect_key($args, array_flip($safe));
+        $r->update($data);
+
+        try {
+            AuditLog::create($this->auditPayload('maturity', $r->id, 'updated', 'AI Automated Edit', ['changed_fields' => array_keys($data)]));
+        } catch (\Exception $e) {
+        }
+
+        return [$r->fresh()->toArray(), "✅ Maturity Assessment diupdate: {$r->title}"];
+    }
+
+    // =============================================
     // Organization
     // =============================================
     private function getOrganization(array $args): array
@@ -1267,6 +1514,22 @@ class AiAgentToolExecutor
             // Leak Detection
             ['type' => 'function', 'function' => ['name' => 'list_leak_detection', 'description' => 'List hasil scan Leak Detection: tabel yang discan, jumlah match, dan apakah kebocoran terkonfirmasi.', 'parameters' => ['type' => 'object', 'properties' => (object) [], 'required' => []]]],
 
+            // === TENANT MUTATIONS (butuh approval user sebelum dieksekusi) ===
+            ['type' => 'function', 'function' => ['name' => 'create_third_party', 'description' => 'Buat pihak ketiga (third party) baru. Hanya field dasar; status lingkup PDP otomatis "unscreened" (belum disaring). Jika risk tinggi/offshore, draft TIA otomatis dibuat. risk_level HARUS: low|medium|high|critical. dpa_status HARUS: none|draft|signed|expired.', 'parameters' => ['type' => 'object', 'properties' => ['name' => ['type' => 'string', 'description' => 'Nama pihak ketiga (wajib)'], 'description' => ['type' => 'string'], 'website' => ['type' => 'string'], 'country' => ['type' => 'string'], 'category' => ['type' => 'string'], 'risk_level' => ['type' => 'string', 'description' => 'low|medium|high|critical'], 'risk_score' => ['type' => 'integer', 'description' => '0-100'], 'dpa_status' => ['type' => 'string', 'description' => 'none|draft|signed|expired'], 'services_provided' => ['type' => 'array', 'items' => ['type' => 'string']], 'data_shared' => ['type' => 'array', 'items' => ['type' => 'string']]], 'required' => ['name']]]],
+            ['type' => 'function', 'function' => ['name' => 'update_third_party', 'description' => 'Update field dasar satu pihak ketiga. Sertakan id.', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string'], 'name' => ['type' => 'string'], 'description' => ['type' => 'string'], 'website' => ['type' => 'string'], 'country' => ['type' => 'string'], 'category' => ['type' => 'string'], 'risk_level' => ['type' => 'string'], 'risk_score' => ['type' => 'integer'], 'dpa_status' => ['type' => 'string']], 'required' => ['id']]]],
+
+            ['type' => 'function', 'function' => ['name' => 'create_cross_border', 'description' => 'Buat transfer data lintas negara (cross-border). Draft TIA otomatis dibuat (wajib per Pasal 56). legal_basis HARUS: none|adequacy|sccs|bcr|consent|contract_necessity|public_interest|vital_interest.', 'parameters' => ['type' => 'object', 'properties' => ['destination_country' => ['type' => 'string', 'description' => 'Negara tujuan (wajib)'], 'destination_entity' => ['type' => 'string', 'description' => 'Entitas penerima (wajib)'], 'transfer_purpose' => ['type' => 'string', 'description' => 'Tujuan transfer (wajib)'], 'legal_basis' => ['type' => 'string', 'description' => 'Dasar hukum (wajib)'], 'data_categories' => ['type' => 'array', 'items' => ['type' => 'string']], 'safeguards' => ['type' => 'string'], 'status' => ['type' => 'string', 'description' => 'draft|pending|approved|rejected|expired (default draft)'], 'notes' => ['type' => 'string']], 'required' => ['destination_country', 'destination_entity', 'transfer_purpose', 'legal_basis']]]],
+            ['type' => 'function', 'function' => ['name' => 'update_cross_border', 'description' => 'Update transfer lintas negara. Sertakan id.', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string'], 'destination_country' => ['type' => 'string'], 'destination_entity' => ['type' => 'string'], 'transfer_purpose' => ['type' => 'string'], 'legal_basis' => ['type' => 'string'], 'status' => ['type' => 'string'], 'safeguards' => ['type' => 'string'], 'notes' => ['type' => 'string']], 'required' => ['id']]]],
+
+            ['type' => 'function', 'function' => ['name' => 'create_lia', 'description' => 'Buat LIA (Legitimate Interest Assessment) baru sebagai draft. Kode LIA otomatis dibuat. purpose_test/necessity_test/balancing_test berupa object jawaban uji.', 'parameters' => ['type' => 'object', 'properties' => ['title' => ['type' => 'string', 'description' => 'Judul (wajib)'], 'description' => ['type' => 'string'], 'processing_activity' => ['type' => 'string'], 'linked_ropa_id' => ['type' => 'string'], 'legitimate_interest_basis' => ['type' => 'string'], 'legitimate_interest_reason' => ['type' => 'string'], 'purpose_test' => ['type' => 'object'], 'necessity_test' => ['type' => 'object'], 'balancing_test' => ['type' => 'object'], 'wizard_data' => ['type' => 'object']], 'required' => ['title']]]],
+            ['type' => 'function', 'function' => ['name' => 'update_lia', 'description' => 'Update LIA. HANYA jika status masih draft (belum disubmit). Sertakan id.', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string'], 'title' => ['type' => 'string'], 'description' => ['type' => 'string'], 'processing_activity' => ['type' => 'string'], 'legitimate_interest_basis' => ['type' => 'string'], 'legitimate_interest_reason' => ['type' => 'string'], 'purpose_test' => ['type' => 'object'], 'necessity_test' => ['type' => 'object'], 'balancing_test' => ['type' => 'object'], 'wizard_data' => ['type' => 'object']], 'required' => ['id']]]],
+
+            ['type' => 'function', 'function' => ['name' => 'create_tia', 'description' => 'Buat TIA (Transfer Impact Assessment) baru sebagai draft. Kode TIA otomatis. Metrik risiko 1-10 (opsional). transfer_basis HARUS: contract|consent|bcr|other.', 'parameters' => ['type' => 'object', 'properties' => ['title' => ['type' => 'string', 'description' => 'Judul (wajib)'], 'linked_cross_border_id' => ['type' => 'string'], 'linked_ropa_id' => ['type' => 'string'], 'linked_vendor_id' => ['type' => 'string'], 'transfer_basis' => ['type' => 'string'], 'destination_country' => ['type' => 'string'], 'risk_data_leak' => ['type' => 'integer', 'description' => '1-10'], 'risk_sovereign_access' => ['type' => 'integer', 'description' => '1-10'], 'wizard_data' => ['type' => 'object']], 'required' => ['title']]]],
+            ['type' => 'function', 'function' => ['name' => 'update_tia', 'description' => 'Update TIA. HANYA jika status masih draft. Sertakan id.', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string'], 'title' => ['type' => 'string'], 'transfer_basis' => ['type' => 'string'], 'destination_country' => ['type' => 'string'], 'risk_data_leak' => ['type' => 'integer'], 'risk_sovereign_access' => ['type' => 'integer'], 'wizard_data' => ['type' => 'object']], 'required' => ['id']]]],
+
+            ['type' => 'function', 'function' => ['name' => 'create_maturity', 'description' => 'Buat Maturity Level Assessment baru sebagai draft. input_method HARUS: questionnaire|document|auto_derive (default questionnaire).', 'parameters' => ['type' => 'object', 'properties' => ['title' => ['type' => 'string', 'description' => 'Judul (wajib)'], 'version' => ['type' => 'string', 'description' => 'default v1'], 'input_method' => ['type' => 'string', 'description' => 'questionnaire|document|auto_derive'], 'recommendations' => ['type' => 'string']], 'required' => ['title']]]],
+            ['type' => 'function', 'function' => ['name' => 'update_maturity', 'description' => 'Update Maturity Assessment. TIDAK bisa jika sudah published. Sertakan id.', 'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'string'], 'title' => ['type' => 'string'], 'version' => ['type' => 'string'], 'recommendations' => ['type' => 'string']], 'required' => ['id']]]],
+
             // Organization
             ['type' => 'function', 'function' => ['name' => 'get_organization', 'description' => 'Ambil detail organisasi (nama, alamat, industri, dll). Tidak bisa mengakses credentials.', 'parameters' => ['type' => 'object', 'properties' => (object) [], 'required' => []]]],
             ['type' => 'function', 'function' => ['name' => 'update_organization', 'description' => 'Update info organisasi. Field yang diizinkan: name, address, phone, industry, size, website, description. TIDAK BISA mengubah credentials/email/password.', 'parameters' => ['type' => 'object', 'properties' => ['name' => ['type' => 'string'], 'address' => ['type' => 'string'], 'phone' => ['type' => 'string'], 'industry' => ['type' => 'string'], 'size' => ['type' => 'string'], 'website' => ['type' => 'string'], 'description' => ['type' => 'string']], 'required' => []]]],
@@ -1355,11 +1618,11 @@ class AiAgentToolExecutor
         'consent' => ['list_consent', 'get_consent_stats', 'get_cookie_stats'],
         'data-discovery' => ['list_discovery', 'get_discovery_detail', 'list_leak_detection'],
         'simulation' => ['list_drill', 'get_drill_detail'],
-        'lia' => ['list_lia', 'get_lia_detail'],
-        'tia' => ['list_tia', 'get_tia_detail'],
-        'maturity' => ['list_maturity', 'get_maturity_detail'],
-        'vendor-risk' => ['list_third_party', 'get_third_party_detail', 'get_third_party_pre_assessment'],
-        'cross-border' => ['list_cross_border', 'get_cross_border_detail'],
+        'lia' => ['list_lia', 'get_lia_detail', 'create_lia', 'update_lia'],
+        'tia' => ['list_tia', 'get_tia_detail', 'create_tia', 'update_tia'],
+        'maturity' => ['list_maturity', 'get_maturity_detail', 'create_maturity', 'update_maturity'],
+        'vendor-risk' => ['list_third_party', 'get_third_party_detail', 'get_third_party_pre_assessment', 'create_third_party', 'update_third_party'],
+        'cross-border' => ['list_cross_border', 'get_cross_border_detail', 'create_cross_border', 'update_cross_border'],
         'security' => ['get_security_posture', 'list_posture_findings'],
     ];
 

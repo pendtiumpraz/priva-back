@@ -17,6 +17,7 @@ use App\Models\InformationSystem;
 use App\Models\License;
 use App\Models\Organization;
 use App\Services\AiAgentToolExecutor;
+use App\Services\PlatformToolExecutor;
 use App\Services\CreditService;
 use App\Services\DocumentParserService;
 use App\Services\TenantStorageService;
@@ -265,6 +266,11 @@ class AiAgentController extends Controller
         $executor = (new AiAgentToolExecutor($orgId ?? ''))
             ->withContext($user->id, $user->name, $conversation->id);
 
+        // Platform-scoped executor for root/superadmin control tools (not org-scoped).
+        $platformExecutor = $isSuperAdmin
+            ? (new PlatformToolExecutor($user->role, $user->id, $user->name))->withContext($conversation->id)
+            : null;
+
         // Generate per-request nonce untuk spotlight tool results. Nonce ini
         // hadir di system prompt sebagai "id sah" untuk batas TOOL_OUTPUT.
         // Attacker tidak bisa menanam closing-tag palsu di field DB karena
@@ -285,8 +291,14 @@ class AiAgentController extends Controller
         $intentResult = \App\Services\AiIntentClassifier::classify($request->message);
 
         if ($isSuperAdmin) {
-            $tools = AiAgentToolExecutor::getSuperAdminToolDefinitions();
-            $toolSelectionReason = 'superadmin tools';
+            // SuperAdmin/root: read-only platform monitoring tools + (role-gated)
+            // platform CONTROL tools (license suspend, tenant freeze, credits,
+            // entitlement, config). Root sees more than superadmin.
+            $tools = array_merge(
+                AiAgentToolExecutor::getSuperAdminToolDefinitions(),
+                PlatformToolExecutor::getDefinitions($user->role)
+            );
+            $toolSelectionReason = "superadmin tools (role={$user->role}, ".count($tools).' tools)';
         } elseif ($intentResult['intent'] === \App\Services\AiIntentClassifier::PURE_QA) {
             // Pure Q&A: tidak butuh tools sama sekali, save ~3700 token
             $tools = null;
@@ -493,7 +505,7 @@ PROMPT;
         $agentMaxTokens = $outputGuard->clampMaxTokens(3000);
 
         // Function calling loop
-        return response()->stream(function () use ($messages, $tools, $apiKey, $agentModel, $agentBaseUrl, $agentAuthHeader, $agentAuthPrefix, $executor, $conversation, $user, $orgId, $isSuperAdmin, $outputGuard, $agentMaxTokens, $toolNonce) {
+        return response()->stream(function () use ($messages, $tools, $apiKey, $agentModel, $agentBaseUrl, $agentAuthHeader, $agentAuthPrefix, $executor, $platformExecutor, $conversation, $user, $orgId, $isSuperAdmin, $outputGuard, $agentMaxTokens, $toolNonce) {
             $steps = [];
             $iteration = 0;
 
@@ -585,8 +597,13 @@ PROMPT;
                             // Emit step to frontend immediately
                             $stepDesc = "Menjalankan internal proses..."; // Fallback temporarily
 
-                            // Let the executor handle it and get the translated description
-                            [$result, $stepDesc] = $executor->execute($fnName, $fnArgs);
+                            // Let the executor handle it and get the translated description.
+                            // Platform-control tools (root/superadmin) route to the
+                            // non-org-scoped PlatformToolExecutor; everything else to the
+                            // tenant executor.
+                            [$result, $stepDesc] = ($platformExecutor && PlatformToolExecutor::handles($fnName))
+                                ? $platformExecutor->execute($fnName, $fnArgs)
+                                : $executor->execute($fnName, $fnArgs);
 
                             $stepData = ['tool' => $fnName, 'description' => $stepDesc, 'args' => $fnArgs];
                             $steps[] = $stepData;
@@ -768,8 +785,13 @@ PROMPT;
         $orgId = $user->org_id;
 
         $tool = $request->input('tool');
-        if (!in_array($tool, AiAgentToolExecutor::MUTATION_TOOLS, true)) {
+        $isPlatformTool = PlatformToolExecutor::handles($tool);
+        if (!$isPlatformTool && !in_array($tool, AiAgentToolExecutor::MUTATION_TOOLS, true)) {
             return response()->json(['error' => 'Tool bukan mutation atau tidak dikenali.'], 400);
+        }
+        // Platform-control approvals are restricted to root/superadmin.
+        if ($isPlatformTool && !in_array($user->role, ['root', 'superadmin'], true)) {
+            return response()->json(['error' => 'Hanya root/superadmin yang bisa approve aksi platform.'], 403);
         }
 
         $conversation = ChatConversation::where('id', $request->conversation_id)
@@ -780,8 +802,13 @@ PROMPT;
         }
 
         $args = $request->input('args', []) ?: [];
-        $executor = (new AiAgentToolExecutor($orgId ?? ''))
-            ->withContext($user->id, $user->name, $conversation->id);
+        if ($isPlatformTool) {
+            $executor = (new PlatformToolExecutor($user->role, $user->id, $user->name))
+                ->withContext($conversation->id);
+        } else {
+            $executor = (new AiAgentToolExecutor($orgId ?? ''))
+                ->withContext($user->id, $user->name, $conversation->id);
+        }
         [$result, $stepDesc] = $executor->execute($tool, $args, approved: true);
 
         ChatMessage::create([
