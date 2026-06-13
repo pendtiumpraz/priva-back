@@ -21,6 +21,8 @@ class AiService
 
     private string $locale = 'id';
 
+    private ?string $orgId = null;
+
     /**
      * Initialize AiService with the active provider config.
      *
@@ -29,6 +31,8 @@ class AiService
      */
     public function __construct(?string $orgId = null, string $mode = 'chat')
     {
+        $this->orgId = $orgId;
+
         // Try multi-provider config first
         $config = AiProviderController::getActiveConfig($orgId, $mode);
 
@@ -90,17 +94,19 @@ class AiService
         // Dihitung gabungan system + language directive + user supaya
         // total real yang sampai ke provider yang di-validate.
         $combined = $this->getLanguageDirective().$systemPrompt."\n\n".$userPrompt;
-        app(\App\Services\AiPromptGuard::class)->assertPromptSize($combined);
+        app(AiPromptGuard::class)->assertPromptSize($combined);
 
         // Output guard — clamp max_tokens ke hard cap supaya caller tidak
         // bisa minta output 100000 token (drain kuota). Hard cap di
         // config('security.ai.max_output_tokens', default 4000). Caller
         // tetap boleh minta kurang (mis. 2000 untuk JSON kecil); guard
         // hanya menurunkan, tidak menaikkan.
-        $maxTokens = app(\App\Services\AiOutputGuard::class)->clampMaxTokens($maxTokens);
+        $maxTokens = app(AiOutputGuard::class)->clampMaxTokens($maxTokens);
 
         // Generate a unique cache key based on the model, prompts and language
-        $cacheKey = 'ai_resp_'.md5($this->model.$systemPrompt.$userPrompt.$this->locale);
+        // org_id is part of the key so one tenant's cached response can NEVER be
+        // served to another tenant that sends an identical prompt on the same model.
+        $cacheKey = 'ai_resp_'.md5(($this->orgId ?? '').'|'.$this->model.$systemPrompt.$userPrompt.$this->locale);
 
         // Check if we have a cached response (TTL 24 hours)
         if ($cached = Cache::get($cacheKey)) {
@@ -205,7 +211,7 @@ class AiService
             // dengan exception jelas, daripada return chunk sampah ke
             // caller. Catch + log; return null supaya caller bisa fallback.
             try {
-                app(\App\Services\AiOutputGuard::class)->assert($content);
+                app(AiOutputGuard::class)->assert($content);
             } catch (\RuntimeException $e) {
                 Log::warning('AI Output Guard rejected response ['.$this->model.']: '.$e->getMessage(), [
                     'output_length' => mb_strlen($content),
@@ -290,15 +296,21 @@ class AiService
 
         if ($firstObj === false) {
             $start = $firstArr;
-            $open = '['; $close = ']';
+            $open = '[';
+            $close = ']';
         } elseif ($firstArr === false) {
             $start = $firstObj;
-            $open = '{'; $close = '}';
+            $open = '{';
+            $close = '}';
         } else {
             if ($firstObj < $firstArr) {
-                $start = $firstObj; $open = '{'; $close = '}';
+                $start = $firstObj;
+                $open = '{';
+                $close = '}';
             } else {
-                $start = $firstArr; $open = '['; $close = ']';
+                $start = $firstArr;
+                $open = '[';
+                $close = ']';
             }
         }
 
@@ -312,6 +324,7 @@ class AiService
 
             if ($escape) {
                 $escape = false;
+
                 continue;
             }
             if ($inString) {
@@ -320,10 +333,12 @@ class AiService
                 } elseif ($ch === '"') {
                     $inString = false;
                 }
+
                 continue;
             }
             if ($ch === '"') {
                 $inString = true;
+
                 continue;
             }
             if ($ch === $open) {
