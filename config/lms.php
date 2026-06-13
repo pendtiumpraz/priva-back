@@ -12,5 +12,5 @@ return [
     |
     */
 
-    'enabled' => env('LMS_ENABLED', false),
+    'enabled' => env('LMS_ENABLED', true),
 ];
