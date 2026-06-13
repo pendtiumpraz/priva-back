@@ -602,6 +602,50 @@ class DocumentMakerService
         return ['provider' => null, 'model' => null];
     }
 
+    /**
+     * Render a canonical ai_output (title/metadata/sections) to a DOCX temp file.
+     * Extracted from renderDocx() so sibling generators (e.g. Policy Generator)
+     * reuse the exact same DOCX engine without needing a GeneratedDocument.
+     */
+    public function renderDocxFromOutput(array $aiOutput, string $fallbackTitle): string
+    {
+        $phpWord = new PhpWord;
+        $phpWord->setDefaultFontName('Calibri');
+        $phpWord->setDefaultFontSize(11);
+
+        $sectionStyle = ['marginTop' => 1134, 'marginBottom' => 1134, 'marginLeft' => 1134, 'marginRight' => 1134];
+        $section = $phpWord->addSection($sectionStyle);
+
+        // Title
+        $titleStyle = ['name' => 'Calibri', 'size' => 18, 'bold' => true, 'color' => '1F2937'];
+        $section->addText((string) ($aiOutput['title'] ?? $fallbackTitle), $titleStyle, ['alignment' => Jc::CENTER, 'spaceAfter' => 240]);
+
+        // Metadata line (small)
+        $meta = $aiOutput['metadata'] ?? [];
+        $metaLine = collect([
+            isset($meta['version']) ? 'Versi '.$meta['version'] : null,
+            isset($meta['language']) ? 'Bahasa: '.strtoupper((string) $meta['language']) : null,
+            'Dibuat: '.now()->format('d M Y'),
+        ])->filter()->implode('  ·  ');
+        if ($metaLine !== '') {
+            $section->addText($metaLine, ['size' => 9, 'color' => '6B7280', 'italic' => true], ['alignment' => Jc::CENTER, 'spaceAfter' => 360]);
+        }
+
+        $sections = $aiOutput['sections'] ?? [];
+        foreach ($sections as $node) {
+            if (! is_array($node) || empty($node['type'])) {
+                continue;
+            }
+            $this->renderDocxNode($section, $node);
+        }
+
+        $out = tempnam(sys_get_temp_dir(), 'docmaker_').'.docx';
+        $writer = IOFactory::createWriter($phpWord, 'Word2007');
+        $writer->save($out);
+
+        return $out;
+    }
+
     // =========================================================================
     // DOCX section renderer
     // =========================================================================

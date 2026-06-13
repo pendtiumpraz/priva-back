@@ -68,6 +68,7 @@ use App\Http\Controllers\Api\OrganizationAppController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PlatformConfigController;
 use App\Http\Controllers\Api\PlatformStorageSettingsController;
+use App\Http\Controllers\Api\PolicyGeneratorController;
 use App\Http\Controllers\Api\PolicyReviewCrudController;
 use App\Http\Controllers\Api\PositionController;
 use App\Http\Controllers\Api\PostureController;
@@ -1308,6 +1309,9 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::post('/contract/analyze', [AiFeatureController::class, 'contractAnalyze']);
         Route::post('/policy/analyze', [AiFeatureController::class, 'policyAnalyze']);
         Route::post('/policy/review', [AiFeatureController::class, 'policyReview']);
+        // Module 9 — Policy Generator (AI-drafted UU PDP privacy policy)
+        Route::post('/policy/generate', [PolicyGeneratorController::class, 'generate']);
+        Route::post('/policy/autofill', [PolicyGeneratorController::class, 'autofill']);
         Route::post('/consent/{id}/audit', [AiFeatureController::class, 'consentAudit']);
         Route::post('/simulation/{id}/analysis', [AiFeatureController::class, 'simulationAnalysis']);
         Route::post('/drill/scenario', [AiFeatureController::class, 'drillScenarioGenerator']);
@@ -1650,6 +1654,21 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::post('/', [CustomFieldController::class, 'storeTemplate']);
         Route::put('/{id}', [CustomFieldController::class, 'updateTemplate']);
         Route::delete('/{id}', [CustomFieldController::class, 'destroyTemplate']);
+    });
+
+    // =============================================
+    // Policy Generator — AI-drafted UU PDP privacy policies (Module 9)
+    //   Generate/autofill live under /ai-features/policy/* (gated). CRUD +
+    //   download/embed below, tenant-scoped by org_id in the controller.
+    // =============================================
+    Route::prefix('policy-generations')->group(function () {
+        Route::get('/', [PolicyGeneratorController::class, 'index']);
+        Route::get('/{id}/download.docx', [PolicyGeneratorController::class, 'downloadDocx'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::get('/{id}/download.pdf', [PolicyGeneratorController::class, 'downloadPdf'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::get('/{id}/embed.html', [PolicyGeneratorController::class, 'embed'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::get('/{id}/staleness', [PolicyGeneratorController::class, 'staleness'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::get('/{id}', [PolicyGeneratorController::class, 'show'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::delete('/{id}', [PolicyGeneratorController::class, 'destroy'])->where('id', '[0-9a-fA-F-]{36}');
     });
 
     // =============================================

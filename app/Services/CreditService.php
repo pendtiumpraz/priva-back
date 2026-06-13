@@ -12,20 +12,21 @@ class CreditService
      * Credit cost table per action type
      */
     public const COSTS = [
-        'autofill_ropa'      => 1.0,
-        'autofill_dpia'      => 1.0,
-        'autofill_breach'    => 1.0,
-        'autofill_dsr'       => 0.5,
-        'analysis_ropa'      => 1.0,  // ropaAnalysis (existing)
-        'analysis_dpia'      => 1.0,  // dpiaRiskScoring (existing)
-        'analysis_breach'    => 1.0,  // breachAdvisor (existing)
-        'analysis_dsr'       => 0.5,  // dsrDraft (existing)
-        'analysis_consent'   => 0.5,  // consentGenerator (existing)
-        'gap_remediation'    => 1.0,
-        'dashboard_summary'  => 1.0,
-        'drill_scenario'     => 2.0,
-        'chat'               => 0.25,
-        'ai_doc_analyze'     => 1.0,  // Sprint G.9 — AiDocumentAnalyzer per-evidence call
+        'autofill_ropa' => 1.0,
+        'autofill_dpia' => 1.0,
+        'autofill_breach' => 1.0,
+        'autofill_dsr' => 0.5,
+        'analysis_ropa' => 1.0,  // ropaAnalysis (existing)
+        'analysis_dpia' => 1.0,  // dpiaRiskScoring (existing)
+        'analysis_breach' => 1.0,  // breachAdvisor (existing)
+        'analysis_dsr' => 0.5,  // dsrDraft (existing)
+        'analysis_consent' => 0.5,  // consentGenerator (existing)
+        'gap_remediation' => 1.0,
+        'dashboard_summary' => 1.0,
+        'drill_scenario' => 2.0,
+        'chat' => 0.25,
+        'ai_doc_analyze' => 1.0,  // Sprint G.9 — AiDocumentAnalyzer per-evidence call
+        'policy_generator' => 2.0,  // Module 9 — full privacy-policy draft (heaviest AI feature)
     ];
 
     /**
@@ -42,10 +43,14 @@ class CreditService
      */
     public static function resetIfNeeded(?string $orgId): void
     {
-        if ($orgId === null || $orgId === '') return;
+        if ($orgId === null || $orgId === '') {
+            return;
+        }
 
         $org = Organization::find($orgId);
-        if (!$org) return;
+        if (! $org) {
+            return;
+        }
 
         if ($org->ai_credits_reset_at === null || $org->ai_credits_reset_at->isPast()) {
             $org->update([
@@ -64,13 +69,20 @@ class CreditService
      */
     public static function hasCredit(?string $orgId, string $actionType): bool
     {
-        if (self::isOnPrem()) return true;
-        if ($orgId === null || $orgId === '') return false;
+        if (self::isOnPrem()) {
+            return true;
+        }
+        if ($orgId === null || $orgId === '') {
+            return false;
+        }
         $cost = self::COSTS[$actionType] ?? 1.0;
         $org = Organization::find($orgId);
-        if (!$org) return false;
+        if (! $org) {
+            return false;
+        }
 
         $available = $org->ai_credits_remaining + $org->ai_credits_purchased;
+
         return $available >= $cost;
     }
 
@@ -150,7 +162,9 @@ class CreditService
     public static function refund(string $logId): void
     {
         $log = AiCreditLog::findOrFail($logId);
-        if ($log->status !== 'success') return;
+        if ($log->status !== 'success') {
+            return;
+        }
 
         $org = Organization::findOrFail($log->org_id);
         $org->increment('ai_credits_remaining', $log->credits_used);
