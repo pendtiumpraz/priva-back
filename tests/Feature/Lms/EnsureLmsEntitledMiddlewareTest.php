@@ -31,15 +31,15 @@ class EnsureLmsEntitledMiddlewareTest extends TestCase
         $this->getJson('/_test/lms-gate')->assertStatus(503);
     }
 
-    public function test_returns_403_when_org_lacks_entitlement(): void
+    public function test_passes_through_when_no_entitlement_row_default_entitled(): void
     {
         config(['lms.enabled' => true]);
         $org = Organization::factory()->create();
         $user = User::factory()->create(['org_id' => $org->id]);
-        // No LMS menu item or entitlement row — org is not entitled
+        // No entitlement row — LMS is entitled for ALL tenants by default.
         Sanctum::actingAs($user);
 
-        $this->getJson('/_test/lms-gate')->assertStatus(403);
+        $this->getJson('/_test/lms-gate')->assertOk()->assertJson(['ok' => true]);
     }
 
     public function test_passes_through_when_org_entitled(): void
@@ -94,8 +94,11 @@ class EnsureLmsEntitledMiddlewareTest extends TestCase
         $this->getJson('/_test/lms-gate')->assertStatus(403);
     }
 
-    public function test_returns_403_when_entitlement_valid_until_in_past(): void
+    public function test_expired_grant_still_passes_since_lms_is_default_entitled(): void
     {
+        // Under the default-entitled model, only an explicit is_entitled=false
+        // revoke denies access. An is_entitled=true grant (even expired) is not a
+        // revoke, so the tenant keeps the default LMS access.
         config(['lms.enabled' => true]);
         $org = Organization::factory()->create();
         $user = User::factory()->create(['org_id' => $org->id]);
@@ -123,6 +126,6 @@ class EnsureLmsEntitledMiddlewareTest extends TestCase
 
         Sanctum::actingAs($user);
 
-        $this->getJson('/_test/lms-gate')->assertStatus(403);
+        $this->getJson('/_test/lms-gate')->assertOk()->assertJson(['ok' => true]);
     }
 }
