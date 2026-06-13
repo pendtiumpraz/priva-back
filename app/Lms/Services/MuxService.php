@@ -38,7 +38,14 @@ class MuxService
      */
     private function cfg(string $key, $default = null)
     {
-        $stored = AppSetting::get(self::PREFIX.$key);
+        // DB-resilient: if app_settings is unavailable (e.g. a unit test without
+        // migrations, or DB down), fall back to config('services.mux') (.env)
+        // instead of throwing.
+        try {
+            $stored = AppSetting::get(self::PREFIX.$key);
+        } catch (\Throwable $e) {
+            $stored = null;
+        }
         if (filled($stored)) {
             if (in_array($key, self::SECRET_KEYS, true)) {
                 try {
