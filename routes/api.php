@@ -1748,6 +1748,9 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     Route::get('/platform-config', [PlatformConfigController::class, 'index']);
     Route::put('/platform-config', [PlatformConfigController::class, 'update']);
     Route::get('/platform-config/budget', [PlatformConfigController::class, 'budget']);
+    // Mux (LMS video) credentials — root-managed, secrets encrypted/write-only.
+    Route::get('/platform-config/mux', [PlatformConfigController::class, 'muxConfig']);
+    Route::put('/platform-config/mux', [PlatformConfigController::class, 'updateMux']);
 
     Route::get('/system/check-update', [SystemUpdateController::class, 'checkUpdate']);
     Route::post('/system/update-backend', [SystemUpdateController::class, 'updateBackend']);

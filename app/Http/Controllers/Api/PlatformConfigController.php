@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Lms\Services\MuxService;
 use App\Models\AppSetting;
 use App\Models\AuditLog;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -90,6 +92,19 @@ class PlatformConfigController extends Controller
         ],
     ];
 
+    /**
+     * Mux (LMS video) credential fields — platform-global, root-managed.
+     * Secret fields are stored encrypted and never returned (write-only).
+     */
+    public const MUX_FIELDS = [
+        'token_id' => ['secret' => false, 'label' => 'Mux Token ID'],
+        'token_secret' => ['secret' => true, 'label' => 'Mux Token Secret'],
+        'signing_key_id' => ['secret' => false, 'label' => 'Signing Key ID'],
+        'signing_key_private_key' => ['secret' => true, 'label' => 'Signing Key (base64 PEM)'],
+        'default_playback_policy' => ['secret' => false, 'label' => 'Default Playback Policy'],
+        'playback_token_ttl' => ['secret' => false, 'label' => 'Playback Token TTL (detik)'],
+    ];
+
     public function index(Request $request)
     {
         $this->requireRoot($request);
@@ -156,6 +171,80 @@ class PlatformConfigController extends Controller
         }
 
         return response()->json(['message' => 'Saved', 'key' => $data['key'], 'value' => $value]);
+    }
+
+    /**
+     * Read Mux config status. Secrets are NEVER returned — only whether they are
+     * set and from where (db override vs .env fallback). Non-secrets returned.
+     */
+    public function muxConfig(Request $request)
+    {
+        $this->requireRoot($request);
+
+        $prefix = MuxService::PREFIX;
+        $fields = [];
+        foreach (self::MUX_FIELDS as $key => $meta) {
+            $stored = AppSetting::get($prefix.$key);
+            $envFallback = config('services.mux.'.$key);
+            $source = filled($stored) ? 'db' : (filled($envFallback) ? 'env' : 'unset');
+            if ($meta['secret']) {
+                $fields[$key] = ['label' => $meta['label'], 'secret' => true, 'is_set' => $source !== 'unset', 'source' => $source];
+            } else {
+                $fields[$key] = ['label' => $meta['label'], 'secret' => false, 'value' => filled($stored) ? $stored : (string) ($envFallback ?? ''), 'source' => $source];
+            }
+        }
+
+        $svc = new MuxService;
+
+        return response()->json([
+            'fields' => $fields,
+            'configured' => $svc->configured(),
+            'signing_configured' => $svc->signingConfigured(),
+        ]);
+    }
+
+    /**
+     * Save Mux config. Secret fields left blank are kept unchanged (write-only);
+     * secrets are encrypted at rest. Empty .env fallback still applies for unset.
+     */
+    public function updateMux(Request $request)
+    {
+        $this->requireRoot($request);
+
+        $payload = $request->validate([
+            'token_id' => 'nullable|string|max:255',
+            'token_secret' => 'nullable|string|max:8000',
+            'signing_key_id' => 'nullable|string|max:255',
+            'signing_key_private_key' => 'nullable|string|max:20000',
+            'default_playback_policy' => 'nullable|in:signed,public',
+            'playback_token_ttl' => 'nullable|integer|min:60|max:86400',
+        ]);
+
+        $prefix = MuxService::PREFIX;
+        $changed = [];
+        foreach (self::MUX_FIELDS as $key => $meta) {
+            if (! array_key_exists($key, $payload)) {
+                continue;
+            }
+            $val = $payload[$key];
+            // Secret left blank → keep existing (don't wipe).
+            if ($meta['secret'] && ($val === null || $val === '')) {
+                continue;
+            }
+            if (! $meta['secret'] && $val === null) {
+                continue;
+            }
+            AppSetting::set($prefix.$key, $meta['secret'] ? Crypt::encryptString((string) $val) : (string) $val);
+            $changed[] = $key;
+        }
+
+        try {
+            AuditLog::log('platform_config', 'lms.mux', 'updated', ['changed' => $changed], 'platform_config');
+        } catch (\Throwable $e) {
+            \Log::warning('audit failed: '.$e->getMessage());
+        }
+
+        return response()->json(['message' => 'Mux config disimpan.', 'changed' => $changed]);
     }
 
     public function queueHealth(): array

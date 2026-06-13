@@ -2,8 +2,10 @@
 
 namespace App\Lms\Services;
 
+use App\Models\AppSetting;
 use Firebase\JWT\JWT;
 use GuzzleHttp\Client;
+use Illuminate\Support\Facades\Crypt;
 use MuxPhp\Api\AssetsApi;
 use MuxPhp\Configuration;
 use MuxPhp\Models\CreateAssetRequest;
@@ -17,23 +19,51 @@ use MuxPhp\Models\PlaybackPolicy;
  *   1. Ingest an mp4/HLS URL into Mux as an asset (admin / seeder side).
  *   2. Mint short-lived RS256 playback JWTs for SIGNED playback ids (read side).
  *
- * Credentials live in config('services.mux'). When unset the service reports
- * itself unconfigured so callers can degrade gracefully (YouTube keeps working).
+ * Credentials are platform-global, managed by root/superadmin via Platform
+ * Config (AppSetting keys `lms.mux.*`), falling back to config('services.mux')
+ * (.env) for self-hosted setups. When unset the service reports itself
+ * unconfigured so callers degrade gracefully (YouTube keeps working).
  */
 class MuxService
 {
+    /** AppSetting keys whose value is stored encrypted (Crypt). */
+    private const SECRET_KEYS = ['token_secret', 'signing_key_private_key'];
+
+    /** AppSetting key prefix for Mux platform config. */
+    public const PREFIX = 'lms.mux.';
+
+    /**
+     * Resolve a Mux setting: AppSetting (DB, root-managed) first — decrypting
+     * secret keys — then config('services.mux.*') (.env) as a fallback.
+     */
+    private function cfg(string $key, $default = null)
+    {
+        $stored = AppSetting::get(self::PREFIX.$key);
+        if (filled($stored)) {
+            if (in_array($key, self::SECRET_KEYS, true)) {
+                try {
+                    return Crypt::decryptString($stored);
+                } catch (\Throwable $e) {
+                    return $stored; // tolerate a legacy plaintext value
+                }
+            }
+
+            return $stored;
+        }
+
+        return config('services.mux.'.$key, $default);
+    }
+
     /** Management API (ingest) usable — needs an access token. */
     public function configured(): bool
     {
-        return filled(config('services.mux.token_id'))
-            && filled(config('services.mux.token_secret'));
+        return filled($this->cfg('token_id')) && filled($this->cfg('token_secret'));
     }
 
     /** Signed playback usable — needs a signing key. */
     public function signingConfigured(): bool
     {
-        return filled(config('services.mux.signing_key_id'))
-            && filled(config('services.mux.signing_key_private_key'));
+        return filled($this->cfg('signing_key_id')) && filled($this->cfg('signing_key_private_key'));
     }
 
     /**
@@ -44,7 +74,7 @@ class MuxService
      */
     public function ingestFromUrl(string $url, ?string $policy = null): array
     {
-        $policy = $policy ?: (string) config('services.mux.default_playback_policy', 'signed');
+        $policy = $policy ?: (string) $this->cfg('default_playback_policy', 'signed');
         $muxPolicy = $policy === 'signed' ? PlaybackPolicy::SIGNED : PlaybackPolicy::_PUBLIC;
 
         $request = new CreateAssetRequest([
@@ -79,7 +109,7 @@ class MuxService
             throw new \RuntimeException('Mux signing key not configured.');
         }
 
-        $ttl = $ttl ?? (int) config('services.mux.playback_token_ttl', 21600);
+        $ttl = $ttl ?? (int) $this->cfg('playback_token_ttl', 21600);
         $expiresAt = now()->getTimestamp() + $ttl;
 
         $token = JWT::encode(
@@ -90,7 +120,7 @@ class MuxService
             ],
             $this->signingPrivateKey(),
             'RS256',
-            (string) config('services.mux.signing_key_id'), // -> kid header
+            (string) $this->cfg('signing_key_id'), // -> kid header
         );
 
         return ['token' => $token, 'expires_at' => $expiresAt];
@@ -103,10 +133,10 @@ class MuxService
         }
 
         $config = Configuration::getDefaultConfiguration()
-            ->setUsername((string) config('services.mux.token_id'))
-            ->setPassword((string) config('services.mux.token_secret'));
+            ->setUsername((string) $this->cfg('token_id'))
+            ->setPassword((string) $this->cfg('token_secret'));
 
-        return new AssetsApi(new Client(), $config);
+        return new AssetsApi(new Client, $config);
     }
 
     /**
@@ -115,7 +145,7 @@ class MuxService
      */
     private function signingPrivateKey(): string
     {
-        $raw = trim((string) config('services.mux.signing_key_private_key'));
+        $raw = trim((string) $this->cfg('signing_key_private_key'));
 
         if (str_contains($raw, 'BEGIN')) {
             return $raw;
