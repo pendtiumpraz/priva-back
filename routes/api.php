@@ -16,7 +16,6 @@ use App\Http\Controllers\Api\ApiKeyController;
 use App\Http\Controllers\Api\ApprovalConfigController;
 use App\Http\Controllers\Api\ApprovalController;
 use App\Http\Controllers\Api\AsesmenPublikController;
-use App\Http\Controllers\Api\PraAsesmenPublikController;
 use App\Http\Controllers\Api\AssessmentsController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AutomationController;
@@ -66,6 +65,7 @@ use App\Http\Controllers\Api\ModuleCrudController;
 use App\Http\Controllers\Api\NotificationPreferenceController;
 use App\Http\Controllers\Api\OrganizationAppController;
 use App\Http\Controllers\Api\OrganizationController;
+use App\Http\Controllers\Api\PentestReportController;
 use App\Http\Controllers\Api\PlatformConfigController;
 use App\Http\Controllers\Api\PlatformStorageSettingsController;
 use App\Http\Controllers\Api\PolicyGeneratorController;
@@ -73,6 +73,7 @@ use App\Http\Controllers\Api\PolicyReviewCrudController;
 use App\Http\Controllers\Api\PositionController;
 use App\Http\Controllers\Api\PostureController;
 use App\Http\Controllers\Api\PostureFindingController;
+use App\Http\Controllers\Api\PraAsesmenPublikController;
 use App\Http\Controllers\Api\ProcessingCategoryController;
 use App\Http\Controllers\Api\PublicLandingController;
 use App\Http\Controllers\Api\RaciTemplateController;
@@ -80,7 +81,6 @@ use App\Http\Controllers\Api\RetentionPolicyController;
 use App\Http\Controllers\Api\RiskTreatmentPlanController;
 use App\Http\Controllers\Api\Root\QaCenterController;
 use App\Http\Controllers\Api\RootDashboardController;
-use App\Http\Controllers\Api\SuperadminDashboardController;
 use App\Http\Controllers\Api\RopaApprovalController;
 use App\Http\Controllers\Api\RopaLinkController;
 use App\Http\Controllers\Api\RopaTemplateController;
@@ -88,6 +88,7 @@ use App\Http\Controllers\Api\SimulationController;
 use App\Http\Controllers\Api\SsoLoginController;
 use App\Http\Controllers\Api\StoragePoolController;
 use App\Http\Controllers\Api\StorageSettingsController;
+use App\Http\Controllers\Api\SuperadminDashboardController;
 use App\Http\Controllers\Api\SystemSettingsController;
 use App\Http\Controllers\Api\SystemUpdateController;
 use App\Http\Controllers\Api\TemplateExportController;
@@ -99,22 +100,22 @@ use App\Http\Controllers\Api\TenantRoleController;
 use App\Http\Controllers\Api\TenantSsoController;
 use App\Http\Controllers\Api\TenantThemeController;
 use App\Http\Controllers\Api\ThirdPartyQuestionController;
+use App\Http\Controllers\Api\ThreatIntelController;
+use App\Http\Controllers\Api\TiaController;
 use App\Http\Controllers\Api\TprmApprovalController;
 use App\Http\Controllers\Api\TprmIncidentController;
 use App\Http\Controllers\Api\TprmLibraryController;
 use App\Http\Controllers\Api\TprmMonitoringController;
 use App\Http\Controllers\Api\TprmReviewController;
 use App\Http\Controllers\Api\TriageQuestionController;
-use App\Http\Controllers\Api\VendorPreAssessmentController;
-use App\Http\Controllers\Api\VendorScreeningController;
-use App\Http\Controllers\Api\ThreatIntelController;
-use App\Http\Controllers\Api\TiaController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\V1\BreachApiController;
 use App\Http\Controllers\Api\V1\ConsentApiV1Controller;
 use App\Http\Controllers\Api\V1\DsrApiV1Controller;
 use App\Http\Controllers\Api\V2\CookieCaptureController;
+use App\Http\Controllers\Api\VendorPreAssessmentController;
 use App\Http\Controllers\Api\VendorRiskController;
+use App\Http\Controllers\Api\VendorScreeningController;
 use App\Http\Controllers\Api\VoiceTtsController;
 use App\Http\Controllers\Api\WizardSchemaController;
 use App\Http\Controllers\GapComparisonController;
@@ -1911,17 +1912,17 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     Route::prefix('platform-admin/pentest-reports')
         ->middleware('permission:settings,write')
         ->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\PentestReportController::class, 'index']);
-            Route::post('/', [\App\Http\Controllers\Api\PentestReportController::class, 'store']);
+            Route::get('/', [PentestReportController::class, 'index']);
+            Route::post('/', [PentestReportController::class, 'store']);
             // Security posture endpoints — di-mount SEBELUM /{id} supaya
             // tidak ke-conflict dengan UUID route parameter.
-            Route::get('/security-posture', [\App\Http\Controllers\Api\PentestReportController::class, 'securityPosture']);
-            Route::get('/security-posture/download', [\App\Http\Controllers\Api\PentestReportController::class, 'securityPosturePdf']);
-            Route::get('/{id}', [\App\Http\Controllers\Api\PentestReportController::class, 'show']);
-            Route::put('/{id}', [\App\Http\Controllers\Api\PentestReportController::class, 'update']);
-            Route::post('/{id}', [\App\Http\Controllers\Api\PentestReportController::class, 'update']); // multipart workaround
-            Route::delete('/{id}', [\App\Http\Controllers\Api\PentestReportController::class, 'destroy']);
-            Route::get('/{id}/download', [\App\Http\Controllers\Api\PentestReportController::class, 'download']);
+            Route::get('/security-posture', [PentestReportController::class, 'securityPosture']);
+            Route::get('/security-posture/download', [PentestReportController::class, 'securityPosturePdf']);
+            Route::get('/{id}', [PentestReportController::class, 'show']);
+            Route::put('/{id}', [PentestReportController::class, 'update']);
+            Route::post('/{id}', [PentestReportController::class, 'update']); // multipart workaround
+            Route::delete('/{id}', [PentestReportController::class, 'destroy']);
+            Route::get('/{id}/download', [PentestReportController::class, 'download']);
         });
 
 });
@@ -2019,3 +2020,10 @@ Route::middleware(['auth:sanctum', 'role.root', 'tenant.context'])->prefix('admi
     Route::put('/leads/{id}', [$c, 'updateLead']);
     Route::delete('/leads/{id}', [$c, 'destroyLead']);
 });
+
+// =============================================
+// LMS (DPO Academy) — own route file; gated by auth + tenant LMS entitlement.
+// =============================================
+Route::prefix('lms')
+    ->middleware(['auth:sanctum', 'lms.entitled'])
+    ->group(base_path('routes/lms.php'));

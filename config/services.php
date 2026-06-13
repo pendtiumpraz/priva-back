@@ -39,4 +39,19 @@ return [
         'public_key' => env('LICENSE_PUBLIC_KEY'),
     ],
 
+    /*
+    | Mux Video — LMS lesson video with signed playback (M1).
+    | token_id/secret authenticate the management API (asset ingest).
+    | signing_key_id + signing_key_private_key mint RS256 playback JWTs.
+    | Empty config => Mux disabled (YouTube still works).
+    */
+    'mux' => [
+        'token_id' => env('MUX_TOKEN_ID'),
+        'token_secret' => env('MUX_TOKEN_SECRET'),
+        'signing_key_id' => env('MUX_SIGNING_KEY_ID'),
+        'signing_key_private_key' => env('MUX_SIGNING_KEY_PRIVATE_KEY'),
+        'playback_token_ttl' => (int) env('MUX_PLAYBACK_TOKEN_TTL', 21600),
+        'default_playback_policy' => env('MUX_DEFAULT_PLAYBACK_POLICY', 'signed'),
+    ],
+
 ];

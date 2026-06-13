@@ -4,8 +4,6 @@ namespace Database\Seeders;
 
 use App\Models\Organization;
 use App\Models\User;
-use App\Models\Department;
-use App\Models\Position;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -35,10 +33,18 @@ class DatabaseSeeder extends Seeder
             CountryAdequacySeeder::class,
             // TPRM vendor questionnaire bank (3 categories × 12-15 questions).
             VendorQuestionnaireSeeder::class,
+            // LMS (DPO Academy) — idempotent config + content seeders.
+            LmsMenuSeeder::class,
+            LmsPermissionsSeeder::class,
+            LmsXpRulesSeeder::class,
+            LmsBadgesSeeder::class,
+            LmsDpoAcademyContentSeeder::class,
+            LmsFeatureDocQuizzesSeeder::class,
         ]);
 
         if (User::where('email', 'superadmin@privasimu.com')->exists()) {
             $this->command->info('Database is already seeded. Skipping to avoid duplicates.');
+
             return;
         }
 

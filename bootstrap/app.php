@@ -5,6 +5,7 @@ use App\Http\Middleware\AuthenticateConsentApiKey;
 use App\Http\Middleware\AuthenticateDsrApiKey;
 use App\Http\Middleware\CheckPermission;
 use App\Http\Middleware\EnforceTenantReadOnly;
+use App\Http\Middleware\EnsureLmsEntitled;
 use App\Http\Middleware\InitializeTenantDatabase;
 use App\Http\Middleware\PublicAssessmentTokenMiddleware;
 use App\Http\Middleware\PublicPreAssessmentTokenMiddleware;
@@ -43,6 +44,8 @@ return Application::configure(basePath: dirname(__DIR__))
             // Per-user rate limit khusus endpoint AI — N panggilan per menit
             // per user (default 20, configurable di system_settings).
             'ai-throttle' => AiCallRateLimit::class,
+            // LMS (DPO Academy) — gate routes behind tenant LMS entitlement.
+            'lms.entitled' => EnsureLmsEntitled::class,
         ]);
 
         // Stamp security headers (HSTS, frame-options, referrer-policy, dst)
