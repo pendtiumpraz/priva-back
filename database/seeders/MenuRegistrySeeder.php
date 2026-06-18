@@ -58,6 +58,8 @@ class MenuRegistrySeeder extends Seeder
             // Menu Utama
             ['menu_key' => 'dashboard', 'label' => 'Dashboard', 'href' => '/dashboard', 'icon' => 'LayoutDashboard', 'section' => 'Menu Utama', 'sort' => 10, 'hideable' => false, 'roles' => self::ALL],
             ['menu_key' => 'holding-dashboard', 'label' => 'Holding Dashboard', 'href' => '/holding-dashboard', 'icon' => 'Building2', 'section' => 'Menu Utama', 'sort' => 20, 'roles' => ['root', 'superadmin', 'admin']],
+            ['menu_key' => 'holding-assessment', 'label' => 'Asesmen Holding', 'href' => '/holding-assessment', 'icon' => 'ClipboardCheck', 'section' => 'Menu Utama', 'sort' => 22, 'roles' => ['root', 'superadmin', 'admin']],
+            ['menu_key' => 'holding-assessment-review', 'label' => 'Review Asesmen', 'href' => '/holding-assessment-review', 'icon' => 'ShieldCheck', 'section' => 'Menu Utama', 'sort' => 24, 'roles' => ['root', 'superadmin', 'admin']],
             ['menu_key' => 'gap-assessment', 'label' => 'Gap Assessment', 'href' => '/gap-assessment', 'icon' => 'ClipboardCheck', 'section' => 'Menu Utama', 'sort' => 30, 'roles' => array_merge(['root'], self::COMPLIANCE)],
 
             // PDP Modules

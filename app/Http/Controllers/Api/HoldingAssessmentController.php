@@ -363,7 +363,34 @@ class HoldingAssessmentController extends Controller
             'is_locked' => $i->isLocked(),
             'is_expired' => $i->isExpired(),
             'dispatched_at' => $i->dispatched_at,
+            // Token di-expose eksplisit (model meng-hide dari serialisasi default)
+            // supaya holding bisa menyalin tautan publik untuk dibagikan.
+            'token' => $i->assessment_token,
         ];
+    }
+
+    /**
+     * Daftar org tujuan dispatch: descendant holding (tanpa holding itu sendiri).
+     */
+    public function dispatchTargets(Request $request)
+    {
+        [$holding, $descendantIds] = $this->resolveHolding($request);
+        $selfId = $holding?->id;
+
+        $targets = Organization::query()
+            ->whereIn('id', $descendantIds)
+            ->when($selfId, fn ($q) => $q->where('id', '!=', $selfId))
+            ->orderBy('org_level')
+            ->orderBy('name')
+            ->get(['id', 'name', 'org_level', 'parent_id'])
+            ->map(fn ($o) => [
+                'id' => $o->id,
+                'name' => $o->name,
+                'org_level' => $o->org_level,
+                'parent_id' => $o->parent_id,
+            ]);
+
+        return response()->json(['data' => $targets]);
     }
 
     private function instanceDetail(HoldingAssessmentInstance $i): array
