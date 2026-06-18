@@ -57,9 +57,9 @@ class MenuRegistrySeeder extends Seeder
         $menus = [
             // Menu Utama
             ['menu_key' => 'dashboard', 'label' => 'Dashboard', 'href' => '/dashboard', 'icon' => 'LayoutDashboard', 'section' => 'Menu Utama', 'sort' => 10, 'hideable' => false, 'roles' => self::ALL],
+            // Holding Assessment + Review + Grafik Kepatuhan dikonsolidasikan menjadi
+            // TAB di dalam Holding Dashboard (bukan menu terpisah) — akses satu pintu.
             ['menu_key' => 'holding-dashboard', 'label' => 'Holding Dashboard', 'href' => '/holding-dashboard', 'icon' => 'Building2', 'section' => 'Menu Utama', 'sort' => 20, 'roles' => ['root', 'superadmin', 'admin']],
-            ['menu_key' => 'holding-assessment', 'label' => 'Asesmen Holding', 'href' => '/holding-assessment', 'icon' => 'ClipboardCheck', 'section' => 'Menu Utama', 'sort' => 22, 'roles' => ['root', 'superadmin', 'admin']],
-            ['menu_key' => 'holding-assessment-review', 'label' => 'Review Asesmen', 'href' => '/holding-assessment-review', 'icon' => 'ShieldCheck', 'section' => 'Menu Utama', 'sort' => 24, 'roles' => ['root', 'superadmin', 'admin']],
             ['menu_key' => 'gap-assessment', 'label' => 'Gap Assessment', 'href' => '/gap-assessment', 'icon' => 'ClipboardCheck', 'section' => 'Menu Utama', 'sort' => 30, 'roles' => array_merge(['root'], self::COMPLIANCE)],
 
             // PDP Modules
@@ -165,7 +165,9 @@ class MenuRegistrySeeder extends Seeder
         // Deprecated menu cleanup — drop legacy entries that have been superseded by
         // inline editors. Custom-fields editor is now reachable via the
         // "⚙ Edit Wizard Schema" button on the RoPA / DPIA list pages.
-        $deprecated = MenuItem::whereIn('menu_key', ['custom-fields'])->get();
+        // 'holding-assessment' + 'holding-assessment-review' → dikonsolidasi jadi
+        // tab di Holding Dashboard, jadi menu terpisahnya di-drop.
+        $deprecated = MenuItem::whereIn('menu_key', ['custom-fields', 'holding-assessment', 'holding-assessment-review'])->get();
         foreach ($deprecated as $row) {
             RoleMenuWhitelist::where('menu_id', $row->id)->delete();
             $row->delete();
