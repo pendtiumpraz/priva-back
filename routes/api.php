@@ -1808,6 +1808,9 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // Mux (LMS video) credentials — root-managed, secrets encrypted/write-only.
     Route::get('/platform-config/mux', [PlatformConfigController::class, 'muxConfig']);
     Route::put('/platform-config/mux', [PlatformConfigController::class, 'updateMux']);
+    // Holding Dashboard tab visibility (GET: semua auth; PUT: superadmin/root).
+    Route::get('/holding/dashboard-tabs', [PlatformConfigController::class, 'holdingTabs']);
+    Route::put('/holding/dashboard-tabs', [PlatformConfigController::class, 'updateHoldingTabs']);
 
     Route::get('/system/check-update', [SystemUpdateController::class, 'checkUpdate']);
     Route::post('/system/update-backend', [SystemUpdateController::class, 'updateBackend']);

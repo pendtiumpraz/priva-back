@@ -379,6 +379,64 @@ class PlatformConfigController extends Controller
         ]);
     }
 
+    // Toggle visibilitas tab Holding Dashboard (global, di-set superadmin di /settings).
+    private const HOLDING_TAB_MAP = [
+        'asesmen' => 'features.holding_tab_asesmen_enabled',
+        'review' => 'features.holding_tab_review_enabled',
+        'kepatuhan' => 'features.holding_tab_kepatuhan_enabled',
+    ];
+
+    /**
+     * GET /holding/dashboard-tabs — boleh dibaca semua user terautentikasi
+     * (Holding Dashboard butuh untuk filter tab). Default semua aktif (true).
+     */
+    public function holdingTabs(Request $request)
+    {
+        return response()->json(['data' => $this->readHoldingTabs()]);
+    }
+
+    /**
+     * PUT /holding/dashboard-tabs — hanya superadmin / root.
+     * Body: { asesmen?:bool, review?:bool, kepatuhan?:bool }
+     */
+    public function updateHoldingTabs(Request $request)
+    {
+        $role = $request->user()->role ?? null;
+        if (! in_array($role, ['root', 'superadmin'], true)) {
+            abort(403, 'Hanya superadmin / root yang dapat mengatur tab Holding Dashboard.');
+        }
+
+        $data = $request->validate([
+            'asesmen' => 'sometimes|boolean',
+            'review' => 'sometimes|boolean',
+            'kepatuhan' => 'sometimes|boolean',
+        ]);
+
+        foreach (self::HOLDING_TAB_MAP as $field => $key) {
+            if (array_key_exists($field, $data)) {
+                AppSetting::set($key, $data[$field] ? '1' : '0');
+            }
+        }
+
+        try {
+            AuditLog::log('platform_config', 'holding_dashboard_tabs', 'updated', $data, 'platform_config');
+        } catch (\Throwable $e) {
+            \Log::warning('audit failed: '.$e->getMessage());
+        }
+
+        return response()->json(['message' => 'Saved', 'data' => $this->readHoldingTabs()]);
+    }
+
+    private function readHoldingTabs(): array
+    {
+        $out = [];
+        foreach (self::HOLDING_TAB_MAP as $field => $key) {
+            $out[$field] = (string) AppSetting::get($key, '1') !== '0';
+        }
+
+        return $out;
+    }
+
     private function requireRoot(Request $request): void
     {
         if (($request->user()->role ?? null) !== 'root') {
