@@ -30,22 +30,34 @@ use Illuminate\Support\Facades\DB;
  *   ropa | dpia | breach | vendor | kb | pasal_uu_pdp | contract | policy
  */
 return new class extends Migration {
+    /**
+     * JANGAN bungkus migrasi ini dalam transaksi. Di Postgres, kalau
+     * `CREATE EXTENSION vector` gagal (pgvector tak terinstal / tanpa
+     * superuser) di dalam transaksi, SELURUH transaksi menjadi "aborted"
+     * (SQLSTATE 25P02) — try/catch PHP tidak menyelamatkan; statement
+     * berikutnya (create table) ikut gagal. Dengan autocommit per-statement,
+     * kegagalan extension yang sudah di-catch tidak meracuni create table,
+     * dan kita degrade ke kolom JSON fallback dengan bersih.
+     */
+    public $withinTransaction = false;
+
     public function up(): void
     {
         if (Schema::hasTable('vector_embeddings')) return;
 
         $driver = DB::getDriverName();
+        $hasVector = false;
 
-        // Postgres-only: enable pgvector extension. CREATE EXTENSION IF NOT
-        // EXISTS aman dipanggil berulang. Non-Postgres drivers skip — tabel
-        // tetap dibuat dengan kolom embedding sebagai JSON fallback.
+        // Postgres-only: coba enable pgvector. Berhasil → kolom embedding
+        // dipromosikan ke vector(1024) + index IVFFlat. Gagal (mis. managed
+        // Postgres / Docker tanpa pgvector) → kolom embedding tetap JSON,
+        // RAG semantic search di-disable via config (fitur lain aman).
         if ($driver === 'pgsql') {
             try {
                 DB::statement('CREATE EXTENSION IF NOT EXISTS vector');
+                $hasVector = true;
             } catch (\Throwable $e) {
-                // Extension mungkin perlu superuser; log + lanjut. Kolom
-                // akan dibuat sebagai JSON fallback kalau pgvector gagal.
-                \Log::warning('pgvector extension creation failed, falling back to JSON column: ' . $e->getMessage());
+                \Log::warning('pgvector tidak tersedia; pakai kolom JSON fallback untuk embeddings: ' . $e->getMessage());
             }
         } else {
             \Log::info("Skipping pgvector extension on driver [{$driver}] — embedding column will be JSON/TEXT fallback");
@@ -86,11 +98,10 @@ return new class extends Migration {
             $table->index(['org_id', 'source_type', 'source_id'], 'vector_embeddings_lookup_idx');
         });
 
-        // Postgres-only: swap JSON embedding column → vector(1024) bila
-        // extension berhasil di-load. Kalau extension gagal load (mis. di
-        // managed Postgres tanpa pgvector), kolom JSON tetap dipakai dan
-        // RAG semantic search di-disable via config.
-        if ($driver === 'pgsql') {
+        // Postgres + pgvector tersedia: swap JSON embedding column → vector(1024).
+        // Hanya kalau $hasVector — kalau tidak, JANGAN drop kolom JSON (kalau
+        // di-drop lalu ADD vector gagal, tabel berakhir tanpa kolom embedding).
+        if ($driver === 'pgsql' && $hasVector) {
             try {
                 DB::statement('ALTER TABLE vector_embeddings DROP COLUMN embedding');
                 DB::statement('ALTER TABLE vector_embeddings ADD COLUMN embedding vector(1024)');
@@ -110,19 +121,18 @@ return new class extends Migration {
                 . 'WHERE deleted_at IS NULL'
             );
 
-            // IVFFlat cosine index untuk approximate nearest neighbor.
-            // lists=100 cocok untuk dataset puluhan ribu rows; nanti bisa
-            // di-rebuild dengan lists lebih besar untuk dataset jutaan.
-            // Index ini hanya di-create kalau kolom embedding berhasil
-            // jadi tipe vector.
-            try {
-                DB::statement(
-                    'CREATE INDEX vector_embeddings_embedding_idx '
-                    . 'ON vector_embeddings USING ivfflat (embedding vector_cosine_ops) '
-                    . 'WITH (lists = 100)'
-                );
-            } catch (\Throwable $e) {
-                \Log::warning('IVFFlat index creation skipped (kolom embedding bukan tipe vector?): ' . $e->getMessage());
+            // IVFFlat cosine index untuk approximate nearest neighbor — hanya
+            // bila kolom embedding sukses jadi tipe vector (pgvector aktif).
+            if ($hasVector) {
+                try {
+                    DB::statement(
+                        'CREATE INDEX vector_embeddings_embedding_idx '
+                        . 'ON vector_embeddings USING ivfflat (embedding vector_cosine_ops) '
+                        . 'WITH (lists = 100)'
+                    );
+                } catch (\Throwable $e) {
+                    \Log::warning('IVFFlat index creation skipped: ' . $e->getMessage());
+                }
             }
         } else {
             // SQLite/MySQL fallback — unique penuh tanpa partial predicate.
