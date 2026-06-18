@@ -506,6 +506,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::get('/', [RiskTreatmentPlanController::class, 'index'])->middleware('permission:dpia,read');
         Route::get('/facets', [RiskTreatmentPlanController::class, 'facets'])->middleware('permission:dpia,read');
         Route::get('/dashboard', [RiskTreatmentPlanController::class, 'dashboard'])->middleware('permission:dpia,read');
+        Route::get('/deadline-count', [RiskTreatmentPlanController::class, 'deadlineCount'])->middleware('permission:dpia,read');
     });
 
     // =============================================

@@ -265,6 +265,53 @@ class RiskTreatmentPlanController extends Controller
         ]);
     }
 
+    /**
+     * GET /api/rtp/deadline-count
+     * Hitungan ringan untuk badge sidebar/dashboard: jumlah RTP item overdue +
+     * yang jatuh tempo dalam 7 hari (status aktif). Tanpa list — murah dipanggil
+     * dari layout global.
+     */
+    public function deadlineCount(Request $request)
+    {
+        $orgId = $request->user()->org_id;
+        $today = Carbon::today();
+
+        $dpias = Dpia::where('org_id', $orgId)
+            ->whereNotNull('mitigation_tracking')
+            ->select(['id', 'mitigation_tracking'])
+            ->get();
+
+        $overdue = 0;
+        $dueSoon = 0;
+        foreach ($dpias as $d) {
+            foreach (($d->mitigation_tracking ?? []) as $it) {
+                $due = $it['due_date'] ?? null;
+                $status = $it['status'] ?? 'planned';
+                if (! $due || in_array($status, ['verified', 'cancelled', 'on_hold'], true)) {
+                    continue;
+                }
+                try {
+                    $diff = Carbon::parse($due)->startOfDay()->diffInDays($today, false);
+                } catch (\Throwable $e) {
+                    continue;
+                }
+                // diffInDays($today,false): >0 = due_date sudah lewat (overdue),
+                // <0 = masih di depan. (urutan argumen: today - due)
+                if ($diff > 0 || $status === 'overdue') {
+                    $overdue++;
+                } elseif ($diff >= -7) {
+                    $dueSoon++;
+                }
+            }
+        }
+
+        return response()->json([
+            'overdue' => $overdue,
+            'due_soon' => $dueSoon,
+            'total' => $overdue + $dueSoon,
+        ]);
+    }
+
     // =========================================================================
     // Helpers
     // =========================================================================
