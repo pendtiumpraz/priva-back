@@ -25,7 +25,9 @@ use Illuminate\Console\Command;
  */
 class ScanRtpDeadlines extends Command
 {
-    protected $signature = 'notifications:scan-rtp-deadlines {--days=7 : Ambang "due soon" dalam hari}';
+    protected $signature = 'notifications:scan-rtp-deadlines '
+        .'{--days=7 : Ambang "due soon" dalam hari} '
+        .'{--escalate-after=7 : Eskalasi ke atasan setelah overdue lebih dari N hari}';
 
     protected $description = 'Kirim notifikasi untuk RTP item yang jatuh tempo / terlambat';
 
@@ -34,6 +36,10 @@ class ScanRtpDeadlines extends Command
         $window = (int) $this->option('days');
         if ($window < 1) {
             $window = 7;
+        }
+        $escalateAfter = (int) $this->option('escalate-after');
+        if ($escalateAfter < 1) {
+            $escalateAfter = 7;
         }
         $today = now()->startOfDay();
 
@@ -127,8 +133,8 @@ class ScanRtpDeadlines extends Command
                     $sent++;
                 }
 
-                // ---- 2) ESKALASI ke atasan kalau overdue > 7 hari ----
-                if ($overdueDays > 7) {
+                // ---- 2) ESKALASI ke atasan kalau overdue > ambang (default 7 hari) ----
+                if ($overdueDays > $escalateAfter) {
                     $escRecent = SecurityAlert::query()
                         ->where('record_id', $itemId)
                         ->where('type', 'rtp.escalation')
