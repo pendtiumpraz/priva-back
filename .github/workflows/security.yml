@@ -101,7 +101,7 @@ jobs:
 
       - name: OWASP ZAP Baseline Scan
         if: steps.check_url.outputs.skip == 'false'
-        uses: zaproxy/action-baseline@v0.13.0
+        uses: zaproxy/action-baseline@v0.15.0
         with:
           target: ${{ secrets.ZAP_TARGET_URL }}
           rules_file_name: '.zap/rules.tsv'
