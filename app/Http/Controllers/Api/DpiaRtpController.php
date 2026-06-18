@@ -179,6 +179,15 @@ class DpiaRtpController extends Controller
                 ], 422);
             }
 
+            // Bukti mitigasi WAJIB sebelum verifikasi — inilah penanda risiko
+            // benar-benar sudah dimitigasi (bukan klaim sepihak).
+            if ($to === 'verified' && empty($item['evidence_files'])) {
+                return response()->json([
+                    'message' => 'Lampirkan minimal satu bukti mitigasi sebelum menandai risiko ini "verified".',
+                    'code' => 'EVIDENCE_REQUIRED',
+                ], 422);
+            }
+
             // Auto-timestamp milestone
             if ($to === 'in_progress' && empty($item['started_at'])) {
                 $data['started_at'] = now()->toIso8601String();
@@ -471,6 +480,139 @@ class DpiaRtpController extends Controller
             }
         }
         return -1;
+    }
+
+    /**
+     * POST /api/dpia/{id}/rtp/{itemId}/upload-evidence
+     * Unggah bukti mitigasi (multi — bisa dipanggil berkali-kali). Disimpan ke
+     * evidence_files[] sebagai objek {id,path,original_name,size,mime,uploaded_at}.
+     * Saat bukti pertama diunggah di status in_progress → auto-maju ke implemented.
+     */
+    public function uploadEvidence(
+        Request $request,
+        string $id,
+        string $itemId,
+        \App\Services\TenantStorageService $storage,
+        \App\Services\FileUploadValidator $validator,
+    ) {
+        $user = $request->user();
+        $dpia = Dpia::where('id', $id)->where('org_id', $user->org_id)->firstOrFail();
+
+        $request->validate(['file' => 'required|file|max:10240']); // 10MB
+
+        $items = $dpia->mitigation_tracking ?? [];
+        $idx = $this->findItem($items, $itemId);
+        if ($idx === -1) {
+            return response()->json(['message' => 'Treatment item tidak ditemukan'], 404);
+        }
+
+        $file = $request->file('file');
+        $ext = strtolower($file->getClientOriginalExtension());
+        $allowed = ['pdf', 'docx', 'xlsx', 'xls', 'jpg', 'jpeg', 'png'];
+        if (! in_array($ext, $allowed, true)) {
+            return response()->json(['message' => 'Format tidak diizinkan. Hanya PDF, DOCX, XLSX, JPG, PNG.'], 422);
+        }
+        try {
+            $preset = in_array($ext, ['jpg', 'jpeg', 'png'], true)
+                ? \App\Services\FileUploadValidator::PRESET_IMAGE
+                : \App\Services\FileUploadValidator::PRESET_DOCUMENT;
+            $validator->validate($file, $preset);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        $org = \App\Models\Organization::findOrFail($user->org_id);
+        try {
+            $stored = $storage->storeTenantPrivateFile($org, $file, "rtp/{$dpia->id}/{$itemId}/evidence");
+        } catch (\Throwable $e) {
+            report($e);
+            return response()->json(['message' => 'Gagal menyimpan file ke storage.'], 500);
+        }
+
+        $entry = [
+            'id' => (string) Str::uuid(),
+            'path' => $stored['path'] ?? null,
+            'original_name' => $file->getClientOriginalName(),
+            'size' => $file->getSize(),
+            'mime' => $file->getMimeType(),
+            'uploaded_at' => now()->toIso8601String(),
+            'uploaded_by' => $user->id,
+        ];
+
+        $item = $items[$idx];
+        $evidence = is_array($item['evidence_files'] ?? null) ? $item['evidence_files'] : [];
+        $evidence[] = $entry;
+        $item['evidence_files'] = $evidence;
+        $item['updated_at'] = now()->toIso8601String();
+
+        // Bukti = tanda implementasi. Dari in_progress → implemented otomatis.
+        $autoAdvanced = false;
+        if (($item['status'] ?? 'planned') === 'in_progress') {
+            $item['status'] = 'implemented';
+            if (empty($item['completed_at'])) {
+                $item['completed_at'] = now()->toIso8601String();
+            }
+            $autoAdvanced = true;
+        }
+
+        $items[$idx] = $item;
+        $dpia->mitigation_tracking = $items;
+        $dpia->save();
+
+        AuditLog::create([
+            'org_id' => $user->org_id,
+            'user_id' => $user->id,
+            'module' => 'dpia',
+            'record_id' => $dpia->id,
+            'action' => 'rtp.evidence_upload',
+            'details' => ['treatment_id' => $itemId, 'file' => $entry['original_name'], 'auto_advanced' => $autoAdvanced],
+        ]);
+
+        return response()->json([
+            'message' => 'Bukti mitigasi diunggah.' . ($autoAdvanced ? ' Status → implemented.' : ''),
+            'data' => $entry,
+            'item' => $item,
+        ], 201);
+    }
+
+    /**
+     * DELETE /api/dpia/{id}/rtp/{itemId}/evidence/{evidenceId}
+     */
+    public function deleteEvidence(Request $request, string $id, string $itemId, string $evidenceId)
+    {
+        $user = $request->user();
+        $dpia = Dpia::where('id', $id)->where('org_id', $user->org_id)->firstOrFail();
+
+        $items = $dpia->mitigation_tracking ?? [];
+        $idx = $this->findItem($items, $itemId);
+        if ($idx === -1) {
+            return response()->json(['message' => 'Treatment item tidak ditemukan'], 404);
+        }
+
+        $item = $items[$idx];
+        $evidence = is_array($item['evidence_files'] ?? null) ? $item['evidence_files'] : [];
+        $before = count($evidence);
+        $evidence = array_values(array_filter($evidence, fn ($e) => is_array($e) && ($e['id'] ?? null) !== $evidenceId));
+        if (count($evidence) === $before) {
+            return response()->json(['message' => 'Bukti tidak ditemukan'], 404);
+        }
+
+        $item['evidence_files'] = $evidence;
+        $item['updated_at'] = now()->toIso8601String();
+        $items[$idx] = $item;
+        $dpia->mitigation_tracking = $items;
+        $dpia->save();
+
+        AuditLog::create([
+            'org_id' => $user->org_id,
+            'user_id' => $user->id,
+            'module' => 'dpia',
+            'record_id' => $dpia->id,
+            'action' => 'rtp.evidence_delete',
+            'details' => ['treatment_id' => $itemId, 'evidence_id' => $evidenceId],
+        ]);
+
+        return response()->json(['message' => 'Bukti dihapus.', 'item' => $item]);
     }
 
     // =========================================================================
