@@ -2,8 +2,10 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Department;
 use App\Models\Dpia;
 use App\Models\SecurityAlert;
+use App\Models\User;
 use App\Services\NotificationService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -40,6 +42,7 @@ class ScanRtpDeadlines extends Command
 
         $sent = 0;
         $skipped = 0;
+        $escalated = 0;
 
         foreach ($dpias as $dpia) {
             $items = is_array($dpia->mitigation_tracking) ? $dpia->mitigation_tracking : [];
@@ -67,66 +70,136 @@ class ScanRtpDeadlines extends Command
                     continue; // belum masuk window reminder
                 }
 
-                // Anti-spam: sudah dinotifikasi dalam 20 jam terakhir?
+                $overdue = $diff < 0;
+                $overdueDays = $overdue ? abs($diff) : 0;
+                $riskEvent = (string) ($item['risk_event'] ?? 'Tindakan mitigasi');
+                $dpiaNo = $dpia->registration_number ?? $dpia->custom_number ?? $dpia->id;
+
+                // ---- 1) Reminder rutin ke owner (anti-spam 20 jam) ----
                 $recent = SecurityAlert::query()
                     ->where('record_id', $itemId)
                     ->where('type', 'like', 'rtp.deadline%')
                     ->where('created_at', '>=', now()->subHours(20))
                     ->exists();
+
                 if ($recent) {
                     $skipped++;
-                    continue;
-                }
-
-                $overdue = $diff < 0;
-                $recipient = ! empty($item['owner_user_id'])
-                    ? 'user:'.$item['owner_user_id']
-                    : 'role:dpo,admin';
-
-                $riskEvent = (string) ($item['risk_event'] ?? 'Tindakan mitigasi');
-                $dpiaNo = $dpia->registration_number ?? $dpia->custom_number ?? $dpia->id;
-
-                if ($overdue) {
-                    $title = "RTP terlambat: {$riskEvent}";
-                    $body = "Tindakan mitigasi untuk \"{$riskEvent}\" (DPIA {$dpiaNo}) sudah melewati tenggat "
-                        .abs($diff)." hari lalu dan belum diverifikasi. Segera tindak lanjuti & unggah bukti mitigasi.";
-                    $kind = 'warning';
-                    $severity = 'high';
-                    $type = 'rtp.deadline_overdue';
                 } else {
-                    $when = $diff === 0 ? 'hari ini' : "dalam {$diff} hari";
-                    $title = "RTP jatuh tempo {$when}: {$riskEvent}";
-                    $body = "Tindakan mitigasi untuk \"{$riskEvent}\" (DPIA {$dpiaNo}) jatuh tempo {$when}. "
-                        ."Lengkapi pelaksanaan & unggah bukti mitigasi sebelum tenggat.";
-                    $kind = 'info';
-                    $severity = 'medium';
-                    $type = 'rtp.deadline_due';
+                    $recipient = ! empty($item['owner_user_id'])
+                        ? 'user:'.$item['owner_user_id']
+                        : 'role:dpo,admin';
+
+                    if ($overdue) {
+                        $title = "RTP terlambat: {$riskEvent}";
+                        $body = "Tindakan mitigasi untuk \"{$riskEvent}\" (DPIA {$dpiaNo}) sudah melewati tenggat "
+                            .$overdueDays." hari lalu dan belum diverifikasi. Segera tindak lanjuti & unggah bukti mitigasi.";
+                        $kind = 'warning';
+                        $severity = 'high';
+                        $type = 'rtp.deadline_overdue';
+                    } else {
+                        $when = $diff === 0 ? 'hari ini' : "dalam {$diff} hari";
+                        $title = "RTP jatuh tempo {$when}: {$riskEvent}";
+                        $body = "Tindakan mitigasi untuk \"{$riskEvent}\" (DPIA {$dpiaNo}) jatuh tempo {$when}. "
+                            ."Lengkapi pelaksanaan & unggah bukti mitigasi sebelum tenggat.";
+                        $kind = 'info';
+                        $severity = 'medium';
+                        $type = 'rtp.deadline_due';
+                    }
+
+                    NotificationService::dispatch(
+                        kind: $kind,
+                        severity: $severity,
+                        module: 'rtp',
+                        type: $type,
+                        recipient: $recipient,
+                        orgId: $dpia->org_id,
+                        title: $title,
+                        body: $body,
+                        actionUrl: '/risk-treatment-plan?dpia_id='.$dpia->id,
+                        metadata: [
+                            'record_id' => $itemId,
+                            'dpia_id' => $dpia->id,
+                            'due_date' => $due,
+                            'days_remaining' => $diff,
+                            'priority' => $item['priority'] ?? null,
+                        ],
+                    );
+                    $sent++;
                 }
 
-                NotificationService::dispatch(
-                    kind: $kind,
-                    severity: $severity,
-                    module: 'rtp',
-                    type: $type,
-                    recipient: $recipient,
-                    orgId: $dpia->org_id,
-                    title: $title,
-                    body: $body,
-                    actionUrl: '/risk-treatment-plan?dpia_id='.$dpia->id,
-                    metadata: [
-                        'record_id' => $itemId,
-                        'dpia_id' => $dpia->id,
-                        'due_date' => $due,
-                        'days_remaining' => $diff,
-                        'priority' => $item['priority'] ?? null,
-                    ],
-                );
-                $sent++;
+                // ---- 2) ESKALASI ke atasan kalau overdue > 7 hari ----
+                if ($overdueDays > 7) {
+                    $escRecent = SecurityAlert::query()
+                        ->where('record_id', $itemId)
+                        ->where('type', 'rtp.escalation')
+                        ->where('created_at', '>=', now()->subHours(20))
+                        ->exists();
+
+                    if (! $escRecent) {
+                        [$escRecipient, $ownerName] = $this->resolveEscalationTarget($item);
+                        $ownerLabel = $ownerName ? " (PIC: {$ownerName})" : '';
+
+                        NotificationService::dispatch(
+                            kind: 'warning',
+                            severity: 'critical',
+                            module: 'rtp',
+                            type: 'rtp.escalation',
+                            recipient: $escRecipient,
+                            orgId: $dpia->org_id,
+                            title: "Eskalasi: RTP terlambat {$overdueDays} hari — {$riskEvent}",
+                            body: "Tindakan mitigasi \"{$riskEvent}\" (DPIA {$dpiaNo}){$ownerLabel} sudah terlambat {$overdueDays} hari "
+                                .'(>7 hari) dan belum diverifikasi. Mohon tinjau & dorong penyelesaian sebagai atasan/penanggung jawab.',
+                            actionUrl: '/risk-treatment-plan?dpia_id='.$dpia->id,
+                            metadata: [
+                                'record_id' => $itemId,
+                                'dpia_id' => $dpia->id,
+                                'due_date' => $due,
+                                'overdue_days' => $overdueDays,
+                                'escalation' => true,
+                                'priority' => $item['priority'] ?? null,
+                            ],
+                        );
+                        $escalated++;
+                    }
+                }
             }
         }
 
-        $this->info("RTP deadline scan selesai: {$sent} notifikasi terkirim, {$skipped} dilewati (anti-spam).");
+        $this->info("RTP deadline scan selesai: {$sent} reminder, {$escalated} eskalasi, {$skipped} dilewati (anti-spam).");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Tentukan penerima eskalasi (atasan) + nama owner.
+     * Prioritas: kepala departemen owner → kepala departemen induk (1 tingkat ke
+     * atas) → fallback DPO/admin tenant. Hindari mengeskalasi ke owner sendiri.
+     *
+     * @return array{0:string,1:?string} [recipientSpec, ownerName]
+     */
+    private function resolveEscalationTarget(array $item): array
+    {
+        $ownerId = $item['owner_user_id'] ?? null;
+        $owner = $ownerId ? User::find($ownerId) : null;
+        $ownerName = $owner?->name;
+
+        if ($owner && $owner->department_id) {
+            $dept = Department::find($owner->department_id);
+            if ($dept) {
+                if (! empty($dept->head_user_id) && $dept->head_user_id !== $owner->id) {
+                    return ['user:'.$dept->head_user_id, $ownerName];
+                }
+                // Owner adalah kepala departemen (atau tak ada head) → naik 1 tingkat.
+                if (! empty($dept->parent_id)) {
+                    $parent = Department::find($dept->parent_id);
+                    if ($parent && ! empty($parent->head_user_id) && $parent->head_user_id !== $owner->id) {
+                        return ['user:'.$parent->head_user_id, $ownerName];
+                    }
+                }
+            }
+        }
+
+        // Fallback: manajemen tenant (DPO + admin) untuk visibilitas eskalasi.
+        return ['role:dpo,admin', $ownerName];
     }
 }
