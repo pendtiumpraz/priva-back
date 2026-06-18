@@ -310,6 +310,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::delete('/questions/{id}', [HoldingAssessmentController::class, 'destroyQuestion']);
         // Dispatch + instances
         Route::get('/dispatch-targets', [HoldingAssessmentController::class, 'dispatchTargets']);
+        Route::get('/compliance-graph', [HoldingAssessmentController::class, 'complianceGraph']);
         Route::post('/dispatch', [HoldingAssessmentController::class, 'dispatch']);
         Route::get('/instances', [HoldingAssessmentController::class, 'indexInstances']);
         Route::get('/instances/{id}', [HoldingAssessmentController::class, 'showInstance']);

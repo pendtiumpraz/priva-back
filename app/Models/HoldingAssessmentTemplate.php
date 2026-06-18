@@ -26,6 +26,7 @@ class HoldingAssessmentTemplate extends Model
         'description',
         'regulation_code',
         'regulation_name',
+        'type',
         'status',
         'created_by',
     ];

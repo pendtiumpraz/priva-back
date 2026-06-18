@@ -85,10 +85,12 @@ class HoldingAssessmentController extends Controller
             'description' => ['nullable', 'string'],
             'regulation_code' => ['nullable', 'string', 'max:40'],
             'regulation_name' => ['nullable', 'string', 'max:255'],
+            'type' => ['nullable', 'in:normal,maturity'],
         ]);
 
         $template = HoldingAssessmentTemplate::create([
             ...$data,
+            'type' => $data['type'] ?? 'normal',
             'status' => 'draft',
             'created_by' => $request->user()->id,
         ]);
@@ -108,6 +110,7 @@ class HoldingAssessmentController extends Controller
             'description' => ['nullable', 'string'],
             'regulation_code' => ['nullable', 'string', 'max:40'],
             'regulation_name' => ['nullable', 'string', 'max:255'],
+            'type' => ['sometimes', 'in:normal,maturity'],
             'status' => ['sometimes', 'in:draft,published,archived'],
         ]);
 
@@ -271,6 +274,7 @@ class HoldingAssessmentController extends Controller
                     'title' => $template->name,
                     'regulation_code' => $template->regulation_code,
                     'regulation_name' => $template->regulation_name,
+                    'type' => $template->type ?? 'normal',
                     'questions_snapshot' => $snapshot,
                     'answers' => [],
                     'status' => 'sent',
@@ -346,6 +350,74 @@ class HoldingAssessmentController extends Controller
         return response()->json(['data' => ['token' => $instance->assessment_token, 'token_expires_at' => $instance->token_expires_at]]);
     }
 
+    /**
+     * F6 — Grafik kepatuhan anak & cucu perusahaan. Skor terakhir per target org
+     * (instance yang sudah submit/approve), dilengkapi tier hierarki:
+     *   - 'anak' : org yang parent_id-nya = holding (anak langsung)
+     *   - 'cucu' : org lebih dalam (parent bukan holding)
+     * Bisa difilter ?template_id / ?type (normal|maturity) / ?regulation_code.
+     */
+    public function complianceGraph(Request $request)
+    {
+        [$holding, $descendantIds] = $this->resolveHolding($request);
+        $holdingId = $holding?->id;
+
+        $rows = HoldingAssessmentInstance::query()
+            ->whereIn('status', ['submitted', 'review_in_progress', 'approved', 'rejected'])
+            ->whereNotNull('overall_score')
+            ->when($request->query('template_id'), fn ($q, $v) => $q->where('template_id', $v))
+            ->when($request->query('type'), fn ($q, $v) => $q->where('type', $v))
+            ->when($request->query('regulation_code'), fn ($q, $v) => $q->where('regulation_code', $v))
+            ->orderByDesc('submitted_at')
+            ->get();
+
+        // Skor terakhir per target org (instance pertama setelah sort desc).
+        $latestByOrg = [];
+        foreach ($rows as $r) {
+            $key = $r->target_org_id ?? $r->id;
+            if (! isset($latestByOrg[$key])) {
+                $latestByOrg[$key] = $r;
+            }
+        }
+
+        $orgs = Organization::whereIn('id', $descendantIds)->get()->keyBy('id');
+
+        $data = [];
+        foreach ($latestByOrg as $r) {
+            $org = $r->target_org_id ? $orgs->get($r->target_org_id) : null;
+            $tier = ($org && $org->parent_id === $holdingId) ? 'anak' : 'cucu';
+            $data[] = [
+                'target_org_id' => $r->target_org_id,
+                'target_org_name' => $r->target_org_name ?? $org?->name,
+                'org_level' => $org?->org_level,
+                'tier' => $tier,
+                'type' => $r->type ?? 'normal',
+                'regulation_code' => $r->regulation_code,
+                'regulation_name' => $r->regulation_name,
+                'overall_score' => (float) $r->overall_score,
+                'compliance_level' => $r->compliance_level,
+                'maturity_level' => $r->maturity_level,
+                'status' => $r->status,
+                'submitted_at' => optional($r->submitted_at)->toIso8601String(),
+            ];
+        }
+
+        // Ringkasan rata-rata per tier (untuk header chart).
+        $byTier = collect($data)->groupBy('tier')->map(fn ($items) => [
+            'count' => $items->count(),
+            'avg_score' => round($items->avg('overall_score'), 1),
+        ]);
+
+        return response()->json([
+            'data' => $data,
+            'summary' => [
+                'total' => count($data),
+                'avg_score' => count($data) ? round(collect($data)->avg('overall_score'), 1) : null,
+                'by_tier' => $byTier,
+            ],
+        ]);
+    }
+
     private function instanceSummary(HoldingAssessmentInstance $i): array
     {
         return [
@@ -354,9 +426,11 @@ class HoldingAssessmentController extends Controller
             'target_org_id' => $i->target_org_id,
             'target_org_name' => $i->target_org_name,
             'regulation_code' => $i->regulation_code,
+            'type' => $i->type ?? 'normal',
             'status' => $i->status,
             'overall_score' => $i->overall_score !== null ? (float) $i->overall_score : null,
             'compliance_level' => $i->compliance_level,
+            'maturity_level' => $i->maturity_level,
             'progress' => (float) $i->progress,
             'submitted_at' => $i->submitted_at,
             'token_expires_at' => $i->token_expires_at,

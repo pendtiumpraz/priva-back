@@ -45,6 +45,7 @@ class AsesmenHoldingController extends Controller
                     'title' => $instance->title,
                     'regulation_code' => $instance->regulation_code,
                     'regulation_name' => $instance->regulation_name,
+                    'type' => $instance->type ?? 'normal',
                     'target_org_name' => $instance->target_org_name,
                     'status' => $instance->status,
                     'submitted_at' => optional($instance->submitted_at)->toIso8601String(),
@@ -210,6 +211,7 @@ class AsesmenHoldingController extends Controller
             $instance->forceFill([
                 'overall_score' => $score['overall_score'],
                 'compliance_level' => $score['compliance_level'],
+                'maturity_level' => $score['maturity_level'] ?? null,
                 'progress' => $score['progress'],
                 'status' => 'submitted',
                 'token_consumed_at' => $now,
@@ -299,6 +301,10 @@ class AsesmenHoldingController extends Controller
 
     private function computeScore(HoldingAssessmentInstance $instance): array
     {
+        if (($instance->type ?? 'normal') === 'maturity') {
+            return $this->computeMaturityScore($instance);
+        }
+
         $questions = $instance->effectiveQuestions();
         $answers = is_array($instance->answers) ? $instance->answers : [];
 
@@ -336,6 +342,52 @@ class AsesmenHoldingController extends Controller
         return [
             'overall_score' => $overall,
             'compliance_level' => $level,
+            'progress' => round(($answered / $totalQ) * 100, 2),
+        ];
+    }
+
+    /**
+     * Maturity scoring — jawaban skala level 1..5. overall_score dinormalkan ke
+     * persen (avg/5*100) supaya bisa dibandingkan dgn assessment normal di grafik;
+     * maturity_level = pembulatan rata-rata level.
+     */
+    private function computeMaturityScore(HoldingAssessmentInstance $instance): array
+    {
+        $questions = $instance->effectiveQuestions();
+        $answers = is_array($instance->answers) ? $instance->answers : [];
+
+        $sum = 0.0;
+        $counted = 0;
+        $answered = 0;
+        foreach ($questions as $q) {
+            $qid = $q['id'] ?? null;
+            if (! $qid) {
+                continue;
+            }
+            $raw = $answers[$qid]['value'] ?? null;
+            if ($raw === null || $raw === '') {
+                continue;
+            }
+            $answered++;
+            $level = (int) $raw;
+            if ($level < 1) {
+                continue; // 0 / tidak relevan dikecualikan dari rata-rata
+            }
+            $level = min(5, max(1, $level));
+            $sum += $level;
+            $counted++;
+        }
+
+        $avg = $counted > 0 ? $sum / $counted : 0.0;
+        $overall = round(($avg / 5) * 100, 2);
+        $level = $counted > 0 ? (int) round($avg) : null;
+        $complianceLevel = $overall >= 70 ? 'high' : ($overall >= 40 ? 'medium' : 'low');
+        $totalQ = max(count($questions), 1);
+
+        return [
+            'overall_score' => $overall,
+            'compliance_level' => $complianceLevel,
+            'maturity_level' => $level,
             'progress' => round(($answered / $totalQ) * 100, 2),
         ];
     }

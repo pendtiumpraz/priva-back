@@ -101,6 +101,8 @@ class HoldingAssessmentReviewController extends Controller
                 'target_org_name' => $instance->target_org_name,
                 'regulation_code' => $instance->regulation_code,
                 'regulation_name' => $instance->regulation_name,
+                'type' => $instance->type ?? 'normal',
+                'maturity_level' => $instance->maturity_level,
                 'status' => $instance->status,
                 'overall_score' => $instance->overall_score !== null ? (float) $instance->overall_score : null,
                 'compliance_level' => $instance->compliance_level,
