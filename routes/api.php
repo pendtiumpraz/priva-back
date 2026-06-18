@@ -51,6 +51,7 @@ use App\Http\Controllers\Api\DsrVerificationController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\FeatureRequestController;
 use App\Http\Controllers\Api\GapAssessmentController;
+use App\Http\Controllers\Api\HoldingAssessmentController;
 use App\Http\Controllers\Api\HoldingDashboardController;
 use App\Http\Controllers\Api\IntegrationController;
 use App\Http\Controllers\Api\KnowledgeBaseController;
@@ -272,6 +273,28 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     Route::get('/holding/dashboard', [HoldingDashboardController::class, 'dashboard']);
     Route::get('/holding/compliance-matrix', [HoldingDashboardController::class, 'complianceMatrix']);
     Route::get('/holding/sub-holding-breakdown', [HoldingDashboardController::class, 'subHoldingBreakdown']);
+
+    // Holding Compliance Assessment — template authoring + dispatch + monitoring.
+    // Diisi anak perusahaan via public link (/asesmen-holding/{token}); reviewer
+    // holding menilai di dashboard. Akses di-gate self-check isHolding() di controller.
+    Route::prefix('holding/assessments')->group(function () {
+        // Templates
+        Route::get('/templates', [HoldingAssessmentController::class, 'indexTemplates']);
+        Route::post('/templates', [HoldingAssessmentController::class, 'storeTemplate']);
+        Route::get('/templates/{id}', [HoldingAssessmentController::class, 'showTemplate']);
+        Route::put('/templates/{id}', [HoldingAssessmentController::class, 'updateTemplate']);
+        Route::delete('/templates/{id}', [HoldingAssessmentController::class, 'destroyTemplate']);
+        // Questions (nested)
+        Route::post('/templates/{templateId}/questions', [HoldingAssessmentController::class, 'storeQuestion']);
+        Route::post('/templates/{templateId}/questions/reorder', [HoldingAssessmentController::class, 'reorderQuestions']);
+        Route::put('/questions/{id}', [HoldingAssessmentController::class, 'updateQuestion']);
+        Route::delete('/questions/{id}', [HoldingAssessmentController::class, 'destroyQuestion']);
+        // Dispatch + instances
+        Route::post('/dispatch', [HoldingAssessmentController::class, 'dispatch']);
+        Route::get('/instances', [HoldingAssessmentController::class, 'indexInstances']);
+        Route::get('/instances/{id}', [HoldingAssessmentController::class, 'showInstance']);
+        Route::post('/instances/{id}/regenerate-token', [HoldingAssessmentController::class, 'regenerateToken']);
+    });
 
     // Log Analyzer
     Route::get('/system-logs', [LogAnalyzerController::class, 'index']);
