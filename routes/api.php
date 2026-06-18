@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\ApiHubController;
 use App\Http\Controllers\Api\ApiKeyController;
 use App\Http\Controllers\Api\ApprovalConfigController;
 use App\Http\Controllers\Api\ApprovalController;
+use App\Http\Controllers\Api\AsesmenHoldingController;
 use App\Http\Controllers\Api\AsesmenPublikController;
 use App\Http\Controllers\Api\AssessmentsController;
 use App\Http\Controllers\Api\AuthController;
@@ -208,6 +209,23 @@ Route::middleware('throttle:api')->group(function () {
         ->group(function () {
             Route::get('/', [PraAsesmenPublikController::class, 'show']);
             Route::post('/submit', [PraAsesmenPublikController::class, 'submit']);
+        });
+
+    // =============================================
+    // Asesmen Holding Publik — Holding Compliance Assessment (anak perusahaan
+    // isi tanpa login via UUID token). Middleware `public-holding-assessment-token`:
+    // resolve instance dari token, validasi expiry, single-use guard utk write,
+    // set tenant context (org holding), rate-limit 30 RPM (bucket terpisah).
+    // Upload bukti MULTI per pertanyaan; analisis AI ada di reviewer dashboard.
+    // =============================================
+    Route::prefix('asesmen-holding/{token}')
+        ->middleware('public-holding-assessment-token')
+        ->group(function () {
+            Route::get('/', [AsesmenHoldingController::class, 'show']);
+            Route::post('/jawaban', [AsesmenHoldingController::class, 'saveDraft']);
+            Route::post('/upload', [AsesmenHoldingController::class, 'uploadEvidence']);
+            Route::post('/submit', [AsesmenHoldingController::class, 'submit']);
+            Route::get('/result', [AsesmenHoldingController::class, 'result']);
         });
 
     // SSO Public Routes
