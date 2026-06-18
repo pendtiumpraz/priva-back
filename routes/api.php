@@ -53,6 +53,7 @@ use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\FeatureRequestController;
 use App\Http\Controllers\Api\GapAssessmentController;
 use App\Http\Controllers\Api\HoldingAssessmentController;
+use App\Http\Controllers\Api\HoldingAssessmentReviewController;
 use App\Http\Controllers\Api\HoldingDashboardController;
 use App\Http\Controllers\Api\IntegrationController;
 use App\Http\Controllers\Api\KnowledgeBaseController;
@@ -312,6 +313,15 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::get('/instances', [HoldingAssessmentController::class, 'indexInstances']);
         Route::get('/instances/{id}', [HoldingAssessmentController::class, 'showInstance']);
         Route::post('/instances/{id}/regenerate-token', [HoldingAssessmentController::class, 'regenerateToken']);
+
+        // Reviewer dashboard (F4) — tinjau submission, AI analyze evidence, approve/reject.
+        Route::get('/review/inbox', [HoldingAssessmentReviewController::class, 'inbox']);
+        Route::get('/review/{id}', [HoldingAssessmentReviewController::class, 'show']);
+        Route::post('/review/{id}/start', [HoldingAssessmentReviewController::class, 'start']);
+        Route::post('/review/{id}/question', [HoldingAssessmentReviewController::class, 'reviewQuestion']);
+        Route::post('/review/{id}/analyze-evidence', [HoldingAssessmentReviewController::class, 'analyzeEvidence']);
+        Route::post('/review/{id}/analyze-evidence-bulk', [HoldingAssessmentReviewController::class, 'bulkAnalyzeEvidence']);
+        Route::post('/review/{id}/finalize', [HoldingAssessmentReviewController::class, 'finalize']);
     });
 
     // Log Analyzer
