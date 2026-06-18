@@ -60,8 +60,9 @@ class HoldingAssessmentController extends Controller
         $this->resolveHolding($request);
 
         $templates = HoldingAssessmentTemplate::query()
+            ->when($request->boolean('trashed'), fn ($q) => $q->onlyTrashed())
             ->withCount(['questions', 'instances'])
-            ->orderByDesc('created_at')
+            ->orderByDesc($request->boolean('trashed') ? 'deleted_at' : 'created_at')
             ->get();
 
         return response()->json(['data' => $templates]);
@@ -128,7 +129,37 @@ class HoldingAssessmentController extends Controller
         $template->delete();
         $this->audit($request, 'holding_assessment.template', $id, 'delete', []);
 
-        return response()->json(['message' => 'Template dihapus.']);
+        return response()->json(['message' => 'Template dipindahkan ke sampah.']);
+    }
+
+    /**
+     * Pulihkan template yang sudah di-soft-delete.
+     */
+    public function restoreTemplate(Request $request, string $id)
+    {
+        $this->resolveHolding($request);
+
+        $template = HoldingAssessmentTemplate::onlyTrashed()->findOrFail($id);
+        $template->restore();
+        $this->audit($request, 'holding_assessment.template', $id, 'restore', []);
+
+        return response()->json(['message' => 'Template dipulihkan.', 'data' => $template]);
+    }
+
+    /**
+     * Hapus permanen template (beserta pertanyaannya) dari sampah.
+     */
+    public function forceDeleteTemplate(Request $request, string $id)
+    {
+        $this->resolveHolding($request);
+
+        $template = HoldingAssessmentTemplate::withTrashed()->findOrFail($id);
+        // Hapus pertanyaan terkait permanen juga (force) agar tidak menggantung.
+        HoldingAssessmentQuestion::withTrashed()->where('template_id', $template->id)->forceDelete();
+        $template->forceDelete();
+        $this->audit($request, 'holding_assessment.template', $id, 'force_delete', []);
+
+        return response()->json(['message' => 'Template dihapus permanen.']);
     }
 
     // ===================================================================

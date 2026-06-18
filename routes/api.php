@@ -303,6 +303,8 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::get('/templates/{id}', [HoldingAssessmentController::class, 'showTemplate']);
         Route::put('/templates/{id}', [HoldingAssessmentController::class, 'updateTemplate']);
         Route::delete('/templates/{id}', [HoldingAssessmentController::class, 'destroyTemplate']);
+        Route::post('/templates/{id}/restore', [HoldingAssessmentController::class, 'restoreTemplate']);
+        Route::delete('/templates/{id}/force', [HoldingAssessmentController::class, 'forceDeleteTemplate']);
         // Questions (nested)
         Route::post('/templates/{templateId}/questions', [HoldingAssessmentController::class, 'storeQuestion']);
         Route::post('/templates/{templateId}/questions/reorder', [HoldingAssessmentController::class, 'reorderQuestions']);
