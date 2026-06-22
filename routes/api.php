@@ -502,6 +502,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::delete('/{itemId}', [DpiaRtpController::class, 'destroy'])->middleware('permission:dpia,write');
         // Bukti mitigasi (multi) — penanda risiko sudah ditangani; wajib sebelum verified.
         Route::post('/{itemId}/upload-evidence', [DpiaRtpController::class, 'uploadEvidence'])->middleware('permission:dpia,write');
+        Route::post('/{itemId}/analyze-evidence', [DpiaRtpController::class, 'analyzeEvidence'])->middleware('permission:dpia,write');
         Route::delete('/{itemId}/evidence/{evidenceId}', [DpiaRtpController::class, 'deleteEvidence'])->middleware('permission:dpia,write');
     });
 

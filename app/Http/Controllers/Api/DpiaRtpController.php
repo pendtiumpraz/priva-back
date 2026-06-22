@@ -5,6 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Dpia;
+use App\Models\Organization;
+use App\Services\AiDocumentAnalyzer;
+use App\Services\CreditService;
+use App\Services\TenantStorageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -613,6 +617,131 @@ class DpiaRtpController extends Controller
         ]);
 
         return response()->json(['message' => 'Bukti dihapus.', 'item' => $item]);
+    }
+
+    /**
+     * POST /api/dpia/{id}/rtp/{itemId}/analyze-evidence
+     * Analisis AI atas SATU bukti mitigasi: apakah dokumen membuktikan tindakan
+     * mitigasi sudah dilakukan. Body: { evidence_id }. 1 kredit/analisis (di-cache
+     * per dokumen+pertanyaan di AiDocumentAnalyzer). Gambar (JPG/PNG) di-skip oleh
+     * analyzer (OCR belum didukung) → status 'unsure', tanpa charge.
+     */
+    public function analyzeEvidence(Request $request, string $id, string $itemId, AiDocumentAnalyzer $analyzer)
+    {
+        $user = $request->user();
+        $dpia = Dpia::where('id', $id)->where('org_id', $user->org_id)->firstOrFail();
+        $request->validate(['evidence_id' => 'required|string']);
+
+        $items = $dpia->mitigation_tracking ?? [];
+        $idx = $this->findItem($items, $itemId);
+        if ($idx === -1) {
+            return response()->json(['message' => 'Treatment item tidak ditemukan'], 404);
+        }
+        $item = $items[$idx];
+        $evidence = is_array($item['evidence_files'] ?? null) ? $item['evidence_files'] : [];
+
+        $evIdx = -1;
+        foreach ($evidence as $i => $e) {
+            if (is_array($e) && ($e['id'] ?? null) === $request->input('evidence_id')) {
+                $evIdx = $i;
+                break;
+            }
+        }
+        if ($evIdx === -1) {
+            return response()->json(['message' => 'Bukti tidak ditemukan'], 404);
+        }
+
+        $path = $evidence[$evIdx]['path'] ?? null;
+        if (! $path) {
+            return response()->json(['message' => 'Path bukti tidak tersedia'], 404);
+        }
+
+        $orgId = $user->org_id;
+        if ($orgId) {
+            CreditService::resetIfNeeded($orgId);
+            if (! CreditService::hasCredit($orgId, 'ai_doc_analyze')) {
+                $cost = CreditService::getCost('ai_doc_analyze');
+
+                return response()->json([
+                    'message' => "Kredit AI Anda habis. Dibutuhkan {$cost} kredit untuk analisis ini.",
+                    'credits_exhausted' => true,
+                ], 402);
+            }
+        }
+
+        $localPath = $this->resolveAttachmentPath($orgId, $path);
+        if (! $localPath || ! is_file($localPath)) {
+            return response()->json(['message' => 'File bukti tidak ditemukan pada penyimpanan.'], 404);
+        }
+
+        $question = trim('Apakah dokumen ini membuktikan bahwa tindakan mitigasi telah dilaksanakan untuk risiko berikut?'
+            ."\nRisiko: ".(string) ($item['risk_event'] ?? '')
+            ."\nTindakan mitigasi: ".(string) ($item['action'] ?? ''));
+
+        $result = $analyzer->analyze(
+            documentPath: $localPath,
+            question: $question,
+            regulationRef: (string) ($item['category'] ?? ''),
+            orgId: $orgId,
+        );
+
+        $entry = array_merge($result->toArray(), ['analyzed_at' => now()->toIso8601String()]);
+        $evidence[$evIdx]['ai_analysis'] = $entry;
+        $item['evidence_files'] = $evidence;
+        $item['updated_at'] = now()->toIso8601String();
+        $items[$idx] = $item;
+        $dpia->mitigation_tracking = $items;
+        $dpia->save();
+
+        AuditLog::create([
+            'org_id' => $orgId,
+            'user_id' => $user->id,
+            'module' => 'dpia',
+            'record_id' => $dpia->id,
+            'action' => 'rtp.evidence_analyzed',
+            'details' => ['treatment_id' => $itemId, 'evidence_id' => $request->input('evidence_id'), 'status' => $entry['status'] ?? null],
+        ]);
+
+        return response()->json(['data' => $entry, 'item' => $item]);
+    }
+
+    /**
+     * Resolve path relatif → absolute filesystem path (local disk → tenant disk
+     * via temp file). Mirror pola TPRM/Holding.
+     */
+    private function resolveAttachmentPath(?string $orgId, string $relativePath): ?string
+    {
+        $rel = ltrim($relativePath, '/');
+        foreach ([storage_path('app/public/'.$rel), storage_path('app/private/'.$rel), storage_path('app/'.$rel)] as $candidate) {
+            if (is_file($candidate) && is_readable($candidate)) {
+                return $candidate;
+            }
+        }
+        try {
+            $org = $orgId ? Organization::find($orgId) : null;
+            if (! $org) {
+                return null;
+            }
+            $disk = app(TenantStorageService::class)->getDisk($org);
+            if (! $disk->exists($rel)) {
+                return null;
+            }
+            $contents = $disk->get($rel);
+            if ($contents === null || $contents === '') {
+                return null;
+            }
+            $ext = pathinfo($rel, PATHINFO_EXTENSION) ?: 'bin';
+            $tmp = sys_get_temp_dir().DIRECTORY_SEPARATOR.'rtp_evidence_'.substr(hash('sha256', $rel), 0, 16).'.'.$ext;
+            if (file_put_contents($tmp, $contents) === false) {
+                return null;
+            }
+
+            return $tmp;
+        } catch (\Throwable $e) {
+            \Log::warning('[RTP resolveAttachmentPath] gagal: '.$e->getMessage());
+
+            return null;
+        }
     }
 
     // =========================================================================
