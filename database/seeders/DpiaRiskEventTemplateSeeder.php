@@ -19,7 +19,7 @@ class DpiaRiskEventTemplateSeeder extends Seeder
 {
     public function run(): void
     {
-        foreach ($this->library() as $bucket) {
+        foreach (self::library() as $bucket) {
             $key = $bucket['key'];
             $label = $bucket['label'];
             foreach ($bucket['risks'] as $i => $riskName) {
@@ -31,7 +31,12 @@ class DpiaRiskEventTemplateSeeder extends Seeder
         }
     }
 
-    private function library(): array
+    /**
+     * Risk event library riset (per kategori DPIA). Public static supaya
+     * dipakai juga oleh DpiaCategoryService sebagai default risk per kategori
+     * — SATU sumber kebenaran, tidak diduplikasi.
+     */
+    public static function library(): array
     {
         return [
             ['key' => 'legal_basis', 'label' => 'Legal Basis', 'risks' => [
