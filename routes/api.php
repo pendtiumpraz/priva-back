@@ -483,6 +483,10 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::put('/categories/{categoryId}/risks/{id}', [DpiaAssessmentFrameworkController::class, 'updateRisk'])->middleware('permission:dpia,write');
         Route::delete('/categories/{categoryId}/risks/{id}', [DpiaAssessmentFrameworkController::class, 'destroyRisk'])->middleware('permission:dpia,write');
         Route::post('/reset', [DpiaAssessmentFrameworkController::class, 'reset'])->middleware('permission:dpia,write');
+        // Panduan Nilai Penilaian Risiko — custom per tenant.
+        Route::get('/scoring-guidance', [DpiaAssessmentFrameworkController::class, 'scoringGuidance'])->middleware('permission:dpia,read');
+        Route::put('/scoring-guidance', [DpiaAssessmentFrameworkController::class, 'updateScoringGuidance'])->middleware('permission:dpia,write');
+        Route::delete('/scoring-guidance', [DpiaAssessmentFrameworkController::class, 'resetScoringGuidance'])->middleware('permission:dpia,write');
     });
 
     // =============================================

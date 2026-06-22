@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\DpiaCategory;
 use App\Models\DpiaCategoryRisk;
+use App\Models\DpiaScoringGuidance;
 use App\Services\DpiaCategoryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -170,6 +171,55 @@ class DpiaAssessmentFrameworkController extends Controller
         });
         DpiaCategoryService::ensureSeeded($orgId);
         return response()->json(['message' => 'Framework direset ke default sistem.']);
+    }
+
+    /**
+     * GET /dpia/framework/scoring-guidance
+     * Override "Panduan Nilai" per tenant. Null kalau belum di-custom → frontend
+     * pakai default bawaan.
+     */
+    public function scoringGuidance(Request $request)
+    {
+        $row = DpiaScoringGuidance::where('org_id', $request->user()->org_id)->first();
+
+        return response()->json(['data' => $row?->payload]);
+    }
+
+    /**
+     * PUT /dpia/framework/scoring-guidance
+     * Simpan/override panduan nilai. payload = { dampak, probabilitas, kontrol, penanganan }.
+     */
+    public function updateScoringGuidance(Request $request)
+    {
+        $this->assertDPO($request);
+
+        $data = $request->validate([
+            'payload' => ['required', 'array'],
+            'payload.dampak' => ['sometimes', 'array'],
+            'payload.dampak.*.indikator' => ['required_with:payload.dampak', 'string', 'max:255'],
+            'payload.dampak.*.levels' => ['required_with:payload.dampak', 'array'],
+            'payload.probabilitas' => ['sometimes', 'array'],
+            'payload.kontrol' => ['sometimes', 'array'],
+            'payload.penanganan' => ['sometimes', 'array'],
+        ]);
+
+        $row = DpiaScoringGuidance::updateOrCreate(
+            ['org_id' => $request->user()->org_id],
+            ['payload' => $data['payload'], 'updated_by' => $request->user()->id],
+        );
+
+        return response()->json(['message' => 'Panduan nilai disimpan.', 'data' => $row->payload]);
+    }
+
+    /**
+     * DELETE /dpia/framework/scoring-guidance — kembalikan ke default (hapus override).
+     */
+    public function resetScoringGuidance(Request $request)
+    {
+        $this->assertDPO($request);
+        DpiaScoringGuidance::where('org_id', $request->user()->org_id)->delete();
+
+        return response()->json(['message' => 'Panduan nilai dikembalikan ke default.']);
     }
 
     private function assertDPO(Request $request): void
