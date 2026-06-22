@@ -14,8 +14,9 @@ use Illuminate\Http\Request;
  *
  * 3 document types (Pasal 46 UU PDP compliance artifacts):
  *   - komdigi  : Surat Notifikasi ke KOMDIGI (formal, 3x24h notification)
- *   - subject  : Data Subject Notification Letter (himbauan ganti
- *                credential — tidak menyebut sebab biar anti-churn)
+ *   - subject  : Data Subject Notification Letter — pemberitahuan resmi yang
+ *                menyebut kasus + langkah penanganan yang telah dilakukan,
+ *                dengan bahasa menenangkan (transparansi Pasal 46 UU PDP)
  *   - report   : Breach Incident Full Report (offline-ready, RACI,
  *                containment timeline, RCA, remediation)
  *
@@ -36,7 +37,7 @@ class BreachReportController extends Controller
     {
         $breach = $this->loadBreach($request, $id);
         $pdf = $this->buildPdf($request, 'reports.breach.subject', $breach, 'breach_subject');
-        return $pdf->download("Himbauan-Keamanan-Akun_{$breach->incident_code}.pdf");
+        return $pdf->download("Pemberitahuan-Insiden_{$breach->incident_code}.pdf");
     }
 
     public function fullReport(Request $request, string $id)
