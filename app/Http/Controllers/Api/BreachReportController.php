@@ -48,6 +48,32 @@ class BreachReportController extends Controller
     }
 
     /**
+     * PUT /breach/{id}/notification-templates
+     * Simpan template pemberitahuan custom PER BREACH (KOMDIGI / internal /
+     * subjek). Disimpan ke kolom notification_template (JSON, keyed per jenis).
+     * Kosong = frontend pakai default. Setiap breach bisa beda.
+     */
+    public function saveNotificationTemplates(Request $request, string $id)
+    {
+        $breach = $this->loadBreach($request, $id);
+
+        $data = $request->validate([
+            'templates' => ['required', 'array'],
+            'templates.*' => ['nullable', 'string'],
+        ]);
+
+        // Buang entri kosong supaya null = fallback ke default.
+        $clean = array_filter($data['templates'], fn ($v) => is_string($v) && trim($v) !== '');
+
+        $breach->forceFill(['notification_template' => $clean ?: null])->save();
+
+        return response()->json([
+            'message' => 'Template pemberitahuan disimpan.',
+            'data' => $breach->notification_template,
+        ]);
+    }
+
+    /**
      * Supported paper sizes for all report endpoints.
      * Accept as ?size=a4 (default) | letter | legal | a3 | a5 | folio.
      * Accept orientation as ?orientation=portrait (default) | landscape.
