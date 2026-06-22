@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
  * CRUDs freely — system defaults no longer auto-sync.
  *
  * Kategori + teks pertanyaan mengikuti kuesioner DPIA baku (lihat dpia.txt):
- * Legal Basis, Retensi, Autentikasi, … Hak Subjek Data. `description` kategori
+ * Legal Basis, Retensi, Autentifikasi, … Hak Subjek Data. `description` kategori
  * = teks pertanyaan yang ditampilkan di wizard Edit Potensi Risiko + detail DPIA.
  */
 class DpiaCategoryService
@@ -67,7 +67,7 @@ class DpiaCategoryService
                 'Tidak ada batas waktu berlakunya persetujuan',
                 'Pemrosesan melewati masa berlaku consent',
             ]],
-            ['name' => 'Autentikasi', 'question' => 'Apakah terdapat mekanisme autentikasi yang diterapkan pada sistem/aplikasi yang berkaitan dengan pemrosesan data pribadi (mis. MFA, kompleksitas password)? Jika iya, sebutkan mekanismenya.', 'risks' => [
+            ['name' => 'Autentifikasi', 'question' => 'Apakah terdapat mekanisme autentikasi yang diterapkan pada sistem/aplikasi yang berkaitan dengan pemrosesan data pribadi (mis. MFA, kompleksitas password)? Jika iya, sebutkan mekanismenya.', 'risks' => [
                 'Akses tidak sah akibat autentikasi lemah',
                 'Pembobolan kredensial pengguna',
                 'Sistem kritikal tanpa MFA',

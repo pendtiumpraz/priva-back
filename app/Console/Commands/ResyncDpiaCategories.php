@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
  *
  * ensureSeeded() hanya men-seed org yang BELUM punya kategori, jadi org yang
  * sudah terlanjur ter-seed dengan set kategori lama (prinsip GDPR generik) perlu
- * di-refresh ke set baru (Legal Basis, Retensi, Autentikasi, … + teks pertanyaan).
+ * di-refresh ke set baru (Legal Basis, Retensi, Autentifikasi, … + teks pertanyaan).
  *
  * PERHATIAN: command ini MENGHAPUS kategori + risk-event default per org lalu
  * men-seed ulang. Kustomisasi kategori/risk yang dibuat DPO akan hilang. Jawaban

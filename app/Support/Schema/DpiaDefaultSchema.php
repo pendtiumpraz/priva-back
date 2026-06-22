@@ -33,7 +33,7 @@ class DpiaDefaultSchema
     private const RISK_CATEGORIES = [
         'Legal Basis',
         'Retensi',
-        'Autentikasi',
+        'Autentifikasi',
         'Pemantauan Akses',
         'Enkripsi (Structured)',
         'Enkripsi (Unstructured)',
