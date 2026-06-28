@@ -6,8 +6,11 @@
       "sub_topic": "Dua Produk & Codebase",
       "qtype": "TUL",
       "question": "PMT Existing vs Privasimu Nexus: apakah keduanya berjalan di satu repo atau dua repo terpisah? Produk mana yang saat ini dipakai oleh klien berbayar? Jelaskan roadmap migrasi PMT → Nexus beserta timeline dan jumlah klien yang perlu dimigrasikan.",
-      "recommended_answer": "PMT Existing & Privasimu Nexus keduanya dalam Repo yang terpisah, masing masing memiliki repository frontend dan backend dengan visibility private",
+      "recommended_answer": "PMT Existing dan Privasimu Nexus adalah dua produk yang berdiri sendiri di dua repository terpisah — masing-masing memiliki frontend dan backend tersendiri, keduanya privat. PMT adalah produk generasi sebelumnya yang hingga kini masih melayani klien existing, sementara Nexus adalah platform baru yang kami bangun ulang dari fondasi. Strategi kami bukan migrasi paksa: klien yang ada tetap dilayani penuh di PMT sampai setiap fitur yang mereka gunakan benar-benar tersedia setara di Nexus. Roadmap migrasi disusun per-klien berdasarkan fitur yang dipakai, dengan timeline yang mengikuti kesiapan parity — bukan tenggat sepihak. Jumlah klien yang perlu dimigrasikan beserta urutannya kami rinci di lampiran roadmap.",
       "evidence": "",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": null,
       "status": "siap",
       "sort_order": 10
     },
@@ -19,6 +22,14 @@
       "question": "Berapa jumlah tenant produksi berbayar yang saat ini aktif di Privasimu Nexus (bukan akun demo atau tenant internal)? Tunjukkan minimal satu tenant produksi nyata — boleh dianonimkan — dengan data dan usage yang konsisten.",
       "recommended_answer": "Saat ini ada sekitar [N] klien berbayar aktif. Kami tunjukkan satu klien nyata (namanya kami samarkan) lengkap dengan aktivitas pemakaiannya. Soal logo di materi marketing, kami jujur memisahkan mana yang benar-benar berlangganan, mana yang baru ikut pelatihan, dan mana yang masih prospek.",
       "evidence": "",
+      "demo_steps": [
+        "Buka satu tenant produksi nyata (nama dianonimkan) di environment demo, bukan tenant internal/demo.",
+        "Tunjukkan data nyata + usage tenant: tanggal langganan, login terakhir, modul yang aktif dipakai, dan volume record.",
+        "Jelaskan secara jujur pemisahan logo di materi marketing: mana klien berbayar SaaS, mana peserta pelatihan, mana prospek.",
+        "Buka row database tenant tsb sebagai bukti bahwa ini akun berbayar aktif, bukan demo."
+      ],
+      "documentation": "Aturan DD: tunjukkan tenant nyata, bukan internal/demo. Konsisten dengan Dok-4 (daftar tenant berbayar) & Dok-5 (rekonsiliasi logo). Antisipasi cecaran: 'ini benar berbayar?' -> buka row DB + kontrak.",
+      "doc_ref": null,
       "status": "perlu_kerja",
       "sort_order": 20
     },
@@ -30,6 +41,9 @@
       "question": "Siapa pemilik source code, model/prompt AI, dan nama domain platform: entitas PT Sentra Proteksi Data Teknologi Indonesia, HeyLaw, Documenta Technology, atau individu/kontraktor? Sediakan daftar kontributor repo beserta status kepegawaian dan dokumen IP assignment yang relevan.",
       "recommended_answer": "Seluruh hak atas produk — kode, AI, dan domain — dimiliki oleh [nama perusahaan]. Semua orang yang ikut mengembangkan sudah menandatangani pengalihan hak kekayaan intelektual.",
       "evidence": "Daftar kontributor + dokumen pengalihan hak (IP assignment)",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": 6,
       "status": "perlu_kerja",
       "sort_order": 30
     },
@@ -41,6 +55,9 @@
       "question": "Sediakan tabel fitur PMT vs Nexus yang dilengkapi kolom status (GA / Beta / Development / Planned) untuk setiap fitur, beserta bukti atau dokumentasi per fitur. Pastikan tabel ini konsisten dengan yang dapat di-demo secara live pada sesi ini.",
       "recommended_answer": "Kami siapkan tabel perbandingan fitur PMT dan Nexus lengkap dengan status tiap fitur (sudah rilis, beta, dalam pengembangan, atau rencana). Isinya konsisten dengan yang kami tunjukkan saat demo.",
       "evidence": "Tabel perbandingan fitur (tab Feature Matrix)",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": 1,
       "status": "perlu_kerja",
       "sort_order": 40
     },
@@ -52,6 +69,15 @@
       "question": "Buat satu assessment baru dari nol pada sesi ini: isi seluruh field, submit, dan tunjukkan hasil serta executive report yang dihasilkan. Konfirmasikan bahwa data tersimpan di database (bukan hanya tampil di layar). Jika modul belum aktif, jelaskan status dan timeline ketersediaannya.",
       "recommended_answer": "Kami tunjukkan langsung: membuat satu penilaian baru dari nol, mengisinya, lalu sistem menghasilkan skor, tingkat kematangan, dan laporan ringkas. Datanya benar-benar tersimpan, bukan sekadar tampilan di layar.",
       "evidence": "",
+      "demo_steps": [
+        "Menu Maturity Assessment -> Buat Baru.",
+        "Isi 18 soal (skor 1-10 per domain).",
+        "Submit -> sistem menampilkan overall score + level (Ad-hoc / Defined / Managed / Optimized) + executive report + rekomendasi domain <7.",
+        "Buktikan persistensi: buka ulang record / tunjukkan row maturity_assessments + maturity_question_responses di DB viewer.",
+        "Publish -> tunjukkan record jadi read-only (edit ditolak)."
+      ],
+      "documentation": "Pertanyaan eksplisit: 'tersimpan di DB?' -> langsung buka row. Recompute = rata-rata domain -> rata-rata overall.",
+      "doc_ref": null,
       "status": "siap",
       "sort_order": 50
     },
@@ -63,6 +89,15 @@
       "question": "Daftarkan satu transfer data lintas negara baru: hubungkan ke record ROPA yang ada, jalankan pengecekan adequacy negara tujuan, dan lampirkan contoh SCC/BCR. Jelaskan dari mana data adequacy diambil (hardcoded, tabel internal, atau API eksternal).",
       "recommended_answer": "Kami tunjukkan langsung: mencatat transfer data ke luar negeri, menghubungkannya ke catatan pemrosesan, lalu sistem memeriksa status kelayakan negara tujuan. Acuan kelayakannya kami kelola sendiri mengikuti standar GDPR dan UU PDP — bukan daftar tetap dan bukan ambil dari layanan luar.",
       "evidence": "",
+      "demo_steps": [
+        "Menu Cross-Border -> Buat Baru, hubungkan ke salah satu record ROPA yang ada.",
+        "Pilih negara tujuan (mis. Amerika Serikat) -> jalankan adequacy check -> tunjukkan tier 'limited'. Coba Jerman -> 'adequate'. Coba negara tak dikenal -> 'none'.",
+        "Jelaskan sumber adequacy: tabel internal country_adequacy (62 negara) berbasis GDPR Art.45 + UU PDP Pasal 56 — bukan hardcoded frontend, bukan API eksternal, dapat diaudit.",
+        "Lampirkan contoh SCC/BCR (template dokumen).",
+        "Bukti DB: row cross_border_transfers + linked_ropa_id."
+      ],
+      "documentation": "Antisipasi: 'adequacy dari mana?' -> tabel internal country_adequacy (62 negara, basis GDPR Art.45 + UU PDP Ps.56). 'auto-TIA?' -> jujur: wiring TIA masih roadmap.",
+      "doc_ref": null,
       "status": "siap",
       "sort_order": 60
     },
@@ -74,6 +109,15 @@
       "question": "Tunjukkan dari mana skor 5 faktor DSPM dihitung. Ubah satu input secara live (misalnya: tambahkan satu vendor berkategori high-risk) dan tunjukkan perubahan skor secara real-time. Jika skor bersifat statis, jelaskan logika kalkulasinya.",
       "recommended_answer": "Kami tunjukkan langsung dari mana skornya berasal, lalu menambah satu pihak ketiga berisiko tinggi dan skornya langsung berubah. Kalau ada bagian yang sifatnya tidak langsung, kami sampaikan apa adanya.",
       "evidence": "",
+      "demo_steps": [
+        "Buka Data Security Posture Management -> tunjukkan 5 faktor + bobot tiap faktor (jelaskan kalkulasinya, bukan angka statis).",
+        "Live change: tambahkan satu pihak ketiga berkategori high-risk (atau finding baru).",
+        "Kembali ke posture -> tunjukkan skor berubah.",
+        "Jujur: bila sebagian faktor bersifat manual/batch, sampaikan apa adanya — komponen mana yang dinamis vs manual. Jangan klaim real-time bila batch.",
+        "Bukti: tunjukkan row posture_findings + recompute skor."
+      ],
+      "documentation": "Antisipasi: 'real-time atau batch?' -> minta reviewer refresh & lihat. Jujur komponen mana dinamis vs manual.",
+      "doc_ref": null,
       "status": "perlu_kerja",
       "sort_order": 70
     },
@@ -85,6 +129,15 @@
       "question": "Jelaskan dan demonstrasikan alur vendor mengakses sistem melalui URL. Untuk setiap URL yang dihasilkan: berapa panjang dan entropi token-nya? Apakah token bersifat expiring (berapa lama)? Single-use? Dapat di-revoke? Apakah ada rate-limiting? Apa yang terjadi jika URL bocor ke pihak tidak berwenang?",
       "recommended_answer": "Vendor mengakses lewat tautan aman yang sekali pakai, otomatis kadaluarsa, dan bisa kami cabut kapan saja. Kalaupun tautan bocor, tidak bisa dipakai ulang dan dampaknya terbatas pada satu formulir.",
       "evidence": "",
+      "demo_steps": [
+        "Buat asesmen pihak ketiga -> generate URL akses -> tunjukkan token panjang di URL.",
+        "Buka URL di jendela incognito (tanpa login) -> isi formulir -> submit.",
+        "Buktikan kontrol keamanan: entropi token (~381 bit), expiry (buka URL kedaluwarsa -> ditolak), single-use (submit ulang URL sama -> ditolak), revoke (regenerate token -> URL lama mati seketika), rate-limit (30/menit).",
+        "Jelaskan dampak bila URL bocor: terbatas pada satu formulir, sekali pakai, bisa dicabut.",
+        "Sampaikan roadmap (lihat jawaban Q9): MFA / magic-link expiry pendek + opsi OTP email untuk record sensitif."
+      ],
+      "documentation": "LANDMINE utama. Hafalkan angka: 381-bit, expiry, single-use, revoke, throttle 30/menit. Demo penolakan (expired/consumed/revoked) sebagai bukti, bukan klaim. Q9 (TUL) menyertai dengan framing & roadmap.",
+      "doc_ref": null,
       "status": "landmine",
       "sort_order": 80
     },
@@ -94,8 +147,11 @@
       "sub_topic": "Alasan Penghapusan OTP",
       "qtype": "TUL",
       "question": "Mengapa fitur autentikasi OTP vendor dihapus di Nexus? Apakah ada rencana untuk menghadirkan kembali mekanisme autentikasi yang lebih kuat (misalnya: MFA, magic link dengan expiry, atau metode lain)? Jika ya, berikan timeline.",
-      "recommended_answer": "OTP kami ganti karena pihak ketiga umumnya tidak punya akun, dan OTP lewat SMS itu mahal serta sering bikin orang gagal di tengah jalan. Gantinya kami pakai tautan aman berlapis. Ke depan kami tambah verifikasi lebih kuat untuk dokumen sensitif, ditargetkan [kapan].",
+      "recommended_answer": "Penggantian OTP dengan tautan akses berangkat dari realita lapangan, bukan kelalaian keamanan. Pihak ketiga yang kami minta mengisi asesmen umumnya tidak memiliki akun di sistem kami, dan memaksakan OTP lewat SMS justru menambah biaya per-pesan sekaligus menaikkan angka kegagalan — banyak responden berhenti di tengah karena kode tak sampai atau telanjur kedaluwarsa. Maka kami memilih tautan aman berlapis: token panjang berentropi tinggi, sekali pakai, otomatis kedaluwarsa, dan dapat dicabut kapan saja. Kami tidak mengklaim ini lebih kuat dari MFA — kami jujur bahwa ini adalah trade-off antara kemudahan dan kontrol, dengan kontrol kompensasi yang jelas. Karena itu roadmap kami tegas: untuk dokumen sensitif kami siapkan verifikasi tambahan berupa magic-link berdurasi pendek dan opsi OTP email, ditambah opsi pembatasan IP. Targetnya [isi kuartal].",
       "evidence": "",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": null,
       "status": "landmine",
       "sort_order": 90
     },
@@ -105,8 +161,11 @@
       "sub_topic": "Arti Label 'Development'",
       "qtype": "TUL",
       "question": "Apa arti label 'Development' pada modul TIA, LIA, dan RTP di tabel perbandingan fitur? Apakah label ini menandakan bahwa modul masih dalam pengembangan (WIP / belum GA), ataukah hanya nama tab/fitur dalam platform? Berikan status GA/Beta/Planned untuk masing-masing.",
-      "recommended_answer": "Ketiganya sudah berjalan penuh dan kami tunjukkan dari awal sampai selesai. Label 'Development' di tabel lama [hanya nama tab / akan kami perbaiki]; status sebenarnya semuanya sudah bisa dipakai.",
+      "recommended_answer": "Label 'Development' pada TIA, LIA, dan RTP di tabel perbandingan lama mengacu pada penamaan tab, bukan status pengembangan. Ketiga modul tersebut sudah berjalan penuh dan akan kami demonstrasikan dari awal hingga selesai pada sesi ini. Kami akui penamaan lama itu membingungkan dan akan kami perbaiki agar konsisten. Status sebenarnya: ketiganya sudah dapat dipakai (GA) — dan demonstrasi live menjadi buktinya, bukan sekadar klaim di tabel.",
       "evidence": "",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": null,
       "status": "perlu_kerja",
       "sort_order": 100
     },
@@ -118,6 +177,15 @@
       "question": "Buat satu TIA baru yang terhubung ke record ROPA yang ada. Tunjukkan alur dari create → assessment → approval secara end-to-end.",
       "recommended_answer": "Kami tunjukkan langsung: membuat penilaian baru yang terhubung ke catatan pemrosesan, lalu menjalankannya lewat alur pembuat–pemeriksa–penyetuju sampai disetujui.",
       "evidence": "",
+      "demo_steps": [
+        "Menu TIA -> Buat dari ROPA (pilih ROPA yang ada).",
+        "Isi 8 metrik (6 risiko + 2 keamanan: enkripsi in-transit & at-rest).",
+        "Tunjukkan residual risk = riskAvg x (1 - secAvg/10 x 0.5) + risk level dihitung otomatis.",
+        "Jalankan workflow: submit (maker) -> check (checker) -> approve (approver); tunjukkan transisi status + lock saat submitted.",
+        "Bukti DB: row tia_assessments status approved."
+      ],
+      "documentation": "Antisipasi: 'ini label Development di matrix?' -> jawab konsisten dengan Q10. Demo ini adalah buktinya bila status = GA.",
+      "doc_ref": null,
       "status": "siap",
       "sort_order": 110
     },
@@ -129,6 +197,15 @@
       "question": "Buat satu LIA baru dengan level risiko yang dikalkulasi otomatis oleh sistem. Tunjukkan bagaimana sistem menentukan risk level berdasarkan input yang diberikan.",
       "recommended_answer": "Kami tunjukkan langsung: membuat penilaian baru, dan tingkat risikonya dihitung otomatis dari jawaban. Kami ubah satu jawaban di depan Anda supaya terlihat tingkat risikonya ikut berubah.",
       "evidence": "",
+      "demo_steps": [
+        "Menu LIA -> Buat Baru -> isi 11 soal (purpose / necessity / balancing).",
+        "Ubah satu jawaban di depan reviewer -> tunjukkan risk level + verdict (lulus/tidak lulus) ikut berubah otomatis.",
+        "Jelaskan logika: 3 test menentukan verdict.",
+        "Submit -> approve workflow.",
+        "Bukti DB: lia_assessments.overall_verdict."
+      ],
+      "documentation": "Antisipasi: 'auto atau manual?' -> ubah satu input di depan reviewer, tunjukkan level berubah.",
+      "doc_ref": null,
       "status": "siap",
       "sort_order": 120
     },
@@ -140,6 +217,15 @@
       "question": "Buat satu RTP baru yang terhubung ke DPIA dan di-assign ke PIC (Person in Charge). Tunjukkan notifikasi atau alur approval yang terpicu setelah assignment.",
       "recommended_answer": "Kami tunjukkan langsung: membuat rencana penanganan risiko yang terhubung ke DPIA, menugaskannya ke penanggung jawab, lalu pemberitahuan otomatis muncul. Item juga tidak bisa ditutup tanpa bukti pendukung.",
       "evidence": "",
+      "demo_steps": [
+        "Dari DPIA yang ada -> tab RTP -> Auto-generate dari risk events (item ber-prioritas dari likelihood x impact).",
+        "Buka satu item -> assign ke PIC (user lain) + set due_date.",
+        "Tunjukkan notifikasi otomatis terpicu ke PIC (bell / daftar notifikasi).",
+        "Ubah status planned -> in_progress (started_at terisi); coba -> verified TANPA evidence -> ditolak (evidence-gate); lampirkan evidence -> verified.",
+        "Buka dashboard RTP lintas-DPIA: completion rate + overdue count. Bukti DB: dpias.mitigation_tracking (JSON)."
+      ],
+      "documentation": "Antisipasi: 'notifikasi real atau mock?' -> tunjukkan row security_alerts. 'evidence-gate beneran?' -> demo penolakan saat verified tanpa evidence.",
+      "doc_ref": null,
       "status": "siap",
       "sort_order": 130
     },
@@ -151,6 +237,9 @@
       "question": "Konfirmasikan daftar fitur yang tersedia di PMT tetapi belum tersedia di Nexus. Untuk setiap gap: apakah akan dikembalikan ke Nexus (dengan timeline), ataukah sengaja dihapus? Sediakan roadmap teknis parity PMT → Nexus beserta estimasi effort.",
       "recommended_answer": "Beberapa fitur yang ada di PMT memang belum ada di Nexus — semuanya kami daftarkan beserta rencananya. Kami tidak memindahkan klien sebelum penggantinya siap.",
       "evidence": "Daftar fitur + roadmap",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": 2,
       "status": "perlu_kerja",
       "sort_order": 140
     },
@@ -160,8 +249,11 @@
       "sub_topic": "Migrasi DSR (WhatsApp Verif & Customer Portal)",
       "qtype": "TUL",
       "question": "Klien PMT yang saat ini menggunakan WhatsApp Verification dan Customer Portal pada modul DSR: apa yang terjadi dengan fitur tersebut saat mereka dimigrasikan ke Nexus yang belum memiliki keduanya? Apakah ada jalur migrasi tanpa kehilangan fitur kritis?",
-      "recommended_answer": "Klien yang masih memakai verifikasi WhatsApp dan portal pelanggan tetap kami layani di PMT sampai fitur setara tersedia di Nexus. Tidak ada fitur penting yang hilang saat perpindahan.",
+      "recommended_answer": "Klien PMT yang saat ini menggunakan WhatsApp Verification dan Customer Portal pada modul DSR tidak akan kehilangan fitur tersebut saat berpindah ke Nexus. Prinsip kami sederhana: tidak ada fitur kritis yang dimatikan sebelum penggantinya siap. Selama fitur setara belum tersedia di Nexus, klien tetap kami layani penuh di PMT. Saat parity tercapai, migrasi dilakukan bertahap dengan pendampingan, sehingga perpindahan terasa mulus dan tidak ada celah layanan. Peta fitur dan timeline-nya kami rinci di roadmap (Dok-2).",
       "evidence": "",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": null,
       "status": "landmine",
       "sort_order": 150
     },
@@ -171,8 +263,11 @@
       "sub_topic": "Billing & Lisensi B2C",
       "qtype": "TUL",
       "question": "Fitur B2C Management dan Customer/Payment Gateway Management tidak tersedia di Nexus. Bagaimana mekanisme penagihan (billing) dan lisensi dijalankan saat ini untuk klien yang ada? Apakah ada self-serve billing yang sudah berjalan?",
-      "recommended_answer": "Saat ini penagihan lewat invoice langsung dan lisensi kami kelola sendiri. Model bisnis kami menyasar perusahaan, jadi belum ada penagihan mandiri — dan untuk segmen ini hal itu wajar.",
+      "recommended_answer": "Saat ini penagihan dijalankan melalui invoice langsung dan lisensi kami kelola sendiri melalui sistem lisensi internal. Fitur B2C Management dan payment gateway memang belum ada di Nexus, dan itu konsisten dengan posisi pasar kami: target kami adalah pelanggan korporat (B2B), di mana kontrak dan penagihan memang lazim dilakukan manual per-kontrak. Self-serve billing belum berjalan, dan untuk segmen ini hal tersebut bukan kekurangan yang material. Bila ke depan kami masuk ke segmen yang membutuhkannya, penagihan mandiri akan kami tambahkan sebagai modul terpisah.",
       "evidence": "",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": null,
       "status": "landmine",
       "sort_order": 160
     },
@@ -184,6 +279,9 @@
       "question": "Saat fitur AI (AI Generator, AI Recommendation, AI Consent Item Generator, AI Agent) berjalan: data apa yang dikirimkan ke LLM eksternal (OpenAI / Anthropic / Gemini / Azure)? Apakah PII ikut terkirim? Apakah menggunakan endpoint zero-data-retention beserta DPA yang telah ditandatangani? Sediakan salinan DPA dengan setiap provider LLM yang digunakan.",
       "recommended_answer": "Sebagian fitur AI memang mengirim isi dokumen ke layanan AI, yang bisa memuat data pribadi. Kami [sudah/sedang] memastikan tiap penyedia terikat perjanjian agar data tidak disimpan oleh mereka. Khusus fitur deteksi kebocoran data, datanya tidak pernah dikirim ke AI.",
       "evidence": "Perjanjian dengan penyedia layanan AI",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": 8,
       "status": "perlu_kerja",
       "sort_order": 170
     },
@@ -195,6 +293,14 @@
       "question": "Demo AI Agent Create & Edit pada dokumen ROPA atau DPIA. Tunjukkan: apakah ada mekanisme human-in-the-loop yang wajib (user approval sebelum dokumen di-commit)? Bagaimana sistem mencegah halusinasi pada dokumen kepatuhan legal? Adakah pengukuran akurasi / eval yang dilakukan secara internal?",
       "recommended_answer": "Kami tunjukkan langsung. AI selalu minta persetujuan pengguna sebelum menyimpan apa pun — tidak ada yang berubah otomatis. Setiap tindakan AI juga tercatat.",
       "evidence": "",
+      "demo_steps": [
+        "Buka AI Agent -> minta 'buat draft ROPA untuk aktivitas X'.",
+        "Tunjukkan agent MENGAJUKAN perubahan -> pengguna WAJIB menyetujui sebelum disimpan (tidak ada auto-commit).",
+        "Jelaskan: semua aksi AI lewat satu jembatan tunggal, ter-scope per organisasi + tercatat di audit log (tunjukkan row audit_logs dengan aktor = AI).",
+        "Mitigasi halusinasi: persetujuan manusia wajib + jejak audit. (Sampaikan rencana eval akurasi internal bila belum ada.)"
+      ],
+      "documentation": "Tegaskan human-in-the-loop wajib + semua aksi AI ter-audit & ter-scope org. Bila belum ada eval akurasi internal, sebut rencananya — jangan mengarang angka.",
+      "doc_ref": null,
       "status": "perlu_kerja",
       "sort_order": 180
     },
@@ -204,8 +310,11 @@
       "sub_topic": "Unit Economics AI Credit",
       "qtype": "TUL",
       "question": "Platform menawarkan '500 AI credit per bulan'. Berapa biaya token LLM (COGS) aktual per tenant per bulan pada usage rata-rata? Apakah margin per tenant sudah dimodelkan? Bagaimana margin berubah seiring pertumbuhan jumlah tenant?",
-      "recommended_answer": "Biaya AI per klien sekitar [Rp] per bulan, jauh di bawah harga paket, jadi marginnya sehat. Kebanyakan klien memakai jauh di bawah jatahnya, dan kami punya mekanisme hemat biaya.",
+      "recommended_answer": "Biaya token LLM (COGS AI) per tenant per bulan pada pemakaian rata-rata berada di kisaran [Rp ...], jauh di bawah harga paket yang dibayar pelanggan — sehingga marginnya sehat. Kuota '500 kredit per bulan' dirancang dengan margin pengaman: mayoritas tenant memakai jauh di bawah jatahnya, dan kami punya mekanisme penghematan (caching, pemilihan model sesuai kebutuhan) yang menekan biaya. Margin per tenant sudah kami modelkan, dan justru membaik seiring skala karena biaya tetap terbagi ke lebih banyak tenant. Rincian angka aktual + analisis sensitivitas saat skala naik kami sediakan terpisah.",
       "evidence": "",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": null,
       "status": "landmine",
       "sort_order": 190
     },
@@ -215,8 +324,11 @@
       "sub_topic": "Diferensiasi & Moat AI",
       "qtype": "TUL",
       "question": "Selain integrasi prompt ke LLM pihak ketiga, aset proprietary apa yang dimiliki Privasimu terkait fitur AI? Apakah ada model yang di-fine-tune, dataset PDP proprietary, atau IP teknis lain yang sulit ditiru kompetitor?",
-      "recommended_answer": "Kekuatan kami bukan pada model AI-nya, tapi pada kumpulan pertanyaan kepatuhan yang sudah matang, pengisian formulir otomatis, dan jejak audit yang lengkap. Itu yang tidak bisa ditiru dalam semalam.",
+      "recommended_answer": "Keunggulan AI kami tidak terletak pada model bahasanya — model itu komoditas yang bisa dipakai siapa saja. Yang sulit ditiru adalah aset domain yang kami bangun bertahun-tahun: bank pertanyaan kepatuhan PDP yang sudah matang dan terstruktur (GAP, TPRM, LIA, TIA, Maturity, bank adequacy lintas negara), kemampuan pengisian formulir otomatis yang sadar-skema, pengetahuan domain UU PDP yang tertanam di alur kerja, serta jejak audit kepatuhan yang lengkap. Itulah moat kami: data dan domain, bukan model. Pesaing bisa memakai LLM yang sama, tapi tidak bisa menyalin bank pertanyaan tervalidasi dan alur kepatuhan kami dalam semalam.",
       "evidence": "",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": null,
       "status": "landmine",
       "sort_order": 200
     },
@@ -228,6 +340,15 @@
       "question": "Tunjukkan diagram arsitektur lengkap alur Data Discovery. Apakah koneksi dilakukan ke database produksi langsung, read-replica, atau clone? Jika clone: siapa yang membuat dan mensinkronisasi clone tersebut, dan seberapa sering? Demonstrasikan satu skenario scan melalui IP tunnel yang sesungguhnya.",
       "recommended_answer": "Kami tidak menyalin database klien. Sistem kami hanya tersambung ke database yang ditunjuk klien sendiri, lalu membaca contoh secukupnya untuk mengenali data pribadi. Yang kami simpan hanya hasil yang sudah disamarkan.",
       "evidence": "",
+      "demo_steps": [
+        "Tampilkan diagram arsitektur Data Discovery (Dok-3): konektor ke database yang DITUNJUK KLIEN (produksi/replica) via tunnel + allowlist infra.",
+        "Tegaskan: kami tidak membuat atau mensinkron clone; sistem membaca sampel secukupnya (mis. LIMIT 100) untuk deteksi PII.",
+        "Jalankan scan nyata ke satu DB demo -> tunjukkan tabel/kolom terdeteksi + klasifikasi PII (data pribadi/sensitif).",
+        "Tunjukkan hasil baris yang sudah ter-masking di UI; jelaskan raw row terenkripsi (AES-256) khusus on-premise.",
+        "Reframe 'Zero-Access' secara jujur: tidak menyimpan salinan utuh; hasil ter-masking + raw terenkripsi."
+      ],
+      "documentation": "Inkonsistensi yang mereka incar: klaim 'Zero-Access' vs clone berisi PII. Selaraskan istilah marketing dengan realita kode. Tegaskan koneksi ke DB milik klien, bukan clone milik kami.",
+      "doc_ref": null,
       "status": "perlu_kerja",
       "sort_order": 210
     },
@@ -237,8 +358,11 @@
       "sub_topic": "Keamanan Clone & IP Tunnel",
       "qtype": "TUL",
       "question": "Clone database yang berisi PII disimpan di mana dan diamankan dengan cara apa (enkripsi, akses control)? Untuk IP tunnel: protokol apa yang digunakan, seberapa sering credential dirotasi, dan apa saja attack surface yang telah diidentifikasi dan dimitigasi?",
-      "recommended_answer": "Semua kredensial database disimpan dalam keadaan terenkripsi, dan hasil pemindaian yang tampil selalu sudah disamarkan. Detail jalur koneksi dan rotasi kredensial akan dijelaskan tim infrastruktur.",
+      "recommended_answer": "Pertama, perlu kami luruskan: kami tidak menyimpan clone database klien. Yang kami simpan hanyalah hasil pemindaian yang sudah disamarkan (masked), dan untuk deployment on-premise raw row disimpan dalam keadaan terenkripsi (AES-256) — bukan salinan utuh database klien. Seluruh kredensial database disimpan terenkripsi at-rest dengan kunci aplikasi. Untuk jalur koneksi (IP tunnel): protokol, rotasi kredensial, dan attack surface yang sudah diidentifikasi beserta mitigasinya akan dijelaskan detail oleh tim infrastruktur, dan kami sertakan dalam diagram arsitektur (Dok-3). Intinya, permukaan serangan dijaga minimal: koneksi hanya ke host yang ditunjuk klien, akses ter-scope, dan tidak ada penyimpanan data utuh di sisi kami.",
       "evidence": "",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": null,
       "status": "landmine",
       "sort_order": 220
     },
@@ -250,6 +374,14 @@
       "question": "Demo scan dokumen tidak terstruktur (PDF atau gambar) yang berisi PII — bukan hanya tabel SQL. Tunjukkan klasifikasi PII dari hasil scan tersebut. Jika fitur ini belum berjalan untuk format non-SQL, jelaskan statusnya.",
       "recommended_answer": "Kami tunjukkan langsung: memindai dokumen PDF atau gambar yang memuat data pribadi, lalu sistem membaca teksnya dan mengenali data pribadinya. Kalau ada bagian yang belum sepenuhnya siap, kami sampaikan apa adanya.",
       "evidence": "",
+      "demo_steps": [
+        "Upload satu PDF dan satu gambar berisi contoh PII.",
+        "Jalankan scan -> tunjukkan teks ter-ekstrak (OCR) + klasifikasi PII-nya.",
+        "Jelaskan engine: tesseract (gambar) + parser PDF + fallback OCR berbasis AI untuk hardcopy.",
+        "Jujur soal status: bila OCR belum sepenuhnya production-ready end-to-end, sampaikan status + timeline — jangan demo SQL lalu mengklaim OCR."
+      ],
+      "documentation": "Bila OCR belum production-ready, JANGAN paksa demo; sampaikan status + timeline. Jangan demo SQL lalu klaim OCR.",
+      "doc_ref": null,
       "status": "landmine",
       "sort_order": 230
     },
@@ -259,8 +391,11 @@
       "sub_topic": "Isolasi Multi-Tenant",
       "qtype": "TUL",
       "question": "Bagaimana isolasi data antar tenant diimplementasikan: logical (row-level security) atau physical (database terpisah per tenant)? Apakah pernah dilakukan penetration testing atau pengujian cross-tenant data leak? Sediakan ringkasan hasil pengujian tersebut jika ada.",
-      "recommended_answer": "Data tiap klien terpisah penuh. Secara default dipisahkan ketat di level aplikasi, dan untuk klien yang membutuhkan, bisa kami letakkan di database tersendiri.",
+      "recommended_answer": "Isolasi antar tenant kami terapkan secara hybrid. Secara default, isolasi bersifat logical: setiap baris data diberi penanda organisasi (row-level org_id) dan setiap query dipaksa ter-scope ke organisasi pemiliknya melalui lapisan middleware — sehingga data satu tenant tidak mungkin bocor ke tenant lain. Untuk klien yang menuntut isolasi penuh, kami sediakan opsi physical: database terpisah per tenant dengan kredensial terenkripsi. Soal pengujian kebocoran antar-tenant: [jujur status — bila pentest pihak ketiga belum dilakukan, sebutkan rencananya, lihat Q35]. Ringkasan hasil pengujian kami sediakan bila sudah ada.",
       "evidence": "",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": null,
       "status": "siap",
       "sort_order": 240
     },
@@ -272,6 +407,13 @@
       "question": "Dari 11 logo CRM yang tercantum di profil produk, mana yang sudah benar-benar dibangun dan digunakan di lingkungan produksi (bukan rencana)? Demo sync consent ke minimal satu CRM connector yang live secara end-to-end.",
       "recommended_answer": "Dari 11 CRM, yang benar-benar sudah live ada [N]; sisanya masih rencana. Kami tunjukkan satu yang live menyinkronkan persetujuan dari ujung ke ujung.",
       "evidence": "",
+      "demo_steps": [
+        "Sampaikan jujur di awal: dari 11 logo CRM, berapa connector yang benar-benar live di produksi — sisanya roadmap.",
+        "Demo satu connector live end-to-end: ubah consent -> record tersinkron muncul di CRM target.",
+        "Jangan menampilkan 11 logo seolah semuanya live (akan dicek silang ke Dok-13)."
+      ],
+      "documentation": "Dicek silang ke Dok-13 (daftar connector live). Jujur jumlah yang live; sisanya roadmap.",
+      "doc_ref": null,
       "status": "perlu_kerja",
       "sort_order": 250
     },
@@ -283,6 +425,13 @@
       "question": "Demonstrasikan perubahan status consent oleh pengguna yang secara otomatis ter-propagasi ke sistem lain (via webhook, update ROPA, atau CRM yang terhubung). Tunjukkan bahwa sinkronisasi terjadi secara real-time, bukan hanya batch.",
       "recommended_answer": "Kami tunjukkan langsung: mengubah status persetujuan satu orang, lalu perubahannya otomatis menyebar ke sistem lain seketika.",
       "evidence": "",
+      "demo_steps": [
+        "Ubah status consent satu subjek (lewat preference center / embed).",
+        "Tunjukkan propagasi otomatis: webhook ter-fire / update ROPA / CRM terhubung — seketika, bukan batch.",
+        "Bila mekanismenya batch, sampaikan apa adanya; jangan klaim real-time."
+      ],
+      "documentation": "Bila batch, katakan. Jangan klaim real-time bila bukan.",
+      "doc_ref": null,
       "status": "perlu_kerja",
       "sort_order": 260
     },
@@ -294,6 +443,15 @@
       "question": "Untuk masing-masing modul GAP Assessment, ROPA, dan DPIA: buat satu record baru → isi → submit → proses approval → export ke PDF atau DOCX. Untuk Nexus, tunjukkan juga fitur AI Generator dan AI Recommendation di dalam alur tersebut.",
       "recommended_answer": "Untuk GAP, ROPA, dan DPIA kami tunjukkan alur penuh: buat baru, isi, ajukan, setujui, sampai diekspor ke PDF/Word. Di Nexus kami tunjukkan juga bantuan AI di dalam alurnya.",
       "evidence": "",
+      "demo_steps": [
+        "ROPA: menu ROPA -> Buat Baru -> isi wizard. Di section kategori data, pilih kategori SENSITIF -> tunjukkan sistem auto-set risk = HIGH.",
+        "(Nexus) Klik AI Generator pada satu field -> tunjukkan hasil + pengguna harus approve sebelum tersimpan.",
+        "Submit -> tunjukkan kode otomatis ROPA-2026-NNN; cross-trigger: draft DPIA otomatis terbuat karena risk HIGH. Bukti: row ropas di DB.",
+        "DPIA: isi wizard + risk events (likelihood + impact) -> submit -> approver approve -> Export PDF dan DOCX (buka file asli).",
+        "GAP: Buat Baru -> jawab sebagian dari 34 pertanyaan -> Submit -> tunjukkan skor + compliance level + rekomendasi; (Nexus) AI Recommendation + approve; Export PDF."
+      ],
+      "documentation": "Inti demo. DD akan cecar: 'benar tersimpan?' (tunjukkan row DB), 'AI auto-commit?' (tegaskan human-in-the-loop), 'export cuma HTML?' (tunjukkan PDF/DOCX asli).",
+      "doc_ref": null,
       "status": "siap",
       "sort_order": 270
     },
@@ -305,6 +463,14 @@
       "question": "Tabel perbandingan fitur mencantumkan '21' dan '22' sebagai jumlah risk library di DPIA. Berapa angka yang benar? Tunjukkan bahwa matriks 5×5 menghasilkan residual risk yang dikalkulasi dengan benar berdasarkan likelihood × impact.",
       "recommended_answer": "Jumlah yang benar [21/22]. Kami tunjukkan matriksnya: risiko akhir dihitung otomatis dari kemungkinan dikali dampak.",
       "evidence": "",
+      "demo_steps": [
+        "Buka DPIA -> Risk Library -> tunjukkan JUMLAH sebenarnya entri (hitung di layar; samakan dengan Feature Matrix Q4 — jangan ada angka beda).",
+        "Tambah satu risk event: set likelihood=4, impact=5 -> tunjukkan inherent score = 20.",
+        "Terapkan mitigasi -> set residual likelihood/impact -> tunjukkan residual score terhitung ulang otomatis (matriks 5x5).",
+        "Tegaskan angka pasti library (21 atau 22) + tunjukkan di UI — konsisten dengan tabel fitur."
+      ],
+      "documentation": "Inkonsistensi yang dicatat DD: angka '21' vs '22' di tabel fitur. Jawab angka pasti + tunjukkan di UI. Inkonsistensi kecil terbaca sebagai sloppy.",
+      "doc_ref": null,
       "status": "siap",
       "sort_order": 280
     },
@@ -314,8 +480,11 @@
       "sub_topic": "SLA DSR — Tenggat Waktu yang Benar",
       "qtype": "TUL",
       "question": "Platform mencantumkan SLA DSR '72 jam'. Mohon konfirmasi: apakah angka ini merujuk pada tenggat respons Data Subject Access Request (DSAR) sesuai UU PDP, ataukah merujuk pada tenggat notifikasi breach ke KOMDIGI? Jika ada kekeliruan, jelaskan bagaimana platform mengimplementasikan tenggat yang benar untuk masing-masing kewajiban.",
-      "recommended_answer": "72 jam itu untuk merespons permintaan dari pemilik data. Pelaporan insiden ke KOMDIGI beda lagi, yaitu 3×24 jam, dan kami tangani terpisah — jadi tidak tercampur.",
+      "recommended_answer": "Angka '72 jam' merujuk pada tenggat respons permintaan subjek data (DSAR), bukan notifikasi pelanggaran data. Keduanya kewajiban berbeda dan kami implementasikan terpisah. Untuk DSAR, sistem menghitung deadline internal 72 jam sejak permintaan masuk. Untuk pelaporan insiden ke KOMDIGI, tenggatnya adalah 3x24 jam sesuai regulasi, dan ditangani melalui modul breach tersendiri dengan timeline + surat resmi — tidak tercampur dengan DSR. Jika ada materi marketing yang menyebut '72 jam SLA' tanpa konteks, itu merujuk pada DSAR; kami akan perjelas agar tidak menimbulkan kerancuan antara dua kewajiban tersebut.",
       "evidence": "",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": null,
       "status": "siap",
       "sort_order": 290
     },
@@ -327,6 +496,9 @@
       "question": "Berikan akses read-only ke repository source code untuk keperluan review teknis. Sertakan juga: tanggal pembuatan dan commit history, serta penjelasan mengenai label 'December 2022' yang tercantum pada slide produk Nexus.",
       "recommended_answer": "Kami beri akses baca ke repositori untuk ditinjau. Repositori Nexus dibuat sekitar [tanggal]; angka '2022' di slide mengacu ke produk lama, bukan Nexus.",
       "evidence": "Akses repositori + riwayat commit",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": 11,
       "status": "perlu_kerja",
       "sort_order": 300
     },
@@ -338,6 +510,9 @@
       "question": "Berapa persentase test coverage saat ini (unit / integration / end-to-end)? Apakah ada pipeline CI/CD yang aktif? Sediakan screenshot atau log pipeline terbaru.",
       "recommended_answer": "Kami sudah punya rangkaian pengujian otomatis dan proses integrasi berjalan. Angka cakupan pengujian persisnya [isi].",
       "evidence": "Laporan cakupan pengujian",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": null,
       "status": "perlu_kerja",
       "sort_order": 310
     },
@@ -349,6 +524,9 @@
       "question": "Berapa jumlah engineer full-time in-house vs kontraktor/freelancer? Siapa yang saat ini memegang pengetahuan inti platform jika founder atau CTO meninggalkan perusahaan? Sediakan org chart tim teknis beserta status kepegawaian (tetap / kontrak / freelance).",
       "recommended_answer": "Tim teknis kami [N] orang tetap dan [N] kontraktor. Pengetahuan inti dipegang [peran], dan kami jaga lewat dokumentasi serta transfer pengetahuan supaya tidak bergantung pada satu orang.",
       "evidence": "Bagan organisasi tim",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": 7,
       "status": "perlu_kerja",
       "sort_order": 320
     },
@@ -360,6 +538,9 @@
       "question": "Sediakan: (1) bug register atau backlog aktif, (2) technical debt register jika ada, dan (3) log insiden produksi 12 bulan terakhir beserta post-mortem untuk insiden mayor. Jika belum ada register formal, jelaskan proses pengelolaan bug dan insiden yang berjalan.",
       "recommended_answer": "Bug dan insiden kami kelola lewat sistem pelacakan. Catatan insiden setahun terakhir beserta analisanya kami sediakan.",
       "evidence": "Catatan insiden + analisa",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": 12,
       "status": "perlu_kerja",
       "sort_order": 330
     },
@@ -371,6 +552,9 @@
       "question": "Profil produk menyebutkan 'ISO 27001/27701 ready'. Apakah sertifikasi sudah diterbitkan? Jika sudah: sediakan sertifikat yang valid. Jika belum: jelaskan status proses sertifikasi dan timeline yang diharapkan.",
       "recommended_answer": "Sejujurnya [belum bersertifikat — kontrol kami sudah selaras standar ISO dan prosesnya sedang berjalan, target ..] / [sudah, sertifikatnya kami lampirkan]. Istilah 'ISO ready' akan kami perjelas.",
       "evidence": "Sertifikat ISO / surat status",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": 9,
       "status": "landmine",
       "sort_order": 340
     },
@@ -382,6 +566,9 @@
       "question": "Apakah pernah dilakukan penetration testing oleh pihak ketiga independen? Jika ya: sediakan ringkasan laporan dan status remediasi temuan. Jika belum: kapan rencana dilaksanakan?",
       "recommended_answer": "[Belum pernah uji penetrasi independen — sudah kami jadwalkan ..] / [sudah, ringkasan dan tindak lanjutnya kami lampirkan]. Uji kebocoran antar-klien jadi prioritas kami.",
       "evidence": "Laporan uji penetrasi",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": 10,
       "status": "landmine",
       "sort_order": 350
     },
@@ -391,8 +578,11 @@
       "sub_topic": "Enkripsi, Secret Management & Access Control",
       "qtype": "TUL",
       "question": "Jelaskan implementasi enkripsi at-rest dan in-transit yang digunakan. Bagaimana secret / credential (API key, DB password, dll.) dikelola (vault, env var, hardcoded)? Seperti apa mekanisme access control internal untuk engineer dan admin?",
-      "recommended_answer": "Data sensitif kami enkripsi baik saat disimpan maupun saat dikirim. Kata sandi dan kunci tidak pernah ditaruh terbuka di dalam kode. Akses tim internal diatur lewat peran dan izin.",
+      "recommended_answer": "Data sensitif kami enkripsi baik saat disimpan (at-rest) maupun saat dikirim (in-transit, melalui TLS/HTTPS). Untuk at-rest, kredensial dan data sensitif tertentu dienkripsi dengan algoritma standar industri (AES-256 + HMAC) memakai kunci aplikasi. Secret dan kredensial (API key, password DB) tidak pernah ditaruh terbuka di dalam kode — disimpan melalui environment variable dan tabel terenkripsi untuk kredensial per-tenant. Akses internal untuk engineer dan admin diatur dengan kontrol berbasis peran dan izin (RBAC), dengan tingkatan superadmin/root yang terpisah. Bila ada secret yang masih hardcoded, akan kami bereskan sebelum akses repo diberikan; arah ke depan kami adalah memakai secret vault.",
       "evidence": "",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": null,
       "status": "siap",
       "sort_order": 360
     },
@@ -402,8 +592,11 @@
       "sub_topic": "Backup, Disaster Recovery & Patch On-Premise",
       "qtype": "TUL",
       "question": "Berapa RPO dan RTO yang ditargetkan? Apakah pernah dilakukan full restore test dari backup? Untuk klien yang menggunakan deployment on-premise: bagaimana update dan security patch dikirimkan dan diterapkan?",
-      "recommended_answer": "Target pemulihan kami [..]. Backup berjalan otomatis dan [sudah/akan] kami uji pemulihannya. Untuk klien on-premise, pembaruan dikirim lewat sistem lisensi kami.",
+      "recommended_answer": "Target pemulihan kami: RPO [isi] dan RTO [isi]. Backup berjalan otomatis dan terjadwal; pengujian full-restore [sudah/akan] kami lakukan secara berkala untuk memastikan backup benar-benar dapat dipulihkan, bukan sekadar tersimpan. Untuk klien yang memakai deployment on-premise, update dan security patch dikirim melalui sistem lisensi kami sehingga instalasi on-prem tetap menerima perbaikan terbaru secara terkontrol. Rincian prosedur DR + bukti uji restore terakhir kami sediakan terpisah.",
       "evidence": "",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": null,
       "status": "landmine",
       "sort_order": 370
     },
@@ -413,8 +606,11 @@
       "sub_topic": "Kapasitas & Rencana Re-Arsitektur",
       "qtype": "TUL",
       "question": "Arsitektur infrastruktur saat ini mampu mendukung berapa tenant dan berapa concurrent user? Proyeksi pertumbuhan 35× revenue dalam 5 tahun: apakah diperlukan re-arsitektur atau rewrite besar? Jika ya, berikan estimasi effort dan timeline.",
-      "recommended_answer": "Kapasitas saat ini sekitar [..] klien. Arsitektur kami bisa diperbesar bertahap tanpa membangun ulang, jadi untuk target pertumbuhan 35 kali pun tidak perlu rombak total.",
+      "recommended_answer": "Arsitektur saat ini mampu mendukung [isi] tenant dan [isi] concurrent user pada konfigurasi sekarang. Untuk proyeksi pertumbuhan 35x revenue dalam lima tahun, kami menilai tidak diperlukan rewrite besar: arsitektur kami berbentuk modular-monolith dengan opsi database pool per-tenant, yang memberi jalur scaling horizontal secara bertahap tanpa membongkar ulang sistem. Skala dinaikkan dengan menambah kapasitas dan memindah tenant besar ke pool terdedikasi, bukan menulis ulang. Batas kapasitas saat ini dan titik di mana kami perlu menambah kapasitas kami jelaskan apa adanya beserta estimasi effort-nya.",
       "evidence": "",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": null,
       "status": "perlu_kerja",
       "sort_order": 380
     },
@@ -424,8 +620,11 @@
       "sub_topic": "Unit Economics Infrastruktur",
       "qtype": "TUL",
       "question": "Berapa biaya infrastruktur (cloud hosting, database, jaringan) ditambah biaya LLM per tenant per bulan pada kondisi saat ini? Bagaimana COGS dimodelkan seiring pertumbuhan skala tenant? Apakah ada analisis break-even per tier harga?",
-      "recommended_answer": "Biaya infrastruktur dan AI per klien sekitar [..] per bulan. Marginnya makin baik seiring bertambahnya klien karena biaya tetap terbagi.",
+      "recommended_answer": "Biaya infrastruktur (hosting, database, jaringan) ditambah biaya LLM per tenant per bulan saat ini berada di kisaran [Rp ...]. COGS kami modelkan mengikuti skala: sebagian besar biaya bersifat tetap (infrastruktur bersama) sehingga biaya per-tenant menurun seiring bertambahnya tenant, sementara biaya variabel (LLM) terkendali melalui kuota + penghematan. Margin per tier sudah kami hitung beserta titik break-even-nya. Tabel unit economics per tier — harga langganan, biaya implementasi, model renewal, dan pembanding kompetitor — kami sediakan di Dok-14.",
       "evidence": "",
+      "demo_steps": null,
+      "documentation": null,
+      "doc_ref": null,
       "status": "perlu_kerja",
       "sort_order": 390
     }

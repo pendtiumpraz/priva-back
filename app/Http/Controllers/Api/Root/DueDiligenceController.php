@@ -36,6 +36,9 @@ class DueDiligenceController extends Controller
 
         $data = $request->validate([
             'recommended_answer' => 'nullable|string',
+            'demo_steps' => 'nullable|array',
+            'demo_steps.*' => 'string',
+            'documentation' => 'nullable|string',
             'evidence' => 'nullable|string|max:1000',
             'status' => 'nullable|string|in:siap,perlu_kerja,landmine',
             'internal_note' => 'nullable|string',

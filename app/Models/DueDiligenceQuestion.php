@@ -17,11 +17,14 @@ class DueDiligenceQuestion extends Model
 
     protected $fillable = [
         'q_no', 'area', 'sub_topic', 'qtype', 'question',
-        'recommended_answer', 'evidence', 'status', 'internal_note', 'sort_order',
+        'recommended_answer', 'demo_steps', 'documentation', 'doc_ref',
+        'evidence', 'status', 'internal_note', 'sort_order',
     ];
 
     protected $casts = [
         'q_no' => 'integer',
         'sort_order' => 'integer',
+        'doc_ref' => 'integer',
+        'demo_steps' => 'array',
     ];
 }
