@@ -40,6 +40,10 @@ class DatabaseSeeder extends Seeder
             LmsBadgesSeeder::class,
             LmsDpoAcademyContentSeeder::class,
             LmsFeatureDocQuizzesSeeder::class,
+            // Due Diligence Center (root-only): 39 pertanyaan TDD + 14 dokumen
+            // dengan tabel detail. Non-destruktif (firstOrCreate) — editan root
+            // tidak tertimpa saat re-seed. Reset ke default via endpoint /reset.
+            DueDiligenceSeeder::class,
         ]);
 
         if (User::where('email', 'superadmin@privasimu.com')->exists()) {

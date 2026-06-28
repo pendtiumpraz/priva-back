@@ -82,6 +82,7 @@ use App\Http\Controllers\Api\PublicLandingController;
 use App\Http\Controllers\Api\RaciTemplateController;
 use App\Http\Controllers\Api\RetentionPolicyController;
 use App\Http\Controllers\Api\RiskTreatmentPlanController;
+use App\Http\Controllers\Api\Root\DueDiligenceController;
 use App\Http\Controllers\Api\Root\QaCenterController;
 use App\Http\Controllers\Api\RootDashboardController;
 use App\Http\Controllers\Api\RopaApprovalController;
@@ -1655,6 +1656,17 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
 
         // Dashboard
         Route::get('/dashboard', [QaCenterController::class, 'dashboard']);
+    });
+
+    // =============================================
+    // Due Diligence Center — root-only. Kuesioner TDD (39 pertanyaan) +
+    // 14 dokumen yang diminta, jawaban rekomendasi editable, export PDF FE.
+    // =============================================
+    Route::prefix('root/due-diligence')->middleware('role.root_only')->group(function () {
+        Route::get('/', [DueDiligenceController::class, 'index']);
+        Route::put('/questions/{id}', [DueDiligenceController::class, 'updateQuestion'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::put('/documents/{id}', [DueDiligenceController::class, 'updateDocument'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::post('/reset', [DueDiligenceController::class, 'reset']);
     });
 
     // =============================================
