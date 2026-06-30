@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Organization;
+use App\Models\QuestionLibrary;
 use App\Models\TenantRole;
 use App\Models\User;
 use App\Models\Vendor;
@@ -34,7 +35,9 @@ class PublicAssessmentFlowTest extends TestCase
     use RefreshDatabase;
 
     private Organization $org;
+
     private User $admin;
+
     private Vendor $vendor;
 
     protected function setUp(): void
@@ -109,8 +112,110 @@ class PublicAssessmentFlowTest extends TestCase
 
         $assessment = VendorAssessment::where('assessment_token', $token)->firstOrFail();
         $this->assertSame('sent', $assessment->status);
-        $this->assertNotNull($assessment->token_expires_at);
-        $this->assertTrue($assessment->token_expires_at->isFuture(), 'Expiry harus di masa depan.');
+        // Kebijakan revisi 2026-06-30: tautan publik TIDAK kedaluwarsa by-time —
+        // token_expires_at null. Tautan hanya invalid saat di-regenerate.
+        $this->assertNull($assessment->token_expires_at, 'Tautan publik tidak boleh expiry by-time.');
+    }
+
+    // =========================================================
+    // Revisi #5 — multi-assessment per vendor by jenis (library_id)
+    // =========================================================
+
+    public function test_generate_link_per_library_independent_tokens(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        $libA = QuestionLibrary::create([
+            'org_id' => $this->org->id, 'name' => 'Library A', 'is_active' => true,
+        ]);
+        $libB = QuestionLibrary::create([
+            'org_id' => $this->org->id, 'name' => 'Library B', 'is_active' => true,
+        ]);
+
+        // (a) generate jenis A → token A
+        $tokenA = $this->postJson("/api/vendor-risk/{$this->vendor->id}/generate-public-link", [
+            'library_id' => $libA->id,
+        ])->assertStatus(200)->json('token');
+
+        // generate jenis B → token B (row + token independen)
+        $tokenB = $this->postJson("/api/vendor-risk/{$this->vendor->id}/generate-public-link", [
+            'library_id' => $libB->id,
+        ])->assertStatus(200)->json('token');
+
+        $this->assertNotSame($tokenA, $tokenB);
+        // A masih valid setelah B dibuat.
+        $this->getJson('/api/asesmen-publik/'.$tokenA)->assertStatus(200);
+        $this->getJson('/api/asesmen-publik/'.$tokenB)->assertStatus(200);
+
+        // Dua row terpisah, satu per library.
+        $this->assertSame(2, VendorAssessment::where('vendor_id', $this->vendor->id)->count());
+    }
+
+    public function test_regenerate_rotates_same_library_and_keeps_other(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        $libA = QuestionLibrary::create([
+            'org_id' => $this->org->id, 'name' => 'Library A', 'is_active' => true,
+        ]);
+        $libB = QuestionLibrary::create([
+            'org_id' => $this->org->id, 'name' => 'Library B', 'is_active' => true,
+        ]);
+
+        $tokenA1 = $this->postJson("/api/vendor-risk/{$this->vendor->id}/generate-public-link", [
+            'library_id' => $libA->id,
+        ])->json('token');
+        $tokenB = $this->postJson("/api/vendor-risk/{$this->vendor->id}/generate-public-link", [
+            'library_id' => $libB->id,
+        ])->json('token');
+
+        // (b) regenerate A → token A baru, token A lama invalid, B tetap.
+        $tokenA2 = $this->postJson("/api/vendor-risk/{$this->vendor->id}/generate-public-link", [
+            'library_id' => $libA->id,
+        ])->assertStatus(200)->json('token');
+
+        $this->assertNotSame($tokenA1, $tokenA2, 'Regenerate harus rotate token.');
+        $this->getJson('/api/asesmen-publik/'.$tokenA1)->assertStatus(404); // lama invalid
+        $this->getJson('/api/asesmen-publik/'.$tokenA2)->assertStatus(200); // baru valid
+        $this->getJson('/api/asesmen-publik/'.$tokenB)->assertStatus(200);  // B tak tersentuh
+
+        // Rotate = row sama, bukan duplikat: tetap 2 row total (A + B).
+        $this->assertSame(2, VendorAssessment::where('vendor_id', $this->vendor->id)->count());
+    }
+
+    public function test_submitted_library_blocks_regenerate_but_other_library_ok(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        $libA = QuestionLibrary::create([
+            'org_id' => $this->org->id, 'name' => 'Library A', 'is_active' => true,
+        ]);
+        $libB = QuestionLibrary::create([
+            'org_id' => $this->org->id, 'name' => 'Library B', 'is_active' => true,
+        ]);
+
+        $tokenA = $this->postJson("/api/vendor-risk/{$this->vendor->id}/generate-public-link", [
+            'library_id' => $libA->id,
+        ])->json('token');
+
+        // Vendor submit jenis A.
+        $assessmentA = VendorAssessment::where('assessment_token', $tokenA)->firstOrFail();
+        $assessmentA->forceFill(['status' => 'submitted', 'token_consumed_at' => now()])->save();
+
+        // (c) generate A lagi → diblok (per-library guard).
+        $this->postJson("/api/vendor-risk/{$this->vendor->id}/generate-public-link", [
+            'library_id' => $libA->id,
+        ])->assertStatus(422);
+
+        // reassess=true → boleh bikin siklus baru jenis A.
+        $this->postJson("/api/vendor-risk/{$this->vendor->id}/generate-public-link", [
+            'library_id' => $libA->id, 'reassess' => true,
+        ])->assertStatus(200);
+
+        // Jenis B tetap bisa digenerate meski A sudah submitted.
+        $this->postJson("/api/vendor-risk/{$this->vendor->id}/generate-public-link", [
+            'library_id' => $libB->id,
+        ])->assertStatus(200);
     }
 
     // =========================================================

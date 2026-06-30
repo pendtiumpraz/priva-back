@@ -149,7 +149,7 @@ class VendorRiskController extends Controller
         $showQuery = Vendor::where('org_id', $request->user()->org_id)
             ->with(['assessments' => function ($q) {
                 $q->select([
-                    'id', 'vendor_id', 'org_id', 'status',
+                    'id', 'vendor_id', 'org_id', 'status', 'library_id',
                     'assessment_token', 'token_expires_at', 'token_consumed_at',
                     'score', 'risk_level', 'submitted_at', 'created_at',
                     'recommendations', 'notes',
@@ -200,6 +200,37 @@ class VendorRiskController extends Controller
                 // vs read-only (vendor sudah submit, hanya untuk preview hasil).
                 $data['active_token_consumed'] = $consumed;
             }
+
+            // Revisi #5 — multi-assessment per jenis (library_id): tampilkan
+            // SEMUA tautan aktif, satu per jenis, supaya token jenis lain tidak
+            // hilang dari UI saat satu jenis di-regenerate/submit. Field tunggal
+            // `active_assessment_token` di atas dipertahankan utk backward-compat.
+            $baseUrl = config('app.frontend_url', config('app.url', 'http://localhost:3000'));
+            $activeStatuses = [VendorAssessment::STATUS_DRAFT, VendorAssessment::STATUS_SENT];
+            $links = [];
+            foreach ($assessments->groupBy(fn ($a) => $a->library_id ?? '__default__') as $group) {
+                // Wakili tiap jenis dengan row ber-token paling baru.
+                $a = $group->first(fn ($x) => ! empty($x->assessment_token)) ?? $group->first();
+                if (empty($a->assessment_token)) {
+                    continue;
+                }
+                $expiresAt = $a->token_expires_at;
+                $notExpired = empty($expiresAt) || (is_object($expiresAt) && method_exists($expiresAt, 'isFuture') && $expiresAt->isFuture());
+                $isConsumed = ! empty($a->token_consumed_at);
+                $links[] = [
+                    'library_id' => $a->library_id,
+                    'assessment_id' => $a->id,
+                    'status' => $a->status,
+                    'token' => $a->assessment_token,
+                    'public_url' => rtrim((string) $baseUrl, '/').'/asesmen-pihak-ketiga/'.$a->assessment_token,
+                    'expires_at' => $expiresAt,
+                    'consumed' => $isConsumed,
+                    // shareable = masih bisa dikirim ke pihak ketiga (belum
+                    // expired, belum dipakai, masih di fase draft/sent).
+                    'shareable' => $notExpired && ! $isConsumed && in_array($a->status, $activeStatuses, true),
+                ];
+            }
+            $data['shareable_links'] = $links;
         } catch (\Throwable $e) {
             \Log::warning('vendor.show active_assessment computation failed: '.$e->getMessage());
         }
@@ -1017,12 +1048,20 @@ class VendorRiskController extends Controller
     // =========================================================
 
     /**
-     * Sprint G.6 — Generate public assessment link untuk dikirim ke pihak ketiga.
+     * Sprint G.6 + Revisi #5 — Generate public assessment link untuk dikirim ke
+     * pihak ketiga, MULTI-ASSESSMENT PER VENDOR keyed by jenis (library_id).
      *
-     * Reuse VendorAssessment draft kalau ada (status='draft'), kalau tidak bikin
-     * baru. AssessmentTokenService yang men-set token + token_expires_at + status.
-     * Setelah generate, status di-flip ke 'sent' (idempotent kalau dipanggil
-     * ulang — service akan re-generate token baru dengan expiry baru).
+     * Model "jenis assessment" = QuestionLibrary (`library_id`). Satu pihak
+     * ketiga boleh punya SATU assessment aktif per jenis; jenis berbeda =
+     * row/token independen. Aturan:
+     *   - Cari row AKTIF (status draft|sent) untuk (vendor, org, library_id)
+     *     → ROTATE token di row itu (generate() menimpa UUID lama → token lama
+     *     otomatis invalid). Tidak pernah menyentuh token/row jenis lain.
+     *   - Tidak ada row aktif → BUAT row baru untuk jenis itu, lalu generate().
+     *   - Guard "sudah submitted" di-scope per (vendor, library_id): jenis yang
+     *     sudah lewat fase submit tidak boleh di-regenerate kecuali `reassess`
+     *     (dipakai monitoring / siklus re-assessment berkala). Jenis lain tetap
+     *     bebas digenerate walau jenis ini sudah submitted.
      *
      * Audit log: module=tprm.send_assessment, action=generate_token, supaya
      * tim compliance bisa trace siapa kirim ke vendor mana dan kapan.
@@ -1040,22 +1079,10 @@ class VendorRiskController extends Controller
             ], 422);
         }
 
-        // GUARD: tolak generate tautan baru bila ada assessment yang sudah
-        // ter-submit. Skor sudah final — re-share tautan justru membingungkan
-        // vendor (kuesioner lock). Frontend juga punya guard sama, tapi
-        // backend tetap defensif terhadap bypass / direct API call.
-        $hasSubmitted = $vendor->assessments()
-            ->where('status', 'submitted')
-            ->exists();
-        if ($hasSubmitted) {
-            return response()->json([
-                'message' => 'Asesmen sudah selesai diisi oleh pihak ketiga. Tautan baru tidak dapat dibuat. Untuk mengulang penilaian, hubungi superadmin.',
-            ], 422);
-        }
-
         // TPRM Phase 1: terima library_id opsional dari client supaya
         // pertanyaan yang dirender di public page mengikuti library yang
-        // dipilih. Validasi library visible untuk org ini.
+        // dipilih. Validasi library visible untuk org ini. null = jenis
+        // "Default" (pertanyaan efektif org saat ini, jalur effectiveForOrg).
         $libraryId = $request->input('library_id');
         if ($libraryId) {
             $lib = QuestionLibrary::query()
@@ -1070,33 +1097,60 @@ class VendorRiskController extends Controller
                 ], 422);
             }
         }
+        $libraryId = $libraryId ?: null;
 
-        // firstOrCreate dengan attributes search-only + values default supaya
-        // record baru di-stamp dengan questionnaire_version + answers kosong.
-        $assessment = VendorAssessment::firstOrCreate(
-            [
-                'vendor_id' => $vendor->id,
-                'org_id' => $vendor->org_id,
-                'status' => 'draft',
-            ],
-            [
-                'questionnaire_version' => 'v2_2026',
-                'answers' => [],
-                'library_id' => $libraryId,
-            ]
-        );
+        // Re-assessment berkala (monitoring / manual): izinkan bikin siklus baru
+        // untuk jenis yang sudah submitted. Default false = sekali kirim per jenis.
+        $reassess = $request->boolean('reassess');
 
-        // Kalau row existing (firstOrCreate hit lama) dan client kirim pilihan
-        // library berbeda, update supaya pertanyaan yang dirender konsisten.
-        // `exists('library_id')` membedakan "key dikirim bernilai null" (=
-        // pilih Default / pertanyaan org saat ini → CLEAR library_id, jalur
-        // effectiveForOrg) dari "key tidak dikirim" (legacy client → no-op).
-        if ($request->exists('library_id') && $assessment->library_id !== ($libraryId ?: null)) {
-            $assessment->update(['library_id' => $libraryId ?: null]);
+        // Status di mana token MASIH boleh di-rotate (belum di-submit pihak
+        // ketiga). Selain ini = sudah submit / direview / final → terkunci.
+        $activeStatuses = [VendorAssessment::STATUS_DRAFT, VendorAssessment::STATUS_SENT];
+
+        // Closure scope per jenis: null library harus pakai whereNull (param
+        // bind `= null` tidak match di SQL). Dipakai ulang utk guard + lookup.
+        $scopeLibrary = function ($q) use ($libraryId) {
+            return $libraryId === null ? $q->whereNull('library_id') : $q->where('library_id', $libraryId);
+        };
+
+        // GUARD per (vendor, library_id): bila JENIS INI sudah lewat fase submit
+        // (submitted/review/approved/rejected/closed), tolak regenerate kecuali
+        // reassess. Jenis lain TIDAK terpengaruh — sengaja di-scope per library
+        // supaya 1 vendor bisa punya banyak jenis assessment paralel.
+        if (! $reassess) {
+            $submittedSameLib = $vendor->assessments()
+                ->whereNotIn('status', $activeStatuses)
+                ->where($scopeLibrary)
+                ->exists();
+            if ($submittedSameLib) {
+                return response()->json([
+                    'message' => 'Asesmen jenis ini sudah selesai diisi oleh pihak ketiga. Untuk mengulang penilaian jenis ini, gunakan re-assessment/monitoring.',
+                ], 422);
+            }
         }
 
-        // Generate token (default expiry 30 hari, configurable via
-        // system_settings tprm_public_link_expiry_days). Service set status='sent'.
+        // Cari row AKTIF untuk jenis ini → rotate token-nya. Tidak ada → buat
+        // row baru khusus jenis ini. JANGAN sentuh row jenis lain.
+        $assessment = $vendor->assessments()
+            ->whereIn('status', $activeStatuses)
+            ->where($scopeLibrary)
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        if (! $assessment) {
+            $assessment = VendorAssessment::create([
+                'vendor_id' => $vendor->id,
+                'org_id' => $vendor->org_id,
+                'library_id' => $libraryId,
+                'questionnaire_version' => 'v2_2026',
+                'answers' => [],
+                'status' => VendorAssessment::STATUS_DRAFT,
+            ]);
+        }
+
+        // ROTATE token di row jenis yang sama: generate() menimpa UUID lama pada
+        // row itu → token lama otomatis tidak ter-resolve = invalid. Token jenis
+        // lain tetap hidup karena ada di row berbeda yang tidak kita sentuh.
         $token = $tokenSvc->generate($assessment);
         $assessment->refresh();
 
@@ -1118,6 +1172,7 @@ class VendorRiskController extends Controller
             'section' => 'vendor_assessment',
             'changes' => [
                 'vendor' => $vendor->name,
+                'library_id' => $libraryId,
                 'token_prefix' => substr($token, 0, 8),
                 'expires_at' => optional($assessment->token_expires_at)->toIso8601String(),
             ],
@@ -1127,6 +1182,7 @@ class VendorRiskController extends Controller
         return response()->json([
             'message' => 'Tautan asesmen berhasil dibuat. Bagikan URL berikut kepada pihak ketiga.',
             'assessment_id' => $assessment->id,
+            'library_id' => $assessment->library_id,
             'token' => $token,
             'public_url' => $publicUrl,
             'expires_at' => $assessment->token_expires_at,

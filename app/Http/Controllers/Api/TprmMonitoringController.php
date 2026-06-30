@@ -26,6 +26,14 @@ use Illuminate\Support\Str;
 class TprmMonitoringController extends Controller
 {
     /**
+     * Preset frekuensi re-assessment berkala yang disarankan (bulan). Hanya
+     * kenyamanan UI — store() tetap menerima nilai bebas 1-60. Re-assessment
+     * per jenis (library) tetap berjalan: tiap siklus generate tautan jenis
+     * itu lagi (lihat VendorRiskController::generatePublicLink, param reassess).
+     */
+    public const FREQUENCY_PRESETS = [3, 6, 12];
+
+    /**
      * GET /api/tprm/monitoring/inbox?filter=overdue|due|upcoming|all
      */
     public function inbox(Request $request)
@@ -59,6 +67,7 @@ class TprmMonitoringController extends Controller
         return response()->json([
             'data' => $rows->map(function ($m) use ($vendors) {
                 $v = $vendors->get($m->vendor_id);
+
                 return [
                     'id' => $m->id,
                     'vendor_id' => $m->vendor_id,
@@ -78,6 +87,8 @@ class TprmMonitoringController extends Controller
                 'due' => $rows->where('derive_status', 'due')->count(),
                 'upcoming' => $rows->where('derive_status', 'upcoming')->count(),
             ],
+            // Preset frekuensi nyaman (3/6/12 bln); nilai lain (1-60) tetap valid.
+            'frequency_presets' => self::FREQUENCY_PRESETS,
         ]);
     }
 
@@ -285,7 +296,10 @@ class TprmMonitoringController extends Controller
 
     private function findOrFail(string $id, ?string $orgId): VendorMonitoring
     {
-        if (! $orgId) abort(403, 'Org context required.');
+        if (! $orgId) {
+            abort(403, 'Org context required.');
+        }
+
         return VendorMonitoring::query()
             ->where('id', $id)
             ->where('org_id', $orgId)
