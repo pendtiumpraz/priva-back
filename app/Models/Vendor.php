@@ -20,6 +20,10 @@ class Vendor extends Model
         'country',
         'contact_name',
         'contact_email',
+        'npwp',
+        'alamat',
+        'telepon',
+        'pic_jabatan',
         'departemen_kontak',
         'bidang',
         'jenis_entitas',
@@ -62,6 +66,8 @@ class Vendor extends Model
         // PII Encryption — AES-256-CBC
         'contact_name' => EncryptedString::class,
         'contact_email' => EncryptedString::class,
+        'npwp' => EncryptedString::class,
+        'telepon' => EncryptedString::class,
         // TPRM Pre-Assessment — PDP scope gate
         'scope_overridden' => 'boolean',
         'scope_decided_at' => 'datetime',

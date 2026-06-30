@@ -370,6 +370,13 @@ class VendorRiskController extends Controller
             'last_assessed_at' => "{$opt}|date",
             'contact_name' => "{$opt}|string|max:200",
             'contact_email' => "{$opt}|email|max:200",
+            // Revisi TPRM #1/#6 — profil identitas legal pihak ketiga.
+            // Selalu opsional saat perusahaan prefill; vendor melengkapi sendiri
+            // lewat form publik (AsesmenPublikController::updateProfil).
+            'npwp' => "{$opt}|string|max:50",
+            'alamat' => "{$opt}|string|max:1000",
+            'telepon' => "{$opt}|string|max:50",
+            'pic_jabatan' => "{$opt}|string|max:255",
             // Phase 2 — TPRM category
             'category' => "{$opt}|in:".implode(',', VendorQuestionnaire::ALL_CATEGORIES),
             // Assignment + division-scoped visibility (mirrors RoPA).

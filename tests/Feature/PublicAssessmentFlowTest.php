@@ -12,6 +12,7 @@ use App\Models\VendorPreAssessment;
 use App\Models\VendorQuestionnaire;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
@@ -379,18 +380,42 @@ class PublicAssessmentFlowTest extends TestCase
             'jenis_entitas' => 'badan_hukum',
             'bidang' => ['IT', 'Legal'],
             'departemen_kontak' => 'Procurement',
+            'npwp' => '09.254.294.3-407.000',
+            'alamat' => 'Jl. Merdeka No. 1, Jakarta Pusat',
+            'telepon' => '+62-21-5550123',
+            'pic_jabatan' => 'Manajer Legal',
             'description' => 'Penyedia layanan cloud.',
         ]);
 
         $response->assertStatus(200)
             ->assertJsonPath('data.name', 'PT Vendor Update Sendiri')
-            ->assertJsonPath('data.contact_name', 'Budi Santoso');
+            ->assertJsonPath('data.contact_name', 'Budi Santoso')
+            // Field terenkripsi harus kembali ter-decrypt di response.
+            ->assertJsonPath('data.npwp', '09.254.294.3-407.000')
+            ->assertJsonPath('data.alamat', 'Jl. Merdeka No. 1, Jakarta Pusat')
+            ->assertJsonPath('data.telepon', '+62-21-5550123')
+            ->assertJsonPath('data.pic_jabatan', 'Manajer Legal');
 
         $this->vendor->refresh();
         $this->assertSame('PT Vendor Update Sendiri', $this->vendor->name);
         $this->assertSame('budi@vendor.test', $this->vendor->contact_email);
         $this->assertSame(['IT', 'Legal'], $this->vendor->bidang);
         $this->assertSame('badan_hukum', $this->vendor->jenis_entitas);
+        // Revisi #1/#6 — profil identitas legal tersimpan & ter-decrypt.
+        $this->assertSame('09.254.294.3-407.000', $this->vendor->npwp);
+        $this->assertSame('Jl. Merdeka No. 1, Jakarta Pusat', $this->vendor->alamat);
+        $this->assertSame('+62-21-5550123', $this->vendor->telepon);
+        $this->assertSame('Manajer Legal', $this->vendor->pic_jabatan);
+
+        // npwp + telepon harus tersimpan terenkripsi (ciphertext != plaintext)
+        // di kolom raw — buktikan EncryptedString cast aktif.
+        $raw = DB::table('vendors')
+            ->where('id', $this->vendor->id)
+            ->first(['npwp', 'telepon', 'alamat']);
+        $this->assertNotSame('09.254.294.3-407.000', $raw->npwp, 'npwp harus terenkripsi at-rest.');
+        $this->assertNotSame('+62-21-5550123', $raw->telepon, 'telepon harus terenkripsi at-rest.');
+        // alamat sengaja TIDAK di-encrypt (free text) — tersimpan apa adanya.
+        $this->assertSame('Jl. Merdeka No. 1, Jakarta Pusat', $raw->alamat);
     }
 
     public function test_pihak_ketiga_profil_requires_name(): void

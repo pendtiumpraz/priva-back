@@ -307,6 +307,10 @@ class AsesmenPublikController extends Controller
      *   - jenis entitas        → jenis_entitas (badan_hukum|individual)
      *   - bidang usaha         → bidang (array)
      *   - departemen kontak    → departemen_kontak
+     *   - NPWP                 → npwp          (terenkripsi, EncryptedString cast)
+     *   - alamat perusahaan    → alamat
+     *   - telepon              → telepon       (terenkripsi, EncryptedString cast)
+     *   - jabatan PIC          → pic_jabatan
      *   - URL kebijakan privasi → privacy_policy_url
      *   - deskripsi            → description
      *
@@ -334,6 +338,10 @@ class AsesmenPublikController extends Controller
             'bidang' => 'nullable|array',
             'bidang.*' => 'string|max:100',
             'departemen_kontak' => 'nullable|string|max:255',
+            'npwp' => 'nullable|string|max:50',
+            'alamat' => 'nullable|string|max:1000',
+            'telepon' => 'nullable|string|max:50',
+            'pic_jabatan' => 'nullable|string|max:255',
             'privacy_policy_url' => 'nullable|string|max:255',
             'description' => 'nullable|string|max:5000',
         ]);
@@ -356,6 +364,10 @@ class AsesmenPublikController extends Controller
                 'jenis_entitas' => $vendor->jenis_entitas,
                 'bidang' => $vendor->bidang,
                 'departemen_kontak' => $vendor->departemen_kontak,
+                'npwp' => $vendor->npwp,
+                'alamat' => $vendor->alamat,
+                'telepon' => $vendor->telepon,
+                'pic_jabatan' => $vendor->pic_jabatan,
                 'privacy_policy_url' => $vendor->privacy_policy_url,
                 'description' => $vendor->description,
             ],
