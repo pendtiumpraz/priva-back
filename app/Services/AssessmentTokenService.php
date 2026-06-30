@@ -41,12 +41,22 @@ class AssessmentTokenService
      */
     public function generate(VendorAssessment $assessment, ?int $expiryDays = null): string
     {
-        $days = $expiryDays ?? $this->configuredExpiryDays();
         $token = (string) Str::uuid7();
+
+        // KEBIJAKAN (revisi 2026-06-30): tautan publik TIDAK kedaluwarsa
+        // berbasis waktu. Tautan hanya menjadi tidak berlaku saat di-REGENERATE
+        // (token baru menimpa UUID lama pada row yang sama → UUID lama tak lagi
+        // ter-resolve = otomatis invalid). `token_expires_at` di-set null supaya
+        // assessment yang sudah selesai diisi tetap bisa dibuka kapan pun.
+        // (Parameter $expiryDays dipertahankan utk kompatibilitas pemanggil;
+        //  bila >0 eksplisit, baru pakai expiry waktu — default null.)
+        $expiresAt = ($expiryDays !== null && $expiryDays > 0)
+            ? now()->addDays($expiryDays)
+            : null;
 
         $assessment->forceFill([
             'assessment_token' => $token,
-            'token_expires_at' => now()->addDays($days),
+            'token_expires_at' => $expiresAt,
             'token_consumed_at' => null,
             'status' => 'sent',
         ])->save();
