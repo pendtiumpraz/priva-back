@@ -102,6 +102,10 @@ class PublicAssessmentFlowTest extends TestCase
     {
         Sanctum::actingAs($this->admin);
 
+        // Requirement #4 — jenis Default (library_id null) = UU PDP → wajib
+        // lingkup PDP sudah ditetapkan IN sebelum boleh generate tautan penuh.
+        $this->vendor->forceFill(['pdp_scope_status' => Vendor::SCOPE_IN])->save();
+
         $response = $this->postJson("/api/vendor-risk/{$this->vendor->id}/generate-public-link");
 
         $response->assertStatus(200)
@@ -218,6 +222,86 @@ class PublicAssessmentFlowTest extends TestCase
         $this->postJson("/api/vendor-risk/{$this->vendor->id}/generate-public-link", [
             'library_id' => $libB->id,
         ])->assertStatus(200);
+    }
+
+    // =========================================================
+    // Requirement #4 — pra-asesmen gating KHUSUS template UU PDP
+    // =========================================================
+
+    public function test_pdp_library_unscreened_blocks_generate_link(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        $pdpLib = QuestionLibrary::create([
+            'org_id' => $this->org->id, 'name' => 'UU PDP', 'is_active' => true,
+            'category' => 'pdp_compliance', 'version' => 'v2_2026',
+        ]);
+
+        // Lingkup belum diputuskan IN (unscreened).
+        $this->vendor->forceFill(['pdp_scope_status' => Vendor::SCOPE_UNSCREENED])->save();
+
+        $response = $this->postJson("/api/vendor-risk/{$this->vendor->id}/generate-public-link", [
+            'library_id' => $pdpLib->id,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonPath('requires_pre_assessment', true)
+            ->assertJsonPath('pdp_scope_status', Vendor::SCOPE_UNSCREENED);
+        $this->assertStringContainsString('pre-assessment', $response->json('pre_assessment_route'));
+    }
+
+    public function test_pdp_library_out_of_scope_blocks_generate_link(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        $pdpLib = QuestionLibrary::create([
+            'org_id' => $this->org->id, 'name' => 'UU PDP', 'is_active' => true,
+            'category' => 'pdp_compliance', 'version' => 'v2_2026',
+        ]);
+        $this->vendor->forceFill(['pdp_scope_status' => Vendor::SCOPE_OUT])->save();
+
+        $response = $this->postJson("/api/vendor-risk/{$this->vendor->id}/generate-public-link", [
+            'library_id' => $pdpLib->id,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonPath('pdp_scope_status', Vendor::SCOPE_OUT);
+        $this->assertStringContainsString('out of scope', strtolower($response->json('message')));
+    }
+
+    public function test_pdp_library_in_scope_allows_generate_link(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        $pdpLib = QuestionLibrary::create([
+            'org_id' => $this->org->id, 'name' => 'UU PDP', 'is_active' => true,
+            'category' => 'pdp_compliance', 'version' => 'v2_2026',
+        ]);
+        $this->vendor->forceFill(['pdp_scope_status' => Vendor::SCOPE_IN])->save();
+
+        $this->postJson("/api/vendor-risk/{$this->vendor->id}/generate-public-link", [
+            'library_id' => $pdpLib->id,
+        ])->assertStatus(200)
+            ->assertJsonPath('requires_pre_assessment', true)
+            ->assertJsonPath('pdp_scope_status', Vendor::SCOPE_IN);
+    }
+
+    public function test_non_pdp_library_skips_pre_assessment_gate(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        // Library NON-UU-PDP (category ISO/custom) — gate pra-asesmen dilewati
+        // walau vendor masih unscreened.
+        $isoLib = QuestionLibrary::create([
+            'org_id' => $this->org->id, 'name' => 'ISO 27001 Lite', 'is_active' => true,
+            'category' => 'iso_27001', 'version' => 'v1',
+        ]);
+        $this->vendor->forceFill(['pdp_scope_status' => Vendor::SCOPE_UNSCREENED])->save();
+
+        $this->postJson("/api/vendor-risk/{$this->vendor->id}/generate-public-link", [
+            'library_id' => $isoLib->id,
+        ])->assertStatus(200)
+            ->assertJsonPath('requires_pre_assessment', false);
     }
 
     // =========================================================

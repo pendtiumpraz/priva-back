@@ -228,6 +228,8 @@ class VendorRiskController extends Controller
                     // shareable = masih bisa dikirim ke pihak ketiga (belum
                     // expired, belum dipakai, masih di fase draft/sent).
                     'shareable' => $notExpired && ! $isConsumed && in_array($a->status, $activeStatuses, true),
+                    // Requirement #4 — jenis UU PDP butuh pra-asesmen lingkup PDP.
+                    'requires_pre_assessment' => $this->isPdpLibrary($a->library_id),
                 ];
             }
             $data['shareable_links'] = $links;
@@ -512,8 +514,10 @@ class VendorRiskController extends Controller
         // Resolve or create the vendor
         if ($id) {
             $vendor = Vendor::where('org_id', $orgId)->findOrFail($id);
-            // SCOPE GATE: out-of-scope third parties don't need a full assessment.
-            if ($vendor->pdp_scope_status === Vendor::SCOPE_OUT) {
+            // SCOPE GATE (Requirement #4): hanya berlaku untuk template UU PDP
+            // (category pdp_compliance). Jenis lain tidak punya makna lingkup PDP.
+            if ($data['category'] === VendorQuestionnaire::CATEGORY_PDP_COMPLIANCE
+                && $vendor->pdp_scope_status === Vendor::SCOPE_OUT) {
                 return response()->json([
                     'message' => 'Pihak ketiga ini Di Luar Lingkup PDP — tidak memerlukan assessment.',
                 ], 422);
@@ -821,8 +825,10 @@ class VendorRiskController extends Controller
     {
         $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($id);
 
-        // SCOPE GATE: out-of-scope third parties don't need a full assessment.
-        if ($vendor->pdp_scope_status === Vendor::SCOPE_OUT) {
+        // SCOPE GATE (Requirement #4): hanya untuk pihak ketiga UU PDP
+        // (vendor->category pdp_compliance). Jenis lain lewati gate.
+        if ($vendor->category === VendorQuestionnaire::CATEGORY_PDP_COMPLIANCE
+            && $vendor->pdp_scope_status === Vendor::SCOPE_OUT) {
             return response()->json([
                 'message' => 'Pihak ketiga ini Di Luar Lingkup PDP — tidak memerlukan assessment.',
             ], 422);
@@ -1073,18 +1079,34 @@ class VendorRiskController extends Controller
      * Audit log: module=tprm.send_assessment, action=generate_token, supaya
      * tim compliance bisa trace siapa kirim ke vendor mana dan kapan.
      */
+    /**
+     * Requirement #4 — deteksi apakah sebuah "jenis" assessment = template UU
+     * PDP. Template UU PDP = QuestionLibrary ber-`category=pdp_compliance`.
+     *
+     * library_id NULL = jenis "Default" → pertanyaan efektif org via
+     * VendorQuestionnaire::effectiveForOrg() yang selalu set UU PDP (category
+     * pdp_compliance, version v2_2026) → diperlakukan sebagai UU PDP juga.
+     *
+     * Hanya template UU PDP yang di-gate pra-asesmen lingkup PDP. Template lain
+     * (ISO, custom, dst) tidak punya makna "lingkup PDP" → lewati gate.
+     */
+    private function isPdpLibrary(?string $libraryId): bool
+    {
+        if ($libraryId === null) {
+            return true;
+        }
+
+        $lib = QuestionLibrary::query()
+            ->withoutGlobalScope('org')
+            ->where('id', $libraryId)
+            ->first(['id', 'category']);
+
+        return $lib !== null && $lib->category === VendorQuestionnaire::CATEGORY_PDP_COMPLIANCE;
+    }
+
     public function generatePublicLink(Request $request, string $vendorId, AssessmentTokenService $tokenSvc)
     {
         $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($vendorId);
-
-        // SCOPE GATE (Pre-Assessment): pihak ketiga yang sudah ditetapkan Di
-        // Luar Lingkup PDP tidak memerlukan asesmen penuh. unscreened/in_scope
-        // tetap diizinkan (FE hanya mendorong screening dulu, tidak hard-block).
-        if ($vendor->pdp_scope_status === Vendor::SCOPE_OUT) {
-            return response()->json([
-                'message' => 'Pihak ketiga ini Di Luar Lingkup PDP — tidak memerlukan assessment.',
-            ], 422);
-        }
 
         // TPRM Phase 1: terima library_id opsional dari client supaya
         // pertanyaan yang dirender di public page mengikuti library yang
@@ -1105,6 +1127,33 @@ class VendorRiskController extends Controller
             }
         }
         $libraryId = $libraryId ?: null;
+
+        // Requirement #4 — PRA-ASESMEN GATING KHUSUS TEMPLATE UU PDP.
+        // Hanya jenis UU PDP (library category pdp_compliance / default) yang
+        // wajib lulus penyaringan lingkup PDP lebih dulu. Jenis NON-UU-PDP
+        // (ISO/custom) langsung boleh generate tanpa syarat pra-asesmen.
+        $isPdp = $this->isPdpLibrary($libraryId);
+        if ($isPdp) {
+            if ($vendor->pdp_scope_status === Vendor::SCOPE_OUT) {
+                // Pra-asesmen sudah memutuskan: tidak ada kaitan data pribadi →
+                // out of scope → assessment penuh UU PDP tidak diperlukan.
+                return response()->json([
+                    'message' => 'Pihak ketiga ini Di Luar Lingkup PDP (pra-asesmen out of scope) — assessment penuh tidak diperlukan.',
+                    'requires_pre_assessment' => true,
+                    'pdp_scope_status' => $vendor->pdp_scope_status,
+                ], 422);
+            }
+            if ($vendor->pdp_scope_status !== Vendor::SCOPE_IN) {
+                // unscreened / out_of_scope_pending → lingkup belum diputuskan IN.
+                // Wajib kirim/selesaikan pra-asesmen dulu sebelum assessment penuh.
+                return response()->json([
+                    'message' => 'Template UU PDP wajib melalui pra-asesmen lingkup PDP terlebih dahulu. Kirim/selesaikan pra-asesmen dulu (POST /api/vendor-risk/'.$vendor->id.'/pre-assessment/public-link), lalu tetapkan lingkup Masuk (in scope).',
+                    'requires_pre_assessment' => true,
+                    'pdp_scope_status' => $vendor->pdp_scope_status,
+                    'pre_assessment_route' => '/api/vendor-risk/'.$vendor->id.'/pre-assessment/public-link',
+                ], 422);
+            }
+        }
 
         // Re-assessment berkala (monitoring / manual): izinkan bikin siklus baru
         // untuk jenis yang sudah submitted. Default false = sekali kirim per jenis.
@@ -1193,6 +1242,10 @@ class VendorRiskController extends Controller
             'token' => $token,
             'public_url' => $publicUrl,
             'expires_at' => $assessment->token_expires_at,
+            // Requirement #4 — info gating untuk FE: apakah jenis ini UU PDP
+            // (butuh pra-asesmen) + status lingkup PDP vendor saat ini.
+            'requires_pre_assessment' => $isPdp,
+            'pdp_scope_status' => $vendor->pdp_scope_status,
         ]);
     }
 
