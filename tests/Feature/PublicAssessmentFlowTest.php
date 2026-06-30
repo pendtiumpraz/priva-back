@@ -8,6 +8,7 @@ use App\Models\TenantRole;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Models\VendorAssessment;
+use App\Models\VendorPreAssessment;
 use App\Models\VendorQuestionnaire;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -359,6 +360,120 @@ class PublicAssessmentFlowTest extends TestCase
             ->assertJsonStructure([
                 'data' => ['score', 'risk_level', 'recommendations', 'summary'],
             ]);
+    }
+
+    // =========================================================
+    // Revisi #1 + #6 — vendor self-fill profil + upload dokumen via token publik
+    // =========================================================
+
+    public function test_pihak_ketiga_can_update_profil(): void
+    {
+        $assessment = $this->makeSentAssessment();
+
+        $response = $this->putJson('/api/asesmen-publik/'.$assessment->assessment_token.'/profil', [
+            'name' => 'PT Vendor Update Sendiri',
+            'contact_name' => 'Budi Santoso',
+            'contact_email' => 'budi@vendor.test',
+            'website' => 'https://vendor.test',
+            'country' => 'Indonesia',
+            'jenis_entitas' => 'badan_hukum',
+            'bidang' => ['IT', 'Legal'],
+            'departemen_kontak' => 'Procurement',
+            'description' => 'Penyedia layanan cloud.',
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.name', 'PT Vendor Update Sendiri')
+            ->assertJsonPath('data.contact_name', 'Budi Santoso');
+
+        $this->vendor->refresh();
+        $this->assertSame('PT Vendor Update Sendiri', $this->vendor->name);
+        $this->assertSame('budi@vendor.test', $this->vendor->contact_email);
+        $this->assertSame(['IT', 'Legal'], $this->vendor->bidang);
+        $this->assertSame('badan_hukum', $this->vendor->jenis_entitas);
+    }
+
+    public function test_pihak_ketiga_profil_requires_name(): void
+    {
+        $assessment = $this->makeSentAssessment();
+
+        $this->putJson('/api/asesmen-publik/'.$assessment->assessment_token.'/profil', [
+            'contact_email' => 'budi@vendor.test',
+        ])->assertStatus(422);
+    }
+
+    public function test_pihak_ketiga_can_upload_dokumen(): void
+    {
+        $assessment = $this->makeSentAssessment();
+
+        $pdf = UploadedFile::fake()->createWithContent('akta.pdf', $this->fakePdfBytes());
+
+        $response = $this->postJson(
+            '/api/asesmen-publik/'.$assessment->assessment_token.'/dokumen',
+            ['kind' => 'akta_notaris', 'file' => $pdf],
+        );
+
+        $response->assertStatus(201)
+            ->assertJsonPath('kind', 'akta_notaris')
+            ->assertJsonStructure(['document' => ['path', 'filename', 'size', 'uploaded_at', 'uploaded_by_token']]);
+
+        $this->vendor->refresh();
+        $this->assertArrayHasKey('akta_notaris', $this->vendor->documents);
+        $this->assertSame('akta.pdf', $this->vendor->documents['akta_notaris']['filename']);
+        $this->assertNull($this->vendor->documents['akta_notaris']['uploaded_by']);
+        $this->assertTrue($this->vendor->documents['akta_notaris']['uploaded_by_token']);
+    }
+
+    public function test_pihak_ketiga_dokumen_rejects_bad_kind(): void
+    {
+        $assessment = $this->makeSentAssessment();
+        $pdf = UploadedFile::fake()->createWithContent('x.pdf', $this->fakePdfBytes());
+
+        $this->postJson(
+            '/api/asesmen-publik/'.$assessment->assessment_token.'/dokumen',
+            ['kind' => 'random_kind', 'file' => $pdf],
+        )->assertStatus(422);
+    }
+
+    public function test_profil_and_dokumen_blocked_after_consumed(): void
+    {
+        $assessment = $this->makeSentAssessment();
+        $qid = VendorQuestionnaire::whereNull('org_id')->where('version', 'v2_2026')->first()->id;
+        $assessment->forceFill(['answers' => [$qid => ['value' => 'ya']]])->save();
+
+        // Submit → token consumed.
+        $this->postJson('/api/asesmen-publik/'.$assessment->assessment_token.'/submit')->assertStatus(200);
+
+        // Write profil setelah consumed → 410 (single-use guard middleware).
+        $this->putJson('/api/asesmen-publik/'.$assessment->assessment_token.'/profil', [
+            'name' => 'Coba Ubah Lagi',
+        ])->assertStatus(410);
+
+        // Upload dokumen setelah consumed → 410.
+        $pdf = UploadedFile::fake()->createWithContent('akta.pdf', $this->fakePdfBytes());
+        $this->postJson(
+            '/api/asesmen-publik/'.$assessment->assessment_token.'/dokumen',
+            ['kind' => 'akta_notaris', 'file' => $pdf],
+        )->assertStatus(410);
+    }
+
+    // =========================================================
+    // Revisi #2 — pra-asesmen public link juga tak kadaluarsa by-time
+    // =========================================================
+
+    public function test_pre_assessment_public_link_has_no_expiry(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        $response = $this->postJson("/api/vendor-risk/{$this->vendor->id}/pre-assessment/public-link");
+
+        $response->assertStatus(200)
+            ->assertJsonStructure(['message', 'pre_assessment_id', 'token', 'public_url', 'expires_at']);
+
+        $this->assertNull($response->json('expires_at'), 'Token pra-asesmen tidak boleh expiry by-time.');
+
+        $pre = VendorPreAssessment::where('assessment_token', $response->json('token'))->firstOrFail();
+        $this->assertNull($pre->token_expires_at);
     }
 
     // =========================================================

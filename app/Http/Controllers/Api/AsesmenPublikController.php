@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\Organization;
 use App\Models\Vendor;
 use App\Models\VendorAssessment;
+use App\Models\VendorAssessmentEvidence;
 use App\Models\VendorQuestionnaire;
 use App\Services\AssessmentTokenService;
 use App\Services\FileUploadValidator;
@@ -224,6 +226,7 @@ class AsesmenPublikController extends Controller
             );
         } catch (\Throwable $e) {
             report($e);
+
             return response()->json([
                 'message' => 'Gagal menyimpan file ke storage.',
             ], 500);
@@ -258,7 +261,7 @@ class AsesmenPublikController extends Controller
         // backward compat existing public page logic. Reviewer/Approver UI
         // baca dari tabel ini supaya bisa query terpisah + soft-delete.
         try {
-            \App\Models\VendorAssessmentEvidence::create([
+            VendorAssessmentEvidence::create([
                 'id' => $entry['id'],
                 'org_id' => $assessment->org_id,
                 'assessment_id' => $assessment->id,
@@ -287,6 +290,166 @@ class AsesmenPublikController extends Controller
     }
 
     /**
+     * PUT /profil — pihak ketiga isi/ubah detail PERUSAHAANNYA SENDIRI.
+     *
+     * Requirement #1: vendor mengisi profil sendiri di form publik (sebelumnya
+     * diisi perusahaan di wizard create). Hanya kolom `vendors` yang BENAR-BENAR
+     * ADA yang boleh di-update (lihat migrasi vendors) — tidak ada kolom NPWP /
+     * alamat / telp / jabatan PIC di schema, jadi field tsb di-skip (frontend
+     * tidak boleh mengirimnya; kalau dikirim akan diabaikan oleh whitelist ini).
+     *
+     * Mapping konsep → kolom nyata:
+     *   - nama perusahaan      → name (required)
+     *   - PIC (nama)           → contact_name  (terenkripsi, EncryptedString cast)
+     *   - email PIC            → contact_email (terenkripsi)
+     *   - website              → website
+     *   - negara               → country
+     *   - jenis entitas        → jenis_entitas (badan_hukum|individual)
+     *   - bidang usaha         → bidang (array)
+     *   - departemen kontak    → departemen_kontak
+     *   - URL kebijakan privasi → privacy_policy_url
+     *   - deskripsi            → description
+     *
+     * Write endpoint → middleware sudah memblok bila token sudah consumed (410).
+     * Tenant context juga sudah di-set middleware sehingga update tetap aman.
+     */
+    public function updateProfil(Request $request, string $token)
+    {
+        /** @var VendorAssessment $assessment */
+        $assessment = $request->get('_assessment');
+
+        $vendor = Vendor::find($assessment->vendor_id);
+        if (! $vendor) {
+            return response()->json(['message' => 'Data perusahaan tidak ditemukan.'], 404);
+        }
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'contact_name' => 'nullable|string|max:255',
+            'contact_email' => 'nullable|email|max:255',
+            'website' => 'nullable|string|max:255',
+            'country' => 'nullable|string|max:100',
+            'type' => 'nullable|string|max:100',
+            'jenis_entitas' => 'nullable|in:badan_hukum,individual',
+            'bidang' => 'nullable|array',
+            'bidang.*' => 'string|max:100',
+            'departemen_kontak' => 'nullable|string|max:255',
+            'privacy_policy_url' => 'nullable|string|max:255',
+            'description' => 'nullable|string|max:5000',
+        ]);
+
+        // Hanya tulis key yang dikirim (partial update) supaya field lain tidak
+        // ter-reset ke null saat vendor menyimpan satu langkah form saja.
+        $vendor->fill(array_intersect_key($validated, $request->all()));
+        $vendor->save();
+
+        return response()->json([
+            'message' => 'Profil perusahaan tersimpan.',
+            'data' => [
+                'id' => $vendor->id,
+                'name' => $vendor->name,
+                'contact_name' => $vendor->contact_name,
+                'contact_email' => $vendor->contact_email,
+                'website' => $vendor->website,
+                'country' => $vendor->country,
+                'type' => $vendor->type,
+                'jenis_entitas' => $vendor->jenis_entitas,
+                'bidang' => $vendor->bidang,
+                'departemen_kontak' => $vendor->departemen_kontak,
+                'privacy_policy_url' => $vendor->privacy_policy_url,
+                'description' => $vendor->description,
+            ],
+        ]);
+    }
+
+    /**
+     * POST /dokumen — pihak ketiga upload dokumen PERUSAHAAN-nya sendiri.
+     *
+     * Requirement #6: dokumen legal (akta_notaris/ktp/kontrak_kerjasama/
+     * company_profile) yang sebelumnya di-upload perusahaan via
+     * VendorRiskController::uploadIntakeDocument, kini boleh di-upload vendor
+     * lewat token publik. REUSE pola penyimpanan keyed-by-kind di
+     * `vendor->documents[kind]` (re-upload menimpa entri kind yang sama).
+     *
+     * Beda dengan versi internal: actor adalah token publik (bukan user
+     * ter-auth) → `uploaded_by` di-set null + jejak actor 'Public Token' di
+     * AuditLog (pola AssessmentTokenService::markConsumed).
+     */
+    public function uploadDocument(Request $request, string $token, TenantStorageService $storage, FileUploadValidator $validator)
+    {
+        /** @var VendorAssessment $assessment */
+        $assessment = $request->get('_assessment');
+
+        $vendor = Vendor::find($assessment->vendor_id);
+        if (! $vendor) {
+            return response()->json(['message' => 'Data perusahaan tidak ditemukan.'], 404);
+        }
+
+        $request->validate([
+            'kind' => 'required|in:akta_notaris,ktp,kontrak_kerjasama,company_profile',
+            'file' => 'required|file|max:10240', // 10MB
+        ]);
+
+        try {
+            $validator->validate($request->file('file'), FileUploadValidator::PRESET_DOCUMENT);
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        $org = Organization::findOrFail($assessment->org_id);
+
+        try {
+            $result = $storage->storeTenantPrivateFile(
+                $org,
+                $request->file('file'),
+                "vendors/{$vendor->id}/documents"
+            );
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['message' => 'Gagal menyimpan file ke storage.'], 500);
+        }
+
+        // Keyed-by-kind: timpa entri kind yang sama (samakan dgn uploadIntakeDocument).
+        $documents = $vendor->documents ?? [];
+        $documents[$request->kind] = [
+            'path' => $result['path'],
+            'driver' => $result['driver'],
+            'filename' => $request->file('file')->getClientOriginalName(),
+            'size' => $request->file('file')->getSize(),
+            'uploaded_at' => now()->toIso8601String(),
+            'uploaded_by' => null,          // anonim — di-upload via token publik
+            'uploaded_by_token' => true,
+        ];
+        $vendor->update(['documents' => $documents]);
+
+        // Audit trail — actor token publik (pola markConsumed: user_name 'Public Token').
+        AuditLog::create([
+            'module' => 'tprm.intake_document',
+            'record_id' => $vendor->id,
+            'action' => 'public_upload',
+            'user_id' => null,
+            'user_name' => 'Public Token',
+            'user_role' => 'public_token',
+            'section' => 'vendor_documents',
+            'field' => $request->kind,
+            'changes' => [
+                'kind' => $request->kind,
+                'filename' => $request->file('file')->getClientOriginalName(),
+                'size' => $request->file('file')->getSize(),
+                'token_prefix' => substr((string) $assessment->assessment_token, 0, 8),
+            ],
+            'ip_address' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => 'Dokumen berhasil diunggah.',
+            'kind' => $request->kind,
+            'document' => $documents[$request->kind],
+        ], 201);
+    }
+
+    /**
      * POST /submit — finalisasi. Setelah ini token tidak bisa dipakai lagi
      * untuk menulis. Operation idempotent: kalau status sudah 'submitted'
      * (race dari middleware yang lolos), tetap return 410 supaya client
@@ -306,7 +469,7 @@ class AsesmenPublikController extends Controller
         if ($assessment->token_consumed_at !== null) {
             return response()->json([
                 'error' => 'Asesmen sudah dikirim sebelumnya.',
-                'result_url' => url('/api/asesmen-publik/' . $token . '/result'),
+                'result_url' => url('/api/asesmen-publik/'.$token.'/result'),
             ], 410);
         }
 
@@ -354,7 +517,7 @@ class AsesmenPublikController extends Controller
             'data' => [
                 'assessment_id' => $assessment->id,
                 'submitted_at' => optional($assessment->fresh()->submitted_at)->toIso8601String(),
-                'result_url' => url('/api/asesmen-publik/' . $token . '/result'),
+                'result_url' => url('/api/asesmen-publik/'.$token.'/result'),
             ],
         ]);
     }

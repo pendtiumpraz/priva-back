@@ -388,15 +388,15 @@ class VendorPreAssessmentController extends Controller
             ]);
         }
 
-        $expiryDays = (int) config('vendor_screening.public_link_expiry_days', self::DEFAULT_TOKEN_EXPIRY_DAYS);
-        if ($expiryDays <= 0) {
-            $expiryDays = self::DEFAULT_TOKEN_EXPIRY_DAYS;
-        }
-
+        // KEBIJAKAN (revisi 2026-06-30, #2): tautan pra-asesmen TIDAK kedaluwarsa
+        // berbasis waktu — konsisten dengan AssessmentTokenService::generate().
+        // Token hanya invalid saat di-regenerate (UUID baru menimpa row yang sama).
+        // token_expires_at = null → PublicPreAssessmentTokenMiddleware tidak pernah
+        // memicu 410 expiry (cek expiry hanya jalan bila token_expires_at ter-set).
         $token = (string) Str::uuid7();
         $pre->forceFill([
             'assessment_token' => $token,
-            'token_expires_at' => now()->addDays($expiryDays),
+            'token_expires_at' => null,
             'token_consumed_at' => null,
         ])->save();
 

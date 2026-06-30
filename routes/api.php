@@ -193,6 +193,8 @@ Route::middleware('throttle:api')->group(function () {
         ->middleware('public-assessment-token')
         ->group(function () {
             Route::get('/', [AsesmenPublikController::class, 'show']);
+            Route::put('/profil', [AsesmenPublikController::class, 'updateProfil']);
+            Route::post('/dokumen', [AsesmenPublikController::class, 'uploadDocument']);
             Route::post('/jawaban', [AsesmenPublikController::class, 'saveDraft']);
             Route::post('/upload', [AsesmenPublikController::class, 'uploadEvidence']);
             Route::post('/submit', [AsesmenPublikController::class, 'submit']);
