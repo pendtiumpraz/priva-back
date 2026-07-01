@@ -30,10 +30,15 @@ class AiDocumentAnalyzerTest extends TestCase
     use RefreshDatabase;
 
     private Organization $org;
+
     private User $admin;
+
     private GapAssessment $assessment;
+
     private string $questionId = 'TK-FR-01'; // ada di question bank UU PDP default.
+
     private string $attachmentRelative;
+
     private string $attachmentAbsolute;
 
     protected function setUp(): void
@@ -181,8 +186,15 @@ class AiDocumentAnalyzerTest extends TestCase
         $fresh = $this->assessment->fresh();
         $this->assertIsArray($fresh->ai_analyses);
         $this->assertArrayHasKey($this->questionId, $fresh->ai_analyses);
-        $this->assertSame('comply', $fresh->ai_analyses[$this->questionId]['status']);
-        $this->assertSame($this->attachmentRelative, $fresh->ai_analyses[$this->questionId]['attachment_path']);
+
+        // Kontrak baru: ai_analyses[qId] adalah ARRAY entri (satu per attachment)
+        // supaya banyak dokumen di 1 pertanyaan punya verdict masing-masing.
+        // Entri pertama = hasil analisis attachment yang baru diproses.
+        $entries = $fresh->ai_analyses[$this->questionId];
+        $this->assertIsArray($entries);
+        $this->assertArrayHasKey(0, $entries);
+        $this->assertSame('comply', $entries[0]['status']);
+        $this->assertSame($this->attachmentRelative, $entries[0]['attachment_path']);
     }
 
     // =========================================================
@@ -215,5 +227,4 @@ class AiDocumentAnalyzerTest extends TestCase
 
         $this->app->instance(AiService::class, $mock);
     }
-
 }
