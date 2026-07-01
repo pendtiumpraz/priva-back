@@ -13,6 +13,7 @@ use App\Services\AssessmentTokenService;
 use App\Services\FileUploadValidator;
 use App\Services\TenantStorageService;
 use App\Services\ThirdPartyAssessmentScorer;
+use App\Services\VendorHeadlineService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -474,6 +475,7 @@ class AsesmenPublikController extends Controller
         string $token,
         AssessmentTokenService $tokens,
         ThirdPartyAssessmentScorer $scorer,
+        VendorHeadlineService $headline,
     ) {
         /** @var VendorAssessment $assessment */
         $assessment = $request->get('_assessment');
@@ -489,7 +491,7 @@ class AsesmenPublikController extends Controller
         // status assessment tidak terlanjur ke 'submitted'.
         $result = $scorer->compute($assessment);
 
-        DB::transaction(function () use ($assessment, $request, $tokens, $result) {
+        DB::transaction(function () use ($assessment, $request, $tokens, $result, $headline) {
             // Persist skor + risk_level + rekomendasi sebelum markConsumed,
             // supaya audit trail di markConsumed bisa reflect state final.
             $assessment->forceFill([
@@ -508,20 +510,19 @@ class AsesmenPublikController extends Controller
                 'source' => VendorAssessment::SOURCE_DETERMINISTIC,
             ])->save();
 
-            // Sync skor & risk_level ke vendor record supaya muncul di TPRM
-            // list table. Frontend tampilkan vendor.risk_score (bukan
-            // assessment.score) sebagai cache value. Tanpa sync ini, vendor
-            // table tampil 0 padahal asesmen sudah dapat nilai final.
+            // markConsumed dulu (set submitted_at + status) supaya headline sync
+            // di bawah melihat asesmen ini sebagai yang paling baru disubmit.
+            $tokens->markConsumed($assessment, $request);
+
+            // Rework 2026-07 — skor DISIMPAN PER-ASESMEN (di row assessment atas).
+            // Headline vendor (risk_score/risk_level cache di tabel TPRM) DIPILIH
+            // via VendorHeadlineService: prefer asesmen UU PDP, else asesmen
+            // dinilai terbaru — TIDAK dirata-rata lintas jenis library.
             $vendor = Vendor::find($assessment->vendor_id);
             if ($vendor) {
-                $vendor->forceFill([
-                    'risk_score' => (int) round($result['score']),
-                    'risk_level' => $result['risk_level'],
-                    'last_assessed_at' => now(),
-                ])->save();
+                $vendor->forceFill(['last_assessed_at' => now()])->save();
+                $headline->sync($vendor);
             }
-
-            $tokens->markConsumed($assessment, $request);
         });
 
         return response()->json([
