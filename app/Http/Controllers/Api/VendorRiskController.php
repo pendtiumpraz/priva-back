@@ -54,6 +54,28 @@ class VendorRiskController extends Controller
                     $q->orderBy('created_at', 'desc')->limit(1);
                 },
             ])
+            // Ringkasan multi-assessment per vendor (1 vendor bisa punya banyak
+            // asesmen per QuestionLibrary). withCount → 1 subquery agregat per
+            // metrik, tanpa N+1. Angka ini menggerakkan kolom "Asesmen" di FE.
+            ->withCount([
+                'assessments as assessments_count',
+                'assessments as assessments_submitted_count' => function ($q) {
+                    // Sudah disubmit pihak ketiga dan seterusnya (review/approve).
+                    $q->whereIn('status', [
+                        VendorAssessment::STATUS_SUBMITTED,
+                        VendorAssessment::STATUS_REVIEW_IN_PROGRESS,
+                        VendorAssessment::STATUS_PENDING_APPROVAL,
+                        VendorAssessment::STATUS_APPROVED,
+                    ]);
+                },
+                'assessments as assessments_active_count' => function ($q) {
+                    // Tautan aktif yang belum diisi (draft/sent).
+                    $q->whereIn('status', [
+                        VendorAssessment::STATUS_DRAFT,
+                        VendorAssessment::STATUS_SENT,
+                    ]);
+                },
+            ])
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($vendor) {
@@ -71,6 +93,10 @@ class VendorRiskController extends Controller
                     // Pre-Assessment / PDP scope gate — drives FE tabs + badges.
                     'pdp_scope_status' => $vendor->pdp_scope_status,
                     'scope_overridden' => (bool) $vendor->scope_overridden,
+                    // Ringkasan multi-assessment — total, sudah submit, aktif (belum diisi).
+                    'assessments_count' => (int) ($vendor->assessments_count ?? 0),
+                    'assessments_submitted_count' => (int) ($vendor->assessments_submitted_count ?? 0),
+                    'assessments_active_count' => (int) ($vendor->assessments_active_count ?? 0),
                     // Assignment + division-scoped visibility (mirrors RoPA) —
                     // drives the Assign Group column + quick-edit modal in FE.
                     'assign_group' => $vendor->assign_group,
