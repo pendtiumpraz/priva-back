@@ -13,10 +13,12 @@ use App\Services\AiService;
 use App\Services\ApprovalWorkflowDispatcher;
 use App\Services\AssessmentAutoTriggerService;
 use App\Services\AssessmentTokenService;
+use App\Services\CanonicalPdpLibraryService;
 use App\Services\DocumentParserService;
 use App\Services\FileUploadValidator;
 use App\Services\NotificationService;
 use App\Services\TenantStorageService;
+use App\Services\VendorHeadlineService;
 use App\Services\VendorRiskScoreService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -233,6 +235,22 @@ class VendorRiskController extends Controller
             // `active_assessment_token` di atas dipertahankan utk backward-compat.
             $baseUrl = config('app.frontend_url', config('app.url', 'http://localhost:3000'));
             $activeStatuses = [VendorAssessment::STATUS_DRAFT, VendorAssessment::STATUS_SENT];
+
+            // Peta id → nama library untuk semua library_id yang dipakai vendor
+            // (satu query, tanpa N+1). Category dipakai utk requires_pre_assessment.
+            $libIds = $vendor->assessments
+                ->pluck('library_id')
+                ->filter()
+                ->unique()
+                ->values();
+            $libMeta = $libIds->isEmpty()
+                ? collect()
+                : QuestionLibrary::query()
+                    ->withoutGlobalScope('org')
+                    ->whereIn('id', $libIds)
+                    ->get(['id', 'name', 'category'])
+                    ->keyBy('id');
+
             $links = [];
             foreach ($assessments->groupBy(fn ($a) => $a->library_id ?? '__default__') as $group) {
                 // Wakili tiap jenis dengan row ber-token paling baru.
@@ -243,10 +261,16 @@ class VendorRiskController extends Controller
                 $expiresAt = $a->token_expires_at;
                 $notExpired = empty($expiresAt) || (is_object($expiresAt) && method_exists($expiresAt, 'isFuture') && $expiresAt->isFuture());
                 $isConsumed = ! empty($a->token_consumed_at);
+                $lib = $a->library_id ? $libMeta->get($a->library_id) : null;
                 $links[] = [
                     'library_id' => $a->library_id,
+                    'library_name' => $lib?->name,
                     'assessment_id' => $a->id,
                     'status' => $a->status,
+                    // Skor per-asesmen (per library) — TIDAK dirata-rata lintas jenis.
+                    'score' => $a->score,
+                    'risk_level' => $a->risk_level,
+                    'submitted_at' => optional($a->submitted_at)->toIso8601String(),
                     'token' => $a->assessment_token,
                     'public_url' => rtrim((string) $baseUrl, '/').'/asesmen-pihak-ketiga/'.$a->assessment_token,
                     'expires_at' => $expiresAt,
@@ -255,10 +279,16 @@ class VendorRiskController extends Controller
                     // expired, belum dipakai, masih di fase draft/sent).
                     'shareable' => $notExpired && ! $isConsumed && in_array($a->status, $activeStatuses, true),
                     // Requirement #4 — jenis UU PDP butuh pra-asesmen lingkup PDP.
-                    'requires_pre_assessment' => $this->isPdpLibrary($a->library_id),
+                    'requires_pre_assessment' => $lib !== null
+                        && $lib->category === VendorQuestionnaire::CATEGORY_PDP_COMPLIANCE,
                 ];
             }
             $data['shareable_links'] = $links;
+
+            // "Tambah Jenis Baru" (#C) — library_id yang SUDAH punya asesmen
+            // (aktif/submitted). FE ambil /tprm/libraries lalu selisih supaya
+            // tidak menawarkan jenis yang sudah ada (cegah asesmen > jumlah lib).
+            $data['assigned_library_ids'] = $libIds->all();
         } catch (\Throwable $e) {
             \Log::warning('vendor.show active_assessment computation failed: '.$e->getMessage());
         }
@@ -519,6 +549,8 @@ class VendorRiskController extends Controller
     public function assessDeterministic(
         Request $request,
         VendorRiskScoreService $scorer,
+        CanonicalPdpLibraryService $canonical,
+        VendorHeadlineService $headline,
         ?string $id = null,
     ) {
         $data = $request->validate([
@@ -563,10 +595,17 @@ class VendorRiskController extends Controller
         // Compute score
         $result = $scorer->compute($data['category'], $data['answers'], $version);
 
+        // Rework 2026-07 — jenis UU PDP SELALU punya library_id konkret (tak ada
+        // library_id null). Category pdp_compliance → library UU PDP kanonik.
+        $libraryId = $data['category'] === VendorQuestionnaire::CATEGORY_PDP_COMPLIANCE
+            ? $canonical->resolveId($orgId)
+            : null;
+
         // Persist assessment
         $assessment = VendorAssessment::create([
             'vendor_id' => $vendor->id,
             'org_id' => $orgId,
+            'library_id' => $libraryId,
             'assessed_by' => $request->user()->id,
             'answers' => $data['answers'],
             'score' => $result['score'],
@@ -579,12 +618,12 @@ class VendorRiskController extends Controller
             'questionnaire_version' => $version,
         ]);
 
-        // Update vendor cached fields
-        $vendor->risk_score = $result['score'];
-        $vendor->risk_level = $result['risk_level'];
+        // Update vendor cadence, lalu sinkron headline (prefer asesmen UU PDP,
+        // else asesmen dinilai terbaru — TIDAK dirata-rata lintas jenis).
         $vendor->last_assessed_at = now();
         $vendor->next_assessment_due_at = $scorer->nextDueDate($result['risk_level']);
         $vendor->save();
+        $headline->sync($vendor);
 
         // Notif ke DPO + admin tenant — severity ikut tingkat risiko hasil asesmen.
         try {
@@ -847,9 +886,16 @@ class VendorRiskController extends Controller
      *
      * Ini menggantikan placeholder "belum diimplementasi" toast di frontend.
      */
-    public function reassess(Request $request, $id)
+    public function reassess(Request $request, $id, CanonicalPdpLibraryService $canonical, VendorHeadlineService $headline)
     {
         $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($id);
+
+        // Rework 2026-07 — asesmen re-run untuk pihak ketiga UU PDP disematkan ke
+        // library UU PDP kanonik supaya headline vendor konsisten memprioritaskan
+        // asesmen UU PDP. Kategori lain tetap null (tak ada makna lingkup PDP).
+        $reassessLibraryId = $vendor->category === VendorQuestionnaire::CATEGORY_PDP_COMPLIANCE
+            ? $canonical->resolveId($vendor->org_id)
+            : null;
 
         // SCOPE GATE (Requirement #4): hanya untuk pihak ketiga UU PDP
         // (vendor->category pdp_compliance). Jenis lain lewati gate.
@@ -878,6 +924,7 @@ class VendorRiskController extends Controller
             $assessment = VendorAssessment::create([
                 'vendor_id' => $vendor->id,
                 'org_id' => $vendor->org_id,
+                'library_id' => $reassessLibraryId,
                 'assessed_by' => $request->user()->id,
                 'answers' => $validated['answers'] ?? [],
                 'score' => $validated['manual_score'],
@@ -885,11 +932,8 @@ class VendorRiskController extends Controller
                 'recommendations' => $validated['recommendations'] ?? [],
                 'notes' => $validated['notes'] ?? null,
             ]);
-            $vendor->update([
-                'risk_score' => $validated['manual_score'],
-                'risk_level' => $validated['manual_risk_level'],
-                'last_assessed_at' => now(),
-            ]);
+            $vendor->forceFill(['last_assessed_at' => now()])->save();
+            $headline->sync($vendor);
 
             return response()->json([
                 'message' => 'Re-assessment manual tersimpan.',
@@ -922,6 +966,7 @@ class VendorRiskController extends Controller
         $assessment = VendorAssessment::create([
             'vendor_id' => $vendor->id,
             'org_id' => $vendor->org_id,
+            'library_id' => $reassessLibraryId,
             'assessed_by' => $request->user()->id,
             'answers' => $validated['answers'],
             'score' => (int) $response['score'],
@@ -929,11 +974,8 @@ class VendorRiskController extends Controller
             'recommendations' => $response['recommendations'] ?? [],
             'notes' => json_encode($response['red_flags'] ?? []),
         ]);
-        $vendor->update([
-            'risk_score' => (int) $response['score'],
-            'risk_level' => $response['risk_level'] ?? $vendor->risk_level,
-            'last_assessed_at' => now(),
-        ]);
+        $vendor->forceFill(['last_assessed_at' => now()])->save();
+        $headline->sync($vendor);
         $org->decrement('ai_credits_remaining', 1);
 
         return response()->json([
@@ -1109,17 +1151,16 @@ class VendorRiskController extends Controller
      * Requirement #4 — deteksi apakah sebuah "jenis" assessment = template UU
      * PDP. Template UU PDP = QuestionLibrary ber-`category=pdp_compliance`.
      *
-     * library_id NULL = jenis "Default" → pertanyaan efektif org via
-     * VendorQuestionnaire::effectiveForOrg() yang selalu set UU PDP (category
-     * pdp_compliance, version v2_2026) → diperlakukan sebagai UU PDP juga.
-     *
-     * Hanya template UU PDP yang di-gate pra-asesmen lingkup PDP. Template lain
-     * (ISO, custom, dst) tidak punya makna "lingkup PDP" → lewati gate.
+     * Rework 2026-07: konsep library_id NULL ("Default") DIHAPUS — UU PDP selalu
+     * punya library_id konkret ber-category pdp_compliance (lihat
+     * CanonicalPdpLibraryService). Karena itu tak perlu lagi treat null sebagai
+     * UU PDP; caller (generatePublicLink) meresolve null → library kanonik lebih
+     * dulu sehingga gate pra-asesmen tetap berjalan tanpa regresi.
      */
     private function isPdpLibrary(?string $libraryId): bool
     {
         if ($libraryId === null) {
-            return true;
+            return false;
         }
 
         $lib = QuestionLibrary::query()
@@ -1130,14 +1171,19 @@ class VendorRiskController extends Controller
         return $lib !== null && $lib->category === VendorQuestionnaire::CATEGORY_PDP_COMPLIANCE;
     }
 
-    public function generatePublicLink(Request $request, string $vendorId, AssessmentTokenService $tokenSvc)
+    public function generatePublicLink(Request $request, string $vendorId, AssessmentTokenService $tokenSvc, CanonicalPdpLibraryService $canonical)
     {
         $vendor = Vendor::where('org_id', $request->user()->org_id)->findOrFail($vendorId);
 
         // TPRM Phase 1: terima library_id opsional dari client supaya
         // pertanyaan yang dirender di public page mengikuti library yang
-        // dipilih. Validasi library visible untuk org ini. null = jenis
-        // "Default" (pertanyaan efektif org saat ini, jalur effectiveForOrg).
+        // dipilih. Validasi library visible untuk org ini.
+        //
+        // Rework 2026-07: konsep library_id NULL ("Default") DIHAPUS. Bila
+        // client kirim null / tidak memilih → resolve ke library UU PDP kanonik
+        // (category pdp_compliance). Jenis assessment SELALU punya library_id
+        // konkret sehingga UU PDP tidak lagi terhitung dobel (null-Default +
+        // library UU PDP).
         $libraryId = $request->input('library_id');
         if ($libraryId) {
             $lib = QuestionLibrary::query()
@@ -1151,8 +1197,10 @@ class VendorRiskController extends Controller
                     'message' => 'Library yang dipilih tidak valid atau tidak dapat diakses.',
                 ], 422);
             }
+        } else {
+            // Tidak memilih library → UU PDP kanonik (fork-aware per org).
+            $libraryId = $canonical->resolveId($vendor->org_id);
         }
-        $libraryId = $libraryId ?: null;
 
         // Requirement #4 — PRA-ASESMEN GATING KHUSUS TEMPLATE UU PDP.
         // Hanya jenis UU PDP (library category pdp_compliance / default) yang
