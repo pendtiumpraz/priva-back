@@ -11,6 +11,15 @@ use Illuminate\Support\Facades\Log;
 class DatabaseScanner
 {
     /**
+     * Jumlah baris sampel yang dibaca per tabel untuk content-scan (deteksi
+     * PII tersembunyi + status proteksi enkripsi/masking). Sengaja KECIL:
+     * cukup 1 nilai non-null per kolom untuk tahu enkripsi/masking; 5 baris
+     * ≈ instan & tahan baris null, jauh dari beban 100 baris. Deteksi 100%
+     * LOKAL (regex/heuristik), nilai sampel TIDAK PERNAH dikirim ke AI.
+     */
+    private const SAMPLE_LIMIT = 5;
+
+    /**
      * Test real connection to a data source
      */
     public static function testConnection(string $sourceType, array $config): array
@@ -104,18 +113,19 @@ class DatabaseScanner
                 $cols = $pdo->query("SHOW COLUMNS FROM `{$tableName}`")->fetchAll(\PDO::FETCH_ASSOC);
                 $rowCount = $pdo->query("SELECT COUNT(*) FROM `{$tableName}`")->fetchColumn();
 
-                // Phase 1 Shadow Data Discovery: Content Sampling
+                // Phase 1 Shadow Data Discovery: Content Sampling (sampel KECIL)
                 $sampleRows = [];
                 try {
-                    $sampleRows = $pdo->query("SELECT * FROM `{$tableName}` LIMIT 100")->fetchAll(\PDO::FETCH_ASSOC);
+                    $sampleRows = $pdo->query("SELECT * FROM `{$tableName}` LIMIT " . self::SAMPLE_LIMIT)->fetchAll(\PDO::FETCH_ASSOC);
                 } catch (\Throwable $e) {}
 
                 foreach ($cols as $col) {
                     $colName = $col['Field'];
                     $piiResult = PiiDetector::analyze($colName, $col['Type']);
                     $shadowDetected = false;
+                    $protection = ['protection_state' => 'unknown', 'protection_reason' => 'Tidak ada sampel'];
 
-                    // Execute Content Scanner on sample data
+                    // Content Scanner + status proteksi pada sampel (LOKAL — TIDAK ke AI)
                     if (!empty($sampleRows) && count($sampleRows) > 0) {
                         $columnValues = array_column($sampleRows, $colName);
                         $contentPii = ContentPiiScanner::analyzeColumnContent($columnValues);
@@ -124,6 +134,7 @@ class DatabaseScanner
                             $piiResult = $contentPii;
                             $shadowDetected = true;
                         }
+                        $protection = ContentPiiScanner::detectProtectionState($columnValues);
                     }
 
                     $columns[] = [
@@ -135,6 +146,8 @@ class DatabaseScanner
                         'classification' => $piiResult['classification'],
                         'encryption_required' => $piiResult['encryption_required'],
                         'pii_reason' => $piiResult['reason'],
+                        'protection_state' => $protection['protection_state'],
+                        'protection_reason' => $protection['protection_reason'],
                         'manually_classified' => false,
                         'shadow_detected' => $shadowDetected,
                     ];
@@ -207,10 +220,10 @@ class DatabaseScanner
                 $rowCount = 0;
                 try { $rowCount = $pdo->query("SELECT COUNT(*) FROM \"{$tableName}\"")->fetchColumn(); } catch (\Throwable) {}
 
-                // Phase 1 Shadow Data Discovery: Content Sampling
+                // Phase 1 Shadow Data Discovery: Content Sampling (sampel KECIL)
                 $sampleRows = [];
                 try {
-                    $sampleRows = $pdo->query("SELECT * FROM \"{$tableName}\" LIMIT 100")->fetchAll(\PDO::FETCH_ASSOC);
+                    $sampleRows = $pdo->query("SELECT * FROM \"{$tableName}\" LIMIT " . self::SAMPLE_LIMIT)->fetchAll(\PDO::FETCH_ASSOC);
                 } catch (\Throwable $e) {}
 
                 $columns = [];
@@ -218,8 +231,9 @@ class DatabaseScanner
                     $colName = $col['column_name'];
                     $piiResult = PiiDetector::analyze($colName, $col['data_type']);
                     $shadowDetected = false;
+                    $protection = ['protection_state' => 'unknown', 'protection_reason' => 'Tidak ada sampel'];
 
-                    // Execute Content Scanner on sample data
+                    // Content Scanner + status proteksi pada sampel (LOKAL — TIDAK ke AI)
                     if (!empty($sampleRows) && count($sampleRows) > 0) {
                         $columnValues = array_column($sampleRows, $colName);
                         $contentPii = ContentPiiScanner::analyzeColumnContent($columnValues);
@@ -228,6 +242,7 @@ class DatabaseScanner
                             $piiResult = $contentPii;
                             $shadowDetected = true;
                         }
+                        $protection = ContentPiiScanner::detectProtectionState($columnValues);
                     }
 
                     $columns[] = [
@@ -239,6 +254,8 @@ class DatabaseScanner
                         'classification' => $piiResult['classification'],
                         'encryption_required' => $piiResult['encryption_required'],
                         'pii_reason' => $piiResult['reason'],
+                        'protection_state' => $protection['protection_state'],
+                        'protection_reason' => $protection['protection_reason'],
                         'manually_classified' => false,
                         'shadow_detected' => $shadowDetected,
                     ];

@@ -119,4 +119,91 @@ class ContentPiiScanner
 
         return null;
     }
+
+    /**
+     * Tentukan STATUS PROTEKSI kolom dari sampel nilainya (LOKAL — tidak ke AI).
+     * Cukup beberapa nilai non-null; untuk deteksi enkripsi/masking 1 nilai
+     * biasanya sudah cukup. Return protection_state:
+     *   plaintext  🔴 nilai PII terbaca telanjang
+     *   masked     🟡 sudah disamarkan (***, partial)
+     *   encrypted  🟢 sudah dienkripsi (blob base64/hex / Laravel Crypt)
+     *   mixed      ⚠️ campur (sebagian terlindung, sebagian plaintext) → risiko
+     *   unknown    tak ada nilai non-null pada sampel
+     */
+    public static function detectProtectionState(array $sampledValues): array
+    {
+        $vals = [];
+        foreach ($sampledValues as $v) {
+            if ($v === null || $v === '') continue;
+            $vals[] = (string) $v;
+        }
+        if (empty($vals)) {
+            return ['protection_state' => 'unknown', 'protection_reason' => 'Tidak ada nilai non-null pada sampel'];
+        }
+
+        $enc = 0; $mask = 0; $plain = 0;
+        foreach ($vals as $v) {
+            if (self::looksEncrypted($v)) { $enc++; }
+            elseif (self::looksMasked($v)) { $mask++; }
+            else { $plain++; }
+        }
+        $n = count($vals);
+
+        if ($enc === $n) {
+            return ['protection_state' => 'encrypted', 'protection_reason' => "Nilai tampak terenkripsi (blob) — $n/$n sampel"];
+        }
+        if ($mask === $n) {
+            return ['protection_state' => 'masked', 'protection_reason' => "Nilai tampak ter-masking — $n/$n sampel"];
+        }
+        if ($plain === $n) {
+            return ['protection_state' => 'plaintext', 'protection_reason' => "Nilai terbaca (plaintext) — $n/$n sampel"];
+        }
+        // Campuran → tandai sebagai risiko (migrasi setengah jalan / tidak konsisten).
+        return ['protection_state' => 'mixed', 'protection_reason' => "Tidak konsisten: $enc enkripsi, $mask masked, $plain plaintext (dari $n sampel)"];
+    }
+
+    /** Heuristik: nilai tampak TERENKRIPSI (ciphertext) — LOKAL, tanpa dekripsi. */
+    private static function looksEncrypted(string $v): bool
+    {
+        $v = trim($v);
+        // Laravel Crypt: base64 → JSON {iv, value, mac}. Sinyal paling kuat.
+        $dec = base64_decode($v, true);
+        if ($dec !== false && $dec !== '') {
+            $j = json_decode($dec, true);
+            if (is_array($j) && isset($j['iv'], $j['value']) && (isset($j['mac']) || isset($j['tag']))) {
+                return true;
+            }
+        }
+        // Ada spasi / terbaca → hampir pasti bukan ciphertext.
+        if (preg_match('/\s/', $v)) return false;
+        // Hex panjang (mis. SHA/AES hex).
+        if (preg_match('/^[0-9a-fA-F]{32,}$/', $v)) return true;
+        // Base64 panjang + entropi tinggi.
+        if (preg_match('/^[A-Za-z0-9+\/]{24,}={0,2}$/', $v) && self::entropy($v) >= 3.6) return true;
+        return false;
+    }
+
+    /** Heuristik: nilai tampak SUDAH DI-MASKING. */
+    private static function looksMasked(string $v): bool
+    {
+        // Asterisk / bullet / hash run (mis. 1234****, b***@mail.com, ****).
+        if (preg_match('/\*{2,}|•{2,}|#{4,}/u', $v)) return true;
+        // Partial reveal digit dengan x: 08xx-xxxx-1234 / 12xxxx56 (>=3 x berturut).
+        if (preg_match('/\dx{3,}\d|x{4,}/i', $v) && preg_match('/[0-9]/', $v)) return true;
+        return false;
+    }
+
+    /** Shannon entropy (bit/char) — untuk membedakan blob acak vs teks biasa. */
+    private static function entropy(string $s): float
+    {
+        $len = strlen($s);
+        if ($len === 0) return 0.0;
+        $freq = count_chars($s, 1);
+        $h = 0.0;
+        foreach ($freq as $c) {
+            $p = $c / $len;
+            $h -= $p * log($p, 2);
+        }
+        return $h;
+    }
 }
