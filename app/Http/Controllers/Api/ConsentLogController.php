@@ -290,10 +290,18 @@ class ConsentLogController extends Controller
             PushConsentToCrmJob::dispatch($providerId, (array) $config, $log->id);
         }
 
+        // CORS: capture adalah endpoint PUBLIK untuk widget di situs eksternal
+        // (samakan dgn config() yang sudah `*`). Sebelumnya header ini absen →
+        // POST browser lintas-origin bisa ditolak. Preflight OPTIONS untuk
+        // origin arbitrer tetap diatur HandleCors (allowed_origins); untuk
+        // widget yang di-iframe dari origin Privasimu (ter-whitelist) sudah
+        // lolos. Response ini eksplisit `*` supaya konsisten dengan config().
         return response()->json([
             'message' => 'Consent captured successfully',
             'log_id' => $log->id,
-        ], 201);
+        ], 201)
+            ->header('Access-Control-Allow-Origin', '*')
+            ->header('Access-Control-Allow-Methods', 'POST, OPTIONS');
     }
 
     /**
