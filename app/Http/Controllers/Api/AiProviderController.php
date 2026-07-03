@@ -8,7 +8,7 @@ use App\Models\AiModel;
 use Illuminate\Http\Request;
 use App\Models\Organization;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
+use App\Support\OutboundHttp;
 
 class AiProviderController extends Controller
 {
@@ -458,8 +458,8 @@ class AiProviderController extends Controller
 
             $baseUrl = rtrim($provider->api_base_url, '/');
 
-            $response = Http::timeout(15)
-                ->withoutVerifying()
+            $response = OutboundHttp::client($baseUrl)
+                ->timeout(15)
                 ->withHeaders($headers)
                 ->post($baseUrl . '/chat/completions', [
                     'model' => $provider->models()->where('is_active', true)->first()?->model_id ?? 'gpt-4o',

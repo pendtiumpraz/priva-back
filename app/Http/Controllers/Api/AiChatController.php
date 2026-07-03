@@ -12,7 +12,7 @@ use App\Services\AiContentSanitizer;
 use App\Services\ChatSummaryMemoryService;
 use App\Services\CreditService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
+use App\Support\OutboundHttp;
 
 class AiChatController extends Controller
 {
@@ -277,11 +277,11 @@ PROMPT;
                 $payload['tools'] = $widgetTools;
             }
 
-            $response = Http::withOptions([
-                'timeout' => 60,
-                'connect_timeout' => 15,
-            ])
-                ->withoutVerifying()
+            $response = OutboundHttp::client($chatBaseUrl)
+                ->withOptions([
+                    'timeout' => 60,
+                    'connect_timeout' => 15,
+                ])
                 ->withHeaders($headers)
                 ->post($chatBaseUrl.'/chat/completions', $payload);
 
@@ -335,8 +335,8 @@ PROMPT;
                     'temperature' => 0.3,
                     'max_tokens' => $maxTokens,
                 ];
-                $response2 = Http::withOptions(['timeout' => 60, 'connect_timeout' => 15])
-                    ->withoutVerifying()
+                $response2 = OutboundHttp::client($chatBaseUrl)
+                    ->withOptions(['timeout' => 60, 'connect_timeout' => 15])
                     ->withHeaders($headers)
                     ->post($chatBaseUrl.'/chat/completions', $payload2);
 
@@ -499,8 +499,8 @@ PROMPT;
         }
 
         try {
-            $response = Http::timeout(10)
-                ->withoutVerifying()
+            $response = OutboundHttp::client('https://api.deepseek.com/chat/completions')
+                ->timeout(10)
                 ->withHeaders([
                     'Authorization' => 'Bearer '.$apiKey,
                     'Content-Type' => 'application/json',

@@ -4,7 +4,7 @@ namespace App\Services;
 
 use App\Http\Controllers\Api\AiProviderController;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
+use App\Support\OutboundHttp;
 use Illuminate\Support\Facades\Log;
 
 class AiService
@@ -149,8 +149,8 @@ class AiService
             ]);
 
             $t0 = microtime(true);
-            $response = Http::timeout($timeout)
-                ->withoutVerifying()
+            $response = OutboundHttp::client($this->baseUrl)
+                ->timeout($timeout)
                 ->withHeaders($headers)
                 ->post($this->baseUrl.'/chat/completions', $payload);
             $elapsed = round(microtime(true) - $t0, 2);
@@ -163,8 +163,8 @@ class AiService
                 ]);
                 unset($payload['response_format']);
                 $t0 = microtime(true);
-                $response = Http::timeout($timeout)
-                    ->withoutVerifying()
+                $response = OutboundHttp::client($this->baseUrl)
+                    ->timeout($timeout)
                     ->withHeaders($headers)
                     ->post($this->baseUrl.'/chat/completions', $payload);
                 $elapsed = round(microtime(true) - $t0, 2);

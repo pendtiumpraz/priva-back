@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\PermissionService;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -30,6 +31,8 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class CheckPermission
 {
+    public function __construct(private PermissionService $permissions) {}
+
     public function handle(Request $request, Closure $next, string $module, string $action = 'read'): Response
     {
         $user = $request->user();
@@ -38,76 +41,19 @@ class CheckPermission
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
-        // Superadmin bypasses all permission checks
-        if (in_array($user->role, ['root', 'superadmin'], true)) {
+        // Decision logic centralized in PermissionService (shared with
+        // ModuleCrudController::checkPermission so the two can't drift).
+        if ($this->permissions->allows($user, $module, $action)) {
             return $next($request);
         }
 
-        // Load tenant role if not loaded
-        if (! $user->relationLoaded('tenantRole')) {
-            $user->load('tenantRole');
-        }
+        // Denial messages preserved exactly per action type.
+        $message = match ($action) {
+            'write' => 'Akses ditolak — role Anda tidak memiliki izin write untuk modul ini.',
+            'read' => 'Akses ditolak — role Anda tidak memiliki izin untuk modul ini.',
+            default => "Akses ditolak — role Anda tidak memiliki izin {$action} untuk modul ini.",
+        };
 
-        $permissions = $user->tenantRole?->permissions ?? null;
-
-        // If no tenant_role or no permissions array, fall back to legacy role-based check
-        if (! is_array($permissions)) {
-            // Legacy: admin, dpo, maker can read+write+granular; viewer can only read
-            if ($action === 'read') {
-                return $next($request);
-            }
-            if (in_array($user->role, ['admin', 'dpo', 'maker'])) {
-                return $next($request);
-            }
-
-            return response()->json([
-                'message' => "Akses ditolak — role Anda tidak memiliki izin {$action} untuk modul ini.",
-            ], 403);
-        }
-
-        // Wildcard: full access
-        if (in_array('*', $permissions)) {
-            return $next($request);
-        }
-
-        if ($action === 'write') {
-            // Write requires explicit module:write permission
-            if (in_array("{$module}:write", $permissions)) {
-                return $next($request);
-            }
-
-            return response()->json([
-                'message' => 'Akses ditolak — role Anda tidak memiliki izin write untuk modul ini.',
-            ], 403);
-        }
-
-        if ($action === 'read') {
-            // Read: allowed if module, module:read, or module:write exists
-            if (
-                in_array($module, $permissions) ||
-                in_array("{$module}:read", $permissions) ||
-                in_array("{$module}:write", $permissions)
-            ) {
-                return $next($request);
-            }
-
-            return response()->json([
-                'message' => 'Akses ditolak — role Anda tidak memiliki izin untuk modul ini.',
-            ], 403);
-        }
-
-        // Granular action (e.g. reveal): must be explicitly granted, with
-        // module:write as the implicit fallback so DPOs that previously had
-        // write don't get locked out before role re-seeding.
-        if (
-            in_array("{$module}:{$action}", $permissions) ||
-            in_array("{$module}:write", $permissions)
-        ) {
-            return $next($request);
-        }
-
-        return response()->json([
-            'message' => "Akses ditolak — role Anda tidak memiliki izin {$action} untuk modul ini.",
-        ], 403);
+        return response()->json(['message' => $message], 403);
     }
 }

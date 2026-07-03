@@ -23,7 +23,7 @@ use App\Services\DocumentParserService;
 use App\Services\TenantStorageService;
 use App\Http\Controllers\Api\AiProviderController;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
+use App\Support\OutboundHttp;
 use Illuminate\Support\Facades\Storage;
 
 class AiAgentController extends Controller
@@ -568,7 +568,8 @@ PROMPT;
 
                     $lastHeartbeat = microtime(true);
 
-                    $response = Http::withOptions([
+                    $response = OutboundHttp::client($fullUrl)
+                        ->withOptions([
                         'timeout' => 55,
                         'connect_timeout' => 5,
                         'progress' => function() use (&$lastHeartbeat) {
@@ -579,7 +580,6 @@ PROMPT;
                             }
                         }
                     ])
-                        ->withoutVerifying()
                         ->withHeaders($headers)
                         ->post($fullUrl, $payload);
 

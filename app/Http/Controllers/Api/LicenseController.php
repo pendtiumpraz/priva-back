@@ -6,6 +6,7 @@ use App\Models\License;
 use App\Models\LicenseActivation;
 use App\Models\Organization;
 use App\Models\PricingPlan;
+use App\Support\OutboundHttp;
 use Illuminate\Http\Request;
 
 class LicenseController extends Controller
@@ -90,8 +91,8 @@ class LicenseController extends Controller
         $licenseData = null;
 
         try {
-            $response = \Illuminate\Support\Facades\Http::timeout(10)
-                ->withoutVerifying()
+            $response = OutboundHttp::client($lmUrl)
+                ->timeout(10)
                 ->post("{$lmUrl}/api/licenses/verify", [
                 'license_key' => $request->license_key,
                 'domain' => $domain,
@@ -307,8 +308,8 @@ class LicenseController extends Controller
         $lmUrl = env('LICENSE_MANAGER_URL', 'https://license-priva.sainskerta.net');
 
         try {
-            $response = \Illuminate\Support\Facades\Http::timeout(15)
-                ->withoutVerifying()
+            $response = OutboundHttp::client($lmUrl)
+                ->timeout(15)
                 ->post("{$lmUrl}/api/licenses/verify", [
                 'license_key' => $request->license_key,
                 'domain' => $domain,

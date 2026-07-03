@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
+use App\Support\OutboundHttp;
 use Illuminate\Support\Facades\Log;
 
 class SystemUpdateController extends Controller
@@ -404,7 +404,7 @@ class SystemUpdateController extends Controller
 
         $method = strtoupper((string) env('FRONTEND_DEPLOY_HOOK_METHOD', 'POST'));
 
-        $client = Http::timeout(60)->withoutVerifying();
+        $client = OutboundHttp::client($hookUrl)->timeout(60);
         if (!empty($headers)) $client = $client->withHeaders($headers);
 
         $payload = [

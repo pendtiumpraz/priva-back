@@ -5,7 +5,7 @@ namespace App\Services;
 use App\Http\Controllers\Api\AiProviderController;
 use App\Models\DpiaRiskEventTemplate;
 use App\Models\Ropa;
-use Illuminate\Support\Facades\Http;
+use App\Support\OutboundHttp;
 use Illuminate\Support\Facades\Log;
 
 class AiFieldMappingService
@@ -415,8 +415,8 @@ SCHEMA;
         // potentially per-category responses → bump ceiling so output isn't truncated.
         $maxTokens = ! empty($this->riskLibraryByCategory) ? 6000 : 4096;
 
-        $response = Http::timeout(120)
-            ->withoutVerifying()
+        $response = OutboundHttp::client($baseUrl)
+            ->timeout(120)
             ->withHeaders($headers)
             ->post($baseUrl.'/chat/completions', [
                 'model' => $model->model_id,

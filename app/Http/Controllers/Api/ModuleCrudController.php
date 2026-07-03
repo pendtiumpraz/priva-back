@@ -46,44 +46,20 @@ class ModuleCrudController extends Controller
         if (! $user) {
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
-        if (in_array($user->role, ['root', 'superadmin'], true)) {
-            return null;
-        }
 
-        if (! $user->relationLoaded('tenantRole')) {
-            $user->load('tenantRole');
-        }
-
-        $permissions = $user->tenantRole?->permissions ?? null;
         $moduleId = $this->permissionModuleId($module);
 
-        if (! is_array($permissions)) {
-            // Legacy fallback
-            if ($action === 'write' && ! in_array($user->role, ['admin', 'dpo', 'maker'])) {
-                return response()->json(['message' => 'Akses ditolak — role Anda tidak memiliki izin write untuk modul ini.'], 403);
-            }
-
+        // Decision logic centralized in PermissionService (shared with the
+        // CheckPermission middleware so the two can't drift out of sync).
+        if (app(\App\Services\PermissionService::class)->allows($user, $moduleId, $action)) {
             return null;
         }
 
-        if (in_array('*', $permissions)) {
-            return null;
-        }
+        $message = $action === 'write'
+            ? 'Akses ditolak — role Anda tidak memiliki izin write untuk modul ini.'
+            : 'Akses ditolak — role Anda tidak memiliki izin untuk modul ini.';
 
-        if ($action === 'write') {
-            if (! in_array("{$moduleId}:write", $permissions)) {
-                return response()->json(['message' => 'Akses ditolak — role Anda tidak memiliki izin write untuk modul ini.'], 403);
-            }
-
-            return null;
-        }
-
-        // Read
-        if (in_array($moduleId, $permissions) || in_array("{$moduleId}:read", $permissions) || in_array("{$moduleId}:write", $permissions)) {
-            return null;
-        }
-
-        return response()->json(['message' => 'Akses ditolak — role Anda tidak memiliki izin untuk modul ini.'], 403);
+        return response()->json(['message' => $message], 403);
     }
 
     private function getModel(string $module)

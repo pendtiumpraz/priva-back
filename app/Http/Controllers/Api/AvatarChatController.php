@@ -8,7 +8,7 @@ use App\Models\ChatMessage;
 use App\Models\License;
 use App\Services\AiContentSanitizer;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
+use App\Support\OutboundHttp;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -185,8 +185,8 @@ class AvatarChatController extends Controller
             $outputGuard = app(\App\Services\AiOutputGuard::class);
             $maxTokens = $outputGuard->clampMaxTokens(2048);
 
-            $response = Http::timeout(30)
-                ->withoutVerifying()
+            $response = OutboundHttp::client($baseUrl)
+                ->timeout(30)
                 ->withHeaders($headers)
                 ->post($baseUrl.'/chat/completions', [
                     'model' => $model,
