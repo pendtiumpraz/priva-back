@@ -30,6 +30,22 @@ class ConsentItem extends Model
      */
     public const COOKIE_CATEGORIES = ['essential', 'analytics', 'marketing', 'functional'];
 
+    /**
+     * Categories valid for a given collection kind. A collection is single-kind
+     * (cookie_banner OR app_consent), so its items are physically partitioned by
+     * the parent's kind — this returns the allowed category set for that kind:
+     *   - cookie_banner → COOKIE_CATEGORIES (essential/analytics/marketing/functional)
+     *   - app_consent   → the NON-cookie categories (personalization/third_party/other)
+     */
+    public static function categoriesForKind(string $kind): array
+    {
+        if ($kind === ConsentCollectionPoint::KIND_COOKIE) {
+            return self::COOKIE_CATEGORIES;
+        }
+
+        return array_values(array_diff(self::CATEGORIES, self::COOKIE_CATEGORIES));
+    }
+
     protected static function booted(): void
     {
         // Item writes change the config payload too → bust the parent's cache.

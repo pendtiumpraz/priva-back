@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Jobs\FireConsentWebhookJob;
 use App\Jobs\PushConsentToCrmJob;
 use App\Models\ConsentCollectionPoint;
-use App\Models\ConsentItem;
 use App\Models\ConsentLog;
 use App\Models\Organization;
 use App\Services\CaptchaVerifier;
@@ -95,29 +94,31 @@ class ConsentLogController extends Controller
             'category_filter' => 'nullable|in:cookie,app,all',
         ]);
 
+        // category_filter is accepted for back-compat + cache keying only. Item
+        // purity is now guaranteed by the parent collection's `kind` (a
+        // collection is single-kind), so we derive the item set from kind and
+        // NEVER drop items with a whereNotIn — every active item is returned.
         $filter = $request->input('category_filter', 'all');
         $key = 'consent:config:'.sha1($request->collection_id.'|'.$filter);
 
-        $payload = Cache::remember($key, now()->addMinutes(5), function () use ($request, $filter) {
+        $payload = Cache::remember($key, now()->addMinutes(5), function () use ($request) {
             // Resolve by embed_token (preferred) ATAU legacy collection_id ATAU UUID
-            $collection = ConsentCollectionPoint::with(['items' => function ($query) use ($filter) {
-                $query->where('is_active', true);
-                if ($filter === 'cookie') {
-                    $query->whereIn('category', ConsentItem::COOKIE_CATEGORIES);
-                } elseif ($filter === 'app') {
-                    // Consent items = anything that is NOT a cookie category.
-                    // E.g., 'newsletter', 'whatsapp', 'profiling', 'sharing_3p', custom.
-                    $query->whereNotIn('category', ConsentItem::COOKIE_CATEGORIES);
-                }
-                $query->orderByRaw("CASE WHEN category='essential' THEN 0 ELSE 1 END")
-                    ->orderBy('title');
-            }])
-                ->where(function ($q) use ($request) {
-                    $q->where('embed_token', $request->collection_id)
-                        ->orWhere('collection_id', $request->collection_id)
-                        ->orWhere('id', $request->collection_id);
-                })
-                ->firstOrFail();
+            $collection = ConsentCollectionPoint::where(function ($q) use ($request) {
+                $q->where('embed_token', $request->collection_id)
+                    ->orWhere('collection_id', $request->collection_id)
+                    ->orWhere('id', $request->collection_id);
+            })->firstOrFail();
+
+            $isCookie = $collection->kind === ConsentCollectionPoint::KIND_COOKIE;
+
+            // ALL active items of the collection. cookie_banner → all cookie by
+            // invariant; app_consent → all consent by invariant. Essential-first
+            // ordering preserved (banner UX), then alphabetical.
+            $items = $collection->items()
+                ->where('is_active', true)
+                ->orderByRaw("CASE WHEN category='essential' THEN 0 ELSE 1 END")
+                ->orderBy('title')
+                ->get();
 
             return [
                 'collection' => [
@@ -133,12 +134,14 @@ class ConsentLogController extends Controller
                     'provider' => $collection->captcha_provider,
                     'site_key' => $collection->captcha_site_key,
                 ] : null,
-                'items' => $collection->items->map(fn ($item) => [
+                'items' => $items->map(fn ($item) => [
                     'id' => $item->id,
                     'title' => $item->title,
                     'description' => $item->description,
                     'full_text' => $item->full_text,
-                    'category' => $item->category ?: 'essential',
+                    // Coerce a null category only for output sanity: cookie
+                    // collections default to 'essential', app collections to 'other'.
+                    'category' => $item->category ?: ($isCookie ? 'essential' : 'other'),
                     'cookie_keys' => $item->cookie_keys ?? [],
                     'version' => $item->version,
                     'is_required' => $item->is_required,
