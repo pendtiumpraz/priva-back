@@ -25,3 +25,7 @@ Thumbs.db
 
 # Claude Code
 .claude
+
+# E2E isolated test database (Playwright global-setup)
+/database/e2e.sqlite
+/database/e2e.sqlite-journal
