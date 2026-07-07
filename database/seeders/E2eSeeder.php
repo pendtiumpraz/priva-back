@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Department;
+use App\Models\DsrApp;
 use App\Models\License;
 use App\Models\Organization;
 use App\Models\User;
@@ -32,7 +33,7 @@ class E2eSeeder extends Seeder
             ],
         );
 
-        User::updateOrCreate(
+        $maker = User::updateOrCreate(
             ['email' => 'e2e.maker@privasimu.test'],
             [
                 'name' => 'E2E Maker',
@@ -67,13 +68,24 @@ class E2eSeeder extends Seeder
         }
 
         // Divisi (dibutuhkan wizard ROPA: pilih divisi + penanggung jawab).
-        foreach (['HR', 'IT'] as $i => $name) {
+        foreach (['HR', 'IT'] as $name) {
             Department::firstOrCreate(
                 ['org_id' => $org->id, 'name' => $name],
                 ['code' => strtoupper($name), 'is_active' => true],
             );
         }
 
-        $this->command->info('✅ E2E user: e2e.maker@privasimu.test / E2ePass123! (org e2e-org, divisi HR/IT)');
+        // DSR App (dibutuhkan tiket DSR: app_id wajib). embed_token 64-char unik.
+        DsrApp::firstOrCreate(
+            ['org_id' => $org->id, 'app_code' => 'E2EAPP'],
+            [
+                'name' => 'E2E App',
+                'embed_token' => str_repeat('e2e0', 16), // 64 char
+                'is_active' => true,
+                'created_by' => $maker->id,
+            ],
+        );
+
+        $this->command->info('✅ E2E user: e2e.maker@privasimu.test / E2ePass123! (org e2e-org, divisi HR/IT, DSR App)');
     }
 }
