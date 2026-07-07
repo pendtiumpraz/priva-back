@@ -7,6 +7,7 @@ use App\Models\DsrApp;
 use App\Models\License;
 use App\Models\Organization;
 use App\Models\User;
+use App\Models\Vendor;
 use Illuminate\Database\Seeder;
 
 /**
@@ -86,6 +87,20 @@ class E2eSeeder extends Seeder
             ],
         );
 
-        $this->command->info('✅ E2E user: e2e.maker@privasimu.test / E2ePass123! (org e2e-org, divisi HR/IT, DSR App)');
+        // Pihak Ketiga / Vendor (TPRM) — UI vendor-risk tak punya create manual
+        // (flow via undang/self-register), jadi e2e menguji alur EDIT vendor ini.
+        Vendor::firstOrCreate(
+            ['org_id' => $org->id, 'name' => 'E2E Vendor'],
+            [
+                'type' => 'processor',
+                'category' => 'other',
+                'country' => 'ID',
+                'risk_level' => 'medium',
+                'pdp_scope_status' => 'in_scope',
+                'departemen_kontak' => 'HR', // wajib ≥1 divisi agar edit bisa disimpan
+            ],
+        );
+
+        $this->command->info('✅ E2E user: e2e.maker@privasimu.test / E2ePass123! (org e2e-org, divisi HR/IT, DSR App, Vendor)');
     }
 }
