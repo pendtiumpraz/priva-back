@@ -21,6 +21,7 @@ use App\Models\AiModel;
  * - Google Cloud TTS (WaveNet, Neural2, Standard)
  * - Azure Cognitive Services (GadisNeural, ArdiNeural)
  * - MiniMax TTS (speech-02-turbo, speech-02-hd)
+ * - Gemini TTS (gemini-2.5-flash/pro-preview-tts) — returns PCM, wrapped to WAV
  */
 class VoiceTtsController extends Controller
 {
@@ -62,6 +63,7 @@ class VoiceTtsController extends Controller
                 'google-tts' => $this->synthesizeGoogle($text, $modelId, $gender, $apiKey),
                 'azure-tts' => $this->synthesizeAzure($text, $modelId, $gender, $apiKey),
                 'minimax-tts' => $this->synthesizeMiniMax($text, $modelId, $gender, $apiKey),
+                'gemini-tts' => $this->synthesizeGemini($text, $modelId, $gender, $apiKey),
                 default => null,
             };
 
@@ -262,6 +264,94 @@ class VoiceTtsController extends Controller
         }
 
         throw new \Exception('MiniMax TTS: no audio in response');
+    }
+
+    /**
+     * Gemini TTS — POST /v1beta/models/{model}:generateContent
+     *
+     * Gemini returns RAW PCM audio (signed 16-bit little-endian, mono, 24kHz)
+     * as base64 inlineData — NOT MP3. The browser's <Audio> cannot play raw PCM,
+     * so we wrap it in a WAV container before returning. Sample rate is parsed
+     * from the response mimeType (e.g. "audio/L16;rate=24000"), default 24000.
+     *
+     * Voice: prebuilt names — female → "Kore", male → "Puck". model = model_id.
+     */
+    private function synthesizeGemini(string $text, string $model, string $gender, string $apiKey): array
+    {
+        $voice = $gender === 'female' ? 'Kore' : 'Puck';
+
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
+
+        $response = Http::timeout(30)->post($url, [
+            'contents' => [
+                ['parts' => [['text' => $text]]],
+            ],
+            'generationConfig' => [
+                'responseModalities' => ['AUDIO'],
+                'speechConfig' => [
+                    'voiceConfig' => [
+                        'prebuiltVoiceConfig' => ['voiceName' => $voice],
+                    ],
+                ],
+            ],
+        ]);
+
+        if (!$response->successful()) {
+            throw new \Exception('Gemini TTS error: ' . $response->body());
+        }
+
+        $data = $response->json();
+        $inline = $data['candidates'][0]['content']['parts'][0]['inlineData'] ?? null;
+
+        if (!$inline || empty($inline['data'])) {
+            throw new \Exception('Gemini TTS: no audio in response');
+        }
+
+        $pcm = base64_decode($inline['data']);
+
+        // Parse sample rate from mimeType like "audio/L16;rate=24000".
+        $rate = 24000;
+        if (!empty($inline['mimeType']) && preg_match('/rate=(\d+)/', $inline['mimeType'], $m)) {
+            $rate = (int) $m[1];
+        }
+
+        $wav = $this->pcmToWav($pcm, $rate);
+
+        return [
+            'audio_base64' => base64_encode($wav),
+            'content_type' => 'audio/wav',
+        ];
+    }
+
+    /**
+     * Wrap raw PCM (signed 16-bit LE, mono) into a WAV container by prepending
+     * the 44-byte RIFF/WAVE header. Needed because Gemini TTS returns bare PCM
+     * that the browser cannot play directly.
+     */
+    private function pcmToWav(string $pcm, int $sampleRate = 24000, int $channels = 1, int $bitsPerSample = 16): string
+    {
+        $dataLen    = strlen($pcm);
+        $byteRate   = (int) ($sampleRate * $channels * $bitsPerSample / 8);
+        $blockAlign = (int) ($channels * $bitsPerSample / 8);
+
+        $header = pack(
+            'a4Va4a4VvvVVvva4V',
+            'RIFF',            // ChunkID
+            36 + $dataLen,     // ChunkSize
+            'WAVE',            // Format
+            'fmt ',            // Subchunk1ID
+            16,                // Subchunk1Size (PCM)
+            1,                 // AudioFormat (1 = PCM)
+            $channels,         // NumChannels
+            $sampleRate,       // SampleRate
+            $byteRate,         // ByteRate
+            $blockAlign,       // BlockAlign
+            $bitsPerSample,    // BitsPerSample
+            'data',            // Subchunk2ID
+            $dataLen           // Subchunk2Size
+        );
+
+        return $header . $pcm;
     }
 
     /**

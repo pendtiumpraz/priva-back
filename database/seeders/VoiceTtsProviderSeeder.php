@@ -145,6 +145,29 @@ class VoiceTtsProviderSeeder extends Seeder
                     ['model_id' => 'speech-01-turbo', 'name' => 'MiniMax Speech 01 Turbo (Legacy)', 'category' => 'voice', 'context_window' => 0, 'max_output_tokens' => 0, 'supports_tools' => false, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 60.0, 'output_price_per_m' => 0, 'sort_order' => 3],
                 ],
             ],
+
+            // =============================================
+            // 6. Gemini TTS (Google) — natural prebuilt voices
+            // Model preview; API returns raw PCM (L16, 24kHz) → the controller
+            // wraps it into a WAV container before returning to the browser.
+            // NOTE: free tier is NOT zero-retention; use the paid tier + DPA in prod.
+            // Auth via ?key= query param (same as google-tts), no auth header.
+            // =============================================
+            [
+                'slug' => 'gemini-tts',
+                'name' => 'Gemini TTS (Google)',
+                'api_base_url' => 'https://generativelanguage.googleapis.com/v1beta',
+                'supports_tools' => false,
+                'supports_streaming' => false,
+                'sort_order' => 25,
+                'description' => 'Gemini TTS — suara natural (voice Kore/Puck) via Gemini API. Output PCM di-wrap ke WAV oleh server. Catatan: free tier BUKAN zero-retention; untuk produksi pakai paid tier + DPA.',
+                'website' => 'https://ai.google.dev/gemini-api/docs/speech-generation',
+                'icon' => '✨',
+                'models' => [
+                    ['model_id' => 'gemini-2.5-flash-preview-tts', 'name' => 'Gemini 2.5 Flash TTS (Fast)', 'category' => 'voice', 'context_window' => 0, 'max_output_tokens' => 0, 'supports_tools' => false, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.5, 'output_price_per_m' => 10.0, 'sort_order' => 1],
+                    ['model_id' => 'gemini-2.5-pro-preview-tts', 'name' => 'Gemini 2.5 Pro TTS (Best Quality)', 'category' => 'voice', 'context_window' => 0, 'max_output_tokens' => 0, 'supports_tools' => false, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 1.0, 'output_price_per_m' => 20.0, 'sort_order' => 2],
+                ],
+            ],
         ];
 
         foreach ($voiceProviders as $providerData) {
@@ -165,6 +188,6 @@ class VoiceTtsProviderSeeder extends Seeder
         }
 
         $voiceCount = AiModel::where('category', 'voice')->count();
-        $this->command->info("✅ Seeded 5 Voice TTS providers with {$voiceCount} voice models");
+        $this->command->info("✅ Seeded 6 Voice TTS providers with {$voiceCount} voice models");
     }
 }
