@@ -390,30 +390,54 @@ class VoiceTtsController extends Controller
 
         if (!$provider || !$model) return null;
 
-        // Get API key
-        $configQuery = DB::table('ai_provider_configs')
-            ->where('provider_id', $provider->id);
-        if ($orgId) {
-            $configQuery->where('org_id', $orgId);
-        } else {
-            $configQuery->whereNull('org_id');
-        }
-        $config = $configQuery->first();
-
-        // Fallback to global key
-        if (!$config && $orgId) {
-            $config = DB::table('ai_provider_configs')
-                ->where('provider_id', $provider->id)
-                ->whereNull('org_id')
-                ->first();
+        // Resolve API key for this voice provider (org-specific, then global).
+        // Gemini TTS uses the SAME Google AI (Gemini) key as the chat 'google'
+        // provider, so if the gemini-tts provider has no key of its own, fall
+        // back to the 'google' provider's key — no need to paste it twice.
+        $apiKey = $this->resolveProviderKey($provider->id, $orgId);
+        if (!$apiKey && $provider->slug === 'gemini-tts') {
+            $google = AiProvider::where('slug', 'google')->first();
+            if ($google) {
+                $apiKey = $this->resolveProviderKey($google->id, $orgId);
+            }
         }
 
-        if (!$config) return null;
+        if (!$apiKey) return null;
 
         return [
             'provider' => $provider,
             'model' => $model,
-            'api_key' => decrypt($config->api_key),
+            'api_key' => $apiKey,
         ];
+    }
+
+    /**
+     * Resolve+decrypt a provider's stored API key: org-specific first, then the
+     * global (null org) key. Returns null if none is configured.
+     */
+    private function resolveProviderKey(string $providerId, ?string $orgId): ?string
+    {
+        $query = DB::table('ai_provider_configs')->where('provider_id', $providerId);
+        if ($orgId) {
+            $query->where('org_id', $orgId);
+        } else {
+            $query->whereNull('org_id');
+        }
+        $config = $query->first();
+
+        if (!$config && $orgId) {
+            $config = DB::table('ai_provider_configs')
+                ->where('provider_id', $providerId)
+                ->whereNull('org_id')
+                ->first();
+        }
+
+        if (!$config || empty($config->api_key)) return null;
+
+        try {
+            return decrypt($config->api_key);
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 }
