@@ -118,6 +118,14 @@ class AiProviderComplianceSeeder extends Seeder
                 'zdr_note' => 'Tidak dipublikasi.',
                 'compliance_note' => 'Aggregator 50rb+ model open-source. DPA/GDPR enterprise tidak dipublikasi. Cocok untuk konten NON-PII (gen media). Hindari untuk data pribadi.',
             ],
+            'bedrock' => [
+                'jurisdiction' => 'AS (AWS) — kontrol region kuat, termasuk region UE', 'gdpr_status' => 'compliant', 'no_training' => true,
+                'zdr_available' => true, 'pdp_risk' => 'safe',
+                'dpa_url' => 'https://aws.amazon.com/compliance/gdpr-center/',
+                'privacy_url' => 'https://aws.amazon.com/privacy/',
+                'zdr_note' => 'Zero-retention default: Bedrock TIDAK menyimpan/log prompt & output, TIDAK dipakai melatih model AWS maupun pihak ketiga, dan penyedia model (Anthropic/Meta/dll) tidak dapat mengaksesnya. Region bisa dipin ke UE (mis. eu-central-1 Frankfurt).',
+                'compliance_note' => 'AWS GDPR DPA otomatis termasuk di AWS Service Terms (+ SCC). Inference dasar zero-retention. Jika mengaktifkan model invocation logging, data masuk ke bucket S3/CloudWatch milik Anda sendiri. Autentikasi via AWS SigV4 (Access Key/Secret + region), bukan API key bearer. Aman untuk PII dengan DPA + region UE.',
+            ],
 
             // ── Voice / TTS providers (suara = data BIOMETRIK, Pasal 4 UU PDP) ──
             'elevenlabs' => [

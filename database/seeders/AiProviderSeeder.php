@@ -92,6 +92,32 @@ class AiProviderSeeder extends Seeder
             ],
 
             // =============================================
+            // 3b. AWS Bedrock — managed foundation models (Claude, Llama, Nova, Mistral)
+            // Auth = AWS SigV4 (Access Key ID + Secret + region), BUKAN bearer key.
+            // api_base_url mengikuti region (mis. bedrock-runtime.eu-central-1.amazonaws.com).
+            // =============================================
+            [
+                'slug' => 'bedrock',
+                'name' => 'AWS Bedrock',
+                'api_base_url' => 'https://bedrock-runtime.us-east-1.amazonaws.com',
+                'auth_header' => '',
+                'auth_prefix' => '',
+                'supports_tools' => true,
+                'supports_streaming' => true,
+                'sort_order' => 7,
+                'description' => 'AWS Bedrock — model terkelola (Claude, Llama, Amazon Nova, Mistral) dengan kontrol region & data residency. Autentikasi via AWS SigV4 (Access Key + Secret + region), zero data retention default.',
+                'website' => 'https://aws.amazon.com/bedrock/',
+                'icon' => '🟧',
+                'models' => [
+                    ['model_id' => 'anthropic.claude-sonnet-4-20250514-v1:0', 'name' => 'Claude Sonnet 4 (Bedrock)', 'category' => 'reasoning', 'context_window' => 200000, 'max_output_tokens' => 65536, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 3.0, 'output_price_per_m' => 15.0, 'sort_order' => 1],
+                    ['model_id' => 'anthropic.claude-3-5-haiku-20241022-v1:0', 'name' => 'Claude 3.5 Haiku (Bedrock)', 'category' => 'chat', 'context_window' => 200000, 'max_output_tokens' => 8192, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.8, 'output_price_per_m' => 4.0, 'sort_order' => 2],
+                    ['model_id' => 'amazon.nova-pro-v1:0', 'name' => 'Amazon Nova Pro', 'category' => 'chat', 'context_window' => 300000, 'max_output_tokens' => 5120, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.8, 'output_price_per_m' => 3.2, 'sort_order' => 3],
+                    ['model_id' => 'amazon.nova-lite-v1:0', 'name' => 'Amazon Nova Lite', 'category' => 'chat', 'context_window' => 300000, 'max_output_tokens' => 5120, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.06, 'output_price_per_m' => 0.24, 'sort_order' => 4],
+                    ['model_id' => 'meta.llama3-3-70b-instruct-v1:0', 'name' => 'Llama 3.3 70B (Bedrock)', 'category' => 'chat', 'context_window' => 128000, 'max_output_tokens' => 8192, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.72, 'output_price_per_m' => 0.72, 'sort_order' => 5],
+                ],
+            ],
+
+            // =============================================
             // 4. DeepSeek
             // =============================================
             [
