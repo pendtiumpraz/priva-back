@@ -90,6 +90,44 @@ class BrandedXlsxExporter
     }
 
     /**
+     * Build a PER-RECORD branded document workbook ("Cover" + "Dokumen") laid
+     * out as sections of label→value rows (not a flat table). Reusable for any
+     * module's single-record report.
+     *
+     * @param  array<int,array{title:string,rows:array<int,array{label:string,value:string}>}>  $sections
+     */
+    public function exportRecord(
+        Organization $org,
+        string $title,
+        string $module,
+        array $sections,
+        ?User $user = null,
+    ): string {
+        $palette = $this->resolvePalette($org);
+        $primaryHex = $this->normalizeHex($palette['primary'] ?? null) ?: self::FALLBACK_PRIMARY;
+
+        $spreadsheet = new Spreadsheet;
+        $spreadsheet->getProperties()
+            ->setCreator('Privasimu Nexus')
+            ->setTitle($title)
+            ->setSubject($module)
+            ->setDescription("Dokumen — {$title}");
+
+        $this->buildCoverSheet($spreadsheet, $org, $title, $module, count($sections), [], $user, $primaryHex, 'Jumlah Bagian');
+        $this->buildRecordSheet($spreadsheet, $sections, $primaryHex);
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $tmp = tempnam(sys_get_temp_dir(), 'branded_xlsx_').'.xlsx';
+        $writer = new XlsxWriter($spreadsheet);
+        $writer->save($tmp);
+        $spreadsheet->disconnectWorksheets();
+        unset($spreadsheet);
+
+        return $tmp;
+    }
+
+    /**
      * Suggested filename: {ModuleName}_{OrgSlug}_{YYYY-MM-DD}.xlsx
      */
     public function suggestedFilename(string $moduleName, Organization $org): string
@@ -113,6 +151,7 @@ class BrandedXlsxExporter
         array $filters,
         ?User $user,
         string $primaryHex,
+        string $countLabel = 'Jumlah Baris',
     ): void {
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Cover');
@@ -188,7 +227,7 @@ class BrandedXlsxExporter
             ['Tanggal Export', $this->formatIndonesianDate(now()->toDateString())],
             ['Diekspor oleh', $this->formatUser($user)],
             ['Modul', $module],
-            ['Jumlah Baris', number_format($rowCount, 0, ',', '.')],
+            [$countLabel, number_format($rowCount, 0, ',', '.')],
         ];
         if (! empty($filters)) {
             $metaItems[] = ['Filter Diterapkan', $this->formatFilters($filters)];
@@ -345,6 +384,63 @@ class BrandedXlsxExporter
                 $sheet->getColumnDimension($letter)->setAutoSize(true);
             }
             $col++;
+        }
+    }
+
+    // =====================================================================
+    // Per-record document sheet (sections of label -> value)
+    // =====================================================================
+    /**
+     * @param  array<int,array{title:string,rows:array<int,array{label:string,value:string}>}>  $sections
+     */
+    private function buildRecordSheet(Spreadsheet $spreadsheet, array $sections, string $primaryHex): void
+    {
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle('Dokumen');
+        $sheet->setShowGridlines(false);
+        $sheet->getColumnDimension('A')->setWidth(2);
+        $sheet->getColumnDimension('B')->setWidth(40);
+        $sheet->getColumnDimension('C')->setWidth(78);
+        $sheet->getColumnDimension('D')->setWidth(2);
+
+        $row = 2;
+        foreach ($sections as $section) {
+            // Section title band (merged B:C, primary bg, white bold).
+            $sheet->setCellValue("B{$row}", (string) ($section['title'] ?? ''));
+            $sheet->mergeCells("B{$row}:C{$row}");
+            $sheet->getStyle("B{$row}:C{$row}")->applyFromArray([
+                'font' => ['bold' => true, 'size' => 11, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => $primaryHex]],
+                'alignment' => ['vertical' => Alignment::VERTICAL_CENTER, 'horizontal' => Alignment::HORIZONTAL_LEFT, 'indent' => 1],
+            ]);
+            $sheet->getRowDimension($row)->setRowHeight(24);
+            $row++;
+
+            foreach (($section['rows'] ?? []) as $field) {
+                $label = (string) ($field['label'] ?? '');
+                $value = (string) ($field['value'] ?? '');
+                if ($value === '') {
+                    $value = '-';
+                }
+                $sheet->setCellValue("B{$row}", $label);
+                $sheet->setCellValueExplicit("C{$row}", $value, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->getStyle("B{$row}")->applyFromArray([
+                    'font' => ['bold' => true, 'size' => 10, 'color' => ['rgb' => '444444']],
+                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'F4F6FA']],
+                    'alignment' => ['vertical' => Alignment::VERTICAL_TOP, 'wrapText' => true, 'indent' => 1],
+                    'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => self::BORDER_GRAY]]],
+                ]);
+                $sheet->getStyle("C{$row}")->applyFromArray([
+                    'font' => ['size' => 10, 'color' => ['rgb' => '222222']],
+                    'alignment' => ['vertical' => Alignment::VERTICAL_TOP, 'wrapText' => true, 'indent' => 1],
+                    'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => self::BORDER_GRAY]]],
+                ]);
+                $row++;
+            }
+
+            // Spacer between sections.
+            $sheet->getRowDimension($row)->setRowHeight(8);
+            $row++;
         }
     }
 

@@ -17,6 +17,7 @@ use App\Models\ModuleCustomSection;
 use App\Models\Organization;
 use App\Models\Ropa;
 use App\Services\BrandedXlsxExporter;
+use App\Services\RecordReportBuilder;
 use App\Services\WizardSchemaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -1530,6 +1531,54 @@ class ExportController extends Controller
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'Cache-Control' => 'max-age=0',
         ])->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Stream a PER-RECORD branded XLSX document built from section blocks.
+     */
+    private function streamRecordXlsx(Request $request, string $title, string $module, array $sections, string $filename): BinaryFileResponse|StreamedResponse
+    {
+        $org = $this->resolveBrandingOrg($request);
+        if (! $org) {
+            return $this->streamCsv("{$module}_".date('Y-m-d').'.csv', ['Error'], [['Org tidak ditemukan untuk branding export.']]);
+        }
+
+        $tmpPath = app(BrandedXlsxExporter::class)->exportRecord($org, $title, $module, $sections, $request->user());
+
+        return response()->download($tmpPath, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Cache-Control' => 'max-age=0',
+        ])->deleteFileAfterSend(true);
+    }
+
+    private function safeFilePart(?string $s, string $fallback): string
+    {
+        $s = preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) $s);
+        $s = trim((string) $s, '-');
+
+        return $s !== '' ? $s : $fallback;
+    }
+
+    /** Per-record RoPA document as designed XLSX. */
+    public function ropaRecordXlsx(Request $request, string $id)
+    {
+        $ropa = Ropa::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $sections = app(RecordReportBuilder::class)->ropa($ropa);
+        $code = $ropa->registration_number ?: 'RoPA';
+        $filename = 'RoPA_'.$this->safeFilePart($code, 'dokumen').'.xlsx';
+
+        return $this->streamRecordXlsx($request, 'Dokumen RoPA — '.($ropa->processing_activity ?: $code), 'RoPA', $sections, $filename);
+    }
+
+    /** Per-record DPIA document as designed XLSX. */
+    public function dpiaRecordXlsx(Request $request, string $id)
+    {
+        $dpia = Dpia::with('ropas')->where('org_id', $request->user()->org_id)->findOrFail($id);
+        $sections = app(RecordReportBuilder::class)->dpia($dpia);
+        $code = $dpia->registration_number ?: 'DPIA';
+        $filename = 'DPIA_'.$this->safeFilePart($code, 'dokumen').'.xlsx';
+
+        return $this->streamRecordXlsx($request, 'Dokumen DPIA — '.$code, 'DPIA', $sections, $filename);
     }
 
     // =============================================
