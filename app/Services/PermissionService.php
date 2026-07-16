@@ -65,7 +65,25 @@ class PermissionService
             return in_array($user->role, ['admin', 'dpo', 'maker'], true);
         }
 
-        // 2. Structured permissions array.
+        // 2. Structured permissions array. Normalize hyphen/underscore on the
+        // module id AND the module part of each stored grant, so the form
+        // written by the role editor (e.g. 'data-discovery:read') matches the
+        // permission module id the route asks for (e.g. 'data_discovery') and
+        // vice versa. Without this, the two separators never compare equal and
+        // a role that visibly has "Data Discovery: read" is still denied.
+        $normalize = static fn (string $s): string => str_replace('-', '_', $s);
+        $moduleId = $normalize($moduleId);
+        $permissions = array_map(static function ($p) use ($normalize) {
+            $p = (string) $p;
+            if ($p === '*') {
+                return '*';
+            }
+            $parts = explode(':', $p, 2);
+            $parts[0] = $normalize($parts[0]);
+
+            return implode(':', $parts);
+        }, $permissions);
+
         if (in_array('*', $permissions, true)) {
             return true;
         }
