@@ -675,6 +675,12 @@ class ExportController extends Controller
     {
         $items = $this->getQuery($request, BreachIncident::class)->whereNull('deleted_at')->where('is_simulation', false)->orderBy('created_at', 'desc')->get();
 
+        // Resolve actor UUIDs → user names (a free-text name that isn't a UUID
+        // simply won't match and passes through unchanged).
+        $userIds = $items->flatMap(fn ($b) => [$b->dpo_id, $b->incident_commander])->filter()->unique()->all();
+        $userNames = \App\Models\User::whereIn('id', $userIds)->get(['id', 'name'])->pluck('name', 'id');
+        $nameOf = fn ($id) => $id ? ($userNames[$id] ?? $id) : '-';
+
         $headers = [
             'Kode Insiden', 'Judul', 'Deskripsi', 'Severity', 'Status', 'Sumber',
             'Tipe Data Terdampak', 'Jumlah Subjek Terdampak',
@@ -686,7 +692,7 @@ class ExportController extends Controller
             'Incident Commander', 'DPO',
         ];
 
-        $rows = $items->map(function ($b) {
+        $rows = $items->map(function ($b) use ($nameOf) {
             $checklist = $b->containment_checklist ?? [];
             $done = collect($checklist)->filter(fn ($c) => ($c['completed'] ?? false))->count();
             $total = count($checklist);
@@ -711,8 +717,8 @@ class ExportController extends Controller
                 $b->closed_at?->format('Y-m-d H:i') ?? '-',
                 $b->notified_komdigi_at?->format('Y-m-d H:i') ?? '-',
                 $b->notified_subjects_at?->format('Y-m-d H:i') ?? '-',
-                $b->incident_commander ?? '-',
-                $b->dpo_id ?? '-',
+                $nameOf($b->incident_commander),
+                $nameOf($b->dpo_id),
             ];
         });
 
@@ -726,6 +732,10 @@ class ExportController extends Controller
     {
         $items = $this->getQuery($request, DsrRequest::class)->whereNull('deleted_at')->orderBy('created_at', 'desc')->get();
 
+        // Resolve assigned_to UUID → user name.
+        $assigneeIds = $items->pluck('assigned_to')->filter()->unique()->all();
+        $assigneeNames = \App\Models\User::whereIn('id', $assigneeIds)->get(['id', 'name'])->pluck('name', 'id');
+
         $headers = [
             'Request ID', 'Tipe Permintaan', 'Nama Pemohon', 'Email Pemohon', 'Telepon Pemohon',
             'Deskripsi', 'Status', 'Verifikasi',
@@ -735,7 +745,7 @@ class ExportController extends Controller
             'Dibuat', 'Diperbarui',
         ];
 
-        $rows = $items->map(function ($d) {
+        $rows = $items->map(function ($d) use ($assigneeNames) {
             $deadline = $d->deadline_at ? $d->deadline_at : null;
             $hoursLeft = $deadline ? max(0, round($deadline->diffInHours(now(), false))) : '-';
 
@@ -754,7 +764,7 @@ class ExportController extends Controller
                 $d->rejection_reason ?? '-',
                 $d->responded_at?->format('Y-m-d H:i') ?? '-',
                 $d->closed_at?->format('Y-m-d H:i') ?? '-',
-                $d->assigned_to ?? '-',
+                $d->assigned_to ? ($assigneeNames[$d->assigned_to] ?? $d->assigned_to) : '-',
                 $d->created_at?->format('Y-m-d H:i'),
                 $d->updated_at?->format('Y-m-d H:i'),
             ];

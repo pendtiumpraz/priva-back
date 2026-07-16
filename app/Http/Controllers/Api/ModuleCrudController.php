@@ -464,6 +464,21 @@ class ModuleCrudController extends Controller
             }
         }
 
+        // Optional division filter (ropa) — used by the breach RoPA picker's
+        // division dropdown. Division may live in the legacy `division`/`work_unit`
+        // columns or inside wizard_data.detail_pemrosesan.{divisi,divisi_penanggung_jawab};
+        // match either. The wizard_data LIKE is loose but division names are
+        // distinctive and this is a picker filter, not a security boundary.
+        if ($module === 'ropa' && $request->filled('division')) {
+            $div = $request->get('division');
+            $query->where(function ($sub) use ($div) {
+                $sub->where('division', $div)
+                    ->orWhere('work_unit', $div)
+                    ->orWhere('assign_group', 'like', '%'.$div.'%')
+                    ->orWhere('wizard_data', 'like', '%'.$div.'%');
+            });
+        }
+
         // Add relationship counts for consent module
         if ($module === 'consent') {
             // records_count diisi dari relasi logs() (tabel consent_logs) —
