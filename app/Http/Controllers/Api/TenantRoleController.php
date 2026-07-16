@@ -73,6 +73,11 @@ class TenantRoleController extends Controller
             'is_system' => false,
         ]);
 
+        // Role baru: langsung selaraskan override Menu Preferences dengan
+        // permissions-nya, supaya toggle Menu Preferences untuk role ini
+        // konsisten sejak dibuat (bukan default "tampil semua").
+        $this->syncMenuOverridesToPermissions($role);
+
         return response()->json(['data' => $role, 'message' => 'Role berhasil dibuat'], 201);
     }
 
