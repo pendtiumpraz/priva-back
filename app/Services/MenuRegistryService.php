@@ -44,8 +44,13 @@ class MenuRegistryService
         'cross-border' => 'cross_border',
         'dsr' => 'dsr',
         'consent' => 'consent',
+        'cookie' => 'cookie',
         'breach' => 'breach',
+        'security' => 'security',
         'simulation' => 'simulation',
+        'lia' => 'lia',
+        'tia' => 'tia',
+        'maturity' => 'maturity',
         'users' => 'users',
     ];
 

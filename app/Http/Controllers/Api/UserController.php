@@ -224,7 +224,7 @@ class UserController extends Controller
             $validated['org_id'] = $org->id;
 
             // Create default system roles for the new org
-            $allModules = ['dashboard', 'gap_assessment', 'ropa', 'dpia', 'data_discovery', 'contract_review', 'vendor_risk', 'cross_border', 'dsr', 'consent', 'breach', 'simulation', 'users', 'settings'];
+            $allModules = ['dashboard', 'gap_assessment', 'ropa', 'dpia', 'lia', 'tia', 'maturity', 'data_discovery', 'contract_review', 'vendor_risk', 'cross_border', 'dsr', 'consent', 'cookie', 'breach', 'security', 'simulation', 'users', 'settings'];
             $allWrite = []; $allRead = [];
             foreach ($allModules as $mod) { $allWrite[] = "$mod:read"; $allWrite[] = "$mod:write"; $allRead[] = "$mod:read"; }
 

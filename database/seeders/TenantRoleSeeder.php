@@ -12,9 +12,9 @@ class TenantRoleSeeder extends Seeder
     public function run(): void
     {
         $allModules = [
-            'dashboard', 'gap_assessment', 'ropa', 'dpia', 'data_discovery',
-            'contract_review', 'dsr', 'consent', 'breach', 'simulation',
-            'users', 'settings'
+            'dashboard', 'gap_assessment', 'ropa', 'dpia', 'lia', 'tia', 'maturity',
+            'data_discovery', 'contract_review', 'dsr', 'consent', 'cookie', 'breach',
+            'security', 'simulation', 'users', 'settings'
         ];
 
         $allWrite = [];
@@ -39,11 +39,16 @@ class TenantRoleSeeder extends Seeder
             'gap_assessment:read', 'gap_assessment:write',
             'ropa:read', 'ropa:write',
             'dpia:read', 'dpia:write',
+            'lia:read', 'lia:write',
+            'tia:read', 'tia:write',
+            'maturity:read', 'maturity:write',
             'data_discovery:read', 'data_discovery:write',
             'contract_review:read', 'contract_review:write',
             'dsr:read', 'dsr:write',
             'consent:read', 'consent:write',
+            'cookie:read', 'cookie:write',
             'breach:read', 'breach:write',
+            'security:read', 'security:write',
             'simulation:read', 'simulation:write',
         ];
 
