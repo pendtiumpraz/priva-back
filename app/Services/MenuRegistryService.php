@@ -7,6 +7,7 @@ use App\Models\MenuItem;
 use App\Models\RoleMenuWhitelist;
 use App\Models\TenantMenuOverride;
 use App\Models\TenantModuleEntitlement;
+use App\Models\TenantRole;
 use App\Models\User;
 
 /**
@@ -26,6 +27,49 @@ use App\Models\User;
  */
 class MenuRegistryService
 {
+    /**
+     * Menu (hideable) → permission module id. For NON-platform tenant roles
+     * (DPO/Maker/Viewer/custom) a mapped menu is visible only when the role's
+     * permissions (Role Settings) grant that module. Menus not listed here have
+     * no permission concept and stay visible (subject to entitlement/whitelist).
+     * Keys are menu_key; values match the module ids used in Role Settings.
+     */
+    private const PERMISSION_MENU_MAP = [
+        'gap-assessment' => 'gap-assessment',
+        'ropa' => 'ropa',
+        'dpia' => 'dpia',
+        'data-discovery' => 'data-discovery',
+        'contract-review' => 'contract-review',
+        'vendor-risk' => 'vendor_risk',
+        'cross-border' => 'cross_border',
+        'dsr' => 'dsr',
+        'consent' => 'consent',
+        'breach' => 'breach',
+        'simulation' => 'simulation',
+        'users' => 'users',
+    ];
+
+    /**
+     * Does a tenant role's permission list grant access to a module? Accepts
+     * '*' (all), bare 'module', or 'module:read|write|approve'. Hyphens and
+     * underscores are treated as equivalent (e.g. data-discovery == data_discovery).
+     */
+    private static function roleGrantsMenu(array $permissions, string $module): bool
+    {
+        if (in_array('*', $permissions, true)) {
+            return true;
+        }
+        $target = str_replace('-', '_', $module);
+        foreach ($permissions as $p) {
+            $mod = str_replace('-', '_', explode(':', (string) $p)[0]);
+            if ($mod === $target) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Effective menu list for a user. Root sees everything (bypasses entitlement).
      * Returns array of menu rows (with label/href/icon/section/sort_order).
@@ -120,6 +164,23 @@ class MenuRegistryService
 
         $whitelistedSet = array_flip($whitelistedMenuIds);
 
+        // Permission-driven visibility for NON-platform tenant roles
+        // (DPO/Maker/Viewer/custom). For these, a hideable menu that maps to a
+        // permission module follows the tenant role's permissions (Role Settings)
+        // instead of the per-role menu override. root/superadmin/admin keep the
+        // whitelist + override (matrix) behavior. Whitelist still acts as a
+        // ceiling so platform menus never leak to tenant roles. Legacy users
+        // without a tenant_role fall back to the whitelist/override path.
+        $permissionDriven = false;
+        $perms = [];
+        if ($orgId && ! in_array($role, ['superadmin', 'admin'], true) && ! empty($user->tenant_role_id)) {
+            $tenantRole = TenantRole::find($user->tenant_role_id);
+            if ($tenantRole && is_array($tenantRole->permissions)) {
+                $permissionDriven = true;
+                $perms = $tenantRole->permissions;
+            }
+        }
+
         $visible = [];
         $visibleIds = [];
         foreach ($all as $menu) {
@@ -149,10 +210,25 @@ class MenuRegistryService
                 }
             }
 
-            // Layer 2 — admin tenant tetap punya hak hide menu untuk role
-            // tertentu di org-nya, bahkan kalau ada entitlement.
-            if (isset($hidden[$menu->id])) {
-                continue;
+            if ($permissionDriven) {
+                // Menu visibility follows Role Settings permissions. Only gate
+                // hideable menus that map to a permission module — core menus
+                // (dashboard/settings/notifications, hideable=false) and menus
+                // without a permission concept stay visible. Per-role overrides
+                // are intentionally NOT applied here (Role Settings is the single
+                // source of truth for these roles).
+                if ($menu->hideable) {
+                    $permModule = self::PERMISSION_MENU_MAP[$menu->menu_key] ?? null;
+                    if ($permModule !== null && ! self::roleGrantsMenu($perms, $permModule)) {
+                        continue;
+                    }
+                }
+            } else {
+                // Layer 2 — admin tenant tetap punya hak hide menu untuk role
+                // tertentu di org-nya, bahkan kalau ada entitlement.
+                if (isset($hidden[$menu->id])) {
+                    continue;
+                }
             }
 
             // Sub-item: parent harus juga visible.
