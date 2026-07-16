@@ -50,11 +50,21 @@ class MenuRegistryService
     ];
 
     /**
+     * Permission module id for a menu_key, or null if the menu has no
+     * permission concept. Exposed so callers (e.g. Menu Preferences override)
+     * can keep Role Settings in sync with menu visibility.
+     */
+    public static function permissionModuleForMenuKey(string $menuKey): ?string
+    {
+        return self::PERMISSION_MENU_MAP[$menuKey] ?? null;
+    }
+
+    /**
      * Does a tenant role's permission list grant access to a module? Accepts
      * '*' (all), bare 'module', or 'module:read|write|approve'. Hyphens and
      * underscores are treated as equivalent (e.g. data-discovery == data_discovery).
      */
-    private static function roleGrantsMenu(array $permissions, string $module): bool
+    public static function roleGrantsMenu(array $permissions, string $module): bool
     {
         if (in_array('*', $permissions, true)) {
             return true;

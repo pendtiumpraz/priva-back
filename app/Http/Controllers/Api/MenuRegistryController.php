@@ -412,6 +412,32 @@ class MenuRegistryController extends Controller
                 ['is_visible' => $data['is_visible'], 'role' => null]
             );
 
+            // Sinkron dua arah dengan Role Settings: menyembunyikan menu untuk
+            // sebuah role = mencabut izin modulnya; menampilkan kembali = memberi
+            // akses baca. Hanya untuk menu yang punya modul-permission, dan role
+            // tanpa wildcard '*' (wildcard tidak diekspansi — terlalu destruktif;
+            // menu tetap tersembunyi lewat override).
+            $permModule = MenuRegistryService::permissionModuleForMenuKey($menu->menu_key);
+            if ($permModule !== null) {
+                $perms = is_array($tenantRole->permissions) ? $tenantRole->permissions : [];
+                if (! in_array('*', $perms, true)) {
+                    if ($data['is_visible']) {
+                        if (! MenuRegistryService::roleGrantsMenu($perms, $permModule)) {
+                            $perms[] = $permModule.':read';
+                        }
+                    } else {
+                        $target = str_replace('-', '_', $permModule);
+                        $perms = array_values(array_filter($perms, function ($p) use ($target) {
+                            $mod = str_replace('-', '_', explode(':', (string) $p)[0]);
+
+                            return $mod !== $target;
+                        }));
+                    }
+                    $tenantRole->permissions = $perms;
+                    $tenantRole->save();
+                }
+            }
+
             try {
                 AuditLog::log('menu_registry', $row->id, 'tenant_override_role_updated', [
                     'org_id' => $orgIdForOverride, 'menu_id' => $data['menu_id'],
