@@ -25,6 +25,7 @@ class LiaAssessment extends Model
         'overall_score', 'assessment_result', 'status',
         'wizard_data', 'created_by',
         'attachments', 'ai_analyses',
+        'answer_notes',
     ];
 
     protected $casts = [
@@ -35,6 +36,7 @@ class LiaAssessment extends Model
         'wizard_data' => 'array',
         'attachments' => 'array',
         'ai_analyses' => 'array',
+        'answer_notes' => 'array',
         'overall_score' => 'decimal:2',
         'is_locked' => 'boolean',
         'submitted_at' => 'datetime',

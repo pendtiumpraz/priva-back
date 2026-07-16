@@ -89,6 +89,12 @@ class TiaController extends Controller
     {
         $data = $this->validatePayload($request);
         $data = $this->applyCustomMetricScores($data, $request->user()->org_id);
+        // Drop net-new columns if their migration has not been applied yet.
+        foreach (['description', 'answer_notes'] as $col) {
+            if (array_key_exists($col, $data) && ! \Illuminate\Support\Facades\Schema::hasColumn('tia_assessments', $col)) {
+                unset($data[$col]);
+            }
+        }
         $data['org_id'] = $request->user()->org_id;
         $data['created_by'] = $request->user()->id;
         $data['maker_id'] = $request->user()->id;
@@ -254,6 +260,12 @@ class TiaController extends Controller
 
         $data = $this->validatePayload($request, $id);
         $data = $this->applyCustomMetricScores($data, $record->org_id, $record);
+        // Drop net-new columns if their migration has not been applied yet.
+        foreach (['description', 'answer_notes'] as $col) {
+            if (array_key_exists($col, $data) && ! \Illuminate\Support\Facades\Schema::hasColumn('tia_assessments', $col)) {
+                unset($data[$col]);
+            }
+        }
 
         // Auto-recompute overall_risk_score whenever any metric changes
         $record->fill($data);
@@ -1379,6 +1391,8 @@ class TiaController extends Controller
                     ->where('org_id', $request->user()->org_id)
                     ->whereNull('deleted_at')],
             'title' => 'sometimes|required|string|max:255',
+            'description' => 'nullable|string|max:5000',
+            'answer_notes' => 'nullable|array',
             'linked_ropa_id' => 'nullable|uuid|exists:ropas,id',
             'linked_cross_border_id' => 'nullable|uuid|exists:cross_border_transfers,id',
             'linked_vendor_id' => 'nullable|uuid|exists:vendors,id',

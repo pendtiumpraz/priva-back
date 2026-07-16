@@ -12,7 +12,7 @@ class MaturityAssessment extends Model
     use HasUuids, SoftDeletes, BelongsToOrg;
 
     protected $fillable = [
-        'org_id', 'title', 'version', 'dimensions', 'overall_level', 'overall_score',
+        'org_id', 'title', 'description', 'version', 'dimensions', 'overall_level', 'overall_score',
         'recommendations', 'status', 'created_by',
         'input_method', 'domain_scores', 'uploaded_doc_ids',
         'submitted_at', 'submitted_by', 'auto_derived_at', 'auto_derive_metadata',

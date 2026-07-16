@@ -12,7 +12,7 @@ class TiaAssessment extends Model
     use HasUuids, SoftDeletes, BelongsToOrg;
 
     protected $fillable = [
-        'org_id', 'tia_code', 'title',
+        'org_id', 'tia_code', 'title', 'description',
         'linked_cross_border_id', 'linked_ropa_id', 'linked_vendor_id',
         'transfer_details', 'legal_framework', 'risk_assessment', 'supplementary_measures',
         'transfer_volume', 'transfer_frequency', 'transfer_basis', 'transfer_basis_other',
@@ -29,6 +29,7 @@ class TiaAssessment extends Model
         'conclusion_verdict', 'conclusion_notes',
         'status', 'wizard_data', 'created_by',
         'attachments', 'ai_analyses', 'score_adjustments',
+        'answer_notes',
     ];
 
     protected $casts = [
@@ -41,6 +42,7 @@ class TiaAssessment extends Model
         'ai_analyses' => 'array',
         'score_adjustments' => 'array',
         'supplementary_doc_ids' => 'array',
+        'answer_notes' => 'array',
         'destination_has_pdp_law' => 'boolean',
         'destination_has_pdp_authority' => 'boolean',
         'is_locked' => 'boolean',

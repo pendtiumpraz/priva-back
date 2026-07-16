@@ -69,6 +69,7 @@ class MaturityController extends Controller
     {
         $data = $request->validate([
             'title' => 'required|string|max:255',
+            'description' => 'nullable|string|max:5000',
             'input_method' => ['required', Rule::in([
                 MaturityAssessment::INPUT_QUESTIONNAIRE,
                 MaturityAssessment::INPUT_DOCUMENT,
@@ -77,14 +78,21 @@ class MaturityController extends Controller
             'version' => 'nullable|string|max:32',
         ]);
 
-        $record = MaturityAssessment::create([
+        $attrs = [
             'org_id' => $request->user()->org_id,
             'title' => $data['title'],
             'input_method' => $data['input_method'],
             'version' => $data['version'] ?? 'v1',
             'status' => MaturityAssessment::STATUS_DRAFT,
             'created_by' => $request->user()->id,
-        ]);
+        ];
+        // Guard against pre-migration schema — only persist description if the
+        // column exists so create() never fails on an old table.
+        if (\Illuminate\Support\Facades\Schema::hasColumn('maturity_assessments', 'description')) {
+            $attrs['description'] = $data['description'] ?? null;
+        }
+
+        $record = MaturityAssessment::create($attrs);
 
         AuditLog::log('maturity', $record->id, 'created', [
             'input_method' => $record->input_method,
@@ -196,6 +204,8 @@ class MaturityController extends Controller
             // Keterangan penyesuaian (provenance) — satu reason untuk
             // semua item yang skornya BERUBAH pada assessment submitted.
             'reason' => 'nullable|string|max:1000',
+            // Deskripsi per-asesmen (editable via wizard save-draft path).
+            'description' => 'nullable|string|max:5000',
         ]);
 
         $assessment = MaturityAssessment::query()->findOrFail($id);
@@ -253,6 +263,12 @@ class MaturityController extends Controller
                     ['assessment_id' => $assessment->id, 'question_code' => $r['question_code']],
                     $attrs,
                 );
+            }
+            // Persist the per-assessment description edit (guarded on schema so
+            // it is a no-op on a pre-migration table).
+            if ($request->has('description')
+                && \Illuminate\Support\Facades\Schema::hasColumn('maturity_assessments', 'description')) {
+                $assessment->description = $request->input('description');
             }
             $assessment->recompute();
             $assessment->save();

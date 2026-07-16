@@ -91,6 +91,10 @@ class LiaController extends Controller
     public function store(Request $request)
     {
         $data = $this->validatePayload($request);
+        // Skip answer_notes if the column has not been migrated yet in this environment.
+        if (array_key_exists('answer_notes', $data) && ! \Illuminate\Support\Facades\Schema::hasColumn('lia_assessments', 'answer_notes')) {
+            unset($data['answer_notes']);
+        }
         $data['org_id'] = $request->user()->org_id;
         $data['created_by'] = $request->user()->id;
         $data['maker_id'] = $request->user()->id;
@@ -173,6 +177,10 @@ class LiaController extends Controller
         }
 
         $data = $this->validatePayload($request, $id);
+        // Skip answer_notes if the column has not been migrated yet in this environment.
+        if (array_key_exists('answer_notes', $data) && ! \Illuminate\Support\Facades\Schema::hasColumn('lia_assessments', 'answer_notes')) {
+            unset($data['answer_notes']);
+        }
         $record->update($data);
         AuditLog::log('lia', $record->id, 'updated', [], 'manual');
 
@@ -1218,6 +1226,7 @@ class LiaController extends Controller
             'purpose_test' => 'nullable|array',
             'necessity_test' => 'nullable|array',
             'balancing_test' => 'nullable|array',
+            'answer_notes' => 'nullable|array',
             'balancing_risk_events' => 'nullable|array',
             'subject_loses_control' => 'nullable|in:yes,no',
             'subject_loses_control_reason' => 'nullable|string',
