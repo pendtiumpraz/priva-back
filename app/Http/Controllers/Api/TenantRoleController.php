@@ -5,10 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\License;
 use App\Models\MenuItem;
-use App\Models\TenantMenuOverride;
 use App\Models\TenantModuleEntitlement;
 use App\Models\TenantRole;
-use App\Services\MenuRegistryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -73,11 +71,6 @@ class TenantRoleController extends Controller
             'is_system' => false,
         ]);
 
-        // Role baru: langsung selaraskan override Menu Preferences dengan
-        // permissions-nya, supaya toggle Menu Preferences untuk role ini
-        // konsisten sejak dibuat (bukan default "tampil semua").
-        $this->syncMenuOverridesToPermissions($role);
-
         return response()->json(['data' => $role, 'message' => 'Role berhasil dibuat'], 201);
     }
 
@@ -107,42 +100,7 @@ class TenantRoleController extends Controller
         // (see destroy) so a tenant can't remove a role the platform relies on.
         $role->update($request->only('name', 'description', 'permissions'));
 
-        // Jaga konsistensi dua arah dengan Menu Preferences: untuk menu yang
-        // punya modul-permission, override visibilitas per-role diselaraskan
-        // dengan permissions. Jadi memberi/mencabut akses di Role Settings
-        // langsung tercermin di toggle Menu Preferences (dan sebaliknya).
-        if ($request->has('permissions')) {
-            $this->syncMenuOverridesToPermissions($role);
-        }
-
         return response()->json(['data' => $role, 'message' => 'Role berhasil diupdate']);
-    }
-
-    /**
-     * Selaraskan TenantMenuOverride sebuah role dengan permissions-nya, untuk
-     * menu yang punya modul-permission. Role dengan wildcard '*' dilewati
-     * (semua terlihat; tidak diekspansi). Mencegah kondisi "izin ada tapi menu
-     * tersembunyi oleh override basi" saat Role Settings & Menu Preferences
-     * diubah dari layar berbeda.
-     */
-    private function syncMenuOverridesToPermissions(TenantRole $role): void
-    {
-        $perms = is_array($role->permissions) ? $role->permissions : [];
-        if (in_array('*', $perms, true)) {
-            return;
-        }
-
-        foreach (MenuItem::get(['id', 'menu_key']) as $menu) {
-            $module = MenuRegistryService::permissionModuleForMenuKey($menu->menu_key);
-            if ($module === null) {
-                continue;
-            }
-            $visible = MenuRegistryService::roleGrantsMenu($perms, $module);
-            TenantMenuOverride::updateOrCreate(
-                ['org_id' => $role->org_id, 'menu_id' => $menu->id, 'tenant_role_id' => $role->id],
-                ['is_visible' => $visible, 'role' => null]
-            );
-        }
     }
 
     /**
