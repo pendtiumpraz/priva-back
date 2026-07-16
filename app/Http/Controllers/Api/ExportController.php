@@ -7,20 +7,32 @@ use App\Models\AiResult;
 use App\Models\BreachIncident;
 use App\Models\BreachSimulation;
 use App\Models\ConsentCollectionPoint;
-use App\Models\ConsentRecord;
+use App\Models\ConsentItem;
+use App\Models\ConsentLog;
 use App\Models\Dpia;
 use App\Models\DpiaRiskEventTemplate;
 use App\Models\DsrRequest;
 use App\Models\GapAssessment;
 use App\Models\InformationSystem;
+use App\Models\LiaAssessment;
+use App\Models\MaturityAssessment;
 use App\Models\ModuleCustomSection;
 use App\Models\Organization;
 use App\Models\Ropa;
+use App\Models\TiaAssessment;
+use App\Models\User;
+use App\Models\Vendor;
 use App\Services\BrandedXlsxExporter;
 use App\Services\RecordReportBuilder;
 use App\Services\WizardSchemaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -286,9 +298,9 @@ class ExportController extends Controller
             }
         }
         $vendorNames = [];
-        if (! empty($allVendorIds) && class_exists(\App\Models\Vendor::class)) {
+        if (! empty($allVendorIds) && class_exists(Vendor::class)) {
             try {
-                $vendorNames = \App\Models\Vendor::whereIn('id', array_keys($allVendorIds))
+                $vendorNames = Vendor::whereIn('id', array_keys($allVendorIds))
                     ->pluck('name', 'id')->all();
             } catch (\Throwable $e) {
                 \Log::warning('ExportController: vendor name lookup failed: '.$e->getMessage());
@@ -679,7 +691,7 @@ class ExportController extends Controller
         // Resolve actor UUIDs → user names (a free-text name that isn't a UUID
         // simply won't match and passes through unchanged).
         $userIds = $items->flatMap(fn ($b) => [$b->dpo_id, $b->incident_commander])->filter()->unique()->all();
-        $userNames = \App\Models\User::whereIn('id', $userIds)->get(['id', 'name'])->pluck('name', 'id');
+        $userNames = User::whereIn('id', $userIds)->get(['id', 'name'])->pluck('name', 'id');
         $nameOf = fn ($id) => $id ? ($userNames[$id] ?? $id) : '-';
 
         $headers = [
@@ -735,7 +747,7 @@ class ExportController extends Controller
 
         // Resolve assigned_to UUID → user name.
         $assigneeIds = $items->pluck('assigned_to')->filter()->unique()->all();
-        $assigneeNames = \App\Models\User::whereIn('id', $assigneeIds)->get(['id', 'name'])->pluck('name', 'id');
+        $assigneeNames = User::whereIn('id', $assigneeIds)->get(['id', 'name'])->pluck('name', 'id');
 
         $headers = [
             'Request ID', 'Tipe Permintaan', 'Nama Pemohon', 'Email Pemohon', 'Telepon Pemohon',
@@ -824,7 +836,7 @@ class ExportController extends Controller
         // FK collection_id), bukan consent_records legacy yang join lama
         // selalu kosong. Optional filter ?collection_id= untuk export per
         // collection point.
-        $query = \App\Models\ConsentLog::query()
+        $query = ConsentLog::query()
             ->join('consent_collection_points', 'consent_logs.collection_id', '=', 'consent_collection_points.id');
 
         if ($orgId) {
@@ -847,7 +859,7 @@ class ExportController extends Controller
         // Resolve item UUIDs → titles once for the whole export (keys of
         // consented_items are item UUIDs, not human-readable names).
         $collectionIds = $records->pluck('collection_id')->unique()->filter()->all();
-        $titleById = \App\Models\ConsentItem::titleMap($collectionIds);
+        $titleById = ConsentItem::titleMap($collectionIds);
         $resolve = fn ($k) => $titleById[$k] ?? $k;
 
         $rows = $records->map(function ($r) use ($resolve) {
@@ -967,7 +979,7 @@ class ExportController extends Controller
             return '-';
         };
 
-        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet;
+        $spreadsheet = new Spreadsheet;
         $spreadsheet->getProperties()
             ->setCreator('Privasimu Nexus')
             ->setTitle('GAP Assessment Export')
@@ -978,17 +990,17 @@ class ExportController extends Controller
         $headerStyle = [
             'font' => ['bold' => true, 'color' => ['rgb' => '1F3864']],
             'fill' => [
-                'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                'fillType' => Fill::FILL_SOLID,
                 'startColor' => ['rgb' => 'B4C7E7'],
             ],
             'alignment' => [
-                'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
-                'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical' => Alignment::VERTICAL_CENTER,
                 'wrapText' => true,
             ],
             'borders' => [
                 'allBorders' => [
-                    'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                    'borderStyle' => Border::BORDER_THIN,
                     'color' => ['rgb' => '8FAADC'],
                 ],
             ],
@@ -1007,7 +1019,7 @@ class ExportController extends Controller
             'Jumlah Soal Dijawab', 'Total Soal',
         ];
         $sheet1->fromArray($sheet1Headers, null, 'A1');
-        $lastCol1 = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($sheet1Headers));
+        $lastCol1 = Coordinate::stringFromColumnIndex(count($sheet1Headers));
         $sheet1->getStyle("A1:{$lastCol1}1")->applyFromArray($headerStyle);
         $sheet1->getRowDimension(1)->setRowHeight(28);
         $sheet1->freezePane('A2');
@@ -1063,18 +1075,18 @@ class ExportController extends Controller
             $sheet1->getStyle("A2:{$lastCol1}".($row - 1))->applyFromArray([
                 'borders' => [
                     'allBorders' => [
-                        'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                        'borderStyle' => Border::BORDER_THIN,
                         'color' => ['rgb' => 'D0D7E2'],
                     ],
                 ],
-                'alignment' => ['vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+                'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
             ]);
         }
 
         // Explicit column widths (avoid auto-calc cost on large datasets).
         $widths1 = [38, 8, 18, 18, 12, 18, 16, 16, 18, 18, 12];
         foreach ($widths1 as $i => $w) {
-            $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
+            $col = Coordinate::stringFromColumnIndex($i + 1);
             $sheet1->getColumnDimension($col)->setWidth($w);
         }
 
@@ -1089,7 +1101,7 @@ class ExportController extends Controller
             'Jawaban', 'Bobot', 'Skor Pertanyaan', 'Rekomendasi',
         ];
         $sheet2->fromArray($sheet2Headers, null, 'A1');
-        $lastCol2 = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($sheet2Headers));
+        $lastCol2 = Coordinate::stringFromColumnIndex(count($sheet2Headers));
         $sheet2->getStyle("A1:{$lastCol2}1")->applyFromArray($headerStyle);
         $sheet2->getRowDimension(1)->setRowHeight(28);
         $sheet2->freezePane('A2');
@@ -1136,13 +1148,13 @@ class ExportController extends Controller
             $sheet2->getStyle($bodyRange)->applyFromArray([
                 'borders' => [
                     'allBorders' => [
-                        'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                        'borderStyle' => Border::BORDER_THIN,
                         'color' => ['rgb' => 'D0D7E2'],
                     ],
                 ],
                 'alignment' => [
-                    'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP,
-                    'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT,
+                    'vertical' => Alignment::VERTICAL_TOP,
+                    'horizontal' => Alignment::HORIZONTAL_LEFT,
                     'wrapText' => true,
                 ],
             ]);
@@ -1151,12 +1163,12 @@ class ExportController extends Controller
             foreach ($separatorRows as $sr) {
                 $sheet2->getStyle("A{$sr}:{$lastCol2}{$sr}")->applyFromArray([
                     'fill' => [
-                        'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                        'fillType' => Fill::FILL_SOLID,
                         'startColor' => ['rgb' => 'E7E6E6'],
                     ],
                     'borders' => [
                         'bottom' => [
-                            'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_MEDIUM,
+                            'borderStyle' => Border::BORDER_MEDIUM,
                             'color' => ['rgb' => '8FAADC'],
                         ],
                     ],
@@ -1169,7 +1181,7 @@ class ExportController extends Controller
         // A:Versi B:Kategori C:Kode D:Pertanyaan E:Jawaban F:Bobot G:Skor H:Rekomendasi
         $widths2 = [22, 22, 16, 50, 18, 8, 14, 50];
         foreach ($widths2 as $i => $w) {
-            $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
+            $col = Coordinate::stringFromColumnIndex($i + 1);
             $sheet2->getColumnDimension($col)->setWidth($w);
         }
 
@@ -1184,7 +1196,7 @@ class ExportController extends Controller
             array_map(static fn ($c) => $c.' (%)', $categories)
         );
         $sheet3->fromArray($sheet3Headers, null, 'A1');
-        $lastCol3 = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($sheet3Headers));
+        $lastCol3 = Coordinate::stringFromColumnIndex(count($sheet3Headers));
         $sheet3->getStyle("A1:{$lastCol3}1")->applyFromArray($headerStyle);
         $sheet3->getRowDimension(1)->setRowHeight(28);
         $sheet3->freezePane('A2');
@@ -1231,11 +1243,11 @@ class ExportController extends Controller
             $sheet3->getStyle("A2:{$lastCol3}".($row - 1))->applyFromArray([
                 'borders' => [
                     'allBorders' => [
-                        'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                        'borderStyle' => Border::BORDER_THIN,
                         'color' => ['rgb' => 'D0D7E2'],
                     ],
                 ],
-                'alignment' => ['vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+                'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
             ]);
         }
 
@@ -1244,7 +1256,7 @@ class ExportController extends Controller
         $sheet3->getColumnDimension('B')->setWidth(8);
         $sheet3->getColumnDimension('C')->setWidth(18);
         for ($i = 4; $i <= count($sheet3Headers); $i++) {
-            $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i);
+            $col = Coordinate::stringFromColumnIndex($i);
             $sheet3->getColumnDimension($col)->setWidth(26);
         }
 
@@ -1253,7 +1265,7 @@ class ExportController extends Controller
         $filename = 'gap_assessment_export_'.date('Y-m-d').'.xlsx';
 
         return response()->streamDownload(function () use ($spreadsheet) {
-            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $writer = new Xlsx($spreadsheet);
             $writer->save('php://output');
             $spreadsheet->disconnectWorksheets();
             unset($spreadsheet);
@@ -1559,26 +1571,41 @@ class ExportController extends Controller
         return $s !== '' ? $s : $fallback;
     }
 
-    /** Per-record RoPA document as designed XLSX. */
-    public function ropaRecordXlsx(Request $request, string $id)
+    /**
+     * Per-record document (designed XLSX) for any supported module.
+     * Each entry: [modelClass, eagerLoad[], builderMethod, label, titlePrefix, codeField].
+     */
+    private const RECORD_MODULES = [
+        'ropa' => [Ropa::class, [], 'ropa', 'RoPA', 'Dokumen RoPA', 'registration_number'],
+        'dpia' => [Dpia::class, ['ropas'], 'dpia', 'DPIA', 'Dokumen DPIA', 'registration_number'],
+        'lia' => [LiaAssessment::class, ['ropa', 'dpia', 'maker', 'checker', 'approver'], 'lia', 'LIA', 'Dokumen LIA', 'lia_code'],
+        'tia' => [TiaAssessment::class, ['maker', 'checker', 'approver', 'ropa', 'crossBorder', 'vendor'], 'tia', 'TIA', 'Dokumen TIA', 'tia_code'],
+        'maturity' => [MaturityAssessment::class, ['responses', 'submitter'], 'maturity', 'Maturity', 'Dokumen Maturity Assessment', 'title'],
+        'gap' => [GapAssessment::class, [], 'gap', 'GAP', 'Laporan GAP Assessment', 'version'],
+        'breach' => [BreachIncident::class, [], 'breach', 'Breach', 'Dokumen Insiden Pelanggaran Data', 'incident_code'],
+        'dsr' => [DsrRequest::class, ['app', 'assignee', 'scopes.informationSystem', 'executions.informationSystem'], 'dsr', 'DSR', 'Dokumen DSR', 'request_id'],
+    ];
+
+    /** Per-record document as designed XLSX. Module resolved via RECORD_MODULES. */
+    public function recordXlsx(Request $request, string $module, string $id)
     {
-        $ropa = Ropa::where('org_id', $request->user()->org_id)->findOrFail($id);
-        $sections = app(RecordReportBuilder::class)->ropa($ropa);
-        $code = $ropa->registration_number ?: 'RoPA';
-        $filename = 'RoPA_'.$this->safeFilePart($code, 'dokumen').'.xlsx';
+        $cfg = self::RECORD_MODULES[$module] ?? null;
+        if (! $cfg) {
+            abort(404);
+        }
+        [$modelClass, $eager, $builderMethod, $label, $titlePrefix, $codeField] = $cfg;
 
-        return $this->streamRecordXlsx($request, 'Dokumen RoPA — '.($ropa->processing_activity ?: $code), 'RoPA', $sections, $filename);
-    }
+        $query = $modelClass::where('org_id', $request->user()->org_id);
+        if (! empty($eager)) {
+            $query->with($eager);
+        }
+        $record = $query->findOrFail($id);
 
-    /** Per-record DPIA document as designed XLSX. */
-    public function dpiaRecordXlsx(Request $request, string $id)
-    {
-        $dpia = Dpia::with('ropas')->where('org_id', $request->user()->org_id)->findOrFail($id);
-        $sections = app(RecordReportBuilder::class)->dpia($dpia);
-        $code = $dpia->registration_number ?: 'DPIA';
-        $filename = 'DPIA_'.$this->safeFilePart($code, 'dokumen').'.xlsx';
+        $sections = app(RecordReportBuilder::class)->{$builderMethod}($record);
+        $code = $record->{$codeField} ?: $module;
+        $filename = str_replace(' ', '', $label).'_'.$this->safeFilePart($code, 'dokumen').'.xlsx';
 
-        return $this->streamRecordXlsx($request, 'Dokumen DPIA — '.$code, 'DPIA', $sections, $filename);
+        return $this->streamRecordXlsx($request, $titlePrefix.' — '.$code, $label, $sections, $filename);
     }
 
     // =============================================

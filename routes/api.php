@@ -1772,10 +1772,12 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     Route::prefix('export')->group(function () {
         Route::get('/ropa', [ExportController::class, 'ropa']);
         Route::get('/ropa/xlsx', [ExportController::class, 'ropaXlsx']);
-        Route::get('/ropa/{id}/xlsx', [ExportController::class, 'ropaRecordXlsx'])->where('id', '[0-9a-fA-F-]{36}');
         Route::get('/dpia', [ExportController::class, 'dpia']);
         Route::get('/dpia/xlsx', [ExportController::class, 'dpiaXlsx']);
-        Route::get('/dpia/{id}/xlsx', [ExportController::class, 'dpiaRecordXlsx'])->where('id', '[0-9a-fA-F-]{36}');
+        // Per-record designed XLSX document (ropa|dpia|lia|tia|maturity|gap|breach|dsr).
+        Route::get('/{module}/{id}/xlsx', [ExportController::class, 'recordXlsx'])
+            ->where('module', 'ropa|dpia|lia|tia|maturity|gap|breach|dsr')
+            ->where('id', '[0-9a-fA-F-]{36}');
         Route::get('/dpia-risks', [ExportController::class, 'dpiaRisks']);
         Route::get('/breach', [ExportController::class, 'breach']);
         Route::get('/breach/xlsx', [ExportController::class, 'breachXlsx']);
