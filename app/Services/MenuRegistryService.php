@@ -210,25 +210,22 @@ class MenuRegistryService
                 }
             }
 
-            if ($permissionDriven) {
-                // Menu visibility follows Role Settings permissions. Only gate
-                // hideable menus that map to a permission module — core menus
-                // (dashboard/settings/notifications, hideable=false) and menus
-                // without a permission concept stay visible. Per-role overrides
-                // are intentionally NOT applied here (Role Settings is the single
-                // source of truth for these roles).
-                if ($menu->hideable) {
-                    $permModule = self::PERMISSION_MENU_MAP[$menu->menu_key] ?? null;
-                    if ($permModule !== null && ! self::roleGrantsMenu($perms, $permModule)) {
-                        continue;
-                    }
-                }
-            } else {
-                // Layer 2 — admin tenant tetap punya hak hide menu untuk role
-                // tertentu di org-nya, bahkan kalau ada entitlement.
-                if (isset($hidden[$menu->id])) {
+            // Role Settings gate — hanya untuk role non-platform (DPO/Maker/
+            // Viewer/kustom): menu hideable yang memetakan ke modul-permission
+            // tampil hanya jika permissions role memberi akses. Menu inti
+            // (hideable=false) & menu tanpa modul-permission tetap tampil.
+            if ($permissionDriven && $menu->hideable) {
+                $permModule = self::PERMISSION_MENU_MAP[$menu->menu_key] ?? null;
+                if ($permModule !== null && ! self::roleGrantsMenu($perms, $permModule)) {
                     continue;
                 }
+            }
+
+            // Layer 2 (Menu Preferences override) — berlaku untuk SEMUA role.
+            // Admin tenant tetap bisa menyembunyikan menu per role di org-nya,
+            // di atas gate Role Settings.
+            if (isset($hidden[$menu->id])) {
+                continue;
             }
 
             // Sub-item: parent harus juga visible.
