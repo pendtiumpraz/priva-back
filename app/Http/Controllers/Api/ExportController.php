@@ -23,6 +23,7 @@ use App\Models\TiaAssessment;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Services\BrandedXlsxExporter;
+use App\Services\RecordDocRenderer;
 use App\Services\RecordReportBuilder;
 use App\Services\WizardSchemaService;
 use Illuminate\Http\Request;
@@ -1545,24 +1546,6 @@ class ExportController extends Controller
         ])->deleteFileAfterSend(true);
     }
 
-    /**
-     * Stream a PER-RECORD branded XLSX document built from section blocks.
-     */
-    private function streamRecordXlsx(Request $request, string $title, string $module, array $sections, string $filename): BinaryFileResponse|StreamedResponse
-    {
-        $org = $this->resolveBrandingOrg($request);
-        if (! $org) {
-            return $this->streamCsv("{$module}_".date('Y-m-d').'.csv', ['Error'], [['Org tidak ditemukan untuk branding export.']]);
-        }
-
-        $tmpPath = app(BrandedXlsxExporter::class)->exportRecord($org, $title, $module, $sections, $request->user());
-
-        return response()->download($tmpPath, $filename, [
-            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'Cache-Control' => 'max-age=0',
-        ])->deleteFileAfterSend(true);
-    }
-
     private function safeFilePart(?string $s, string $fallback): string
     {
         $s = preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) $s);
@@ -1586,8 +1569,12 @@ class ExportController extends Controller
         'dsr' => [DsrRequest::class, ['app', 'assignee', 'scopes.informationSystem', 'executions.informationSystem'], 'dsr', 'DSR', 'Dokumen DSR', 'request_id'],
     ];
 
-    /** Per-record document as designed XLSX. Module resolved via RECORD_MODULES. */
-    public function recordXlsx(Request $request, string $module, string $id)
+    /**
+     * Per-record branded document in the requested format (xlsx|docx|pdf).
+     * Module + builder resolved via RECORD_MODULES; same section schema drives
+     * all three renderers.
+     */
+    public function recordDoc(Request $request, string $module, string $id, string $format)
     {
         $cfg = self::RECORD_MODULES[$module] ?? null;
         if (! $cfg) {
@@ -1595,7 +1582,12 @@ class ExportController extends Controller
         }
         [$modelClass, $eager, $builderMethod, $label, $titlePrefix, $codeField] = $cfg;
 
-        $query = $modelClass::where('org_id', $request->user()->org_id);
+        $org = $this->resolveBrandingOrg($request);
+        if (! $org) {
+            return $this->streamCsv("{$module}_".date('Y-m-d').'.csv', ['Error'], [['Org tidak ditemukan untuk branding export.']]);
+        }
+
+        $query = $modelClass::where('org_id', $org->id);
         if (! empty($eager)) {
             $query->with($eager);
         }
@@ -1603,9 +1595,30 @@ class ExportController extends Controller
 
         $sections = app(RecordReportBuilder::class)->{$builderMethod}($record);
         $code = $record->{$codeField} ?: $module;
-        $filename = str_replace(' ', '', $label).'_'.$this->safeFilePart($code, 'dokumen').'.xlsx';
+        $base = str_replace(' ', '', $label).'_'.$this->safeFilePart($code, 'dokumen');
+        $title = $titlePrefix.' — '.$code;
+        $user = $request->user();
 
-        return $this->streamRecordXlsx($request, $titlePrefix.' — '.$code, $label, $sections, $filename);
+        if ($format === 'docx') {
+            $tmp = app(RecordDocRenderer::class)->docx($org, $user, $title, $label, $sections);
+
+            return response()->download($tmp, "{$base}.docx", [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'Cache-Control' => 'max-age=0',
+            ])->deleteFileAfterSend(true);
+        }
+
+        if ($format === 'pdf') {
+            return app(RecordDocRenderer::class)->pdf($org, $user, $title, $label, $sections)->download("{$base}.pdf");
+        }
+
+        // default: xlsx
+        $tmp = app(BrandedXlsxExporter::class)->exportRecord($org, $title, $label, $sections, $user);
+
+        return response()->download($tmp, "{$base}.xlsx", [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Cache-Control' => 'max-age=0',
+        ])->deleteFileAfterSend(true);
     }
 
     // =============================================
