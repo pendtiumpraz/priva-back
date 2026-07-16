@@ -79,8 +79,10 @@ class CrmService
 
         $partnerIds = $searchResponse->json('result');
         
+        // Resolve item UUIDs → titles so the CRM note reads item names, not IDs.
+        $labeled = $log->labeledConsentedItems();
         $consentString = "Privasimu Consent v{$log->policy_version}: \n";
-        foreach ($log->consented_items as $item => $val) {
+        foreach ($labeled as $item => $val) {
             $consentString .= "- {$item}: " . ($val ? 'Yes' : 'No') . "\n";
         }
 

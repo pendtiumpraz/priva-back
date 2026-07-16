@@ -833,14 +833,20 @@ class ExportController extends Controller
             'Consented Items', 'IP Address', 'User Agent', 'Tercatat Pada',
         ];
 
-        $rows = $records->map(function ($r) {
+        // Resolve item UUIDs → titles once for the whole export (keys of
+        // consented_items are item UUIDs, not human-readable names).
+        $collectionIds = $records->pluck('collection_id')->unique()->filter()->all();
+        $titleById = \App\Models\ConsentItem::titleMap($collectionIds);
+        $resolve = fn ($k) => $titleById[$k] ?? $k;
+
+        $rows = $records->map(function ($r) use ($resolve) {
             // consented_items bisa array of id (legacy) atau map id→bool.
             $ci = $r->consented_items;
             if (is_array($ci)) {
                 $isAssoc = array_keys($ci) !== range(0, count($ci) - 1);
                 $consented = $isAssoc
-                    ? collect($ci)->filter(fn ($v) => (bool) $v)->keys()->implode(', ')
-                    : implode(', ', $ci);
+                    ? collect($ci)->filter(fn ($v) => (bool) $v)->keys()->map($resolve)->implode(', ')
+                    : collect($ci)->map($resolve)->implode(', ');
             } else {
                 $consented = (string) $ci;
             }

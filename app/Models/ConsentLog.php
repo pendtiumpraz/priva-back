@@ -59,4 +59,50 @@ class ConsentLog extends Model
     {
         return $this->belongsTo(ConsentCollectionPoint::class, 'collection_id');
     }
+
+    /**
+     * [item_id => title] lookup for this log's collection. `consented_items`
+     * and `purpose_keys` store item UUIDs as keys; use this to render titles.
+     */
+    public function itemTitleMap(): array
+    {
+        return ConsentItem::titleMap([$this->collection_id]);
+    }
+
+    /**
+     * consented_items with item UUIDs resolved to titles: { title: bool }.
+     * Handles both the new map form ({id: bool}) and the legacy array of
+     * granted ids. Unknown keys fall back to the raw key.
+     */
+    public function labeledConsentedItems(): array
+    {
+        $ci = $this->consented_items ?? [];
+        $map = $this->itemTitleMap();
+        $out = [];
+
+        if (array_is_list($ci)) {
+            foreach ($ci as $id) {
+                $out[$map[$id] ?? $id] = true;
+            }
+        } else {
+            foreach ($ci as $id => $val) {
+                $out[$map[$id] ?? $id] = (bool) $val;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Titles of the purposes the subject granted (from purpose_keys UUIDs).
+     */
+    public function grantedPurposeTitles(): array
+    {
+        $map = $this->itemTitleMap();
+
+        return array_values(array_map(
+            fn ($key) => $map[$key] ?? $key,
+            $this->purpose_keys ?? []
+        ));
+    }
 }

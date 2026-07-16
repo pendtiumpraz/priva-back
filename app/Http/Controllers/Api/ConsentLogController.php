@@ -277,7 +277,14 @@ class ConsentLogController extends Controller
                     'event' => 'consent.captured',
                     'collection_id' => $collection->collection_id,
                     'user_identifier' => $log->user_identifier,
+                    // Raw map keeps item UUIDs as keys (stable identifiers for
+                    // machine matching) — unchanged for backward compatibility.
                     'consented_items' => $log->consented_items,
+                    // Additive: same choices with item titles resolved, plus the
+                    // list of granted purpose titles, so receivers can display
+                    // readable names without a lookup.
+                    'consented_items_labeled' => $log->labeledConsentedItems(),
+                    'consented_purposes' => $log->grantedPurposeTitles(),
                     'policy_version' => $log->policy_version,
                     'ip_address' => $log->ip_address,
                     'timestamp' => $log->created_at,

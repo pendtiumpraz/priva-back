@@ -37,8 +37,18 @@ class ConsentExtractController extends Controller
 
         $count = (clone $q)->count();
         $sample = (clone $q)->orderByDesc('created_at')->limit(5)->get([
-            'id', 'email', 'name', 'phone', 'source_form', 'purpose_keys', 'created_at',
+            'id', 'email', 'name', 'phone', 'source_form', 'collection_id', 'purpose_keys', 'created_at',
         ]);
+
+        // Attach resolved purpose titles (purpose_keys holds item UUIDs) so the
+        // wizard sample shows item names, not IDs.
+        $titleById = \App\Models\ConsentItem::titleMap($sample->pluck('collection_id')->unique()->all());
+        $sample->each(function ($r) use ($titleById) {
+            $r->setAttribute('purpose_titles', array_map(
+                fn ($k) => $titleById[$k] ?? $k,
+                $r->purpose_keys ?? []
+            ));
+        });
 
         return response()->json([
             'data' => [
@@ -168,14 +178,20 @@ class ConsentExtractController extends Controller
     {
         $filename = sprintf('consent-extract-%s-%s.csv', $run->id, now()->format('Ymd-His'));
 
-        return response()->streamDownload(function () use ($query) {
+        // Resolve item UUIDs → titles once (purpose_keys holds item UUIDs).
+        $collectionIds = (clone $query)->distinct()->pluck('collection_id')->all();
+        $titleById = \App\Models\ConsentItem::titleMap($collectionIds);
+
+        return response()->streamDownload(function () use ($query, $titleById) {
             $out = fopen('php://output', 'w');
             // BOM for Excel UTF-8
             fwrite($out, "\xEF\xBB\xBF");
             fputcsv($out, ['id', 'email', 'name', 'phone', 'source_form', 'purposes', 'country', 'captured_at']);
-            $query->orderBy('created_at')->chunk(500, function ($rows) use ($out) {
+            $query->orderBy('created_at')->chunk(500, function ($rows) use ($out, $titleById) {
                 foreach ($rows as $r) {
-                    $purposes = is_array($r->purpose_keys) ? implode('|', $r->purpose_keys) : '';
+                    $purposes = is_array($r->purpose_keys)
+                        ? implode('|', array_map(fn ($k) => $titleById[$k] ?? $k, $r->purpose_keys))
+                        : '';
                     fputcsv($out, [
                         $r->id,
                         $r->email,

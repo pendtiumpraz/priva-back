@@ -131,14 +131,21 @@ class PushExtractToCrmJob implements ShouldQueue
             $q->where('purpose_keys', 'like', '%"'.addslashes((string) $p).'"%');
         }
 
+        // Resolve item UUIDs → titles so the CRM receives readable purpose
+        // names, not raw IDs (purpose_keys stores item UUIDs).
+        $collectionIds = (clone $q)->distinct()->pluck('collection_id')->all();
+        $titleById = \App\Models\ConsentItem::titleMap($collectionIds);
+
         $records = [];
-        $q->orderBy('created_at')->chunk(1000, function ($rows) use (&$records) {
+        $q->orderBy('created_at')->chunk(1000, function ($rows) use (&$records, $titleById) {
             foreach ($rows as $r) {
                 $records[] = [
                     'email' => (string) $r->email,
                     'name' => (string) ($r->name ?? ''),
                     'phone' => (string) ($r->phone ?? ''),
-                    'purposes' => is_array($r->purpose_keys) ? $r->purpose_keys : [],
+                    'purposes' => is_array($r->purpose_keys)
+                        ? array_map(fn ($k) => $titleById[$k] ?? $k, $r->purpose_keys)
+                        : [],
                     'captured_at' => $r->created_at?->toIso8601String() ?? '',
                     'source_form' => (string) ($r->source_form ?? ''),
                     'country' => (string) ($r->ip_country ?? ''),

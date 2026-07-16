@@ -62,4 +62,22 @@ class ConsentItem extends Model
     {
         return $this->belongsTo(ConsentCollectionPoint::class , 'collection_point_id');
     }
+
+    /**
+     * Build an [item_id => title] lookup for one or more collection points.
+     * Includes trashed items so historical consent logs that reference a
+     * since-deleted item still resolve to a readable title instead of a UUID.
+     */
+    public static function titleMap(array|string $collectionIds): array
+    {
+        $ids = array_values(array_filter((array) $collectionIds));
+        if (empty($ids)) {
+            return [];
+        }
+
+        return static::withTrashed()
+            ->whereIn('collection_point_id', $ids)
+            ->pluck('title', 'id')
+            ->all();
+    }
 }
