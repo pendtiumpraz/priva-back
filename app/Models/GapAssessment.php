@@ -12,12 +12,13 @@ class GapAssessment extends Model
     use BelongsToOrg, HasUuids, SoftDeletes;
 
     protected $fillable = [
-        'org_id', 'regulation_code', 'version', 'overall_score', 'compliance_level',
-        'progress', 'finalized_at', 'answers', 'attachments', 'ai_analyses', 'recommendations', 'created_by',
+        'org_id', 'regulation_code', 'version', 'description', 'overall_score', 'compliance_level',
+        'progress', 'finalized_at', 'answers', 'answer_notes', 'attachments', 'ai_analyses', 'recommendations', 'created_by',
     ];
 
     protected $casts = [
         'answers' => 'array',
+        'answer_notes' => 'array',
         'attachments' => 'array',
         'ai_analyses' => 'array',
         'recommendations' => 'array',

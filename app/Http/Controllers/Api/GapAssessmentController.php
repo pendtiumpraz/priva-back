@@ -286,6 +286,9 @@ class GapAssessmentController extends Controller
         $request->validate([
             'answers' => 'required|array',
             'attachments' => 'nullable|array',
+            // Deskripsi per-asesmen + catatan/jawaban teks per-soal (opsional).
+            'description' => 'nullable|string|max:5000',
+            'answer_notes' => 'nullable|array',
             // `finalize`: hanya true dari tombol "Selesaikan" (Finish). Save & Exit
             // mengirim false (atau tidak set), sehingga assessment tetap editable
             // walau semua jawaban sudah terisi (progress 100%).
@@ -326,6 +329,17 @@ class GapAssessmentController extends Controller
         // ke kolom, jadi submitAnswers default-nya tidak boleh sentuh.
         if ($request->has('attachments') && $request->input('attachments') !== null) {
             $update['attachments'] = $request->input('attachments', []);
+        }
+
+        // Deskripsi asesmen + catatan jawaban per-soal — hanya di-update kalau
+        // client kirim eksplisit (biar tidak menimpa jadi kosong).
+        if ($request->has('description')) {
+            $update['description'] = $request->input('description');
+        }
+        // Guard hasColumn: aman kalau migrasi answer_notes belum dijalankan di
+        // environment tertentu — cukup skip, tidak error.
+        if ($request->has('answer_notes') && \Illuminate\Support\Facades\Schema::hasColumn('gap_assessments', 'answer_notes')) {
+            $update['answer_notes'] = $request->input('answer_notes') ?: [];
         }
 
         // Hanya tombol "Selesaikan" yang mark assessment sebagai final
