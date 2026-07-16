@@ -13,6 +13,7 @@ use App\Models\InformationSystem;
 use App\Models\LiaAssessment;
 use App\Models\MaturityAssessment;
 use App\Models\MaturityQuestion;
+use App\Models\ModuleCustomField;
 use App\Models\Ropa;
 use App\Models\TiaAssessment;
 use App\Models\VendorAssessment;
@@ -105,6 +106,68 @@ class RecordReportBuilder
         return is_array($v) ? $v : [];
     }
 
+    /**
+     * Format a single field value by its declared type (text/textarea/number/
+     * date/boolean) using the shared helpers.
+     */
+    private function typedValue($val, ?string $type): string
+    {
+        return match ($type) {
+            'boolean' => $this->yn($val),
+            'date' => $this->date($val),
+            default => $this->str($val),
+        };
+    }
+
+    /**
+     * Additional / custom field sections for RoPA & DPIA — so anything a tenant
+     * adds beyond the built-in schema is included in every export format:
+     *   1. Per-record extras (wizard_data.per_record_extras) — self-describing
+     *      {field_label, value, field_type}.
+     *   2. Org-defined custom fields (ModuleCustomField definitions) whose
+     *      values live flat in wizard_data.custom_fields[field_name].
+     * Returns 0–2 sections (empty ones are skipped).
+     */
+    private function additionalFieldSections($record, string $module): array
+    {
+        $w = $this->arr($record->wizard_data);
+        $out = [];
+
+        // 1. Per-record extra fields.
+        $extraRows = [];
+        foreach ($this->arr($w['per_record_extras'] ?? null) as $e) {
+            $label = $this->str($e['field_label'] ?? ($e['field_name'] ?? null));
+            if ($label === '') {
+                continue;
+            }
+            $extraRows[] = ['label' => $label, 'value' => $this->typedValue($e['value'] ?? null, (string) ($e['field_type'] ?? 'text'))];
+        }
+        if (! empty($extraRows)) {
+            $out[] = ['title' => 'Informasi Tambahan (Per-Dokumen)', 'rows' => $extraRows];
+        }
+
+        // 2. Org-defined custom fields (values flat in wizard_data.custom_fields).
+        $customValues = $this->arr($w['custom_fields'] ?? null);
+        $defs = ModuleCustomField::where('org_id', $record->org_id)
+            ->where('module', $module)
+            ->where('origin', '!=', 'built_in')
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->get(['field_name', 'field_label', 'field_type']);
+        $customRows = [];
+        foreach ($defs as $f) {
+            $customRows[] = [
+                'label' => $this->str($f->field_label ?: $f->field_name),
+                'value' => $this->typedValue($customValues[$f->field_name] ?? null, $f->field_type),
+            ];
+        }
+        if (! empty($customRows)) {
+            $out[] = ['title' => 'Field Kustom Organisasi', 'rows' => $customRows];
+        }
+
+        return $out;
+    }
+
     // ------------------------------------------------------------------- ROPA
 
     public function ropa(Ropa $r): array
@@ -123,7 +186,7 @@ class RecordReportBuilder
         $sistem = $this->arr($r->sistem_list);
         $retensi = $this->arr($r->retensi_rows);
 
-        return [
+        $sections = [
             [
                 'title' => 'I. Deskripsi Pemrosesan Data Pribadi',
                 'rows' => [
@@ -210,6 +273,8 @@ class RecordReportBuilder
                 ],
             ],
         ];
+
+        return array_merge($sections, $this->additionalFieldSections($r, 'ropa'));
     }
 
     // ------------------------------------------------------------------- DPIA
@@ -261,7 +326,7 @@ class RecordReportBuilder
         // Section: risk assessment matrix.
         $risks = $this->arr($riskAssessment['risks'] ?? null);
 
-        return [
+        $sections = [
             [
                 'title' => 'I. Informasi DPIA',
                 'rows' => [
@@ -315,6 +380,8 @@ class RecordReportBuilder
                 ],
             ],
         ];
+
+        return array_merge($sections, $this->additionalFieldSections($d, 'dpia'));
     }
 
     public function lia(LiaAssessment $x): array
@@ -1319,59 +1386,59 @@ class RecordReportBuilder
                 ],
             ],
             [
-            'title' => 'V. Rincian Tabel & Kolom Terklasifikasi',
-            'rows' => $tableRows,
-        ],
-            [
-            'title' => 'VI. Perubahan Skema Terdeteksi',
-            'rows' => [
-                    ['label' => 'Peringatan Perubahan Skema', 'value' => $this->bullets($diffAlerts, fn ($a) => $this->str($a)) ?: 'Tidak ada perubahan skema terdeteksi.'],
+                'title' => 'V. Rincian Tabel & Kolom Terklasifikasi',
+                'rows' => $tableRows,
             ],
-        ],
             [
-            'title' => 'VII. Jalur Akses (Access Paths)',
-            'rows' => [
+                'title' => 'VI. Perubahan Skema Terdeteksi',
+                'rows' => [
+                    ['label' => 'Peringatan Perubahan Skema', 'value' => $this->bullets($diffAlerts, fn ($a) => $this->str($a)) ?: 'Tidak ada perubahan skema terdeteksi.'],
+                ],
+            ],
+            [
+                'title' => 'VII. Jalur Akses (Access Paths)',
+                'rows' => [
                     ['label' => 'Akun / Peran Basis Data', 'value' => $this->bullets($this->arr($access['roles'] ?? null), fn ($r) => trim($this->str($r['name'] ?? null).($this->yn($r['can_login'] ?? null) === 'Ya' ? ' — dapat login' : '').(! empty($r['is_superuser']) ? ' — superuser' : ''), ' —')) ?: '-'],
                     ['label' => 'Hak Akses Tabel (Grants)', 'value' => $this->bullets($this->arr($access['grants'] ?? null), fn ($g) => trim($this->str($g['grantee'] ?? null).' → '.$this->str($g['table'] ?? null).' : '.$this->str($g['privilege'] ?? null).(! empty($g['is_grantable']) ? ' (grantable)' : ''), ' →: ')) ?: '-'],
                     ['label' => 'Galat Pemindaian Akses', 'value' => $this->str($access['error'] ?? null) ?: 'Tidak ada'],
+                ],
             ],
-        ],
             [
-            'title' => 'VIII. Sinyal Enkripsi',
-            'rows' => [
+                'title' => 'VIII. Sinyal Enkripsi',
+                'rows' => [
                     ['label' => 'Mesin Basis Data', 'value' => $this->str($enc['engine'] ?? null)],
                     ['label' => 'Koneksi TLS/SSL Aktif', 'value' => $this->yn($enc['ssl_in_use'] ?? null)],
                     ['label' => 'Enkripsi Data-at-Rest', 'value' => $this->yn($enc['data_at_rest_encrypted'] ?? null) ?: 'Tidak diketahui di lapisan basis data'],
                     ['label' => 'Tabel dengan Enkripsi Kolom Terdeteksi', 'value' => $this->bullets($this->arr($this->arr($enc['column_encryption_observed'] ?? null)['tables'] ?? null), fn ($t) => $this->str($t)) ?: '-'],
                     ['label' => 'Galat Pemindaian Enkripsi', 'value' => $this->str($enc['error'] ?? null) ?: 'Tidak ada'],
+                ],
             ],
-        ],
             [
-            'title' => 'IX. Analisis AI Deep Scan',
-            'rows' => array_merge(
-                [['label' => 'Rekomendasi Global AI', 'value' => $this->str($ai['global_recommendation'] ?? null) ?: 'Belum ada analisis AI Deep Scan.']],
-                empty($aiRecRows) ? [] : $aiRecRows,
-            ),
-        ],
-            [
-            'title' => 'X. Penilaian Perlindungan Kolom',
-            'rows' => $protRows,
-        ],
-            [
-            'title' => 'XI. Keterkaitan RoPA',
-            'rows' => [
-                ['label' => 'Aktivitas Pemrosesan Terkait', 'value' => $this->bullets($ropaRows, fn ($r) => trim($this->str($r->registration_number ?? null).' — '.$this->str($r->processing_activity ?? null).' ('.strtoupper($this->str($r->risk_level ?? '-')).')', ' —')) ?: '-'],
+                'title' => 'IX. Analisis AI Deep Scan',
+                'rows' => array_merge(
+                    [['label' => 'Rekomendasi Global AI', 'value' => $this->str($ai['global_recommendation'] ?? null) ?: 'Belum ada analisis AI Deep Scan.']],
+                    empty($aiRecRows) ? [] : $aiRecRows,
+                ),
             ],
-        ],
             [
-            'title' => 'XII. Status Dokumen',
-            'rows' => [
-                ['label' => 'Status Pemindaian', 'value' => strtoupper($this->str($x->scanning_status)) ?: '-'],
-                ['label' => 'Terakhir Dipindai', 'value' => $this->date($x->last_scanned_at)],
-                ['label' => 'Dibuat', 'value' => $this->date($x->created_at)],
-                ['label' => 'Terakhir Diperbarui', 'value' => $this->date($x->updated_at)],
+                'title' => 'X. Penilaian Perlindungan Kolom',
+                'rows' => $protRows,
             ],
-        ],
+            [
+                'title' => 'XI. Keterkaitan RoPA',
+                'rows' => [
+                    ['label' => 'Aktivitas Pemrosesan Terkait', 'value' => $this->bullets($ropaRows, fn ($r) => trim($this->str($r->registration_number ?? null).' — '.$this->str($r->processing_activity ?? null).' ('.strtoupper($this->str($r->risk_level ?? '-')).')', ' —')) ?: '-'],
+                ],
+            ],
+            [
+                'title' => 'XII. Status Dokumen',
+                'rows' => [
+                    ['label' => 'Status Pemindaian', 'value' => strtoupper($this->str($x->scanning_status)) ?: '-'],
+                    ['label' => 'Terakhir Dipindai', 'value' => $this->date($x->last_scanned_at)],
+                    ['label' => 'Dibuat', 'value' => $this->date($x->created_at)],
+                    ['label' => 'Terakhir Diperbarui', 'value' => $this->date($x->updated_at)],
+                ],
+            ],
         ];
     }
 
@@ -1879,17 +1946,17 @@ class RecordReportBuilder
                 ],
             ],
             [
-            'title' => 'VI. RoPA Terkait',
-            'rows' => [
+                'title' => 'VI. RoPA Terkait',
+                'rows' => [
                     ['label' => 'Aktivitas Pemrosesan Terkait', 'value' => $this->bullets(
                         $ropas->all(),
                         fn ($r) => trim($this->str($r->registration_number ?: $r->custom_number).' — '.$this->str($r->processing_activity).' ('.(strtoupper($this->str($r->risk_level)) ?: '-').')', ' —')
                     ) ?: '-'],
+                ],
             ],
-        ],
             [
-            'title' => 'VII. Rekaman Persetujuan (Consent Logs)',
-            'rows' => [
+                'title' => 'VII. Rekaman Persetujuan (Consent Logs)',
+                'rows' => [
                     ['label' => 'Total Rekaman Persetujuan', 'value' => number_format((int) $logsTotal, 0, ',', '.').' rekaman'],
                     ['label' => 'Rekaman Terbaru (maks. 20)', 'value' => $this->bullets($logs->all(), function ($log) use ($grantedCount) {
                         $subj = $this->str($log->email ?: $log->user_identifier ?: $log->name);
@@ -1908,8 +1975,8 @@ class RecordReportBuilder
 
                         return implode(' | ', array_filter($parts));
                     }) ?: 'Belum ada rekaman'],
+                ],
             ],
-        ],
         ];
     }
 }
