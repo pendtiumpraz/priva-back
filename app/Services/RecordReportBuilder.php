@@ -3,14 +3,20 @@
 namespace App\Services;
 
 use App\Models\BreachIncident;
+use App\Models\ConsentCollectionPoint;
+use App\Models\CountryAdequacy;
+use App\Models\CrossBorderTransfer;
 use App\Models\Dpia;
 use App\Models\DsrRequest;
 use App\Models\GapAssessment;
+use App\Models\InformationSystem;
 use App\Models\LiaAssessment;
 use App\Models\MaturityAssessment;
 use App\Models\MaturityQuestion;
 use App\Models\Ropa;
 use App\Models\TiaAssessment;
+use App\Models\VendorAssessment;
+use App\Models\VendorQuestionnaire;
 
 /**
  * Builds a per-record "report document" as an ordered list of sections, where
@@ -423,14 +429,14 @@ class RecordReportBuilder
                     [['label' => 'Verdict Uji Kebutuhan', 'value' => $conclusionLabel($x->conclusion_necessity)]],
                     $testRows('necessity'),
                 ),
-                ],
+            ],
             [
                 'title' => 'V. Uji Keseimbangan (Balancing Test)',
                 'rows' => array_merge(
                     [['label' => 'Verdict Uji Keseimbangan', 'value' => $conclusionLabel($x->conclusion_balancing)]],
                     $testRows('balancing'),
                 ),
-                ],
+            ],
             [
                 'title' => 'VI. Kesimpulan & Catatan Approver',
                 'rows' => [
@@ -440,7 +446,7 @@ class RecordReportBuilder
                     ['label' => 'Catatan Approver', 'value' => $this->str($x->conclusion_notes)],
                     ['label' => 'Alasan Penolakan', 'value' => $this->str($x->rejection_reason)],
                 ],
-                ],
+            ],
             [
                 'title' => 'VII. Alur Kerja (RACI)',
                 'rows' => [
@@ -448,7 +454,7 @@ class RecordReportBuilder
                     ['label' => 'Checker', 'value' => trim($this->str($x->checker?->name).' — '.$this->date($x->checked_at), ' —')],
                     ['label' => 'Approver', 'value' => trim($this->str($x->approver?->name).' — '.$this->date($x->approved_at), ' —')],
                 ],
-                ],
+            ],
             [
                 'title' => 'VIII. Status Dokumen',
                 'rows' => [
@@ -459,7 +465,7 @@ class RecordReportBuilder
                     ['label' => 'Dibuat', 'value' => $this->date($x->created_at)],
                     ['label' => 'Terakhir Diperbarui', 'value' => $this->date($x->updated_at)],
                 ],
-                ],
+            ],
         ];
     }
 
@@ -1114,6 +1120,796 @@ class RecordReportBuilder
                     ['label' => 'Terakhir Diperbarui', 'value' => $this->date($x->updated_at)],
                 ],
             ],
+        ];
+    }
+
+    public function dataDiscovery(InformationSystem $x): array
+    {
+        $scan = $this->arr($x->scan_results);
+        $ai = $this->arr($x->ai_scan_results);
+        $config = $this->arr($x->connection_config);
+        $protection = $this->arr($x->protection_assessments);
+
+        $tables = $this->arr($scan['tables'] ?? null);
+        $aiTables = $this->arr($ai['tables'] ?? null);
+        $access = $this->arr($scan['access_paths'] ?? null);
+        $enc = $this->arr($scan['encryption'] ?? null);
+        $diffAlerts = $this->arr($scan['diff_alerts'] ?? null);
+
+        // Label maps for the recommendation-vs-applied lifecycle of each column.
+        $appliedLabel = [
+            'applied_pribadi' => 'Diterapkan: Data Pribadi',
+            'applied_sensitive' => 'Diterapkan: Data Sensitif',
+            'not_pii' => 'Ditandai: Bukan PII',
+            'rejected' => 'Rekomendasi Ditolak',
+            'pending' => 'Rekomendasi (Belum Direview)',
+        ];
+        $appliedStatus = fn ($c) => $appliedLabel[(string) ($c['applied_status'] ?? '')] ?? 'Rekomendasi (Belum Direview)';
+
+        // Aggregate counts across every scanned table/column.
+        $colCount = 0;
+        $piiCount = 0;
+        $encReqCount = 0;
+        $manualCount = 0;
+        $totalRows = 0;
+        $applied = ['applied_pribadi' => 0, 'applied_sensitive' => 0, 'not_pii' => 0, 'rejected' => 0];
+        $pdpBuckets = [];
+        foreach ($tables as $t) {
+            $totalRows += (int) ($t['row_count'] ?? 0);
+            foreach ($this->arr($t['columns'] ?? null) as $c) {
+                $colCount++;
+                if (! empty($c['pii_detected'])) {
+                    $piiCount++;
+                }
+                if (! empty($c['encryption_required'])) {
+                    $encReqCount++;
+                }
+                if (! empty($c['manually_classified'])) {
+                    $manualCount++;
+                }
+                $as = (string) ($c['applied_status'] ?? '');
+                if (isset($applied[$as])) {
+                    $applied[$as]++;
+                }
+                $cat = trim((string) ($c['pdp_category'] ?? ''));
+                if ($cat !== '') {
+                    $pdpBuckets[$cat] = ($pdpBuckets[$cat] ?? 0) + 1;
+                }
+            }
+        }
+
+        // Per-table rows: each table lists its flagged columns as bullets.
+        $tableRows = [];
+        foreach ($tables as $t) {
+            $tName = $this->str($t['name'] ?? $t['table_name'] ?? null);
+            if ($tName === '') {
+                continue;
+            }
+            $cols = $this->arr($t['columns'] ?? null);
+            $flagged = array_values(array_filter($cols, fn ($c) => ! empty($c['pii_detected']) || trim((string) ($c['pdp_category'] ?? '')) !== '' || ! empty($c['applied_status'])));
+            $meta = 'Baris: '.number_format((int) ($t['row_count'] ?? 0), 0, ',', '.')
+            .' | Kolom: '.count($cols)
+            .(isset($t['size_mb']) ? ' | Ukuran: '.$this->str($t['size_mb']).' MB' : '');
+            $body = $this->bullets($flagged, function ($c) use ($appliedStatus) {
+                $parts = $this->str($c['name'] ?? $c['column_name'] ?? null);
+                if (! empty($c['type'])) {
+                    $parts .= ' ('.$this->str($c['type']).')';
+                }
+                $tags = [];
+                $tags[] = 'PII: '.($this->yn(! empty($c['pii_detected'])));
+                if (trim((string) ($c['pdp_category'] ?? '')) !== '') {
+                    $tags[] = 'Kategori PDP: '.$this->str($c['pdp_category']);
+                }
+                if (trim((string) ($c['classification'] ?? '')) !== '') {
+                    $tags[] = 'Klasifikasi: '.strtoupper($this->str($c['classification']));
+                }
+                $tags[] = 'Status: '.$appliedStatus($c);
+                if (! empty($c['encryption_required'])) {
+                    $tags[] = 'Perlu Enkripsi';
+                }
+
+                return trim($parts.' — '.implode(' | ', $tags), ' —');
+            });
+            $tableRows[] = ['label' => $tName, 'value' => trim($meta."\n".($body !== '' ? $body : 'Tidak ada kolom terklasifikasi.'))];
+        }
+        if (empty($tableRows)) {
+            $tableRows[] = ['label' => 'Tabel', 'value' => 'Belum ada hasil pemindaian.'];
+        }
+
+        // AI Deep Scan per-column recommendations.
+        $aiRecRows = [];
+        foreach ($aiTables as $t) {
+            $tName = $this->str($t['name'] ?? null);
+            $recs = array_values(array_filter($this->arr($t['columns'] ?? null), fn ($c) => trim((string) ($c['ai_recommendation'] ?? '')) !== ''));
+            if (empty($recs)) {
+                continue;
+            }
+            $aiRecRows[] = [
+                'label' => $tName,
+                'value' => $this->bullets($recs, fn ($c) => trim($this->str($c['name'] ?? null).': '.$this->str($c['ai_recommendation'] ?? null), ': ')),
+            ];
+        }
+
+        // Protection assessment per column (keyed by "table.column").
+        $protMeta = ['assessed_at', 'assessed_by', 'assessed_by_name', 'source'];
+        $protRows = [];
+        foreach ($protection as $key => $entry) {
+            $entry = $this->arr($entry);
+            $checks = [];
+            foreach ($entry as $k => $v) {
+                if (in_array($k, $protMeta, true)) {
+                    continue;
+                }
+                $checks[] = ucfirst(str_replace('_', ' ', (string) $k)).': '.$this->str($v);
+            }
+            $footer = trim('Sumber: '.($this->str($entry['source'] ?? null) ?: '-')
+            .' | Oleh: '.($this->str($entry['assessed_by_name'] ?? null) ?: '-')
+            .' | '.$this->date($entry['assessed_at'] ?? null), ' |');
+            $protRows[] = [
+                'label' => $this->str($key),
+                'value' => trim(implode("\n", $checks)."\n".$footer),
+            ];
+        }
+        if (empty($protRows)) {
+            $protRows[] = ['label' => 'Penilaian Perlindungan', 'value' => 'Belum ada penilaian perlindungan kolom.'];
+        }
+
+        // Related RoPA (many-to-many pivot). Only when eager-loaded to avoid N+1.
+        $ropaRows = [];
+        if ($x->relationLoaded('ropas')) {
+            $ropaRows = $x->ropas->all();
+        }
+
+        return [
+            [
+                'title' => 'I. Identitas Sistem Informasi',
+                'rows' => [
+                    ['label' => 'Nama Sistem', 'value' => $this->str($x->name)],
+                    ['label' => 'Kode Sistem', 'value' => $this->str($x->code)],
+                    ['label' => 'Deskripsi', 'value' => $this->str($x->description)],
+                    ['label' => 'Pemilik Sistem (Owner)', 'value' => $this->str($x->owner)],
+                    ['label' => 'Tipe Sumber Data', 'value' => strtoupper($this->str($x->source_type)) ?: '-'],
+                    ['label' => 'Tipe Koneksi', 'value' => $this->str($x->connection_type)],
+                    ['label' => 'Menggunakan Sharding', 'value' => $this->yn($x->is_sharded)],
+                    ['label' => 'Jumlah Shard', 'value' => (string) count($this->arr($x->shards))],
+                    ['label' => 'Dibuat', 'value' => $this->date($x->created_at)],
+                ],
+            ],
+            [
+                'title' => 'II. Konfigurasi Koneksi Sumber Data',
+                'rows' => [
+                    ['label' => 'Host', 'value' => $this->str($config['host'] ?? null)],
+                    ['label' => 'Port', 'value' => $this->str($config['port'] ?? null)],
+                    ['label' => 'Nama Database', 'value' => $this->str($config['database'] ?? null)],
+                    ['label' => 'Username', 'value' => $this->str($config['username'] ?? null)],
+                    ['label' => 'Uji Koneksi Terakhir', 'value' => $this->date($config['last_test'] ?? null)],
+                    ['label' => 'Hasil Uji Koneksi', 'value' => trim($this->yn($this->arr($config['test_result'] ?? null)['success'] ?? null).' — '.$this->str($this->arr($config['test_result'] ?? null)['message'] ?? null), ' —')],
+                ],
+            ],
+            [
+                'title' => 'III. Status Pemindaian (Scan)',
+                'rows' => [
+                    ['label' => 'Status Pemindaian', 'value' => strtoupper($this->str($x->scanning_status)) ?: '-'],
+                    ['label' => 'Progres Pemindaian', 'value' => $x->scanning_progress !== null ? round((float) $x->scanning_progress).'%' : '-'],
+                    ['label' => 'Terakhir Dipindai', 'value' => $this->date($x->last_scanned_at)],
+                    ['label' => 'Mesin Pemindai (Engine)', 'value' => $this->str($scan['engine_version'] ?? ($scan['engine'] ?? null))],
+                    ['label' => 'Durasi Pemindaian', 'value' => isset($scan['scan_duration_ms']) ? $this->str($scan['scan_duration_ms']).' ms' : '-'],
+                    ['label' => 'Total Baris Dipindai', 'value' => number_format((int) ($scan['total_rows_scanned'] ?? $totalRows), 0, ',', '.')],
+                    ['label' => 'Galat Pemindaian', 'value' => $this->str($scan['error'] ?? null) ?: 'Tidak ada'],
+                ],
+            ],
+            [
+                'title' => 'IV. Ringkasan Temuan Data Pribadi',
+                'rows' => [
+                    ['label' => 'Total Alert PDP', 'value' => (string) ((int) ($x->pdp_alert_count ?? 0))],
+                    ['label' => 'Total Alert PII', 'value' => (string) ((int) ($x->pii_alert_count ?? 0))],
+                    ['label' => 'Jumlah Tabel Dipindai', 'value' => (string) count($tables)],
+                    ['label' => 'Total Kolom Dipindai', 'value' => (string) $colCount],
+                    ['label' => 'Kolom Terdeteksi PII', 'value' => (string) $piiCount],
+                    ['label' => 'Kolom Perlu Enkripsi', 'value' => (string) $encReqCount],
+                    ['label' => 'Kolom Diklasifikasi Manual', 'value' => (string) $manualCount],
+                    ['label' => 'Diterapkan: Data Pribadi', 'value' => (string) $applied['applied_pribadi']],
+                    ['label' => 'Diterapkan: Data Sensitif', 'value' => (string) $applied['applied_sensitive']],
+                    ['label' => 'Ditandai: Bukan PII', 'value' => (string) $applied['not_pii']],
+                    ['label' => 'Rekomendasi Ditolak', 'value' => (string) $applied['rejected']],
+                    ['label' => 'Sebaran Kategori PDP', 'value' => $this->bullets(
+                        array_map(fn ($k, $v) => ['k' => $k, 'v' => $v], array_keys($pdpBuckets), array_values($pdpBuckets)),
+                        fn ($p) => $this->str($p['k']).': '.$this->str($p['v']).' kolom'
+                    ) ?: '-'],
+                ],
+            ],
+            [
+            'title' => 'V. Rincian Tabel & Kolom Terklasifikasi',
+            'rows' => $tableRows,
+        ],
+            [
+            'title' => 'VI. Perubahan Skema Terdeteksi',
+            'rows' => [
+                    ['label' => 'Peringatan Perubahan Skema', 'value' => $this->bullets($diffAlerts, fn ($a) => $this->str($a)) ?: 'Tidak ada perubahan skema terdeteksi.'],
+            ],
+        ],
+            [
+            'title' => 'VII. Jalur Akses (Access Paths)',
+            'rows' => [
+                    ['label' => 'Akun / Peran Basis Data', 'value' => $this->bullets($this->arr($access['roles'] ?? null), fn ($r) => trim($this->str($r['name'] ?? null).($this->yn($r['can_login'] ?? null) === 'Ya' ? ' — dapat login' : '').(! empty($r['is_superuser']) ? ' — superuser' : ''), ' —')) ?: '-'],
+                    ['label' => 'Hak Akses Tabel (Grants)', 'value' => $this->bullets($this->arr($access['grants'] ?? null), fn ($g) => trim($this->str($g['grantee'] ?? null).' → '.$this->str($g['table'] ?? null).' : '.$this->str($g['privilege'] ?? null).(! empty($g['is_grantable']) ? ' (grantable)' : ''), ' →: ')) ?: '-'],
+                    ['label' => 'Galat Pemindaian Akses', 'value' => $this->str($access['error'] ?? null) ?: 'Tidak ada'],
+            ],
+        ],
+            [
+            'title' => 'VIII. Sinyal Enkripsi',
+            'rows' => [
+                    ['label' => 'Mesin Basis Data', 'value' => $this->str($enc['engine'] ?? null)],
+                    ['label' => 'Koneksi TLS/SSL Aktif', 'value' => $this->yn($enc['ssl_in_use'] ?? null)],
+                    ['label' => 'Enkripsi Data-at-Rest', 'value' => $this->yn($enc['data_at_rest_encrypted'] ?? null) ?: 'Tidak diketahui di lapisan basis data'],
+                    ['label' => 'Tabel dengan Enkripsi Kolom Terdeteksi', 'value' => $this->bullets($this->arr($this->arr($enc['column_encryption_observed'] ?? null)['tables'] ?? null), fn ($t) => $this->str($t)) ?: '-'],
+                    ['label' => 'Galat Pemindaian Enkripsi', 'value' => $this->str($enc['error'] ?? null) ?: 'Tidak ada'],
+            ],
+        ],
+            [
+            'title' => 'IX. Analisis AI Deep Scan',
+            'rows' => array_merge(
+                [['label' => 'Rekomendasi Global AI', 'value' => $this->str($ai['global_recommendation'] ?? null) ?: 'Belum ada analisis AI Deep Scan.']],
+                empty($aiRecRows) ? [] : $aiRecRows,
+            ),
+        ],
+            [
+            'title' => 'X. Penilaian Perlindungan Kolom',
+            'rows' => $protRows,
+        ],
+            [
+            'title' => 'XI. Keterkaitan RoPA',
+            'rows' => [
+                ['label' => 'Aktivitas Pemrosesan Terkait', 'value' => $this->bullets($ropaRows, fn ($r) => trim($this->str($r->registration_number ?? null).' — '.$this->str($r->processing_activity ?? null).' ('.strtoupper($this->str($r->risk_level ?? '-')).')', ' —')) ?: '-'],
+            ],
+        ],
+            [
+            'title' => 'XII. Status Dokumen',
+            'rows' => [
+                ['label' => 'Status Pemindaian', 'value' => strtoupper($this->str($x->scanning_status)) ?: '-'],
+                ['label' => 'Terakhir Dipindai', 'value' => $this->date($x->last_scanned_at)],
+                ['label' => 'Dibuat', 'value' => $this->date($x->created_at)],
+                ['label' => 'Terakhir Diperbarui', 'value' => $this->date($x->updated_at)],
+            ],
+        ],
+        ];
+    }
+
+    public function vendorRisk(VendorAssessment $x): array
+    {
+        // ---- effective question set (mirror ThirdPartyAssessmentScorer::compute +
+        //      TprmReviewController::doShow dual path). library_id terisi → semua
+        //      pertanyaan aktif library tsb; legacy (NULL) → effectiveForOrg + v2_2026.
+        if (! empty($x->library_id)) {
+            $questions = VendorQuestionnaire::query()
+                ->withoutGlobalScope('org')
+                ->where('library_id', $x->library_id)
+                ->where('is_active', true)
+                ->orderBy('section')
+                ->orderBy('sort_order')
+                ->get();
+        } else {
+            $questions = VendorQuestionnaire::effectiveForOrg($x->org_id)
+                ->filter(fn ($q) => $q->is_active && $q->version === 'v2_2026')
+                ->sortBy(['section', 'sort_order'])
+                ->values();
+        }
+
+        $answers = $this->arr($x->answers);
+        $aiAnalyses = $this->arr($x->ai_analyses);
+        $breakdown = $this->arr($x->score_breakdown);
+        $recommendations = $this->arr($x->recommendations);
+        $vendor = $x->vendor;
+
+        // ---- label maps
+        $valLabel = ['ya' => 'Ya', 'tidak' => 'Tidak', 'tidak_tahu' => 'Tidak Tahu / Tidak Yakin'];
+        $aiLabel = [
+            'comply' => 'Memenuhi', 'partial' => 'Memenuhi Sebagian',
+            'non_comply' => 'Belum Memenuhi', 'unsure' => 'AI Tidak Yakin',
+        ];
+        $riskLabel = [
+            'low' => 'Rendah', 'medium' => 'Sedang', 'high' => 'Tinggi', 'critical' => 'Kritis',
+            'rendah' => 'Rendah', 'sedang' => 'Sedang', 'tinggi' => 'Tinggi', 'kritis' => 'Kritis',
+        ];
+        $statusLabel = [
+            VendorAssessment::STATUS_DRAFT => 'Draf',
+            VendorAssessment::STATUS_SENT => 'Terkirim ke Pihak Ketiga',
+            VendorAssessment::STATUS_SUBMITTED => 'Telah Disubmit (Menunggu Peninjauan)',
+            VendorAssessment::STATUS_REVIEW_IN_PROGRESS => 'Sedang Ditinjau',
+            VendorAssessment::STATUS_PENDING_APPROVAL => 'Menunggu Persetujuan',
+            VendorAssessment::STATUS_APPROVED => 'Disetujui',
+            VendorAssessment::STATUS_REJECTED => 'Ditolak',
+        ];
+        $sourceLabel = [
+            VendorAssessment::SOURCE_DETERMINISTIC => 'Kuesioner Deterministik',
+            VendorAssessment::SOURCE_AI => 'Berbantuan AI',
+            VendorAssessment::SOURCE_IMPORTED => 'Impor',
+        ];
+        $sectionLabels = VendorQuestionnaire::SECTION_LABELS;
+        $catLabels = VendorQuestionnaire::CATEGORY_LABELS;
+
+        $st = (string) $x->status;
+        $stText = $statusLabel[$st] ?? (strtoupper($this->str($st)) ?: '-');
+        $rl = strtolower($this->str($x->risk_level));
+        $rlText = $rl !== '' ? (($riskLabel[$rl] ?? ucfirst($rl)).' ('.strtoupper($rl).')') : '-';
+
+        // ---- helper: normalise satu entri jawaban → [value, note, evidenceCount]
+        $readAnswer = function ($entry) {
+            if (is_array($entry)) {
+                $ev = isset($entry['evidence']) && is_array($entry['evidence']) ? count($entry['evidence']) : 0;
+
+                return [$entry['value'] ?? null, $this->str($entry['note'] ?? null), $ev];
+            }
+            if (is_string($entry)) {
+                return [$entry, '', 0];
+            }
+
+            return [null, '', 0];
+        };
+
+        // ---- per-question detail rows (grouped mengikuti urutan section pertanyaan)
+        $questionRows = [];
+        foreach ($questions as $q) {
+            [$value, $note, $evCount] = $readAnswer($answers[$q->id] ?? null);
+            $sectionText = $sectionLabels[$q->section] ?? ($this->str($q->section) ?: '-');
+            $val = 'Bagian: '.$sectionText
+            .' | Jawaban: '.($value !== null && $value !== '' ? ($valLabel[$value] ?? $this->str($value)) : 'Belum Dijawab');
+            if ($note !== '') {
+                $val .= "\nCatatan: ".$note;
+            }
+            $aiVerdict = VendorAssessment::aggregateAiVerdict($aiAnalyses[$q->id] ?? null);
+            if ($aiVerdict) {
+                $val .= "\nVerdict AI (advisory): ".($aiLabel[$aiVerdict] ?? $aiVerdict);
+            }
+            if ($evCount > 0) {
+                $val .= "\nBukti Terlampir: ".$evCount.' dokumen';
+            } elseif ($q->requires_evidence_upload) {
+                $val .= "\nBukti Terlampir: wajib namun belum diunggah";
+            }
+            $questionRows[] = [
+                'label' => trim($this->str($q->question_code).' — '.$this->str($q->question_text), ' —'),
+                'value' => $val,
+            ];
+        }
+        if (empty($questionRows)) {
+            $questionRows[] = ['label' => 'Pertanyaan', 'value' => '-'];
+        }
+
+        // ---- AI document verification: satu baris per pertanyaan yang punya analisis
+        $qTextById = [];
+        foreach ($questions as $q) {
+            $qTextById[$q->id] = $q->question_text ?: $q->question_code;
+        }
+        $aiRows = [];
+        foreach ($aiAnalyses as $qId => $entries) {
+            $list = $this->arr($entries);
+            if (isset($list['status'])) {
+                $list = [$list];
+            }
+            $list = array_values(array_filter($list, fn ($e) => is_array($e)));
+            if (empty($list)) {
+                continue;
+            }
+            $worst = VendorAssessment::aggregateAiVerdict($entries);
+            $lines = ['Verdict AI (worst-case): '.($worst ? ($aiLabel[$worst] ?? $worst) : 'AI Tidak Yakin')];
+            foreach ($list as $ai) {
+                $fname = isset($ai['attachment_path']) ? basename((string) $ai['attachment_path']) : '';
+                $fname = $fname !== '' ? $fname : 'Dokumen';
+                $lines[] = '— '.$fname.': '.($aiLabel[$ai['status'] ?? ''] ?? ($this->str($ai['status'] ?? null) ?: '-'));
+                if (! empty($ai['analysis'])) {
+                    $lines[] = '  '.$this->str($ai['analysis']);
+                }
+                $cited = $this->arr($ai['cited_passages'] ?? null);
+                if (! empty($cited)) {
+                    $lines[] = '  Kutipan: '.implode(' | ', array_slice(array_map(fn ($c) => $this->str($c), $cited), 0, 2));
+                }
+            }
+            $aiRows[] = ['label' => $this->str($qTextById[$qId] ?? $qId), 'value' => implode("\n", $lines)];
+        }
+
+        return [
+            [
+                'title' => 'I. Identitas Asesmen Pihak Ketiga',
+                'rows' => [
+                    ['label' => 'ID Asesmen', 'value' => $this->str($x->id)],
+                    ['label' => 'Nama Pihak Ketiga', 'value' => $this->str($vendor?->name)],
+                    ['label' => 'Kategori Kuesioner', 'value' => $this->str($catLabels[$x->category] ?? $x->category)],
+                    ['label' => 'Versi Kuesioner', 'value' => $this->str($x->questionnaire_version)],
+                    ['label' => 'Sumber Penilaian', 'value' => $this->str($sourceLabel[$x->source] ?? $x->source)],
+                    ['label' => 'Dinilai oleh', 'value' => $this->str($x->assessor?->name)],
+                    ['label' => 'Status Alur Kerja', 'value' => $stText],
+                    ['label' => 'Tanggal Dikirim (Submit)', 'value' => $this->date($x->submitted_at)],
+                ],
+            ],
+            [
+                'title' => 'II. Profil & Identitas Pihak Ketiga',
+                'rows' => [
+                    ['label' => 'Nama', 'value' => $this->str($vendor?->name)],
+                    ['label' => 'Jenis / Tipe', 'value' => $this->str($vendor?->type)],
+                    ['label' => 'Jenis Entitas', 'value' => $this->str($vendor?->jenis_entitas)],
+                    ['label' => 'Bidang', 'value' => $this->str($this->arr($vendor?->bidang))],
+                    ['label' => 'Negara', 'value' => $this->str($vendor?->country)],
+                    ['label' => 'Alamat', 'value' => $this->str($vendor?->alamat)],
+                    ['label' => 'NPWP', 'value' => $this->str($vendor?->npwp)],
+                    ['label' => 'Kontak PIC', 'value' => $vendor ? trim($this->str($vendor->contact_name).' — '.$this->str($vendor->pic_jabatan).' '.$this->str($vendor->contact_email).' '.$this->str($vendor->telepon), ' —') : ''],
+                    ['label' => 'Departemen Kontak', 'value' => $this->str($vendor?->departemen_kontak)],
+                    ['label' => 'Situs Web', 'value' => $this->str($vendor?->website)],
+                    ['label' => 'URL Kebijakan Privasi', 'value' => $this->str($vendor?->privacy_policy_url)],
+                    ['label' => 'Deskripsi', 'value' => $this->str($vendor?->description)],
+                    ['label' => 'Layanan yang Diberikan', 'value' => $this->str($this->arr($vendor?->services_provided))],
+                    ['label' => 'Data yang Dibagikan', 'value' => $this->str($this->arr($vendor?->data_shared))],
+                    ['label' => 'Status Cakupan PDP', 'value' => $this->str($vendor?->pdp_scope_status)],
+                ],
+            ],
+            [
+                'title' => 'III. Perjanjian Pemrosesan Data (DPA)',
+                'rows' => [
+                    ['label' => 'Status DPA', 'value' => $this->str($vendor?->dpa_status)],
+                    ['label' => 'DPA Ditandatangani', 'value' => $this->date($vendor?->dpa_signed_at)],
+                    ['label' => 'DPA Kedaluwarsa', 'value' => $this->date($vendor?->dpa_expires_at)],
+                    ['label' => 'Jadwal Asesmen Ulang', 'value' => $this->date($vendor?->next_assessment_due_at)],
+                ],
+            ],
+            [
+                'title' => 'IV. Hasil Penilaian Risiko',
+                'rows' => [
+                    ['label' => 'Skor', 'value' => $x->score !== null ? $this->str($x->score).' / 100' : '-'],
+                    ['label' => 'Tingkat Risiko', 'value' => $rlText],
+                    ['label' => 'Total Pertanyaan Aktif', 'value' => $this->str($breakdown['total_aktif'] ?? $questions->count())],
+                    ['label' => 'Dijawab "Ya"', 'value' => $this->str($breakdown['jawab_ya'] ?? null)],
+                    ['label' => 'Dijawab "Tidak"', 'value' => $this->str($breakdown['jawab_tidak'] ?? null)],
+                    ['label' => 'Belum Dijawab / Tidak Tahu', 'value' => $this->str($breakdown['jawab_kosong'] ?? null)],
+                ],
+            ],
+            [
+                'title' => 'V. Detail Jawaban per Pertanyaan',
+                'rows' => $questionRows,
+            ],
+            [
+                'title' => 'VI. Rekomendasi Perbaikan',
+                'rows' => empty($recommendations)
+                ? [['label' => 'Rekomendasi', 'value' => '-']]
+                : array_map(fn ($rec) => [
+                    'label' => trim($this->str($rec['question_code'] ?? null).' — '.$this->str($sectionLabels[$rec['section'] ?? ''] ?? ($rec['section'] ?? '')), ' —'),
+                    'value' => 'Pertanyaan: '.($this->str($rec['pertanyaan'] ?? null) ?: '-')."\nRekomendasi: ".($this->str($rec['rekomendasi'] ?? null) ?: '-'),
+                ], array_values($recommendations)),
+            ],
+            [
+                'title' => 'VII. Verifikasi AI Dokumen Pendukung (Advisory)',
+                'rows' => empty($aiRows) ? [['label' => 'Analisis AI', 'value' => '-']] : $aiRows,
+            ],
+            [
+                'title' => 'VIII. Alur Kerja Peninjauan & Persetujuan',
+                'rows' => [
+                    ['label' => 'Catatan Peninjau (Reviewer)', 'value' => $this->str($x->reviewer_note)],
+                    ['label' => 'Ditinjau Pada', 'value' => $this->date($x->reviewer_actioned_at)],
+                    ['label' => 'Catatan Penyetuju (Approver)', 'value' => $this->str($x->approver_note)],
+                    ['label' => 'Disetujui / Ditindak Pada', 'value' => $this->date($x->approver_actioned_at)],
+                    ['label' => 'Alasan Penolakan', 'value' => $this->str($x->rejection_reason)],
+                    ['label' => 'Catatan Internal', 'value' => $this->str($x->notes)],
+                    ['label' => 'Alur Kerja Terkunci', 'value' => $this->yn($x->workflow_locked)],
+                ],
+            ],
+            [
+                'title' => 'IX. Status Dokumen & Jejak Pengiriman',
+                'rows' => [
+                    ['label' => 'Status', 'value' => $stText],
+                    ['label' => 'Tanggal Dikirim', 'value' => $this->date($x->submitted_at)],
+                    ['label' => 'Alamat IP Pengirim', 'value' => $this->str($x->submitted_ip)],
+                    ['label' => 'User Agent Pengirim', 'value' => $this->str($x->submitted_user_agent)],
+                    ['label' => 'Dibuat', 'value' => $this->date($x->created_at)],
+                    ['label' => 'Terakhir Diperbarui', 'value' => $this->date($x->updated_at)],
+                ],
+            ],
+        ];
+    }
+
+    public function crossBorder(CrossBorderTransfer $x): array
+    {
+        // tia_summary is persisted as a json_encode()'d string (NOT in $casts),
+        // so decode it manually; tia_answers IS array-cast.
+        $tia = is_string($x->tia_summary)
+        ? $this->arr(json_decode($x->tia_summary, true))
+        : $this->arr($x->tia_summary);
+        $answers = $this->arr($x->tia_answers);
+
+        // Country adequacy reference (platform-level lookup, may be null when the
+        // destination string isn't in the adequacy table → treat as Tier "none").
+        $adq = $x->adequacy();
+
+        // Enum → Bahasa Indonesia label maps (model constants + module-local sets).
+        $volumeLabels = CrossBorderTransfer::VOLUME_BAND_LABELS;
+        $freqLabels = CrossBorderTransfer::FREQUENCY_LABELS;
+        $sensLabels = CrossBorderTransfer::SENSITIVITY_LABELS;
+        $mechLabels = CrossBorderTransfer::MECHANISM_LABELS;
+
+        $legalLabels = [
+            'none' => 'Belum dipilih / Tidak ada dasar formal',
+            'adequacy' => 'Tingkat perlindungan setara (adequacy)',
+            'sccs' => 'Standard Contractual Clauses (SCCs)',
+            'bcr' => 'Binding Corporate Rules (BCR)',
+            'consent' => 'Persetujuan eksplisit subjek data',
+            'contract_necessity' => 'Pelaksanaan kontrak dengan subjek',
+            'public_interest' => 'Kepentingan publik',
+            'vital_interest' => 'Kepentingan vital (vital interest)',
+        ];
+        $statusLabels = [
+            'draft' => 'Draf', 'pending' => 'Menunggu Persetujuan',
+            'approved' => 'Disetujui', 'rejected' => 'Ditolak', 'expired' => 'Kedaluwarsa',
+        ];
+        $riskLabels = ['low' => 'Rendah', 'medium' => 'Sedang', 'high' => 'Tinggi', 'critical' => 'Kritis'];
+        $sourceLabels = ['ai' => 'AI-assisted', 'manual' => 'Manual (rubric Pasal 56)'];
+
+        $legalBasis = (string) ($x->legal_basis ?? '');
+        $legalText = $legalBasis !== '' ? ($legalLabels[$legalBasis] ?? $legalBasis) : '';
+
+        $status = strtolower($this->str($x->status));
+        $statusText = $status !== '' ? ($statusLabels[$status] ?? ucfirst($status)) : '-';
+
+        $riskLevel = strtolower($this->str($x->risk_level));
+        $riskText = $riskLevel !== ''
+        ? (($riskLabels[$riskLevel] ?? ucfirst($riskLevel)).' ('.strtoupper($riskLevel).')')
+        : '-';
+
+        // RoPA linkage (belongsTo via linked_ropa_id).
+        $ropa = $x->ropa;
+        $ropaText = $ropa
+        ? trim(($ropa->registration_number ?: $ropa->custom_number).' — '.$ropa->processing_activity, ' —')
+        : '';
+
+        // Adequacy tier + narrative.
+        if ($adq) {
+            $tierText = CountryAdequacy::TIER_LABELS[$adq->tier] ?? $this->str($adq->tier);
+        } else {
+            $tierText = CountryAdequacy::TIER_LABELS[CountryAdequacy::TIER_NONE]
+            .' — negara tidak terdaftar di lookup, wajib safeguard tambahan (SCCs/BCR/persetujuan).';
+        }
+
+        // TIA questionnaire answers: assoc map question_key => bool|string.
+        $answerRows = [];
+        foreach ($answers as $k => $v) {
+            $answerRows[] = ['k' => (string) $k, 'v' => $v];
+        }
+
+        return [
+            [
+                'title' => 'I. Identitas Transfer Lintas Negara',
+                'rows' => [
+                    ['label' => 'Negara Tujuan', 'value' => $this->str($x->destination_country)],
+                    ['label' => 'Entitas Penerima', 'value' => $this->str($x->destination_entity)],
+                    ['label' => 'Tujuan Transfer', 'value' => $this->str($x->transfer_purpose)],
+                    ['label' => 'Aktivitas Pemrosesan Terkait (RoPA)', 'value' => $ropaText],
+                    ['label' => 'Kategori Data yang Ditransfer', 'value' => $this->str($this->arr($x->data_categories))],
+                    ['label' => 'Catatan', 'value' => $this->str($x->notes)],
+                ],
+            ],
+            [
+                'title' => 'II. Profil Transfer',
+                'rows' => [
+                    ['label' => 'Volume Transfer', 'value' => $x->transfer_volume_band ? ($volumeLabels[$x->transfer_volume_band] ?? $this->str($x->transfer_volume_band)) : '-'],
+                    ['label' => 'Frekuensi Transfer', 'value' => $x->transfer_frequency ? ($freqLabels[$x->transfer_frequency] ?? $this->str($x->transfer_frequency)) : '-'],
+                    ['label' => 'Tingkat Sensitivitas Data', 'value' => $x->data_sensitivity ? ($sensLabels[$x->data_sensitivity] ?? $this->str($x->data_sensitivity)) : '-'],
+                    ['label' => 'Mekanisme Transfer', 'value' => $x->transfer_mechanism ? ($mechLabels[$x->transfer_mechanism] ?? $this->str($x->transfer_mechanism)) : '-'],
+                    ['label' => 'Periode Retensi di Penerima', 'value' => $x->retention_period_days !== null ? number_format((int) $x->retention_period_days, 0, ',', '.').' hari' : '-'],
+                ],
+            ],
+            [
+                'title' => 'III. Kontrol Keamanan & Minimisasi Data',
+                'rows' => [
+                    ['label' => 'Enkripsi In-Transit (TLS 1.2+)', 'value' => $this->yn($x->encryption_in_transit)],
+                    ['label' => 'Enkripsi At-Rest (AES-256)', 'value' => $this->yn($x->encryption_at_rest)],
+                    ['label' => 'Data Minimization Diterapkan', 'value' => $this->yn($x->data_minimization_applied)],
+                ],
+            ],
+            [
+                'title' => 'IV. Penanggung Jawab di Penerima (Pasal 56 ayat 2)',
+                'rows' => [
+                    ['label' => 'Nama DPO / PIC Penerima', 'value' => $this->str($x->recipient_dpo_name)],
+                    ['label' => 'Email DPO / PIC Penerima', 'value' => $this->str($x->recipient_dpo_email)],
+                ],
+            ],
+            [
+                'title' => 'V. Dasar Hukum & Status Adekuasi Negara Tujuan',
+                'rows' => [
+                    ['label' => 'Dasar Hukum Transfer (Pasal 56 UU PDP)', 'value' => $legalText ?: '-'],
+                    ['label' => 'Status Adekuasi Negara', 'value' => $tierText],
+                    ['label' => 'Dasar Klasifikasi Adekuasi', 'value' => $adq ? $this->str($adq->basis) : ''],
+                    ['label' => 'Wilayah / Region', 'value' => $adq ? $this->str($adq->region) : ''],
+                    ['label' => 'Negara Memiliki UU Pelindungan Data', 'value' => $adq ? $this->yn($adq->has_pdp_law) : ''],
+                    ['label' => 'Negara Memiliki Otoritas Pengawas', 'value' => $adq ? $this->yn($adq->has_pdp_authority) : ''],
+                    ['label' => 'Safeguard Tambahan Diwajibkan', 'value' => $adq ? $this->yn($adq->recommended_safeguards_required) : 'Ya'],
+                    ['label' => 'Catatan Adekuasi', 'value' => $adq ? $this->str($adq->notes) : ''],
+                ],
+            ],
+            [
+                'title' => 'VI. Safeguard / Langkah Perlindungan',
+                'rows' => [
+                    ['label' => 'Safeguard Terpasang', 'value' => $this->bullets($this->arr($x->safeguards), fn ($s) => $this->str($s)) ?: '-'],
+                ],
+            ],
+            [
+                'title' => 'VII. Transfer Impact Assessment (TIA)',
+                'rows' => [
+                    ['label' => 'Skor Risiko', 'value' => $x->risk_score !== null ? $this->str($x->risk_score).' / 100' : 'Belum dinilai'],
+                    ['label' => 'Tingkat Risiko', 'value' => $riskText],
+                    ['label' => 'Sumber Penilaian', 'value' => isset($tia['source']) ? ($sourceLabels[$tia['source']] ?? $this->str($tia['source'])) : '-'],
+                    ['label' => 'Dasar Hukum Rekomendasi TIA', 'value' => isset($tia['legal_basis']) ? ($legalLabels[$tia['legal_basis']] ?? $this->str($tia['legal_basis'])) : ''],
+                    ['label' => 'Rekomendasi Safeguard (TIA)', 'value' => $this->bullets($this->arr($tia['safeguards'] ?? null), fn ($s) => $this->str($s))],
+                    ['label' => 'Waktu Penilaian TIA', 'value' => $this->date($tia['assessed_at'] ?? null)],
+                    ['label' => 'Catatan Kegagalan AI', 'value' => $this->str($tia['ai_error'] ?? null)],
+                    ['label' => 'Jawaban Kuesioner TIA', 'value' => $this->bullets($answerRows, fn ($r) => ucfirst(str_replace('_', ' ', $r['k'])).': '.(is_bool($r['v']) ? $this->yn($r['v']) : $this->str($r['v'])))],
+                ],
+            ],
+            [
+                'title' => 'VIII. Status & Riwayat Waktu',
+                'rows' => [
+                    ['label' => 'Status', 'value' => $statusText],
+                    ['label' => 'Disetujui Pada', 'value' => $this->date($x->approved_at)],
+                    ['label' => 'Jadwal Tinjauan Ulang', 'value' => $this->date($x->review_due_at)],
+                    ['label' => 'Dibuat', 'value' => $this->date($x->created_at)],
+                    ['label' => 'Terakhir Diperbarui', 'value' => $this->date($x->updated_at)],
+                ],
+            ],
+        ];
+    }
+
+    public function consent(ConsentCollectionPoint $x): array
+    {
+        $settings = $this->arr($x->settings);
+        $allowedDomains = $this->arr($x->allowed_domains);
+
+        // Jenis collection point (single-kind: cookie_banner OR app_consent).
+        $kindLabels = [
+            ConsentCollectionPoint::KIND_COOKIE => 'Cookie Banner (Pengunjung Anonim)',
+            ConsentCollectionPoint::KIND_APP => 'Consent Aplikasi (Subjek Teridentifikasi)',
+        ];
+        $kindLabel = $kindLabels[$x->kind] ?? ($this->str($x->kind) ?: '-');
+
+        $displayModeLabels = [
+            'banner_bottom' => 'Banner Bawah', 'banner_top' => 'Banner Atas',
+            'modal_center' => 'Modal Tengah', 'fullscreen' => 'Layar Penuh',
+            'inline' => 'Inline (Anchor)',
+        ];
+        $frequencyLabels = [
+            'once' => 'Sekali (Once)', 'session' => 'Per Sesi', 'every_load' => 'Setiap Muat Halaman',
+        ];
+        $audienceLabels = [
+            'anonymous_only' => 'Hanya Pengunjung Anonim', 'logged_in_only' => 'Hanya Pengguna Login',
+            'both' => 'Keduanya',
+        ];
+        $categoryLabels = [
+            'essential' => 'Esensial', 'analytics' => 'Analitik', 'marketing' => 'Pemasaran',
+            'personalization' => 'Personalisasi', 'functional' => 'Fungsional',
+            'third_party' => 'Pihak Ketiga', 'other' => 'Lainnya',
+        ];
+
+        // Child data — consent items (purposes / kategori), linked RoPA, consent logs.
+        $items = $x->relationLoaded('items') ? $x->items : $x->items()->get();
+        $ropas = $x->relationLoaded('ropas') ? $x->ropas : $x->ropas()->get();
+        $logsTotal = $x->relationLoaded('logs') ? $x->logs->count() : $x->logs()->count();
+        $logs = $x->relationLoaded('logs') ? $x->logs->take(20) : $x->logs()->latest()->limit(20)->get();
+
+        // Count granted choices in one consent log (handles list vs. {id:bool} map).
+        $grantedCount = function ($log) {
+            $ci = $this->arr($log->consented_items);
+            if ($ci === []) {
+                return 0;
+            }
+
+            return array_is_list($ci) ? count($ci) : count(array_filter($ci, fn ($v) => (bool) $v));
+        };
+
+        return [
+            [
+                'title' => 'I. Identitas Titik Pengumpulan Persetujuan',
+                'rows' => [
+                    ['label' => 'Collection ID', 'value' => $this->str($x->collection_id)],
+                    ['label' => 'Nama', 'value' => $this->str($x->name)],
+                    ['label' => 'Jenis', 'value' => $kindLabel],
+                    ['label' => 'Domain', 'value' => $this->str($x->domain)],
+                    ['label' => 'URL Pengalihan (Redirect)', 'value' => $this->str($x->redirect_url)],
+                    ['label' => 'Bahasa (Locale)', 'value' => $this->str($x->locale)],
+                    ['label' => 'Webhook URL', 'value' => $this->str($x->webhook_url)],
+                    ['label' => 'Dibuat', 'value' => $this->date($x->created_at)],
+                    ['label' => 'Terakhir Diperbarui', 'value' => $this->date($x->updated_at)],
+                ],
+            ],
+            [
+                'title' => 'II. Konfigurasi Tampilan & Audiens',
+                'rows' => [
+                    ['label' => 'Mode Tampilan', 'value' => $displayModeLabels[$x->display_mode] ?? ($this->str($x->display_mode) ?: '-')],
+                    ['label' => 'Frekuensi Tampilan', 'value' => $frequencyLabels[$x->display_frequency] ?? ($this->str($x->display_frequency) ?: '-')],
+                    ['label' => 'Target Audiens', 'value' => $audienceLabels[$x->audience] ?? ($this->str($x->audience) ?: '-')],
+                    ['label' => 'Domain yang Diizinkan', 'value' => $this->str($allowedDomains) ?: '-'],
+                    ['label' => 'Warna Utama', 'value' => $this->str($settings['primary_color'] ?? null)],
+                    ['label' => 'Warna Aksen', 'value' => $this->str($settings['accent_color'] ?? null)],
+                    ['label' => 'Teks Banner', 'value' => $this->str($settings['banner_text'] ?? null)],
+                    ['label' => 'Teks Intro Modal', 'value' => $this->str($settings['modal_intro_text'] ?? null)],
+                    ['label' => 'Tampilkan "Powered By"', 'value' => $this->yn($settings['show_powered_by'] ?? null)],
+                    ['label' => 'Logo', 'value' => $this->str($settings['logo_url'] ?? ($settings['powered_by_logo'] ?? null))],
+                ],
+            ],
+            [
+                'title' => 'III. Pengaturan Wali / Guardian (Anak & Disabilitas)',
+                'rows' => [
+                    ['label' => 'Mode Wali Aktif', 'value' => $this->yn($settings['guardian_mode'] ?? null)],
+                    ['label' => 'Label Wali', 'value' => $this->str($settings['guardian_label'] ?? null)],
+                    ['label' => 'Opsi Hubungan Wali', 'value' => $this->str($settings['guardian_relation_options'] ?? null)],
+                ],
+            ],
+            [
+                'title' => 'IV. Integrasi & Autentikasi',
+                'rows' => [
+                    ['label' => 'Metode Widget Aktif', 'value' => $this->yn($x->isWidgetEnabled())],
+                    ['label' => 'Metode API Key Aktif', 'value' => $this->yn($x->isApiKeyEnabled())],
+                    ['label' => 'Client Key (Publik)', 'value' => $this->str($x->client_key)],
+                    ['label' => 'Embed Token', 'value' => $this->str($x->embed_token)],
+                    ['label' => 'Penyedia CAPTCHA', 'value' => $this->str($x->captcha_provider)],
+                    ['label' => 'CAPTCHA Site Key', 'value' => $this->str($x->captcha_site_key)],
+                    ['label' => 'API Key Terakhir Dirotasi', 'value' => $this->date($x->api_keys_last_rotated_at)],
+                ],
+            ],
+            [
+                'title' => 'V. Daftar Item Persetujuan / Kategori',
+                'rows' => [
+                    ['label' => 'Jumlah Item', 'value' => (string) $items->count()],
+                    ['label' => 'Item Persetujuan', 'value' => $this->bullets($items->all(), function ($it) use ($categoryLabels) {
+                        $cat = $categoryLabels[$it->category] ?? $this->str($it->category);
+                        $meta = [];
+                        if ($cat !== '') {
+                            $meta[] = 'Kategori: '.$cat;
+                        }
+                        $meta[] = 'Wajib: '.$this->yn($it->is_required);
+                        $meta[] = 'Aktif: '.$this->yn($it->is_active);
+                        if ($this->str($it->version) !== '') {
+                            $meta[] = 'v'.$this->str($it->version);
+                        }
+                        $line = trim($this->str($it->title).' — '.implode(' | ', $meta), ' —');
+                        $purpose = $this->str($it->specific_purpose ?: $it->description);
+                        if ($purpose !== '') {
+                            $line .= "\n  Tujuan: ".$purpose;
+                        }
+                        $cookies = $this->str($this->arr($it->cookie_keys));
+                        if ($cookies !== '') {
+                            $line .= "\n  Cookie Keys: ".$cookies;
+                        }
+
+                        return $line;
+                    }) ?: '-'],
+                ],
+            ],
+            [
+            'title' => 'VI. RoPA Terkait',
+            'rows' => [
+                    ['label' => 'Aktivitas Pemrosesan Terkait', 'value' => $this->bullets(
+                        $ropas->all(),
+                        fn ($r) => trim($this->str($r->registration_number ?: $r->custom_number).' — '.$this->str($r->processing_activity).' ('.(strtoupper($this->str($r->risk_level)) ?: '-').')', ' —')
+                    ) ?: '-'],
+            ],
+        ],
+            [
+            'title' => 'VII. Rekaman Persetujuan (Consent Logs)',
+            'rows' => [
+                    ['label' => 'Total Rekaman Persetujuan', 'value' => number_format((int) $logsTotal, 0, ',', '.').' rekaman'],
+                    ['label' => 'Rekaman Terbaru (maks. 20)', 'value' => $this->bullets($logs->all(), function ($log) use ($grantedCount) {
+                        $subj = $this->str($log->email ?: $log->user_identifier ?: $log->name);
+                        $parts = [$subj !== '' ? $subj : '(anonim)'];
+                        $parts[] = 'Setuju: '.$grantedCount($log).' item';
+                        if ($this->str($log->policy_version) !== '') {
+                            $parts[] = 'Kebijakan v'.$this->str($log->policy_version);
+                        }
+                        if ($this->str($log->source_form) !== '') {
+                            $parts[] = 'Form: '.$this->str($log->source_form);
+                        }
+                        if ($this->str($log->ip_country) !== '') {
+                            $parts[] = $this->str($log->ip_country);
+                        }
+                        $parts[] = $this->date($log->created_at);
+
+                        return implode(' | ', array_filter($parts));
+                    }) ?: 'Belum ada rekaman'],
+            ],
+        ],
         ];
     }
 }

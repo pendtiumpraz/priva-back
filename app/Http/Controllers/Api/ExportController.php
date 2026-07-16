@@ -9,6 +9,7 @@ use App\Models\BreachSimulation;
 use App\Models\ConsentCollectionPoint;
 use App\Models\ConsentItem;
 use App\Models\ConsentLog;
+use App\Models\CrossBorderTransfer;
 use App\Models\Dpia;
 use App\Models\DpiaRiskEventTemplate;
 use App\Models\DsrRequest;
@@ -22,6 +23,7 @@ use App\Models\Ropa;
 use App\Models\TiaAssessment;
 use App\Models\User;
 use App\Models\Vendor;
+use App\Models\VendorAssessment;
 use App\Services\BrandedXlsxExporter;
 use App\Services\RecordDocRenderer;
 use App\Services\RecordReportBuilder;
@@ -1567,6 +1569,11 @@ class ExportController extends Controller
         'gap' => [GapAssessment::class, [], 'gap', 'GAP', 'Laporan GAP Assessment', 'version'],
         'breach' => [BreachIncident::class, [], 'breach', 'Breach', 'Dokumen Insiden Pelanggaran Data', 'incident_code'],
         'dsr' => [DsrRequest::class, ['app', 'assignee', 'scopes.informationSystem', 'executions.informationSystem'], 'dsr', 'DSR', 'Dokumen DSR', 'request_id'],
+        'data-discovery' => [InformationSystem::class, ['ropas'], 'dataDiscovery', 'Data Discovery', 'Dokumen Data Discovery', 'name'],
+        'vendor-risk' => [VendorAssessment::class, ['vendor', 'assessor'], 'vendorRisk', 'Asesmen Pihak Ketiga', 'Dokumen Asesmen Pihak Ketiga', 'id'],
+        'cross-border' => [CrossBorderTransfer::class, ['ropa'], 'crossBorder', 'Cross-Border', 'Dokumen Transfer Lintas Negara', 'destination_entity'],
+        'consent' => [ConsentCollectionPoint::class, ['items', 'ropas', 'logs'], 'consent', 'Consent', 'Dokumen Consent Collection Point', 'collection_id'],
+        'cookie' => [ConsentCollectionPoint::class, ['items', 'ropas', 'logs'], 'consent', 'Cookie', 'Dokumen Cookie Banner', 'collection_id'],
     ];
 
     /**
