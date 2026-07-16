@@ -89,16 +89,15 @@ class TenantRoleController extends Controller
 
         $role = TenantRole::where('org_id', $request->user()->org_id)->findOrFail($id);
 
-        if ($role->is_system) {
-            return response()->json(['message' => 'System Role bawan tidak dapat diubah. Buat role custom untuk modifikasi.'], 400);
-        }
-
         $request->validate([
             'name' => 'sometimes|string|max:255',
             'description' => 'nullable|string',
             'permissions' => 'nullable|array',
         ]);
 
+        // System (built-in) roles CAN be edited — permissions, description, and
+        // name are all customizable per tenant. Only deletion stays blocked
+        // (see destroy) so a tenant can't remove a role the platform relies on.
         $role->update($request->only('name', 'description', 'permissions'));
 
         return response()->json(['data' => $role, 'message' => 'Role berhasil diupdate']);
@@ -177,7 +176,7 @@ class TenantRoleController extends Controller
         $role = TenantRole::where('org_id', auth()->user()->org_id)->findOrFail($id);
 
         if ($role->is_system) {
-            return response()->json(['message' => 'Tidak dapat menghapus System Role bawan.'], 400);
+            return response()->json(['message' => 'Role bawaan tidak dapat dihapus.'], 400);
         }
 
         if ($role->users()->count() > 0) {
