@@ -172,15 +172,12 @@ class MenuRegistryService
                 ->value('package_type');
         }
 
-        $whitelistedSet = array_flip($whitelistedMenuIds);
-
         // Permission-driven visibility for NON-platform tenant roles
         // (DPO/Maker/Viewer/custom). For these, a hideable menu that maps to a
         // permission module follows the tenant role's permissions (Role Settings)
         // instead of the per-role menu override. root/superadmin/admin keep the
-        // whitelist + override (matrix) behavior. Whitelist still acts as a
-        // ceiling so platform menus never leak to tenant roles. Legacy users
-        // without a tenant_role fall back to the whitelist/override path.
+        // whitelist + override (matrix) behavior. Legacy users without a
+        // tenant_role fall back to the whitelist/override path.
         $permissionDriven = false;
         $perms = [];
         if ($orgId && ! in_array($role, ['superadmin', 'admin'], true) && ! empty($user->tenant_role_id)) {
@@ -189,6 +186,23 @@ class MenuRegistryService
                 $permissionDriven = true;
                 $perms = $tenantRole->permissions;
             }
+        }
+
+        // Ceiling whitelist. For permission-driven (non-platform) roles the
+        // ceiling is ADMIN's whitelist — so the FULL tenant menu surface is
+        // available by default and gating comes from entitlement + Role
+        // Settings, NOT the per-role whitelist. Menu khusus root/superadmin
+        // (yang admin pun tidak di-whitelist) tetap tertutup. Role lain pakai
+        // whitelist-nya sendiri seperti biasa.
+        if ($permissionDriven) {
+            $whitelistedSet = array_flip(
+                RoleMenuWhitelist::where('role', 'admin')
+                    ->where('is_allowed', true)
+                    ->pluck('menu_id')
+                    ->toArray()
+            );
+        } else {
+            $whitelistedSet = array_flip($whitelistedMenuIds);
         }
 
         $visible = [];
