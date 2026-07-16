@@ -55,4 +55,22 @@ class CookieLog extends Model
     {
         return $this->belongsTo(\App\Models\ConsentCollectionPoint::class, 'collection_id');
     }
+
+    /**
+     * choices with any item-UUID keys resolved to titles: { label: bool }.
+     * V2 cookie captures key by category name (necessary/analytics/…), which
+     * pass through unchanged; legacy rows migrated from consent_logs may key
+     * by item UUID, which this resolves. Pass a prebuilt [id => title] map to
+     * avoid a per-row query when labeling a page of logs.
+     */
+    public function labeledChoices(?array $titleById = null): array
+    {
+        $titleById ??= ConsentItem::titleMap([$this->collection_id]);
+        $out = [];
+        foreach (($this->choices ?? []) as $key => $val) {
+            $out[$titleById[$key] ?? $key] = (bool) $val;
+        }
+
+        return $out;
+    }
 }

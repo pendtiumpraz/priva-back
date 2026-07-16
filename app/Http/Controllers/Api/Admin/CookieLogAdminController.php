@@ -53,6 +53,18 @@ class CookieLogAdminController extends Controller
         }
 
         $page = $q->paginate($perPage);
+
+        // Attach human-readable choice labels (legacy rows may key choices by
+        // item UUID instead of category name). Batch-resolve once per page.
+        $titleById = \App\Models\ConsentItem::titleMap(
+            collect($page->items())->pluck('collection_id')->unique()->all()
+        );
+        $page->getCollection()->transform(function (CookieLog $log) use ($titleById) {
+            $log->setAttribute('choices_labeled', $log->labeledChoices($titleById));
+
+            return $log;
+        });
+
         return response()->json($page);
     }
 
@@ -63,6 +75,8 @@ class CookieLogAdminController extends Controller
             ->where('org_id', $orgId)
             ->where('id', $id)
             ->firstOrFail();
+
+        $log->setAttribute('choices_labeled', $log->labeledChoices());
 
         return response()->json(['data' => $log]);
     }
