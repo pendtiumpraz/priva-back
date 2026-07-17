@@ -17,7 +17,7 @@ class ContentPiiScanner
                 'classification' => 'sensitive',
                 'encryption_required' => true,
                 'weight' => 1.0,
-                'reason' => 'Pola NIK (16 digit) terdeteksi di isi data'
+                'reason' => 'Pola NIK (16 digit) terdeteksi di isi data',
             ],
             // NPWP (15-16 digits with or without separators)
             'npwp' => [
@@ -26,7 +26,7 @@ class ContentPiiScanner
                 'classification' => 'sensitive',
                 'encryption_required' => true,
                 'weight' => 0.8,
-                'reason' => 'Pola NPWP terdeteksi di isi data'
+                'reason' => 'Pola NPWP terdeteksi di isi data',
             ],
             // Email address
             'email' => [
@@ -35,7 +35,7 @@ class ContentPiiScanner
                 'classification' => 'pii',
                 'encryption_required' => false,
                 'weight' => 0.9,
-                'reason' => 'Alamat Email terdeteksi di isi data'
+                'reason' => 'Alamat Email terdeteksi di isi data',
             ],
             // Indonesian Phone Number
             'phone' => [
@@ -44,7 +44,7 @@ class ContentPiiScanner
                 'classification' => 'pii',
                 'encryption_required' => false,
                 'weight' => 0.8,
-                'reason' => 'Nomor Telepon Indonesia terdeteksi di isi data'
+                'reason' => 'Nomor Telepon Indonesia terdeteksi di isi data',
             ],
             // Credit Card (basic approximation)
             'credit_card' => [
@@ -53,7 +53,7 @@ class ContentPiiScanner
                 'classification' => 'sensitive',
                 'encryption_required' => true,
                 'weight' => 1.0,
-                'reason' => 'Nomor Kartu Kredit terdeteksi di isi data'
+                'reason' => 'Nomor Kartu Kredit terdeteksi di isi data',
             ],
             // IP Address
             'ip_address' => [
@@ -62,8 +62,8 @@ class ContentPiiScanner
                 'classification' => 'pii',
                 'encryption_required' => false,
                 'weight' => 1.0,
-                'reason' => 'Alamat IP (IPv4) terdeteksi di isi data'
-            ]
+                'reason' => 'Alamat IP (IPv4) terdeteksi di isi data',
+            ],
         ];
     }
 
@@ -74,13 +74,17 @@ class ContentPiiScanner
     {
         $patterns = self::getPatterns();
         $totalSamples = count($sampledValues);
-        if ($totalSamples === 0) return null;
+        if ($totalSamples === 0) {
+            return null;
+        }
 
         $matchCounts = array_fill_keys(array_keys($patterns), 0);
         $totalNonNull = 0;
 
         foreach ($sampledValues as $val) {
-            if ($val === null || $val === '') continue;
+            if ($val === null || $val === '') {
+                continue;
+            }
             $val = (string) $val;
             $totalNonNull++;
 
@@ -91,7 +95,9 @@ class ContentPiiScanner
             }
         }
 
-        if ($totalNonNull === 0) return null;
+        if ($totalNonNull === 0) {
+            return null;
+        }
 
         // If a pattern matches more than 15% of non-null rows, consider it a match
         $bestMatch = null;
@@ -107,12 +113,13 @@ class ContentPiiScanner
 
         if ($bestMatch) {
             $config = $patterns[$bestMatch];
+
             return [
                 'is_pii' => true,
                 'pdp_category' => $config['pdp_category'],
                 'classification' => $config['classification'],
                 'encryption_required' => $config['encryption_required'],
-                'reason' => $config['reason'] . ' (Akurasi: ' . round($highestConfidence * 100) . '%)',
+                'reason' => $config['reason'].' (Akurasi: '.round($highestConfidence * 100).'%)',
                 'shadow_detected' => true,
             ];
         }
@@ -134,18 +141,26 @@ class ContentPiiScanner
     {
         $vals = [];
         foreach ($sampledValues as $v) {
-            if ($v === null || $v === '') continue;
+            if ($v === null || $v === '') {
+                continue;
+            }
             $vals[] = (string) $v;
         }
         if (empty($vals)) {
             return ['protection_state' => 'unknown', 'protection_reason' => 'Tidak ada nilai non-null pada sampel'];
         }
 
-        $enc = 0; $mask = 0; $plain = 0;
+        $enc = 0;
+        $mask = 0;
+        $plain = 0;
         foreach ($vals as $v) {
-            if (self::looksEncrypted($v)) { $enc++; }
-            elseif (self::looksMasked($v)) { $mask++; }
-            else { $plain++; }
+            if (self::looksEncrypted($v)) {
+                $enc++;
+            } elseif (self::looksMasked($v)) {
+                $mask++;
+            } else {
+                $plain++;
+            }
         }
         $n = count($vals);
 
@@ -158,6 +173,7 @@ class ContentPiiScanner
         if ($plain === $n) {
             return ['protection_state' => 'plaintext', 'protection_reason' => "Nilai terbaca (plaintext) — $n/$n sampel"];
         }
+
         // Campuran → tandai sebagai risiko (migrasi setengah jalan / tidak konsisten).
         return ['protection_state' => 'mixed', 'protection_reason' => "Tidak konsisten: $enc enkripsi, $mask masked, $plain plaintext (dari $n sampel)"];
     }
@@ -175,21 +191,61 @@ class ContentPiiScanner
             }
         }
         // Ada spasi / terbaca → hampir pasti bukan ciphertext.
-        if (preg_match('/\s/', $v)) return false;
+        if (preg_match('/\s/', $v)) {
+            return false;
+        }
         // Hex panjang (mis. SHA/AES hex).
-        if (preg_match('/^[0-9a-fA-F]{32,}$/', $v)) return true;
+        if (preg_match('/^[0-9a-fA-F]{32,}$/', $v)) {
+            return true;
+        }
         // Base64 panjang + entropi tinggi.
-        if (preg_match('/^[A-Za-z0-9+\/]{24,}={0,2}$/', $v) && self::entropy($v) >= 3.6) return true;
+        if (preg_match('/^[A-Za-z0-9+\/]{24,}={0,2}$/', $v) && self::entropy($v) >= 3.6) {
+            return true;
+        }
+
         return false;
+    }
+
+    /**
+     * Heuristik berbasis TIPE kolom: tipe biner/blob hampir pasti menampung
+     * ciphertext/berkas biner (bukan teks terbaca). Melengkapi deteksi berbasis
+     * nilai untuk kasus tanpa sampel atau sampel kosong.
+     */
+    public static function looksEncryptedType(?string $type): bool
+    {
+        if (! $type) {
+            return false;
+        }
+        $t = strtolower($type);
+
+        return (bool) preg_match('/\b(varbinary|longblob|mediumblob|tinyblob|blob|bytea|binary)\b/', $t);
+    }
+
+    /** Parse panjang dari string tipe, mis. "varchar(255)" → 255. */
+    public static function parseTypeLength(?string $type): ?int
+    {
+        if (! $type) {
+            return null;
+        }
+        if (preg_match('/\((\d+)(?:,\d+)?\)/', $type, $m)) {
+            return (int) $m[1];
+        }
+
+        return null;
     }
 
     /** Heuristik: nilai tampak SUDAH DI-MASKING. */
     private static function looksMasked(string $v): bool
     {
         // Asterisk / bullet / hash run (mis. 1234****, b***@mail.com, ****).
-        if (preg_match('/\*{2,}|•{2,}|#{4,}/u', $v)) return true;
+        if (preg_match('/\*{2,}|•{2,}|#{4,}/u', $v)) {
+            return true;
+        }
         // Partial reveal digit dengan x: 08xx-xxxx-1234 / 12xxxx56 (>=3 x berturut).
-        if (preg_match('/\dx{3,}\d|x{4,}/i', $v) && preg_match('/[0-9]/', $v)) return true;
+        if (preg_match('/\dx{3,}\d|x{4,}/i', $v) && preg_match('/[0-9]/', $v)) {
+            return true;
+        }
+
         return false;
     }
 
@@ -197,13 +253,16 @@ class ContentPiiScanner
     private static function entropy(string $s): float
     {
         $len = strlen($s);
-        if ($len === 0) return 0.0;
+        if ($len === 0) {
+            return 0.0;
+        }
         $freq = count_chars($s, 1);
         $h = 0.0;
         foreach ($freq as $c) {
             $p = $c / $len;
             $h -= $p * log($p, 2);
         }
+
         return $h;
     }
 }

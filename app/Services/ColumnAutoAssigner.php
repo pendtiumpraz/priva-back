@@ -77,6 +77,11 @@ class ColumnAutoAssigner
                 if (! $old) {
                     continue;
                 }
+                // Alias adalah metadata yang di-set user (mis. kolom obfuscated
+                // A1 → "NIK") — selalu dipertahankan lintas rescan.
+                if (! empty($old['alias'])) {
+                    $col['alias'] = $old['alias'];
+                }
                 $isUserEdited = ! empty($old['applied_by']) && ! empty($old['applied_status']);
                 $isAiReviewed = ($old['applied_note'] ?? null) === 'ai_scan';
                 if (! $isUserEdited && ! $isAiReviewed) {

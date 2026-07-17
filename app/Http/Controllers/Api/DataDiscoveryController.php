@@ -15,6 +15,7 @@ use App\Services\ColumnAutoAssigner;
 use App\Services\DatabaseScanner;
 use App\Services\NotificationService;
 use App\Services\OcrScannerService;
+use App\Services\PiiDetector;
 use App\Services\PostureFindingService;
 use App\Services\TenantStorageService;
 use Carbon\Carbon;
@@ -123,6 +124,27 @@ class DataDiscoveryController extends Controller
         $prevTables = $system->scan_results['tables'] ?? [];
         $tables = ColumnAutoAssigner::mergePreserveUserEdits($tables, $prevTables);
 
+        // Kolom ter-obfuscate yang diberi ALIAS (mis. A1 → "NIK") diklasifikasi
+        // ulang memakai alias sebagai nama efektif — sehingga detektor berbasis
+        // nama tetap bekerja walau nama kolom aslinya disamarkan. Kolom yang
+        // sudah diklasifikasi manual oleh user tidak disentuh.
+        foreach ($tables as &$aliasTable) {
+            foreach (($aliasTable['columns'] ?? []) as &$aliasCol) {
+                $alias = trim((string) ($aliasCol['alias'] ?? ''));
+                if ($alias === '' || ($aliasCol['applied_note'] ?? null) === 'manual_classify' || ! empty($aliasCol['applied_by'])) {
+                    continue;
+                }
+                $r = PiiDetector::analyze($alias, (string) ($aliasCol['type'] ?? ''));
+                $aliasCol['pii_detected'] = $r['is_pii'];
+                $aliasCol['pdp_category'] = $r['pdp_category'];
+                $aliasCol['classification'] = $r['classification'];
+                $aliasCol['encryption_required'] = $r['encryption_required'];
+                $aliasCol['pii_reason'] = 'Alias "'.$alias.'": '.$r['reason'];
+            }
+            unset($aliasCol);
+        }
+        unset($aliasTable);
+
         // Auto-assign applied_status (data pribadi / data sensitif / data umum)
         // berdasar hasil klasifikasi scanner. User hanya perlu klik "Edit"
         // bila ingin mengubah keputusan otomatis ini.
@@ -223,7 +245,7 @@ class DataDiscoveryController extends Controller
         // temuan PDP/PII, info kalau bersih.
         try {
             $hasAlerts = ($pdpCount + $piiCount) > 0;
-            \App\Services\NotificationService::dispatch(
+            NotificationService::dispatch(
                 kind: $hasAlerts ? 'warning' : 'info',
                 severity: $hasAlerts ? 'high' : 'low',
                 module: 'data-discovery', type: 'data_discovery.scan_completed',
@@ -232,9 +254,11 @@ class DataDiscoveryController extends Controller
                 body: $hasAlerts
                     ? "Ditemukan {$pdpCount} alert PDP + {$piiCount} kolom PII dari ".count($tables).' tabel.'
                     : 'Tidak ada temuan PII signifikan dari '.count($tables).' tabel.',
-                actionUrl: "/data-discovery", metadata: ['record_id' => $system->id],
+                actionUrl: '/data-discovery', metadata: ['record_id' => $system->id],
             );
-        } catch (\Throwable $e) { \Log::warning('data_discovery.scan_completed notif failed: '.$e->getMessage()); }
+        } catch (\Throwable $e) {
+            \Log::warning('data_discovery.scan_completed notif failed: '.$e->getMessage());
+        }
 
         // Phase 3b — re-materialize posture findings now that scan changed.
         // Wrapped so a finding-side bug can't fail the scan response.
@@ -306,6 +330,12 @@ class DataDiscoveryController extends Controller
             if ($table['name'] === $tableName) {
                 foreach ($table['columns'] as &$col) {
                     if ($col['name'] === $columnName) {
+                        // Alias untuk kolom ter-obfuscate (mis. A1 → "NIK").
+                        // Metadata user; dipertahankan lintas rescan.
+                        if ($request->has('alias')) {
+                            $alias = trim((string) $request->input('alias'));
+                            $col['alias'] = $alias !== '' ? $alias : null;
+                        }
                         $col['classification'] = $classification;
                         $col['pdp_category'] = $pdpCategory;
                         $col['retention_days'] = $retentionDays;
@@ -470,6 +500,7 @@ class DataDiscoveryController extends Controller
                     'column' => $columnName,
                     'reason' => 'Tabel tidak ditemukan di hasil scan.',
                 ];
+
                 continue;
             }
 
@@ -1710,6 +1741,7 @@ class DataDiscoveryController extends Controller
                     'duration_ms' => 0,
                     'error' => $genError ?? 'SQL generation failed',
                 ];
+
                 continue;
             }
 
@@ -1726,6 +1758,7 @@ class DataDiscoveryController extends Controller
                     'duration_ms' => 0,
                     'error' => 'SQL validation failed: '.$validationError,
                 ];
+
                 continue;
             }
 
@@ -1847,7 +1880,7 @@ class DataDiscoveryController extends Controller
             $conn = DB::connection($connectionName);
             $driver = $conn->getDriverName();
             if ($driver === 'pgsql') {
-                $conn->statement("SET statement_timeout TO 5000");
+                $conn->statement('SET statement_timeout TO 5000');
             } elseif ($driver === 'mysql' || $driver === 'mariadb') {
                 $conn->statement('SET SESSION MAX_EXECUTION_TIME = 5000');
             }

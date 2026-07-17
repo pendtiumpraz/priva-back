@@ -25,21 +25,21 @@ class DatabaseScanner
     public static function testConnection(string $sourceType, array $config): array
     {
         return match ($sourceType) {
-            'mysql'      => self::testMysql($config),
+            'mysql' => self::testMysql($config),
             'postgresql' => self::testPostgresql($config),
-            'mongodb'    => self::testMongodb($config),
-            'mssql'      => self::testMssql($config),
-            'oracle'     => self::testOracle($config),
-            'api'        => self::testApi($config),
-            'file'       => self::testFile($config),
-            'aws_s3'     => ['success' => true, 'note' => 'Connected to AWS S3 (Simulated)'],
-            'gcs'        => ['success' => true, 'note' => 'Connected to Google Cloud Storage (Simulated)'],
+            'mongodb' => self::testMongodb($config),
+            'mssql' => self::testMssql($config),
+            'oracle' => self::testOracle($config),
+            'api' => self::testApi($config),
+            'file' => self::testFile($config),
+            'aws_s3' => ['success' => true, 'note' => 'Connected to AWS S3 (Simulated)'],
+            'gcs' => ['success' => true, 'note' => 'Connected to Google Cloud Storage (Simulated)'],
             'azure_blob' => ['success' => true, 'note' => 'Connected to Azure Blob Storage (Simulated)'],
             'google_workspace' => ['success' => true, 'note' => 'Authenticated with Google Workspace (Simulated)'],
-            'microsoft_365'    => ['success' => true, 'note' => 'Authenticated with Microsoft 365 (Simulated)'],
-            'slack'            => ['success' => true, 'note' => 'Authenticated with Slack Workspace (Simulated)'],
-            'notion'           => ['success' => true, 'note' => 'Authenticated with Notion (Simulated)'],
-            default      => ['success' => false, 'error' => 'Unknown source type: ' . $sourceType],
+            'microsoft_365' => ['success' => true, 'note' => 'Authenticated with Microsoft 365 (Simulated)'],
+            'slack' => ['success' => true, 'note' => 'Authenticated with Slack Workspace (Simulated)'],
+            'notion' => ['success' => true, 'note' => 'Authenticated with Notion (Simulated)'],
+            default => ['success' => false, 'error' => 'Unknown source type: '.$sourceType],
         };
     }
 
@@ -49,21 +49,21 @@ class DatabaseScanner
     public static function scanSchema(string $sourceType, array $config): array
     {
         return match ($sourceType) {
-            'mysql'      => self::scanMysql($config),
+            'mysql' => self::scanMysql($config),
             'postgresql' => self::scanPostgresql($config),
-            'mongodb'    => self::scanMongodb($config),
-            'mssql'      => self::scanMssql($config),
-            'oracle'     => self::scanOracle($config),
-            'api'        => self::scanApi($config),
-            'file'       => self::scanFile($config),
-            'aws_s3'     => CloudStorageScanner::scanS3($config),
-            'gcs'        => CloudStorageScanner::scanGcs($config),
+            'mongodb' => self::scanMongodb($config),
+            'mssql' => self::scanMssql($config),
+            'oracle' => self::scanOracle($config),
+            'api' => self::scanApi($config),
+            'file' => self::scanFile($config),
+            'aws_s3' => CloudStorageScanner::scanS3($config),
+            'gcs' => CloudStorageScanner::scanGcs($config),
             'azure_blob' => CloudStorageScanner::scanAzureBlob($config),
             'google_workspace' => SaasScanner::scanGoogleWorkspace($config),
-            'microsoft_365'    => SaasScanner::scanMicrosoft365($config),
-            'slack'            => SaasScanner::scanSlack($config),
-            'notion'           => SaasScanner::scanNotion($config),
-            default      => ['tables' => [], 'error' => 'Unknown source type'],
+            'microsoft_365' => SaasScanner::scanMicrosoft365($config),
+            'slack' => SaasScanner::scanSlack($config),
+            'notion' => SaasScanner::scanNotion($config),
+            default => ['tables' => [], 'error' => 'Unknown source type'],
         };
     }
 
@@ -74,19 +74,20 @@ class DatabaseScanner
     {
         try {
             $start = microtime(true);
-            $port = !empty($config['port']) ? $config['port'] : 3306;
+            $port = ! empty($config['port']) ? $config['port'] : 3306;
             $dsn = "mysql:host={$config['host']};port={$port};dbname={$config['database']}";
             $pdo = new \PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [
                 \PDO::ATTR_TIMEOUT => 5,
                 \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
             ]);
             $ms = round((microtime(true) - $start) * 1000);
-            $version = $pdo->query("SELECT VERSION()")->fetchColumn();
-            $tables = $pdo->query("SHOW TABLES")->fetchAll(\PDO::FETCH_COLUMN);
+            $version = $pdo->query('SELECT VERSION()')->fetchColumn();
+            $tables = $pdo->query('SHOW TABLES')->fetchAll(\PDO::FETCH_COLUMN);
+
             return [
                 'success' => true,
                 'latency_ms' => $ms,
-                'server_version' => 'MySQL ' . $version,
+                'server_version' => 'MySQL '.$version,
                 'tables_found' => count($tables),
                 'ssl_enabled' => false,
             ];
@@ -98,7 +99,7 @@ class DatabaseScanner
     private static function scanMysql(array $config): array
     {
         try {
-            $port = !empty($config['port']) ? $config['port'] : 3306;
+            $port = ! empty($config['port']) ? $config['port'] : 3306;
             $dsn = "mysql:host={$config['host']};port={$port};dbname={$config['database']}";
             $pdo = new \PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [
                 \PDO::ATTR_TIMEOUT => 10,
@@ -106,7 +107,7 @@ class DatabaseScanner
             ]);
 
             $tables = [];
-            $tableNames = $pdo->query("SHOW TABLES")->fetchAll(\PDO::FETCH_COLUMN);
+            $tableNames = $pdo->query('SHOW TABLES')->fetchAll(\PDO::FETCH_COLUMN);
 
             foreach ($tableNames as $tableName) {
                 $columns = [];
@@ -116,8 +117,9 @@ class DatabaseScanner
                 // Phase 1 Shadow Data Discovery: Content Sampling (sampel KECIL)
                 $sampleRows = [];
                 try {
-                    $sampleRows = $pdo->query("SELECT * FROM `{$tableName}` LIMIT " . self::SAMPLE_LIMIT)->fetchAll(\PDO::FETCH_ASSOC);
-                } catch (\Throwable $e) {}
+                    $sampleRows = $pdo->query("SELECT * FROM `{$tableName}` LIMIT ".self::SAMPLE_LIMIT)->fetchAll(\PDO::FETCH_ASSOC);
+                } catch (\Throwable $e) {
+                }
 
                 foreach ($cols as $col) {
                     $colName = $col['Field'];
@@ -126,7 +128,7 @@ class DatabaseScanner
                     $protection = ['protection_state' => 'unknown', 'protection_reason' => 'Tidak ada sampel'];
 
                     // Content Scanner + status proteksi pada sampel (LOKAL — TIDAK ke AI)
-                    if (!empty($sampleRows) && count($sampleRows) > 0) {
+                    if (! empty($sampleRows) && count($sampleRows) > 0) {
                         $columnValues = array_column($sampleRows, $colName);
                         $contentPii = ContentPiiScanner::analyzeColumnContent($columnValues);
 
@@ -137,14 +139,24 @@ class DatabaseScanner
                         $protection = ContentPiiScanner::detectProtectionState($columnValues);
                     }
 
+                    // Sinyal enkripsi berbasis TIPE (biner/blob) melengkapi sinyal
+                    // berbasis nilai — berguna saat sampel kosong / tak ada.
+                    $typeEncrypted = ContentPiiScanner::looksEncryptedType($col['Type']);
+                    if ($typeEncrypted && in_array($protection['protection_state'], ['unknown', 'plaintext'], true)) {
+                        $protection = ['protection_state' => 'encrypted', 'protection_reason' => 'Tipe biner/blob — kemungkinan besar ciphertext/berkas biner'];
+                    }
+
                     $columns[] = [
                         'name' => $colName,
+                        'alias' => null,
                         'type' => $col['Type'],
+                        'type_length' => ContentPiiScanner::parseTypeLength($col['Type']),
                         'nullable' => $col['Null'] === 'YES',
                         'pii_detected' => $piiResult['is_pii'],
                         'pdp_category' => $piiResult['pdp_category'],
                         'classification' => $piiResult['classification'],
                         'encryption_required' => $piiResult['encryption_required'],
+                        'encrypted' => $protection['protection_state'] === 'encrypted' || $typeEncrypted,
                         'pii_reason' => $piiResult['reason'],
                         'protection_state' => $protection['protection_state'],
                         'protection_reason' => $protection['protection_reason'],
@@ -163,7 +175,8 @@ class DatabaseScanner
 
             return ['tables' => $tables, 'engine' => 'real_mysql'];
         } catch (\Throwable $e) {
-            Log::error("MySQL scan failed: " . $e->getMessage());
+            Log::error('MySQL scan failed: '.$e->getMessage());
+
             return ['tables' => [], 'error' => $e->getMessage()];
         }
     }
@@ -175,15 +188,16 @@ class DatabaseScanner
     {
         try {
             $start = microtime(true);
-            $port = !empty($config['port']) ? $config['port'] : 5432;
+            $port = ! empty($config['port']) ? $config['port'] : 5432;
             $dsn = "pgsql:host={$config['host']};port={$port};dbname={$config['database']}";
             $pdo = new \PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [
                 \PDO::ATTR_TIMEOUT => 5,
                 \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
             ]);
             $ms = round((microtime(true) - $start) * 1000);
-            $version = $pdo->query("SELECT version()")->fetchColumn();
+            $version = $pdo->query('SELECT version()')->fetchColumn();
             $tables = $pdo->query("SELECT tablename FROM pg_tables WHERE schemaname='public'")->fetchAll(\PDO::FETCH_COLUMN);
+
             return [
                 'success' => true,
                 'latency_ms' => $ms,
@@ -199,7 +213,7 @@ class DatabaseScanner
     private static function scanPostgresql(array $config): array
     {
         try {
-            $port = !empty($config['port']) ? $config['port'] : 5432;
+            $port = ! empty($config['port']) ? $config['port'] : 5432;
             $dsn = "pgsql:host={$config['host']};port={$port};dbname={$config['database']}";
             $pdo = new \PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [
                 \PDO::ATTR_TIMEOUT => 10,
@@ -218,13 +232,17 @@ class DatabaseScanner
                 )->fetchAll(\PDO::FETCH_ASSOC);
 
                 $rowCount = 0;
-                try { $rowCount = $pdo->query("SELECT COUNT(*) FROM \"{$tableName}\"")->fetchColumn(); } catch (\Throwable) {}
+                try {
+                    $rowCount = $pdo->query("SELECT COUNT(*) FROM \"{$tableName}\"")->fetchColumn();
+                } catch (\Throwable) {
+                }
 
                 // Phase 1 Shadow Data Discovery: Content Sampling (sampel KECIL)
                 $sampleRows = [];
                 try {
-                    $sampleRows = $pdo->query("SELECT * FROM \"{$tableName}\" LIMIT " . self::SAMPLE_LIMIT)->fetchAll(\PDO::FETCH_ASSOC);
-                } catch (\Throwable $e) {}
+                    $sampleRows = $pdo->query("SELECT * FROM \"{$tableName}\" LIMIT ".self::SAMPLE_LIMIT)->fetchAll(\PDO::FETCH_ASSOC);
+                } catch (\Throwable $e) {
+                }
 
                 $columns = [];
                 foreach ($cols as $col) {
@@ -234,7 +252,7 @@ class DatabaseScanner
                     $protection = ['protection_state' => 'unknown', 'protection_reason' => 'Tidak ada sampel'];
 
                     // Content Scanner + status proteksi pada sampel (LOKAL — TIDAK ke AI)
-                    if (!empty($sampleRows) && count($sampleRows) > 0) {
+                    if (! empty($sampleRows) && count($sampleRows) > 0) {
                         $columnValues = array_column($sampleRows, $colName);
                         $contentPii = ContentPiiScanner::analyzeColumnContent($columnValues);
 
@@ -245,14 +263,22 @@ class DatabaseScanner
                         $protection = ContentPiiScanner::detectProtectionState($columnValues);
                     }
 
+                    $typeEncrypted = ContentPiiScanner::looksEncryptedType($col['data_type']);
+                    if ($typeEncrypted && in_array($protection['protection_state'], ['unknown', 'plaintext'], true)) {
+                        $protection = ['protection_state' => 'encrypted', 'protection_reason' => 'Tipe biner/blob — kemungkinan besar ciphertext/berkas biner'];
+                    }
+
                     $columns[] = [
                         'name' => $colName,
+                        'alias' => null,
                         'type' => $col['data_type'],
+                        'type_length' => ContentPiiScanner::parseTypeLength($col['data_type']),
                         'nullable' => $col['is_nullable'] === 'YES',
                         'pii_detected' => $piiResult['is_pii'],
                         'pdp_category' => $piiResult['pdp_category'],
                         'classification' => $piiResult['classification'],
                         'encryption_required' => $piiResult['encryption_required'],
+                        'encrypted' => $protection['protection_state'] === 'encrypted' || $typeEncrypted,
                         'pii_reason' => $piiResult['reason'],
                         'protection_state' => $protection['protection_state'],
                         'protection_reason' => $protection['protection_reason'],
@@ -271,7 +297,8 @@ class DatabaseScanner
 
             return ['tables' => $tables, 'engine' => 'real_postgresql'];
         } catch (\Throwable $e) {
-            Log::error("PostgreSQL scan failed: " . $e->getMessage());
+            Log::error('PostgreSQL scan failed: '.$e->getMessage());
+
             return ['tables' => [], 'error' => $e->getMessage()];
         }
     }
@@ -299,15 +326,15 @@ class DatabaseScanner
     {
         return match ($sourceType) {
             'postgresql' => self::scanAccessPathsPostgres($config),
-            'mysql'      => self::scanAccessPathsMysql($config),
-            default      => ['engine' => $sourceType, 'grants' => [], 'roles' => [], 'error' => 'Access path scan not supported for ' . $sourceType],
+            'mysql' => self::scanAccessPathsMysql($config),
+            default => ['engine' => $sourceType, 'grants' => [], 'roles' => [], 'error' => 'Access path scan not supported for '.$sourceType],
         };
     }
 
     private static function scanAccessPathsPostgres(array $config): array
     {
         try {
-            $port = !empty($config['port']) ? $config['port'] : 5432;
+            $port = ! empty($config['port']) ? $config['port'] : 5432;
             $dsn = "pgsql:host={$config['host']};port={$port};dbname={$config['database']}";
             $pdo = new \PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [
                 \PDO::ATTR_TIMEOUT => 10,
@@ -358,7 +385,8 @@ class DatabaseScanner
                 'error' => null,
             ];
         } catch (\Throwable $e) {
-            Log::warning("PostgreSQL access path scan failed: " . $e->getMessage());
+            Log::warning('PostgreSQL access path scan failed: '.$e->getMessage());
+
             return ['engine' => 'postgresql', 'grants' => [], 'roles' => [], 'error' => $e->getMessage()];
         }
     }
@@ -366,7 +394,7 @@ class DatabaseScanner
     private static function scanAccessPathsMysql(array $config): array
     {
         try {
-            $port = !empty($config['port']) ? $config['port'] : 3306;
+            $port = ! empty($config['port']) ? $config['port'] : 3306;
             $dsn = "mysql:host={$config['host']};port={$port};dbname={$config['database']}";
             $pdo = new \PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [
                 \PDO::ATTR_TIMEOUT => 10,
@@ -377,12 +405,12 @@ class DatabaseScanner
             // for non-DBA scanner accounts; we degrade gracefully)
             $roles = [];
             try {
-                $rows = $pdo->query("SELECT User AS name, Host AS host FROM mysql.user")->fetchAll(\PDO::FETCH_ASSOC);
+                $rows = $pdo->query('SELECT User AS name, Host AS host FROM mysql.user')->fetchAll(\PDO::FETCH_ASSOC);
                 foreach ($rows as $r) {
-                    $roles[] = ['name' => $r['name'] . '@' . $r['host'], 'can_login' => true, 'is_superuser' => false];
+                    $roles[] = ['name' => $r['name'].'@'.$r['host'], 'can_login' => true, 'is_superuser' => false];
                 }
             } catch (\Throwable $e) {
-                Log::info('MySQL mysql.user inaccessible to scanner — degrading: ' . $e->getMessage());
+                Log::info('MySQL mysql.user inaccessible to scanner — degrading: '.$e->getMessage());
             }
 
             // Schema-level privileges
@@ -403,7 +431,7 @@ class DatabaseScanner
                     ];
                 }
             } catch (\Throwable $e) {
-                Log::info('MySQL TABLE_PRIVILEGES inaccessible: ' . $e->getMessage());
+                Log::info('MySQL TABLE_PRIVILEGES inaccessible: '.$e->getMessage());
             }
 
             return [
@@ -414,7 +442,8 @@ class DatabaseScanner
                 'error' => null,
             ];
         } catch (\Throwable $e) {
-            Log::warning("MySQL access path scan failed: " . $e->getMessage());
+            Log::warning('MySQL access path scan failed: '.$e->getMessage());
+
             return ['engine' => 'mysql', 'grants' => [], 'roles' => [], 'error' => $e->getMessage()];
         }
     }
@@ -449,14 +478,14 @@ class DatabaseScanner
     {
         return match ($sourceType) {
             'postgresql' => self::scanEncryptionPostgres($config),
-            'mysql'      => self::scanEncryptionMysql($config),
-            default      => [
+            'mysql' => self::scanEncryptionMysql($config),
+            default => [
                 'engine' => $sourceType,
                 'ssl_in_use' => null,
                 'tablespace_encryption' => [],
                 'column_encryption_observed' => ['tables' => [], 'note' => null],
                 'data_at_rest_encrypted' => null,
-                'error' => 'Encryption scan not supported for ' . $sourceType,
+                'error' => 'Encryption scan not supported for '.$sourceType,
             ],
         };
     }
@@ -464,7 +493,7 @@ class DatabaseScanner
     private static function scanEncryptionPostgres(array $config): array
     {
         try {
-            $port = !empty($config['port']) ? $config['port'] : 5432;
+            $port = ! empty($config['port']) ? $config['port'] : 5432;
             $dsn = "pgsql:host={$config['host']};port={$port};dbname={$config['database']}";
             $pdo = new \PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [
                 \PDO::ATTR_TIMEOUT => 10,
@@ -476,7 +505,8 @@ class DatabaseScanner
             try {
                 $row = $pdo->query("SELECT setting FROM pg_settings WHERE name = 'ssl'")->fetchColumn();
                 $sslInUse = strtolower((string) $row) === 'on';
-            } catch (\Throwable $e) {}
+            } catch (\Throwable $e) {
+            }
 
             // Detect column-level encryption via pgcrypto: scan public schema for
             // bytea columns named like *_encrypted / *_enc — heuristic, not perfect.
@@ -490,7 +520,8 @@ class DatabaseScanner
                             OR column_name LIKE 'enc\\_%')"
                 )->fetchAll(\PDO::FETCH_COLUMN);
                 $colEncTables = array_values(array_unique($rows));
-            } catch (\Throwable $e) {}
+            } catch (\Throwable $e) {
+            }
 
             // Per-table encryption flag — Postgres doesn't expose tablespace
             // encryption as a per-table flag; we mark unknown for all and let
@@ -507,7 +538,8 @@ class DatabaseScanner
                         'note' => 'PostgreSQL does not expose tablespace-level encryption flag via SQL — verify via storage layer (RDS storage_encrypted, LUKS, etc.)',
                     ];
                 }
-            } catch (\Throwable $e) {}
+            } catch (\Throwable $e) {
+            }
 
             return [
                 'engine' => 'postgresql',
@@ -522,7 +554,8 @@ class DatabaseScanner
                 'error' => null,
             ];
         } catch (\Throwable $e) {
-            Log::warning("PostgreSQL encryption scan failed: " . $e->getMessage());
+            Log::warning('PostgreSQL encryption scan failed: '.$e->getMessage());
+
             return [
                 'engine' => 'postgresql', 'ssl_in_use' => null,
                 'tablespace_encryption' => [], 'column_encryption_observed' => ['tables' => [], 'note' => null],
@@ -534,7 +567,7 @@ class DatabaseScanner
     private static function scanEncryptionMysql(array $config): array
     {
         try {
-            $port = !empty($config['port']) ? $config['port'] : 3306;
+            $port = ! empty($config['port']) ? $config['port'] : 3306;
             $dsn = "mysql:host={$config['host']};port={$port};dbname={$config['database']}";
             $pdo = new \PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [
                 \PDO::ATTR_TIMEOUT => 10,
@@ -545,8 +578,9 @@ class DatabaseScanner
             $sslInUse = false;
             try {
                 $row = $pdo->query("SHOW STATUS LIKE 'Ssl_cipher'")->fetch(\PDO::FETCH_ASSOC);
-                $sslInUse = !empty($row['Value']);
-            } catch (\Throwable $e) {}
+                $sslInUse = ! empty($row['Value']);
+            } catch (\Throwable $e) {
+            }
 
             // Tablespace encryption — InnoDB
             $tablespace = [];
@@ -560,20 +594,22 @@ class DatabaseScanner
                      WHERE t.NAME LIKE '{$config['database']}/%'"
                 )->fetchAll(\PDO::FETCH_ASSOC);
 
-                $allEnc = !empty($rows);
+                $allEnc = ! empty($rows);
                 foreach ($rows as $r) {
                     $tableName = explode('/', $r['table_name'])[1] ?? $r['table_name'];
                     $enc = $r['ENCRYPTION'] === 'Y' || strtoupper((string) $r['ENCRYPTION']) === 'ON';
-                    if (!$enc) $allEnc = false;
+                    if (! $enc) {
+                        $allEnc = false;
+                    }
                     $tablespace[] = [
                         'table' => $tableName,
                         'encrypted' => $enc,
                         'note' => null,
                     ];
                 }
-                $atRestAllEnc = !empty($rows) ? $allEnc : null;
+                $atRestAllEnc = ! empty($rows) ? $allEnc : null;
             } catch (\Throwable $e) {
-                Log::info('MySQL INNODB_TABLESPACES_ENCRYPTION inaccessible: ' . $e->getMessage());
+                Log::info('MySQL INNODB_TABLESPACES_ENCRYPTION inaccessible: '.$e->getMessage());
             }
 
             // Column encryption hint — detect AES_ENCRYPT / VARBINARY columns
@@ -588,7 +624,8 @@ class DatabaseScanner
                             OR COLUMN_NAME LIKE 'enc\\_%')"
                 )->fetchAll(\PDO::FETCH_COLUMN);
                 $colEncTables = array_values(array_unique($rows));
-            } catch (\Throwable $e) {}
+            } catch (\Throwable $e) {
+            }
 
             return [
                 'engine' => 'mysql',
@@ -603,7 +640,8 @@ class DatabaseScanner
                 'error' => null,
             ];
         } catch (\Throwable $e) {
-            Log::warning("MySQL encryption scan failed: " . $e->getMessage());
+            Log::warning('MySQL encryption scan failed: '.$e->getMessage());
+
             return [
                 'engine' => 'mysql', 'ssl_in_use' => null,
                 'tablespace_encryption' => [], 'column_encryption_observed' => ['tables' => [], 'note' => null],
@@ -616,6 +654,7 @@ class DatabaseScanner
     {
         $start = microtime(true);
         $ms = round((microtime(true) - $start) * 1000 + rand(15, 80));
+
         return [
             'success' => true,
             'latency_ms' => $ms,
@@ -637,6 +676,7 @@ class DatabaseScanner
     {
         $start = microtime(true);
         $ms = round((microtime(true) - $start) * 1000 + rand(20, 100));
+
         return [
             'success' => true,
             'latency_ms' => $ms,
@@ -658,6 +698,7 @@ class DatabaseScanner
     {
         $start = microtime(true);
         $ms = round((microtime(true) - $start) * 1000 + rand(50, 150));
+
         return [
             'success' => true,
             'latency_ms' => $ms,
@@ -681,6 +722,7 @@ class DatabaseScanner
             $start = microtime(true);
             $response = \Http::timeout(5)->get($config['url'] ?? '');
             $ms = round((microtime(true) - $start) * 1000);
+
             return [
                 'success' => $response->successful(),
                 'latency_ms' => $ms,
@@ -706,25 +748,26 @@ class DatabaseScanner
         if ($path && file_exists($path)) {
             return [
                 'success' => true,
-                'files_found' => count(glob($path . '/*.{csv,json,xlsx}', GLOB_BRACE)),
-                'total_size_mb' => round(array_sum(array_map('filesize', glob($path . '/*'))) / 1048576, 2),
+                'files_found' => count(glob($path.'/*.{csv,json,xlsx}', GLOB_BRACE)),
+                'total_size_mb' => round(array_sum(array_map('filesize', glob($path.'/*'))) / 1048576, 2),
                 'formats' => ['csv', 'json', 'xlsx'],
             ];
         }
+
         return ['success' => true, 'note' => 'Path not accessible – simulated', 'files_found' => rand(5, 50)];
     }
 
     private static function scanFile(array $config): array
     {
         $path = $config['path'] ?? '';
-        if (!$path || !is_dir($path)) {
+        if (! $path || ! is_dir($path)) {
             return ['tables' => [], 'error' => 'Path is invalid or not a directory.'];
         }
 
-        $files = glob($path . '/*.{csv,json,xlsx,pdf,docx}', GLOB_BRACE);
+        $files = glob($path.'/*.{csv,json,xlsx,pdf,docx}', GLOB_BRACE);
         $tables = [];
 
-        $parserService = new \App\Services\DocumentParserService();
+        $parserService = new DocumentParserService;
 
         foreach ($files as $file) {
             $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
@@ -735,18 +778,18 @@ class DatabaseScanner
 
             try {
                 if ($ext === 'csv') {
-                    if (($handle = fopen($file, "r")) !== FALSE) {
-                        $headers = fgetcsv($handle, 1000, ",");
+                    if (($handle = fopen($file, 'r')) !== false) {
+                        $headers = fgetcsv($handle, 1000, ',');
                         if ($headers) {
                             foreach ($headers as $h) {
                                 $piiResult = PiiDetector::analyze($h, 'varchar');
                                 $columns[] = array_merge([
                                     'name' => $h, 'type' => 'varchar', 'nullable' => true,
-                                    'manually_classified' => false
+                                    'manually_classified' => false,
                                 ], $piiResult);
                             }
                         }
-                        while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
+                        while (($data = fgetcsv($handle, 1000, ',')) !== false) {
                             $rowCount++;
                         }
                         fclose($handle);
@@ -760,7 +803,7 @@ class DatabaseScanner
                                 $piiResult = PiiDetector::analyze($h, 'json_field');
                                 $columns[] = array_merge([
                                     'name' => $h, 'type' => 'json_field', 'nullable' => true,
-                                    'manually_classified' => false
+                                    'manually_classified' => false,
                                 ], $piiResult);
                             }
                         }
@@ -769,39 +812,39 @@ class DatabaseScanner
                     // UNSTRUCTURED DATA SCAN USING DOCUMENT INTELLIGENCE
                     $parsed = $parserService->parse($file, $ext);
                     $rawText = $parsed['raw_text'] ?? '';
-                    
+
                     // Split raw text into isolated words to match exact regex patterns
                     $words = preg_split('/\s+/', $rawText);
                     $rowCount = 1;
 
-                    if (!empty($words)) {
+                    if (! empty($words)) {
                         $piiResult = ContentPiiScanner::analyzeColumnContent($words);
                         if ($piiResult && $piiResult['is_pii']) {
                             $columns[] = array_merge([
                                 'name' => 'unstructured_content',
-                                'type' => strtoupper($ext) . ' Document',
+                                'type' => strtoupper($ext).' Document',
                                 'nullable' => true,
-                                'manually_classified' => false
+                                'manually_classified' => false,
                             ], $piiResult);
                         } else {
                             $columns[] = [
                                 'name' => 'unstructured_content',
-                                'type' => strtoupper($ext) . ' Document',
+                                'type' => strtoupper($ext).' Document',
                                 'nullable' => true,
                                 'pii_detected' => false,
                                 'pdp_category' => null,
                                 'classification' => 'internal',
                                 'encryption_required' => false,
-                                'manually_classified' => false
+                                'manually_classified' => false,
                             ];
                         }
                     }
                 }
             } catch (\Exception $e) {
-                Log::error("Failed to scan file {$filename}: " . $e->getMessage());
+                Log::error("Failed to scan file {$filename}: ".$e->getMessage());
             }
 
-            if (!empty($columns)) {
+            if (! empty($columns)) {
                 $tables[] = [
                     'name' => $filename,
                     'columns' => $columns,
@@ -850,8 +893,11 @@ class DatabaseScanner
         foreach ($selected as &$t) {
             $t['row_count'] = rand(500, 250000);
             $t['size_mb'] = round($t['row_count'] * rand(1, 8) / 1000, 1);
-            foreach ($t['columns'] as &$c) { $c['manually_classified'] = false; }
+            foreach ($t['columns'] as &$c) {
+                $c['manually_classified'] = false;
+            }
         }
+
         return ['tables' => $selected, 'engine' => 'simulated'];
     }
 
@@ -873,20 +919,24 @@ class DatabaseScanner
 
                 $dsn = "mysql:host={$host};port={$port};dbname={$db};charset=utf8mb4";
                 $pdo = new \PDO($dsn, $user, $pass, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION, \PDO::ATTR_TIMEOUT => 3]);
-                
+
                 // For each table with PII, try to find the user
                 foreach ($tables as $t) {
-                    if (empty($t['pii_columns'])) continue;
-                    
+                    if (empty($t['pii_columns'])) {
+                        continue;
+                    }
+
                     $conditions = [];
                     $params = [];
                     foreach ($t['pii_columns'] as $col) {
                         $conditions[] = "`{$col}` = ?";
                         $params[] = $identifier;
                     }
-                    if (empty($conditions)) continue;
+                    if (empty($conditions)) {
+                        continue;
+                    }
 
-                    $sql = "SELECT * FROM `{$t['table']}` WHERE " . implode(' OR ', $conditions) . " LIMIT 10";
+                    $sql = "SELECT * FROM `{$t['table']}` WHERE ".implode(' OR ', $conditions).' LIMIT 10';
                     try {
                         $stmt = $pdo->prepare($sql);
                         $stmt->execute($params);
@@ -895,35 +945,39 @@ class DatabaseScanner
                             $results[] = [
                                 'table' => $t['table'],
                                 'matched_rows' => count($rows),
-                                'matched_on' => array_keys(array_filter($rows[0], fn($v) => $v === $identifier)),
+                                'matched_on' => array_keys(array_filter($rows[0], fn ($v) => $v === $identifier)),
                             ];
                         }
-                    } catch (\Throwable) {} // Ignore querying errors for specific tables
+                    } catch (\Throwable) {
+                    } // Ignore querying errors for specific tables
                 }
-            } 
-            elseif ($type === 'postgresql') {
+            } elseif ($type === 'postgresql') {
                 $host = $config['host'] ?? '127.0.0.1';
                 $port = $config['port'] ?? 5432;
                 $db = $config['database'] ?? '';
                 $user = $config['username'] ?? '';
                 $pass = $config['password'] ?? '';
-                $ssl = ($config['sslmode'] ?? '') ? "sslmode=" . $config['sslmode'] : '';
+                $ssl = ($config['sslmode'] ?? '') ? 'sslmode='.$config['sslmode'] : '';
 
                 $dsn = "pgsql:host={$host};port={$port};dbname={$db};{$ssl}";
                 $pdo = new \PDO($dsn, $user, $pass, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION, \PDO::ATTR_TIMEOUT => 3]);
-                
+
                 foreach ($tables as $t) {
-                    if (empty($t['pii_columns'])) continue;
-                    
+                    if (empty($t['pii_columns'])) {
+                        continue;
+                    }
+
                     $conditions = [];
                     $params = [];
                     foreach ($t['pii_columns'] as $col) {
                         $conditions[] = "\"{$col}\" = ?";
                         $params[] = $identifier;
                     }
-                    if (empty($conditions)) continue;
+                    if (empty($conditions)) {
+                        continue;
+                    }
 
-                    $sql = "SELECT * FROM \"{$t['table']}\" WHERE " . implode(' OR ', $conditions) . " LIMIT 10";
+                    $sql = "SELECT * FROM \"{$t['table']}\" WHERE ".implode(' OR ', $conditions).' LIMIT 10';
                     try {
                         $stmt = $pdo->prepare($sql);
                         $stmt->execute($params);
@@ -932,24 +986,24 @@ class DatabaseScanner
                             $results[] = [
                                 'table' => $t['table'],
                                 'matched_rows' => count($rows),
-                                'matched_on' => array_keys(array_filter($rows[0], fn($v) => $v === $identifier)),
+                                'matched_on' => array_keys(array_filter($rows[0], fn ($v) => $v === $identifier)),
                             ];
                         }
-                    } catch (\Throwable) {} 
+                    } catch (\Throwable) {
+                    }
                 }
-            }
-            else {
+            } else {
                 // Return generic match for non-sql systems
                 $results[] = ['table' => 'simulation_match', 'matched_rows' => 1, 'matched_on' => ['email']];
             }
         } catch (\Throwable $e) {
-            Log::error("Failed DSR search in $type: " . $e->getMessage());
+            Log::error("Failed DSR search in $type: ".$e->getMessage());
         }
 
         return [
             'found_data' => count($results) > 0,
             'matches' => $results,
-            'search_time_ms' => round((microtime(true) - $start) * 1000)
+            'search_time_ms' => round((microtime(true) - $start) * 1000),
         ];
     }
 
@@ -967,13 +1021,15 @@ class DatabaseScanner
      */
     public static function executeRawReadQueries(string $sourceType, array $config, array $queries): array
     {
-        if (empty($queries)) return ['results' => []];
+        if (empty($queries)) {
+            return ['results' => []];
+        }
 
         $sanitized = [];
         foreach ($queries as $query) {
             $check = self::validateReadOnlyQuery($query);
             if ($check !== true) {
-                return ['error' => "Query ditolak (read-only guard): {$check}. Query: " . substr($query, 0, 200)];
+                return ['error' => "Query ditolak (read-only guard): {$check}. Query: ".substr($query, 0, 200)];
             }
             $sanitized[] = rtrim(trim($query), ';');
         }
@@ -982,7 +1038,7 @@ class DatabaseScanner
         $txStarted = false;
         try {
             if ($sourceType === 'mysql') {
-                $dsn = "mysql:host={$config['host']};port=" . ($config['port'] ?? 3306) . ";dbname={$config['database']}";
+                $dsn = "mysql:host={$config['host']};port=".($config['port'] ?? 3306).";dbname={$config['database']}";
                 $pdo = new \PDO($dsn, $config['username'], $config['password'], [
                     \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
                     \PDO::MYSQL_ATTR_MULTI_STATEMENTS => false,
@@ -991,7 +1047,7 @@ class DatabaseScanner
                 // SET TRANSACTION READ ONLY mid-transaction is invalid.
                 $pdo->exec('START TRANSACTION READ ONLY');
             } elseif ($sourceType === 'postgresql') {
-                $dsn = "pgsql:host={$config['host']};port=" . ($config['port'] ?? 5432) . ";dbname={$config['database']}";
+                $dsn = "pgsql:host={$config['host']};port=".($config['port'] ?? 5432).";dbname={$config['database']}";
                 $pdo = new \PDO($dsn, $config['username'], $config['password'], [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
                 $pdo->exec('BEGIN READ ONLY');
             } else {
@@ -1007,13 +1063,18 @@ class DatabaseScanner
             }
 
             $pdo->exec('ROLLBACK');
+
             return ['results' => $results];
 
         } catch (\Throwable $e) {
             if ($pdo && $txStarted) {
-                try { $pdo->exec('ROLLBACK'); } catch (\Throwable $ignored) {}
+                try {
+                    $pdo->exec('ROLLBACK');
+                } catch (\Throwable $ignored) {
+                }
             }
-            Log::error("Failed executing raw read queries: " . $e->getMessage());
+            Log::error('Failed executing raw read queries: '.$e->getMessage());
+
             return ['error' => $e->getMessage()];
         }
     }
@@ -1026,7 +1087,9 @@ class DatabaseScanner
     public static function validateReadOnlyQuery(string $query): string|bool
     {
         $q = trim($query);
-        if ($q === '') return 'query kosong';
+        if ($q === '') {
+            return 'query kosong';
+        }
 
         // Strip -- line comments and /* ... */ block comments before keyword check
         // so attackers can't hide mutation keywords inside comments that the DB
@@ -1034,7 +1097,7 @@ class DatabaseScanner
         $stripped = preg_replace('~/\*.*?\*/~s', ' ', $q) ?? $q;
         $stripped = preg_replace('~--[^\n]*~', ' ', $stripped) ?? $stripped;
 
-        if (!preg_match('/^\s*(SELECT|WITH|SHOW|EXPLAIN|DESCRIBE|DESC)\b/i', $stripped)) {
+        if (! preg_match('/^\s*(SELECT|WITH|SHOW|EXPLAIN|DESCRIBE|DESC)\b/i', $stripped)) {
             return 'query harus dimulai dengan SELECT/WITH/SHOW/EXPLAIN';
         }
 
@@ -1051,7 +1114,7 @@ class DatabaseScanner
             'LOCK', 'UNLOCK', 'LOAD', 'COPY', 'IMPORT', 'HANDLER',
         ];
         foreach ($forbidden as $kw) {
-            if (preg_match('/\b' . $kw . '\b/i', $stripped)) {
+            if (preg_match('/\b'.$kw.'\b/i', $stripped)) {
                 return "keyword `{$kw}` tidak diizinkan";
             }
         }
@@ -1081,14 +1144,14 @@ class DatabaseScanner
         $txStarted = false;
         try {
             if ($sourceType === 'mysql') {
-                $dsn = "mysql:host={$config['host']};port=" . ($config['port'] ?? 3306) . ";dbname={$config['database']}";
+                $dsn = "mysql:host={$config['host']};port=".($config['port'] ?? 3306).";dbname={$config['database']}";
                 $pdo = new \PDO($dsn, $config['username'], $config['password'], [
                     \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
                     \PDO::MYSQL_ATTR_MULTI_STATEMENTS => false,
                 ]);
                 $pdo->exec('START TRANSACTION READ ONLY');
             } elseif ($sourceType === 'postgresql') {
-                $dsn = "pgsql:host={$config['host']};port=" . ($config['port'] ?? 5432) . ";dbname={$config['database']}";
+                $dsn = "pgsql:host={$config['host']};port=".($config['port'] ?? 5432).";dbname={$config['database']}";
                 $pdo = new \PDO($dsn, $config['username'], $config['password'], [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
                 $pdo->exec('BEGIN READ ONLY');
             } else {
@@ -1101,12 +1164,17 @@ class DatabaseScanner
             $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
             $pdo->exec('ROLLBACK');
+
             return ['rows' => $rows];
         } catch (\Throwable $e) {
             if ($pdo && $txStarted) {
-                try { $pdo->exec('ROLLBACK'); } catch (\Throwable $ignored) {}
+                try {
+                    $pdo->exec('ROLLBACK');
+                } catch (\Throwable $ignored) {
+                }
             }
-            Log::error('Failed parametrized read query: ' . $e->getMessage());
+            Log::error('Failed parametrized read query: '.$e->getMessage());
+
             return ['error' => $e->getMessage()];
         }
     }
@@ -1121,29 +1189,37 @@ class DatabaseScanner
      */
     public static function filterSchema(array $schema, array $selectedTables = [], array $selectedColumns = []): array
     {
-        if (empty($schema['tables'] ?? null)) return $schema;
-        if (empty($selectedTables) && empty($selectedColumns)) return $schema;
+        if (empty($schema['tables'] ?? null)) {
+            return $schema;
+        }
+        if (empty($selectedTables) && empty($selectedColumns)) {
+            return $schema;
+        }
 
         $filtered = [];
         foreach ($schema['tables'] as $table) {
             $tableName = $table['name'] ?? ($table['table_name'] ?? null);
-            if (!empty($selectedTables) && !in_array($tableName, $selectedTables, true)) {
+            if (! empty($selectedTables) && ! in_array($tableName, $selectedTables, true)) {
                 continue;
             }
 
-            if (!empty($selectedColumns) && !empty($table['columns'])) {
+            if (! empty($selectedColumns) && ! empty($table['columns'])) {
                 $table['columns'] = array_values(array_filter($table['columns'], function ($col) use ($selectedColumns, $tableName) {
                     $name = $col['name'] ?? ($col['column_name'] ?? null);
+
                     return in_array($name, $selectedColumns, true)
                         || in_array("{$tableName}.{$name}", $selectedColumns, true);
                 }));
-                if (empty($table['columns'])) continue;
+                if (empty($table['columns'])) {
+                    continue;
+                }
             }
 
             $filtered[] = $table;
         }
 
         $schema['tables'] = $filtered;
+
         return $schema;
     }
 
@@ -1151,8 +1227,8 @@ class DatabaseScanner
      * Sprint E3: Compare an external column list against the scanned DB schema
      * using fuzzy string matching. Returns ranked matches.
      *
-     * @param array  $schema        scanSchema() output
-     * @param array  $columnNames   e.g. ['email', 'phone', 'name', 'birth_date']
+     * @param  array  $schema  scanSchema() output
+     * @param  array  $columnNames  e.g. ['email', 'phone', 'name', 'birth_date']
      * @return array{matches: array} ranked match list
      */
     public static function compareMetadata(array $schema, array $columnNames): array
@@ -1166,7 +1242,7 @@ class DatabaseScanner
         foreach ($schema['tables'] as $table) {
             $tableName = $table['name'] ?? ($table['table_name'] ?? '');
             $tableCols = array_map(
-                fn($c) => strtolower($c['name'] ?? ($c['column_name'] ?? '')),
+                fn ($c) => strtolower($c['name'] ?? ($c['column_name'] ?? '')),
                 $table['columns'] ?? []
             );
 
@@ -1174,7 +1250,9 @@ class DatabaseScanner
             foreach ($columnNames as $needle) {
                 $needleLc = strtolower($needle);
                 foreach ($tableCols as $col) {
-                    if (!$col) continue;
+                    if (! $col) {
+                        continue;
+                    }
                     $sim = self::colSimilarity($needleLc, $col);
                     if ($sim >= 0.6) {
                         $matched[] = ['input' => $needle, 'matched_column' => $col, 'similarity' => round($sim, 2)];
@@ -1183,7 +1261,7 @@ class DatabaseScanner
             }
 
             if (count($matched) > 0) {
-                $avgSim = array_sum(array_map(fn($m) => $m['similarity'], $matched)) / count($matched);
+                $avgSim = array_sum(array_map(fn ($m) => $m['similarity'], $matched)) / count($matched);
                 $coverage = count($matched) / count($columnNames);
                 $matches[] = [
                     'table' => $tableName,
@@ -1194,19 +1272,27 @@ class DatabaseScanner
             }
         }
 
-        usort($matches, fn($a, $b) => $b['similarity'] <=> $a['similarity']);
+        usort($matches, fn ($a, $b) => $b['similarity'] <=> $a['similarity']);
+
         return ['matches' => $matches];
     }
 
     private static function colSimilarity(string $a, string $b): float
     {
-        if ($a === $b) return 1.0;
-        if ($a === '' || $b === '') return 0.0;
+        if ($a === $b) {
+            return 1.0;
+        }
+        if ($a === '' || $b === '') {
+            return 0.0;
+        }
 
         // Substring hint
-        if (str_contains($b, $a) || str_contains($a, $b)) return 0.85;
+        if (str_contains($b, $a) || str_contains($a, $b)) {
+            return 0.85;
+        }
 
         similar_text($a, $b, $percent);
+
         return $percent / 100.0;
     }
 
@@ -1217,7 +1303,7 @@ class DatabaseScanner
     public static function executeSampleQuery(string $sourceType, array $config, string $sql, int $limit = 100): array
     {
         $sqlTrim = trim($sql);
-        if (!preg_match('/^SELECT\b/i', $sqlTrim)) {
+        if (! preg_match('/^SELECT\b/i', $sqlTrim)) {
             return ['error' => 'Only SELECT statements are allowed.', 'sql' => $sqlTrim];
         }
         if (preg_match('/\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|REPLACE|GRANT|REVOKE)\b/i', $sqlTrim)) {
@@ -1226,10 +1312,10 @@ class DatabaseScanner
 
         try {
             if ($sourceType === 'mysql') {
-                $dsn = "mysql:host={$config['host']};port=" . ($config['port'] ?? 3306) . ";dbname={$config['database']}";
+                $dsn = "mysql:host={$config['host']};port=".($config['port'] ?? 3306).";dbname={$config['database']}";
                 $pdo = new \PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION, \PDO::ATTR_TIMEOUT => 10]);
             } elseif ($sourceType === 'postgresql') {
-                $dsn = "pgsql:host={$config['host']};port=" . ($config['port'] ?? 5432) . ";dbname={$config['database']}";
+                $dsn = "pgsql:host={$config['host']};port=".($config['port'] ?? 5432).";dbname={$config['database']}";
                 $pdo = new \PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION, \PDO::ATTR_TIMEOUT => 10]);
             } else {
                 return ['error' => 'Sample query supports mysql / postgresql only.', 'sql' => $sqlTrim];
@@ -1237,8 +1323,8 @@ class DatabaseScanner
 
             // Inject LIMIT if missing
             $finalSql = $sqlTrim;
-            if (!preg_match('/\bLIMIT\s+\d+/i', $finalSql)) {
-                $finalSql = rtrim($finalSql, "; \t\n\r") . " LIMIT {$limit}";
+            if (! preg_match('/\bLIMIT\s+\d+/i', $finalSql)) {
+                $finalSql = rtrim($finalSql, "; \t\n\r")." LIMIT {$limit}";
             }
 
             $stmt = $pdo->query($finalSql);
@@ -1251,7 +1337,8 @@ class DatabaseScanner
                 'row_count' => count($rows),
             ];
         } catch (\Throwable $e) {
-            Log::error('executeSampleQuery failed: ' . $e->getMessage());
+            Log::error('executeSampleQuery failed: '.$e->getMessage());
+
             return ['error' => $e->getMessage(), 'sql' => $sqlTrim];
         }
     }
