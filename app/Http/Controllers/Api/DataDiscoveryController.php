@@ -1824,6 +1824,29 @@ class DataDiscoveryController extends Controller
         $config = $system->connection_config ?? [];
         $connectionName = $this->resolveTenantConnection($system, $config);
 
+        // Tanpa koneksi ke DB SUMBER (connection_config kosong / driver tak
+        // didukung / sumber file/cloud/simulasi), JANGAN eksekusi SQL ke DB
+        // APLIKASI default — SQL hasil AI mereferensikan tabel sumber yang tidak
+        // ada di sana (menyebabkan error SQL membingungkan + berisiko menyentuh
+        // DB platform). Kembalikan error jelas per kasus.
+        if ($connectionName === null) {
+            $results = [];
+            foreach ($generated as $row) {
+                $results[] = [
+                    'case_id' => $row['case_id'] ?? null,
+                    'query_text' => $row['query_text'] ?? null,
+                    'generated_sql' => $row['generated_sql'] ?? null,
+                    'row_count' => 0,
+                    'sample_rows' => [],
+                    'executed_at' => null,
+                    'duration_ms' => 0,
+                    'error' => 'Koneksi database sumber tidak tersedia untuk eksekusi. AI Patrol hanya dapat mengeksekusi pada sumber MySQL/PostgreSQL dengan kredensial koneksi terisi — bukan sumber file/cloud atau hasil scan simulasi.',
+                ];
+            }
+
+            return response()->json(['results' => $results]);
+        }
+
         $results = [];
         $successCount = 0;
         $totalDurationMs = 0;
