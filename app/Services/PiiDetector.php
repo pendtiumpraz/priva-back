@@ -30,6 +30,16 @@ class PiiDetector
             return self::result(true, 'spesifik', 'sensitive', true, 'NPWP (nomor pajak) – data spesifik');
         }
 
+        // Paspor
+        if (self::match($name, ['passport', 'paspor', 'passport_number', 'no_paspor', 'nomor_paspor'])) {
+            return self::result(true, 'spesifik', 'sensitive', true, 'Nomor Paspor – dokumen identitas, data spesifik');
+        }
+
+        // SIM (Surat Izin Mengemudi)
+        if (self::match($name, ['sim', 'driving_license', 'driver_license', 'driving_licence', 'surat_izin_mengemudi', 'no_sim', 'nomor_sim'])) {
+            return self::result(true, 'spesifik', 'sensitive', true, 'Nomor SIM – dokumen identitas, data spesifik');
+        }
+
         // Data Kesehatan / Medis
         if (self::match($name, ['health', 'medical', 'diagnos', 'disease', 'sakit', 'kesehatan', 'rekam_medis', 'bpjs', 'insurance_id'])) {
             return self::result(true, 'spesifik', 'sensitive', true, 'Data kesehatan/medis – data spesifik Pasal 4 UU PDP');
@@ -123,8 +133,11 @@ class PiiDetector
     private static function match(string $columnName, array $keywords): bool
     {
         foreach ($keywords as $kw) {
-            if (str_contains($columnName, $kw)) return true;
+            if (str_contains($columnName, $kw)) {
+                return true;
+            }
         }
+
         return false;
     }
 

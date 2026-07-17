@@ -28,6 +28,24 @@ class ContentPiiScanner
                 'weight' => 0.8,
                 'reason' => 'Pola NPWP terdeteksi di isi data',
             ],
+            // Nomor Paspor Indonesia (1-2 huruf + 6-7 digit, mis. A1234567 / X123456)
+            'passport' => [
+                'pattern' => '/^[A-Z]{1,2}\d{6,7}$/i',
+                'pdp_category' => 'spesifik',
+                'classification' => 'sensitive',
+                'encryption_required' => true,
+                'weight' => 0.7,
+                'reason' => 'Pola Nomor Paspor terdeteksi di isi data',
+            ],
+            // Koordinat GPS "lat,long" (mis. -6.200000,106.816666)
+            'gps' => [
+                'pattern' => '/^[-+]?\d{1,3}\.\d{3,}\s*,\s*[-+]?\d{1,3}\.\d{3,}$/',
+                'pdp_category' => 'umum',
+                'classification' => 'pii',
+                'encryption_required' => false,
+                'weight' => 0.8,
+                'reason' => 'Koordinat GPS (lat,long) terdeteksi di isi data',
+            ],
             // Email address
             'email' => [
                 'pattern' => '/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/',
@@ -55,6 +73,15 @@ class ContentPiiScanner
                 'weight' => 1.0,
                 'reason' => 'Nomor Kartu Kredit terdeteksi di isi data',
             ],
+            // Nomor SIM (12 digit, dgn/ tanpa pemisah — mis. 1301-2345-6789)
+            'sim' => [
+                'pattern' => '/^\d{4}[-\s]?\d{4}[-\s]?\d{4}$/',
+                'pdp_category' => 'spesifik',
+                'classification' => 'sensitive',
+                'encryption_required' => true,
+                'weight' => 0.6,
+                'reason' => 'Pola Nomor SIM (12 digit) terdeteksi di isi data',
+            ],
             // IP Address
             'ip_address' => [
                 'pattern' => '/^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/',
@@ -63,6 +90,17 @@ class ContentPiiScanner
                 'encryption_required' => false,
                 'weight' => 1.0,
                 'reason' => 'Alamat IP (IPv4) terdeteksi di isi data',
+            ],
+            // Nomor Rekening Bank (10-16 digit polos) — POLA GENERIK, sengaja
+            // ditaruh terakhir agar pola lebih spesifik (NIK/kartu/NPWP) menang
+            // saat sama-sama cocok.
+            'bank_account' => [
+                'pattern' => '/^\d{10,16}$/',
+                'pdp_category' => 'spesifik',
+                'classification' => 'sensitive',
+                'encryption_required' => true,
+                'weight' => 0.5,
+                'reason' => 'Pola Nomor Rekening Bank terdeteksi di isi data',
             ],
         ];
     }
