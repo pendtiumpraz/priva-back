@@ -3,8 +3,8 @@
 namespace App\Services;
 
 use App\Http\Controllers\Api\AiProviderController;
-use Illuminate\Support\Facades\Cache;
 use App\Support\OutboundHttp;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class AiService
@@ -1311,6 +1311,50 @@ class AiService
               ."3. Skip seluruh tabel jika tidak ada kolom PII di dalamnya.\n"
               ."4. Beri rekomendasi proteksi singkat (1 kalimat) per kolom PII.\n"
               .'5. Mulai response langsung dengan karakter `{` — JANGAN ada apapun sebelumnya.';
+
+        return $this->ask($system, $user, 4000);
+    }
+
+    /**
+     * AI Column Insights — infers meaning/type, PDP category, an alias suggestion
+     * for obfuscated column names, and encrypted yes/no FROM AGGREGATE SIGNALS
+     * ONLY. No raw sample values are ever passed here (privacy invariant); the
+     * caller sends metadata + derived signals per column.
+     *
+     * @param  array<int,array<string,mixed>>  $columns  each: {table,name,alias,type,type_length,nullable,pdp_category,classification,protection_state,encrypted,shadow_detected}
+     */
+    public function dataDiscoveryColumnInsights(array $columns): ?array
+    {
+        $payload = json_encode(['columns' => $columns], JSON_UNESCAPED_UNICODE);
+        $format = json_encode([
+            'columns' => [[
+                'table' => 'nama_tabel',
+                'name' => 'nama_kolom',
+                'suggested_alias' => 'NIK',
+                'likely_meaning' => 'Nomor Induk Kependudukan',
+                'pdp_category' => 'spesifik',
+                'classification' => 'sensitive',
+                'encrypted' => false,
+                'note' => 'Alasan singkat 1 kalimat',
+            ]],
+        ], JSON_UNESCAPED_UNICODE);
+
+        $system = "Kamu adalah Auditor Data Privacy spesialis UU PDP Indonesia yang menebak MAKNA kolom database dari SINYAL METADATA saja.\n\n"
+                ."PENTING PRIVASI: kamu TIDAK diberi nilai data mentah — hanya metadata (nama/alias kolom, tipe & panjang, nullable) dan sinyal terkomputasi lokal (pola PII terdeteksi, status proteksi: plaintext/masked/encrypted, apakah tampak terenkripsi). Simpulkan dari sinyal itu; JANGAN mengarang isi data.\n\n"
+                ."TUGAS per kolom:\n"
+                ."- suggested_alias: nama bermakna & ringkas untuk kolom yang namanya DISAMARKAN/obfuscated (mis. 'A1','col_3','x') berdasarkan sinyal (tipe, pola terdeteksi, panjang). Jika nama kolom sudah jelas, ulangi maknanya. Bahasa Indonesia/istilah umum.\n"
+                ."- likely_meaning: makna data yang paling mungkin (mis. 'Nomor Telepon', 'Alamat Email', 'Kata Sandi ter-hash').\n"
+                ."- pdp_category: 'umum' atau 'spesifik' (kosongkan '' bila jelas non-PII).\n"
+                ."- classification: 'pii' atau 'sensitive' (kosongkan '' bila non-PII).\n"
+                ."- encrypted: true bila sinyal menunjukkan sudah terenkripsi (protection_state=encrypted / tipe biner / entropi tinggi), selain itu false.\n"
+                ."- note: alasan singkat 1 kalimat.\n\n"
+                ."ATURAN OUTPUT MUTLAK:\n"
+                ."- HANYA JSON valid satu objek. Tanpa markdown/code fence, tanpa teks pengantar.\n"
+                ."- Sertakan HANYA kolom yang bermakna/PII atau yang obfuscated & butuh alias. Skip kolom teknis jelas (id, created_at, foreign key) kecuali obfuscated.\n\n"
+                ."Struktur output:\n{$format}";
+
+        $user = "Sinyal kolom (JSON, tanpa nilai mentah):\n{$payload}\n\n"
+              .'Mulai response langsung dengan `{`.';
 
         return $this->ask($system, $user, 4000);
     }

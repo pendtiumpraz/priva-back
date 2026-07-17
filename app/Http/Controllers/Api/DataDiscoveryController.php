@@ -858,6 +858,111 @@ class DataDiscoveryController extends Controller
     }
 
     /**
+     * AI Column Insights — infer meaning/type, PDP category, alias suggestion
+     * (for obfuscated column names), and encrypted yes/no from AGGREGATE SIGNALS
+     * ONLY (no raw sample values are sent to AI). Advisory: writes
+     * ai_suggested_alias / ai_meaning / ai_note per column, and refines
+     * pdp_category/classification/encrypted for non-manual columns. The user's
+     * own `alias` and manual classifications are never overwritten.
+     */
+    public function aiColumnInsights(Request $request, string $id)
+    {
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+
+        $schema = $system->scan_results ?? null;
+        if (! $schema || empty($schema['tables'])) {
+            return response()->json(['error' => 'Lakukan Standard Scan dulu sebelum AI Analisis Kolom.'], 400);
+        }
+
+        $aiService = new AiService;
+        if (! $aiService->isAvailable()) {
+            return response()->json(['error' => 'AI Provider belum dikonfigurasi untuk server ini.'], 400);
+        }
+
+        // Build aggregate signals (NO raw values — none are stored anyway).
+        $signals = [];
+        foreach ($schema['tables'] as $table) {
+            foreach (($table['columns'] ?? []) as $c) {
+                $signals[] = [
+                    'table' => $table['name'] ?? '',
+                    'name' => $c['name'] ?? '',
+                    'alias' => $c['alias'] ?? null,
+                    'type' => $c['type'] ?? '',
+                    'type_length' => $c['type_length'] ?? null,
+                    'nullable' => $c['nullable'] ?? null,
+                    'pdp_category' => $c['pdp_category'] ?? null,
+                    'classification' => $c['classification'] ?? null,
+                    'protection_state' => $c['protection_state'] ?? null,
+                    'encrypted' => $c['encrypted'] ?? null,
+                    'shadow_detected' => $c['shadow_detected'] ?? null,
+                ];
+            }
+        }
+        if (empty($signals)) {
+            return response()->json(['error' => 'Tidak ada kolom untuk dianalisis.'], 400);
+        }
+
+        // Chunk (≤40 columns/AI call) to keep payloads small; cap 10 chunks.
+        $chunks = array_slice(array_chunk($signals, 40), 0, 10);
+
+        DB::disconnect();
+        $insights = [];
+        foreach ($chunks as $chunk) {
+            $res = $aiService->dataDiscoveryColumnInsights($chunk);
+            foreach (($res['columns'] ?? []) as $row) {
+                $key = ($row['table'] ?? '').'|'.($row['name'] ?? '');
+                $insights[$key] = $row;
+            }
+        }
+
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $results = $system->scan_results ?? ['tables' => []];
+        $applied = 0;
+        foreach ($results['tables'] as &$table) {
+            foreach ($table['columns'] as &$col) {
+                $key = ($table['name'] ?? '').'|'.($col['name'] ?? '');
+                $ai = $insights[$key] ?? null;
+                if (! $ai) {
+                    continue;
+                }
+                $col['ai_suggested_alias'] = $ai['suggested_alias'] ?? null;
+                $col['ai_meaning'] = $ai['likely_meaning'] ?? null;
+                $col['ai_note'] = $ai['note'] ?? null;
+                $applied++;
+
+                // Advisory refinement — never touch manual/user decisions or the
+                // user's own alias.
+                $isManual = ($col['applied_note'] ?? null) === 'manual_classify' || ! empty($col['applied_by']);
+                if (! $isManual) {
+                    if (! empty($ai['pdp_category'])) {
+                        $col['pdp_category'] = $ai['pdp_category'];
+                    }
+                    if (! empty($ai['classification'])) {
+                        $col['classification'] = $ai['classification'];
+                        $col['pii_detected'] = in_array($ai['classification'], ['pii', 'sensitive'], true);
+                    }
+                    if (array_key_exists('encrypted', $ai)) {
+                        $col['encrypted'] = (bool) $ai['encrypted'];
+                    }
+                }
+            }
+            unset($col);
+        }
+        unset($table);
+
+        $system->scan_results = $results;
+        $system->save();
+
+        AuditLog::log('data-discovery', $system->id, 'ai_column_insights', ['columns_analyzed' => $applied], 'system');
+
+        return response()->json([
+            'message' => "AI Analisis Kolom selesai — {$applied} kolom dianalisis.",
+            'columns_analyzed' => $applied,
+            'scan_results' => $results,
+        ]);
+    }
+
+    /**
      * AI Specific Search - Text to SQL Agentic Flow
      */
     /**

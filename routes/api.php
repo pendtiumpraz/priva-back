@@ -998,6 +998,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::post('/{id}/scan', [DataDiscoveryController::class, 'triggerScan'])->middleware('permission:data_discovery,write');
         // AI Deep Scan (replaces standard scan view with AI recommendations)
         Route::post('/{id}/scan-ai', [DataDiscoveryController::class, 'scanAi'])->middleware('permission:data_discovery,write');
+        Route::post('/{id}/ai-column-insights', [DataDiscoveryController::class, 'aiColumnInsights'])->middleware('permission:data_discovery,write');
         Route::get('/{id}/scan-details', [DataDiscoveryController::class, 'scanDetails'])->middleware('permission:data_discovery,read');
         Route::put('/{id}/classify-column', [DataDiscoveryController::class, 'updateColumnClassification'])->middleware('permission:data_discovery,write');
         // Apply scan recommendation to a column's final status (terima/tolak rekomendasi)
