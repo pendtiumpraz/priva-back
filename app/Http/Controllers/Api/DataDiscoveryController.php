@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\DiscoveryChangelog;
 use App\Models\InformationSystem;
 use App\Models\LeakDetection;
 use App\Models\Organization;
@@ -1844,6 +1845,8 @@ class DataDiscoveryController extends Controller
                 ];
             }
 
+            $this->persistPatrolChangelog($system, $results);
+
             return response()->json(['results' => $results]);
         }
 
@@ -1940,8 +1943,46 @@ class DataDiscoveryController extends Controller
             'total_duration_ms' => $totalDurationMs,
         ], 'user');
 
-        // Step 5 — response ephemeral. JANGAN persist ke DB manapun.
+        // Step 5 — persist SQL + metadata (TANPA baris data) ke changelog untuk
+        // riwayat/audit. Baris hasil tetap ephemeral (hanya di respons ini).
+        $this->persistPatrolChangelog($system, $results);
+
         return response()->json(['results' => $results]);
+    }
+
+    /**
+     * Simpan satu run AI Patrol ke DiscoveryChangelog: HANYA SQL + metadata
+     * (query_text, generated_sql, row_count, durasi, status, error) — baris data
+     * hasil TIDAK disimpan (privasi). Gagal simpan tidak menggagalkan respons.
+     */
+    private function persistPatrolChangelog(InformationSystem $system, array $results): void
+    {
+        try {
+            $logs = array_map(fn ($r) => [
+                'case_id' => $r['case_id'] ?? null,
+                'query_text' => $r['query_text'] ?? null,
+                'generated_sql' => $r['generated_sql'] ?? null,
+                'row_count' => (int) ($r['row_count'] ?? 0),
+                'duration_ms' => (int) ($r['duration_ms'] ?? 0),
+                'status' => empty($r['error']) ? 'success' : 'failed',
+                'error' => $r['error'] ?? null,
+                'executed_at' => $r['executed_at'] ?? null,
+            ], $results);
+
+            $totalRows = array_sum(array_map(fn ($r) => (int) ($r['row_count'] ?? 0), $results));
+            $anySuccess = collect($results)->contains(fn ($r) => empty($r['error']));
+
+            DiscoveryChangelog::create([
+                'org_id' => $system->org_id,
+                'information_system_id' => $system->id,
+                'scan_date' => now()->toDateString(),
+                'total_changes' => $totalRows,
+                'logs_data' => ['kind' => 'ai_patrol', 'cases' => $logs],
+                'status' => $anySuccess ? 'success' : 'failed',
+            ]);
+        } catch (\Throwable $e) {
+            \Log::warning('AI Patrol changelog persist gagal: '.$e->getMessage());
+        }
     }
 
     /**

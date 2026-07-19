@@ -13,20 +13,22 @@ class DiscoveryChangelogController extends Controller
     {
         $changelogs = DiscoveryChangelog::where('information_system_id', $systemId)
             ->orderBy('scan_date', 'desc')
+            ->orderBy('created_at', 'desc')
+            ->limit(100)
             ->get();
-        
+
         return response()->json([
-            'changelogs' => $changelogs
+            'changelogs' => $changelogs,
         ]);
     }
 
     public function store(Request $request, $systemId)
     {
         $request->validate([
-            'scan_date'     => 'required|date',
+            'scan_date' => 'required|date',
             'total_changes' => 'required|integer',
-            'logs_data'     => 'nullable|array',
-            'status'        => 'nullable|string',
+            'logs_data' => 'nullable|array',
+            'status' => 'nullable|string',
         ]);
 
         $system = InformationSystem::findOrFail($systemId);
@@ -46,7 +48,7 @@ class DiscoveryChangelogController extends Controller
 
         return response()->json([
             'message' => 'Changelog saved successfully.',
-            'changelog' => $changelog
+            'changelog' => $changelog,
         ]);
     }
 
@@ -60,16 +62,16 @@ class DiscoveryChangelogController extends Controller
         ]);
 
         $system = InformationSystem::findOrFail($systemId);
-        
+
         $settings = is_array($system->settings) ? $system->settings : [];
         $settings['ai_patrol_config'] = $request->only(['enabled', 'frequency', 'time', 'scope']);
-        
+
         $system->settings = $settings;
         $system->save();
 
         return response()->json([
             'message' => 'AI Patrol config saved successfully!',
-            'config' => $settings['ai_patrol_config']
+            'config' => $settings['ai_patrol_config'],
         ]);
     }
 }
