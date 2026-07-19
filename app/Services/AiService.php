@@ -236,6 +236,25 @@ class AiService
             }
 
             $parsed = json_decode($cleaned, true);
+
+            // Repair pass: model kadang balikin JSON dengan defect ringan
+            // (trailing comma, smart-quote, komentar //, control char) yang
+            // bikin json_decode gagal walau strukturnya sebetulnya benar.
+            // Coba perbaiki lalu decode ulang sebelum nyerah — ini mengurangi
+            // spam "AI JSON PARSE FAILED" di log tanpa AI call tambahan (F-14).
+            $repairUsed = false;
+            if ($parsed === null && $cleaned !== '') {
+                $repaired = $this->repairLooseJson($cleaned);
+                if ($repaired !== $cleaned) {
+                    $reparsed = json_decode($repaired, true);
+                    if ($reparsed !== null) {
+                        $parsed = $reparsed;
+                        $cleaned = $repaired;
+                        $repairUsed = true;
+                    }
+                }
+            }
+
             $jsonErr = json_last_error_msg();
             $result = $parsed !== null ? $parsed : ['raw' => $content];
 
@@ -247,6 +266,7 @@ class AiService
                     'parsed_keys' => is_array($parsed) ? array_keys($parsed) : [],
                     'had_markdown_fence' => $hadFence,
                     'balanced_extractor_used' => $balancedFound,
+                    'repair_used' => $repairUsed,
                 ]);
                 Cache::put($cacheKey, $result, now()->addHours(24));
             } else {
@@ -352,6 +372,37 @@ class AiService
         }
 
         return null; // truncated atau unbalanced
+    }
+
+    /**
+     * Perbaiki defect JSON ringan yang sering muncul di output LLM sebelum
+     * json_decode. Konservatif — hanya menyentuh hal yang aman:
+     *   - smart/curly quotes → straight quote
+     *   - komentar // ... dan block comment
+     *   - trailing comma sebelum } atau ]
+     *   - control char mentah di dalam string (newline/tab literal)
+     *
+     * TIDAK mencoba menebak struktur; kalau hasilnya tetap invalid, caller
+     * tetap treat sebagai gagal. Return string (mungkin sama kalau tak ada
+     * yang diperbaiki).
+     */
+    private function repairLooseJson(string $s): string
+    {
+        // Normalisasi smart quotes ke ASCII (di luar string pun aman untuk decode).
+        $s = strtr($s, [
+            "\u{201C}" => '"', "\u{201D}" => '"',
+            "\u{2018}" => "'", "\u{2019}" => "'",
+        ]);
+        // Strip block comments /* ... */ dan line comments // ...
+        $s = preg_replace('#/\*.*?\*/#s', '', $s) ?? $s;
+        $s = preg_replace('#(^|\s)//[^\n\r]*#', '$1', $s) ?? $s;
+        // Hapus trailing comma sebelum penutup object/array: {"a":1,} → {"a":1}
+        $s = preg_replace('/,(\s*[}\]])/', '$1', $s) ?? $s;
+        // Buang control char telanjang (kecuali yang valid di JSON string di-escape
+        // oleh model). Ini menyapu literal newline/tab yang tak ter-escape.
+        $s = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $s) ?? $s;
+
+        return trim($s);
     }
 
     // =============================================

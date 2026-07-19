@@ -198,6 +198,34 @@ class ModuleCrudController extends Controller
     }
 
     /**
+     * Create sebuah record yang punya kolom kode unik (registration_number /
+     * request_id / dst) dengan retry pada collision. Dipakai oleh jalur
+     * auto-create (mis. auto-DPIA dari RoPA high-risk) yang TIDAK lewat
+     * store() sehingga tidak dapat proteksi retry di sana.
+     *
+     * `$codeField` = nama kolom kode; `$regen` = closure yang menghitung kode
+     * baru saat collision (dipanggil ulang tiap attempt). Melempar kembali
+     * exception non-duplicate atau setelah 3 attempt gagal.
+     */
+    private function createWithCodeRetry($model, array $data, string $codeField, callable $regen)
+    {
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            try {
+                return $model->create($data);
+            } catch (\Illuminate\Database\QueryException $qe) {
+                $isDup = $qe->getCode() === '23000'
+                    || str_contains($qe->getMessage(), 'Duplicate entry')
+                    || str_contains($qe->getMessage(), 'UNIQUE constraint');
+                if ($isDup && $attempt < 2) {
+                    $data[$codeField] = $regen();
+                    continue;
+                }
+                throw $qe;
+            }
+        }
+    }
+
+    /**
      * RoPA per-user/divisi access scope. Non-admin/non-DPO hanya lihat RoPA:
      *   (a) assign_group='(All Group)' atau null — terbuka untuk semua user
      *       di tenant yang sama (tenant boundary tetap via org_id),
@@ -783,7 +811,7 @@ class ModuleCrudController extends Controller
                             'potensi_risiko' => [],
                         ];
 
-                        $autoDpia = $dpiaModel->create([
+                        $autoDpia = $this->createWithCodeRetry($dpiaModel, [
                             'org_id' => $data['org_id'],
                             'category_id' => $data['category_id'] ?? null,
                             'registration_number' => $this->nextCode('DPIA', $dpiaModel, $data['org_id'], $data['category_id'] ?? null),
@@ -798,7 +826,7 @@ class ModuleCrudController extends Controller
                             // DPIA hasil auto-create MEWARISI assignment RoPA induknya.
                             'assign_group' => $data['assign_group'] ?? null,
                             'assignees' => $data['assignees'] ?? [],
-                        ]);
+                        ], 'registration_number', fn () => $this->nextCode('DPIA', $dpiaModel, $data['org_id']));
                         $autoDpiaId = $autoDpia->id;
 
                         // Notifikasi ke assignee warisan (sama seperti create DPIA manual).
@@ -1223,7 +1251,7 @@ class ModuleCrudController extends Controller
                 $dpiaModel = $this->getModel('dpia');
                 $existingDpia = $dpiaModel->where('ropa_id', $record->id)->first();
                 if (! $existingDpia) {
-                    $autoDpia = $dpiaModel->create([
+                    $autoDpia = $this->createWithCodeRetry($dpiaModel, [
                         'org_id' => $record->org_id,
                         'category_id' => $record->category_id,
                         'registration_number' => $this->nextCode('DPIA', $dpiaModel, $record->org_id, $record->category_id),
@@ -1237,7 +1265,7 @@ class ModuleCrudController extends Controller
                         // Warisi assignment RoPA induk + notifikasi assignee.
                         'assign_group' => $record->assign_group,
                         'assignees' => $record->assignees ?? [],
-                    ]);
+                    ], 'registration_number', fn () => $this->nextCode('DPIA', $dpiaModel, $record->org_id));
                     foreach ((array) ($record->assignees ?? []) as $assigneeId) {
                         try {
                             NotificationService::dispatch(
