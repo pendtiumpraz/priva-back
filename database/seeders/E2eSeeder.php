@@ -24,6 +24,9 @@ class E2eSeeder extends Seeder
 {
     public function run(): void
     {
+        // Bank adequacy negara (dipakai autocomplete cross-border /countries).
+        $this->call(CountryAdequacySeeder::class);
+
         $org = Organization::firstOrCreate(
             ['slug' => 'e2e-org'],
             [

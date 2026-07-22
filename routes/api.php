@@ -643,6 +643,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::get('/trashed', [ContractReviewCrudController::class, 'trashed']);
         Route::get('/', [ContractReviewCrudController::class, 'index']);
         Route::get('/{id}', [ContractReviewCrudController::class, 'show']);
+        Route::get('/{id}/export.pdf', [ContractReviewCrudController::class, 'exportPdf']); // branded PDF via AssessmentPdfService
         Route::delete('/{id}', [ContractReviewCrudController::class, 'destroy']);
         Route::post('/{id}/restore', [ContractReviewCrudController::class, 'restore']);
         Route::delete('/{id}/force', [ContractReviewCrudController::class, 'forceDelete']);
@@ -655,6 +656,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::get('/trashed', [PolicyReviewCrudController::class, 'trashed']);
         Route::get('/', [PolicyReviewCrudController::class, 'index']);
         Route::get('/{id}', [PolicyReviewCrudController::class, 'show']);
+        Route::get('/{id}/export.pdf', [PolicyReviewCrudController::class, 'exportPdf']); // branded PDF via AssessmentPdfService
         Route::delete('/{id}', [PolicyReviewCrudController::class, 'destroy']);
         Route::post('/{id}/restore', [PolicyReviewCrudController::class, 'restore']);
         Route::delete('/{id}/force', [PolicyReviewCrudController::class, 'forceDelete']);
@@ -744,6 +746,10 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         // Sprint G.2 — Upload dokumen intake typed (akta/ktp/kontrak/CP)
         Route::post('/{id}/intake-documents', [VendorRiskController::class, 'uploadIntakeDocument'])
             ->middleware('permission:vendor_risk,write');
+        // Unduh dokumen intake typed. File privat per-tenant (tidak ada URL
+        // publik) → harus lewat endpoint ber-auth yang stream dari disk org.
+        Route::get('/{id}/intake-documents/{kind}', [VendorRiskController::class, 'downloadIntakeDocument'])
+            ->middleware('permission:vendor_risk,read');
 
         // TPRM Phase 4 — Assessment history per vendor
         Route::get('/{id}/assessment-history', [VendorRiskController::class, 'assessmentHistory'])
@@ -898,6 +904,10 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         // pihak luar tidak bisa membakar kredit AI org. {id} = assessment id.
         Route::post('/{id}/upload-evidence', [TprmReviewController::class, 'uploadEvidence'])
             ->middleware('permission:vendor_risk,write');
+        // Unduh satu berkas bukti (storage privat per-tenant → tidak bisa
+        // di-serve lewat /storage publik). {evidenceId} = vendor_assessment_evidence.id
+        Route::get('/{id}/evidence/{evidenceId}', [TprmReviewController::class, 'downloadEvidence'])
+            ->middleware('permission:vendor_risk,read');
         Route::post('/{id}/analyze-evidence', [TprmReviewController::class, 'analyzeEvidence'])
             ->middleware('permission:vendor_risk,write');
         Route::post('/{id}/analyze-evidence-bulk', [TprmReviewController::class, 'bulkAnalyzeEvidence'])
@@ -1204,6 +1214,10 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
             ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
         Route::get('/{id}/embed-snippet', [ConsentCollectionController::class, 'embedSnippet'])
             ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,read');
+        Route::get('/{id}/widget-config', [ConsentCollectionController::class, 'widgetConfig'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,read');
+        Route::put('/{id}/widget-config', [ConsentCollectionController::class, 'saveWidgetConfig'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
         Route::post('/{id}/upload-logo', [ConsentCollectionController::class, 'uploadLogo'])
             ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
         Route::get('/{id}/ropas', [RopaLinkController::class, 'indexForConsent'])

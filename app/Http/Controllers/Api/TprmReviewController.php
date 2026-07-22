@@ -640,6 +640,66 @@ class TprmReviewController extends Controller
     }
 
     /**
+     * GET /tprm/review/{id}/evidence/{evidenceId} — stream/unduh satu berkas
+     * bukti asesmen TPRM.
+     *
+     * Berkas bukti disimpan di storage PRIVAT per-tenant
+     * (TenantStorageService::storeTenantPrivateFile → tenants/{org}/...),
+     * jadi tidak ada URL publik. Pola otorisasi mengikuti
+     * DsrExecutionController::streamEvidence: resolve parent record dalam org
+     * pemanggil dulu, baru resolve berkas anaknya dalam parent + org yang sama.
+     *
+     * Tiga lapis pengaman lintas-tenant:
+     *   1. assessment harus milik org pemanggil (findInOrg → 404 kalau bukan);
+     *   2. row evidence harus milik assessment ITU dan org yang sama
+     *      (global scope org di-bypass, filter eksplisit — id yang ditebak
+     *      dari org lain jatuh ke 404 yang sama dengan id tak dikenal);
+     *   3. file_path wajib berada di bawah prefix `tenants/{org_id}/` supaya
+     *      row yang datanya korup/ter-tamper tidak bisa membaca berkas tenant
+     *      lain di disk yang sama.
+     */
+    public function downloadEvidence(Request $request, string $id, string $evidenceId, TenantStorageService $storage)
+    {
+        $assessment = $this->findInOrg($id, $request->user()->org_id);
+
+        $evidence = VendorAssessmentEvidence::query()
+            ->withoutGlobalScope('org')
+            ->where('id', $evidenceId)
+            ->where('assessment_id', $assessment->id)
+            ->where('org_id', $assessment->org_id)
+            ->firstOrFail();
+
+        $path = (string) $evidence->file_path;
+        if ($path === '' || ! str_starts_with($path, "tenants/{$assessment->org_id}/")) {
+            abort(404, 'Berkas bukti tidak ditemukan.');
+        }
+
+        $org = Organization::findOrFail($assessment->org_id);
+        $disk = $storage->getDisk($org);
+        if (! $disk->exists($path)) {
+            abort(404, 'Berkas bukti tidak ditemukan pada penyimpanan.');
+        }
+
+        AuditLog::create([
+            'org_id' => $assessment->org_id,
+            'user_id' => $request->user()->id,
+            'user_name' => $request->user()->name,
+            'user_role' => 'reviewer',
+            'module' => 'tprm.review',
+            'action' => 'evidence_downloaded',
+            'record_id' => $assessment->id,
+            'changes' => [
+                'evidence_id' => $evidence->id,
+                'question_id' => $evidence->question_id,
+                'name' => $evidence->original_name,
+            ],
+            'ip_address' => $request->ip(),
+        ]);
+
+        return $disk->download($path, $evidence->original_name ?: basename($path));
+    }
+
+    /**
      * POST /tprm/review/{id}/analyze-evidence — AI document analysis untuk
      * satu (question_id, attachment_path). INTERNAL ONLY (auth:sanctum).
      *

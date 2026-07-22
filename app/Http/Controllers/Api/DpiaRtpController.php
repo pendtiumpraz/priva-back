@@ -8,7 +8,9 @@ use App\Models\Dpia;
 use App\Models\Organization;
 use App\Services\AiDocumentAnalyzer;
 use App\Services\CreditService;
+use App\Services\FileUploadValidator;
 use App\Services\TenantStorageService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -29,17 +31,19 @@ class DpiaRtpController extends Controller
      * Kalau tidak ada di sini, transisi di-reject.
      */
     private const TRANSITIONS = [
-        'planned'     => ['in_progress', 'on_hold', 'cancelled'],
+        'planned' => ['in_progress', 'on_hold', 'cancelled'],
         'in_progress' => ['implemented', 'on_hold', 'cancelled', 'overdue'],
         'implemented' => ['verified', 'in_progress'],  // verified or re-work
-        'verified'    => ['in_progress'],               // re-open kalau review gagal
-        'overdue'     => ['in_progress', 'implemented', 'cancelled'],
-        'on_hold'     => ['planned', 'in_progress', 'cancelled'],
-        'cancelled'   => [],                            // terminal
+        'verified' => ['in_progress'],               // re-open kalau review gagal
+        'overdue' => ['in_progress', 'implemented', 'cancelled'],
+        'on_hold' => ['planned', 'in_progress', 'cancelled'],
+        'cancelled' => [],                            // terminal
     ];
 
     private const VALID_PRIORITIES = ['critical', 'high', 'medium', 'low'];
+
     private const VALID_TREATMENTS = ['avoid', 'reduce', 'transfer', 'accept'];
+
     private const VALID_STATUSES = ['planned', 'in_progress', 'implemented', 'verified', 'overdue', 'on_hold', 'cancelled'];
 
     /**
@@ -83,35 +87,35 @@ class DpiaRtpController extends Controller
         $dpia = Dpia::where('id', $id)->where('org_id', $user->org_id)->firstOrFail();
 
         $data = $request->validate([
-            'risk_event'            => 'required|string|max:500',
-            'category'              => 'nullable|string|max:150',
-            'treatment_type'        => 'required|in:' . implode(',', self::VALID_TREATMENTS),
-            'action'                => 'required|string|max:2000',
-            'rationale'             => 'nullable|string|max:2000',
-            'owner_user_id'         => 'nullable|uuid',
-            'priority'              => 'required|in:' . implode(',', self::VALID_PRIORITIES),
-            'due_date'              => 'nullable|date|after_or_equal:today',
-            'inherent_likelihood'   => 'nullable|integer|min:1|max:5',
-            'inherent_impact'       => 'nullable|integer|min:1|max:5',
+            'risk_event' => 'required|string|max:500',
+            'category' => 'nullable|string|max:150',
+            'treatment_type' => 'required|in:'.implode(',', self::VALID_TREATMENTS),
+            'action' => 'required|string|max:2000',
+            'rationale' => 'nullable|string|max:2000',
+            'owner_user_id' => 'nullable|uuid',
+            'priority' => 'required|in:'.implode(',', self::VALID_PRIORITIES),
+            'due_date' => 'nullable|date|after_or_equal:today',
+            'inherent_likelihood' => 'nullable|integer|min:1|max:5',
+            'inherent_impact' => 'nullable|integer|min:1|max:5',
         ]);
 
         $items = $dpia->mitigation_tracking ?? [];
         $now = now()->toIso8601String();
 
         $newItem = array_merge($data, [
-            'id'                 => (string) Str::uuid(),
-            'status'             => 'planned',
-            'residual_likelihood'=> null,
-            'residual_impact'    => null,
-            'evidence_files'     => [],
-            'notes'              => '',
-            'started_at'         => null,
-            'completed_at'       => null,
-            'verified_at'        => null,
-            'verified_by'        => null,
-            'created_at'         => $now,
-            'updated_at'         => $now,
-            'created_by'         => $user->id,
+            'id' => (string) Str::uuid(),
+            'status' => 'planned',
+            'residual_likelihood' => null,
+            'residual_impact' => null,
+            'evidence_files' => [],
+            'notes' => '',
+            'started_at' => null,
+            'completed_at' => null,
+            'verified_at' => null,
+            'verified_by' => null,
+            'created_at' => $now,
+            'updated_at' => $now,
+            'created_by' => $user->id,
         ]);
 
         $items[] = $newItem;
@@ -155,20 +159,20 @@ class DpiaRtpController extends Controller
         $item = $items[$idx];
 
         $data = $request->validate([
-            'status'              => 'sometimes|in:' . implode(',', self::VALID_STATUSES),
-            'action'              => 'sometimes|string|max:2000',
-            'rationale'           => 'sometimes|nullable|string|max:2000',
-            'treatment_type'      => 'sometimes|in:' . implode(',', self::VALID_TREATMENTS),
-            'owner_user_id'       => 'sometimes|nullable|uuid',
-            'priority'            => 'sometimes|in:' . implode(',', self::VALID_PRIORITIES),
-            'due_date'            => 'sometimes|nullable|date',
+            'status' => 'sometimes|in:'.implode(',', self::VALID_STATUSES),
+            'action' => 'sometimes|string|max:2000',
+            'rationale' => 'sometimes|nullable|string|max:2000',
+            'treatment_type' => 'sometimes|in:'.implode(',', self::VALID_TREATMENTS),
+            'owner_user_id' => 'sometimes|nullable|uuid',
+            'priority' => 'sometimes|in:'.implode(',', self::VALID_PRIORITIES),
+            'due_date' => 'sometimes|nullable|date',
             'inherent_likelihood' => 'sometimes|nullable|integer|min:1|max:5',
-            'inherent_impact'     => 'sometimes|nullable|integer|min:1|max:5',
+            'inherent_impact' => 'sometimes|nullable|integer|min:1|max:5',
             'residual_likelihood' => 'sometimes|nullable|integer|min:1|max:5',
-            'residual_impact'     => 'sometimes|nullable|integer|min:1|max:5',
-            'notes'               => 'sometimes|nullable|string|max:5000',
-            'evidence_files'      => 'sometimes|array',
-            'evidence_files.*'    => 'string',
+            'residual_impact' => 'sometimes|nullable|integer|min:1|max:5',
+            'notes' => 'sometimes|nullable|string|max:5000',
+            'evidence_files' => 'sometimes|array',
+            'evidence_files.*' => 'string',
         ]);
 
         // Validate status transition
@@ -176,7 +180,7 @@ class DpiaRtpController extends Controller
             $from = $item['status'] ?? 'planned';
             $to = $data['status'];
             $allowed = self::TRANSITIONS[$from] ?? [];
-            if (!in_array($to, $allowed, true)) {
+            if (! in_array($to, $allowed, true)) {
                 return response()->json([
                     'message' => "Transisi status '{$from}' → '{$to}' tidak diizinkan",
                     'allowed_next' => $allowed,
@@ -207,8 +211,8 @@ class DpiaRtpController extends Controller
 
         // Residual score only accepted when status is implemented/verified
         if ((isset($data['residual_likelihood']) || isset($data['residual_impact']))
-            && !in_array($item['status'], ['implemented', 'verified'], true)
-            && !in_array($data['status'] ?? '', ['implemented', 'verified'], true)) {
+            && ! in_array($item['status'], ['implemented', 'verified'], true)
+            && ! in_array($data['status'] ?? '', ['implemented', 'verified'], true)) {
             return response()->json([
                 'message' => 'Residual risk hanya bisa diisi saat status implemented atau verified',
             ], 422);
@@ -246,6 +250,10 @@ class DpiaRtpController extends Controller
      * ke accept/transfer/terminate).
      *
      * Matching logic sama dengan smart upsert (category + risk_event).
+     *
+     * SAFETY: orphan yang sudah digarap user (lihat detectManualWork()) TIDAK
+     * dihapus — hanya dilewati dan dilaporkan di response 'skipped'. Penghapusan
+     * hanya menyentuh item yang masih persis seperti hasil auto-generate.
      */
     public function cleanOrphans(Request $request, string $id)
     {
@@ -254,20 +262,32 @@ class DpiaRtpController extends Controller
 
         $existing = $dpia->mitigation_tracking ?? [];
         if (empty($existing)) {
-            return response()->json(['message' => 'RTP kosong, tidak ada orphan.', 'data' => []]);
+            return response()->json([
+                'message' => 'RTP kosong, tidak ada orphan.',
+                'removed_count' => 0,
+                'skipped_count' => 0,
+                'removed' => [],
+                'skipped' => [],
+                'data' => [],
+            ]);
         }
 
         $candidates = Dpia::buildRtpItemsFromDpia($dpia);
 
+        // Owner default hasil auto-generate (resolved dari PIC wizard). Owner yang
+        // sama dengan ini BUKAN tanda kerja manual — mesin yang mengisinya.
+        $autoOwnerId = $candidates[0]['owner_user_id'] ?? null;
+
         $kept = [];
         $removed = [];
+        $skipped = [];
         foreach ($existing as $item) {
             $hasMatch = false;
-            $itemCat = trim((string)($item['category'] ?? ''));
-            $itemEvent = trim((string)($item['risk_event'] ?? ''));
+            $itemCat = trim((string) ($item['category'] ?? ''));
+            $itemEvent = trim((string) ($item['risk_event'] ?? ''));
             foreach ($candidates as $c) {
-                $cCat = trim((string)($c['category'] ?? ''));
-                $cEvent = trim((string)($c['risk_event'] ?? ''));
+                $cCat = trim((string) ($c['category'] ?? ''));
+                $cEvent = trim((string) ($c['risk_event'] ?? ''));
                 if ($itemEvent === $cEvent && ($itemCat === $cCat || $itemCat === '' || $cCat === '')) {
                     $hasMatch = true;
                     break;
@@ -275,34 +295,127 @@ class DpiaRtpController extends Controller
             }
             if ($hasMatch) {
                 $kept[] = $item;
-            } else {
-                $removed[] = $item;
+
+                continue;
             }
+
+            // Orphan — tapi jangan buang pekerjaan user.
+            $reasons = $this->detectManualWork($item, $autoOwnerId);
+            if (! empty($reasons)) {
+                $kept[] = $item;
+                $skipped[] = [
+                    'id' => $item['id'] ?? null,
+                    'risk_event' => $item['risk_event'] ?? null,
+                    'category' => $item['category'] ?? null,
+                    'status' => $item['status'] ?? null,
+                    'reasons' => $reasons,
+                ];
+
+                continue;
+            }
+
+            $removed[] = $item;
         }
 
         $dpia->mitigation_tracking = $kept;
         $dpia->save();
 
         AuditLog::create([
-            'org_id'    => $user->org_id,
-            'user_id'   => $user->id,
-            'module'    => 'dpia',
+            'org_id' => $user->org_id,
+            'user_id' => $user->id,
+            'module' => 'dpia',
             'record_id' => $dpia->id,
-            'action'    => 'rtp.clean_orphans',
-            'details'   => [
+            'action' => 'rtp.clean_orphans',
+            'details' => [
                 'removed_count' => count($removed),
-                'removed_risk_events' => array_map(fn($r) => $r['risk_event'] ?? null, $removed),
+                'removed_risk_events' => array_map(fn ($r) => $r['risk_event'] ?? null, $removed),
+                'skipped_count' => count($skipped),
+                'skipped' => $skipped,
             ],
         ]);
 
+        $parts = [];
+        if (count($removed) > 0) {
+            $parts[] = count($removed).' orphan items dihapus.';
+        }
+        if (count($skipped) > 0) {
+            $parts[] = count($skipped).' item dilewati karena sudah dikerjakan manual (tidak dihapus).';
+        }
+        if (empty($parts)) {
+            $parts[] = 'Tidak ada orphan. Semua item sinkron dengan wizard.';
+        }
+
         return response()->json([
-            'message' => count($removed) > 0
-                ? count($removed) . ' orphan items dihapus.'
-                : 'Tidak ada orphan. Semua item sinkron dengan wizard.',
+            'message' => implode(' ', $parts),
             'removed_count' => count($removed),
+            'skipped_count' => count($skipped),
             'removed' => $removed,
+            'skipped' => $skipped,
             'data' => $kept,
         ]);
+    }
+
+    /**
+     * Deteksi "tanda kerja manual" pada satu RTP item.
+     *
+     * Baseline pembanding = bentuk item hasil Dpia::buildRtpItem() (auto-generate):
+     *   treatment_type='reduce', status='planned', due_date=null, notes='',
+     *   evidence_files=[], residual_*=null, started_at/completed_at/verified_at=null,
+     *   owner_user_id=<default PIC resolver>.
+     *
+     * Setiap penyimpangan dari baseline itu = user (atau alur kerja user) sudah
+     * menyentuh item ini → JANGAN dihapus. Status 'overdue' dikecualikan karena
+     * di-set otomatis oleh recalcOverdue(), bukan oleh user.
+     *
+     * @return array<int,string> daftar alasan (kosong = item masih polos)
+     */
+    private function detectManualWork(array $item, ?string $autoOwnerId): array
+    {
+        $reasons = [];
+
+        $treatment = (string) ($item['treatment_type'] ?? 'reduce');
+        if ($treatment !== '' && $treatment !== 'reduce') {
+            $reasons[] = "treatment_type diubah manual menjadi '{$treatment}'";
+        }
+
+        $status = (string) ($item['status'] ?? 'planned');
+        if ($status !== '' && ! in_array($status, ['planned', 'overdue'], true)) {
+            $reasons[] = "status sudah maju ke '{$status}'";
+        }
+
+        if (trim((string) ($item['notes'] ?? '')) !== '') {
+            $reasons[] = 'ada catatan (notes)';
+        }
+
+        $evidence = $item['evidence_files'] ?? [];
+        if (is_array($evidence) && count($evidence) > 0) {
+            $reasons[] = 'ada bukti mitigasi terlampir';
+        }
+
+        $owner = $item['owner_user_id'] ?? null;
+        if (! empty($owner) && $owner !== $autoOwnerId) {
+            $reasons[] = 'penanggung jawab ditetapkan manual';
+        }
+
+        if (! empty($item['due_date'])) {
+            $reasons[] = 'tenggat waktu (due_date) sudah diisi';
+        }
+
+        if (! empty($item['residual_likelihood']) || ! empty($item['residual_impact'])) {
+            $reasons[] = 'residual risk sudah dinilai';
+        }
+
+        foreach (['started_at' => 'pekerjaan sudah dimulai', 'completed_at' => 'sudah ditandai selesai', 'verified_at' => 'sudah diverifikasi'] as $field => $label) {
+            if (! empty($item[$field])) {
+                $reasons[] = $label;
+            }
+        }
+
+        if (! empty($item['verified_by'])) {
+            $reasons[] = 'ada verifikator tercatat';
+        }
+
+        return $reasons;
     }
 
     /**
@@ -425,7 +538,9 @@ class DpiaRtpController extends Controller
 
         // PASS 2: insert candidates yang belum di-process (risk event baru)
         foreach ($candidates as $idx => $cand) {
-            if (in_array($idx, $processedCandidateIdx, true)) continue;
+            if (in_array($idx, $processedCandidateIdx, true)) {
+                continue;
+            }
             $cand['created_by'] = $user->id;
             $result[] = $cand;
             $stats['inserted']++;
@@ -447,7 +562,7 @@ class DpiaRtpController extends Controller
         $message = $totalChanged === 0
             ? 'Semua risk events sudah sinkron dengan wizard. Tidak ada perubahan.'
             : "RTP ter-sync: {$stats['inserted']} baru, {$stats['updated']} di-update, {$stats['unchanged']} unchanged"
-                . ($stats['orphan'] > 0 ? ", {$stats['orphan']} orphan (dihapus dari wizard, masih ada di RTP)" : '');
+                .($stats['orphan'] > 0 ? ", {$stats['orphan']} orphan (dihapus dari wizard, masih ada di RTP)" : '');
 
         return response()->json([
             'message' => $message,
@@ -465,14 +580,18 @@ class DpiaRtpController extends Controller
      */
     private function findCandidate(array $candidates, array $exist): int
     {
-        $existCat = trim((string)($exist['category'] ?? ''));
-        $existEvent = trim((string)($exist['risk_event'] ?? ''));
-        if ($existEvent === '') return -1;
+        $existCat = trim((string) ($exist['category'] ?? ''));
+        $existEvent = trim((string) ($exist['risk_event'] ?? ''));
+        if ($existEvent === '') {
+            return -1;
+        }
 
         foreach ($candidates as $idx => $c) {
-            $cCat = trim((string)($c['category'] ?? ''));
-            $cEvent = trim((string)($c['risk_event'] ?? ''));
-            if ($cEvent === '') continue;
+            $cCat = trim((string) ($c['category'] ?? ''));
+            $cEvent = trim((string) ($c['risk_event'] ?? ''));
+            if ($cEvent === '') {
+                continue;
+            }
 
             // Primary match: category + risk_event
             if ($existCat !== '' && $cCat !== '' && $existCat === $cCat && $existEvent === $cEvent) {
@@ -483,6 +602,7 @@ class DpiaRtpController extends Controller
                 return $idx;
             }
         }
+
         return -1;
     }
 
@@ -496,8 +616,8 @@ class DpiaRtpController extends Controller
         Request $request,
         string $id,
         string $itemId,
-        \App\Services\TenantStorageService $storage,
-        \App\Services\FileUploadValidator $validator,
+        TenantStorageService $storage,
+        FileUploadValidator $validator,
     ) {
         $user = $request->user();
         $dpia = Dpia::where('id', $id)->where('org_id', $user->org_id)->firstOrFail();
@@ -518,18 +638,19 @@ class DpiaRtpController extends Controller
         }
         try {
             $preset = in_array($ext, ['jpg', 'jpeg', 'png'], true)
-                ? \App\Services\FileUploadValidator::PRESET_IMAGE
-                : \App\Services\FileUploadValidator::PRESET_DOCUMENT;
+                ? FileUploadValidator::PRESET_IMAGE
+                : FileUploadValidator::PRESET_DOCUMENT;
             $validator->validate($file, $preset);
         } catch (\RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
-        $org = \App\Models\Organization::findOrFail($user->org_id);
+        $org = Organization::findOrFail($user->org_id);
         try {
             $stored = $storage->storeTenantPrivateFile($org, $file, "rtp/{$dpia->id}/{$itemId}/evidence");
         } catch (\Throwable $e) {
             report($e);
+
             return response()->json(['message' => 'Gagal menyimpan file ke storage.'], 500);
         }
 
@@ -573,7 +694,7 @@ class DpiaRtpController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Bukti mitigasi diunggah.' . ($autoAdvanced ? ' Status → implemented.' : ''),
+            'message' => 'Bukti mitigasi diunggah.'.($autoAdvanced ? ' Status → implemented.' : ''),
             'data' => $entry,
             'item' => $item,
         ], 201);
@@ -751,8 +872,11 @@ class DpiaRtpController extends Controller
     private function findItem(array $items, string $itemId): int
     {
         foreach ($items as $i => $it) {
-            if (($it['id'] ?? null) === $itemId) return $i;
+            if (($it['id'] ?? null) === $itemId) {
+                return $i;
+            }
         }
+
         return -1;
     }
 
@@ -763,25 +887,36 @@ class DpiaRtpController extends Controller
     {
         $today = now()->startOfDay();
         foreach ($items as &$item) {
-            if (empty($item['due_date'])) continue;
-            if (in_array($item['status'] ?? 'planned', ['verified', 'cancelled', 'on_hold', 'overdue'], true)) continue;
+            if (empty($item['due_date'])) {
+                continue;
+            }
+            if (in_array($item['status'] ?? 'planned', ['verified', 'cancelled', 'on_hold', 'overdue'], true)) {
+                continue;
+            }
             try {
-                $due = \Carbon\Carbon::parse($item['due_date'])->startOfDay();
+                $due = Carbon::parse($item['due_date'])->startOfDay();
                 if ($due->lt($today)) {
                     $item['status'] = 'overdue';
                     $item['updated_at'] = now()->toIso8601String();
                 }
-            } catch (\Throwable $e) { /* invalid date, skip */ }
+            } catch (\Throwable $e) { /* invalid date, skip */
+            }
         }
+
         return $items;
     }
 
     private function hasOverdueChanges(array $before, array $after): bool
     {
-        if (count($before) !== count($after)) return false;
-        for ($i = 0; $i < count($before); $i++) {
-            if (($before[$i]['status'] ?? null) !== ($after[$i]['status'] ?? null)) return true;
+        if (count($before) !== count($after)) {
+            return false;
         }
+        for ($i = 0; $i < count($before); $i++) {
+            if (($before[$i]['status'] ?? null) !== ($after[$i]['status'] ?? null)) {
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -796,27 +931,31 @@ class DpiaRtpController extends Controller
 
         foreach ($items as $it) {
             $status = $it['status'] ?? 'planned';
-            if (isset($statusCount[$status])) $statusCount[$status]++;
+            if (isset($statusCount[$status])) {
+                $statusCount[$status]++;
+            }
             $priority = $it['priority'] ?? 'medium';
-            if (isset($priorityCount[$priority])) $priorityCount[$priority]++;
+            if (isset($priorityCount[$priority])) {
+                $priorityCount[$priority]++;
+            }
 
-            if (!empty($it['inherent_likelihood']) && !empty($it['inherent_impact'])) {
-                $inherentSum += (int)$it['inherent_likelihood'] * (int)$it['inherent_impact'];
+            if (! empty($it['inherent_likelihood']) && ! empty($it['inherent_impact'])) {
+                $inherentSum += (int) $it['inherent_likelihood'] * (int) $it['inherent_impact'];
                 $inherentCount++;
             }
-            if (!empty($it['residual_likelihood']) && !empty($it['residual_impact'])) {
-                $residualSum += (int)$it['residual_likelihood'] * (int)$it['residual_impact'];
+            if (! empty($it['residual_likelihood']) && ! empty($it['residual_impact'])) {
+                $residualSum += (int) $it['residual_likelihood'] * (int) $it['residual_impact'];
                 $residualCount++;
             }
         }
 
         return [
-            'total'             => count($items),
-            'status'            => $statusCount,
-            'priority'          => $priorityCount,
+            'total' => count($items),
+            'status' => $statusCount,
+            'priority' => $priorityCount,
             'avg_inherent_risk' => $inherentCount > 0 ? round($inherentSum / $inherentCount, 1) : null,
             'avg_residual_risk' => $residualCount > 0 ? round($residualSum / $residualCount, 1) : null,
-            'completion_rate'   => count($items) > 0
+            'completion_rate' => count($items) > 0
                 ? round(($statusCount['verified'] / count($items)) * 100, 1)
                 : 0,
         ];

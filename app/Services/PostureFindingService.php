@@ -48,7 +48,9 @@ class PostureFindingService
         $now = now();
         $candidateKeys = array_column($candidates, 'source_key');
 
-        $created = 0; $bumped = 0; $autoResolved = 0;
+        $created = 0;
+        $bumped = 0;
+        $autoResolved = 0;
 
         // Upsert: create new or bump last_seen_at on existing
         foreach ($candidates as $c) {
@@ -154,15 +156,17 @@ class PostureFindingService
             foreach ($tables as $t) {
                 $tableName = $t['name'] ?? '';
                 foreach (($t['columns'] ?? []) as $c) {
-                    if (($c['pdp_category'] ?? null) !== 'spesifik') continue;
+                    if (($c['pdp_category'] ?? null) !== 'spesifik') {
+                        continue;
+                    }
                     $colName = $c['name'] ?? '';
                     $key = "{$tableName}.{$colName}";
                     $a = $protections[$key] ?? null;
                     $protected = $a && (
-                        !empty($a['encryption']) || !empty($a['access_control']) ||
-                        !empty($a['masking']) || !empty($a['tokenization'])
+                        ! empty($a['encryption']) || ! empty($a['access_control']) ||
+                        ! empty($a['masking']) || ! empty($a['tokenization'])
                     );
-                    if (!$protected) {
+                    if (! $protected) {
                         $candidates[] = [
                             'source_pillar' => 'sensitive_protection',
                             'source_key' => "sensitive_protection:{$sys->id}:{$key}",
@@ -171,7 +175,7 @@ class PostureFindingService
                             'source_detail' => "{$sys->name} · {$key}",
                             'severity' => 'critical',
                             'title' => "Data spesifik tanpa kontrol: {$key}",
-                            'description' => "Kolom {$key} di sistem {$sys->name} terdeteksi sebagai data spesifik (UU PDP Pasal 4 ayat 2) — " . ($c['reason'] ?? 'PII spesifik') . ". Belum ada protection assessment (enkripsi, kontrol akses, masking, atau tokenisasi) yang tercatat.",
+                            'description' => "Kolom {$key} di sistem {$sys->name} terdeteksi sebagai data spesifik (UU PDP Pasal 4 ayat 2) — ".($c['reason'] ?? 'PII spesifik').'. Belum ada protection assessment (enkripsi, kontrol akses, masking, atau tokenisasi) yang tercatat.',
                             'regulation_ref' => 'UU PDP Pasal 4 ayat 2 + Pasal 39',
                             'metadata' => [
                                 'system_id' => $sys->id,
@@ -184,6 +188,7 @@ class PostureFindingService
                 }
             }
         }
+
         return $candidates;
     }
 
@@ -205,8 +210,12 @@ class PostureFindingService
                 $tableName = $t['name'] ?? '';
                 foreach (($t['columns'] ?? []) as $c) {
                     // Skip spesifik (covered by detectSensitiveProtection)
-                    if (($c['pdp_category'] ?? null) === 'spesifik') continue;
-                    if (!($c['pii_detected'] ?? false)) continue;
+                    if (($c['pdp_category'] ?? null) === 'spesifik') {
+                        continue;
+                    }
+                    if (! ($c['pii_detected'] ?? false)) {
+                        continue;
+                    }
 
                     $colName = $c['name'] ?? '';
                     $key = "{$tableName}.{$colName}";
@@ -219,7 +228,7 @@ class PostureFindingService
                             'source_detail' => "{$sys->name} · {$key}",
                             'severity' => 'high',
                             'title' => "PII belum di-assess: {$key}",
-                            'description' => "Kolom {$key} terdeteksi PII (" . ($c['reason'] ?? 'PII umum') . ") tapi belum diisi protection assessment.",
+                            'description' => "Kolom {$key} terdeteksi PII (".($c['reason'] ?? 'PII umum').') tapi belum diisi protection assessment.',
                             'regulation_ref' => 'UU PDP Pasal 39',
                             'metadata' => ['system_id' => $sys->id, 'table' => $tableName, 'column' => $colName],
                         ];
@@ -227,6 +236,7 @@ class PostureFindingService
                 }
             }
         }
+
         return $candidates;
     }
 
@@ -248,18 +258,19 @@ class PostureFindingService
                 $isCritical = stripos((string) $alert, 'WARNING') !== false || stripos((string) $alert, 'PII') !== false;
                 $candidates[] = [
                     'source_pillar' => 'schema_drift',
-                    'source_key' => "schema_drift:{$sys->id}:" . md5((string) $alert),
+                    'source_key' => "schema_drift:{$sys->id}:".md5((string) $alert),
                     'source_type' => 'information_system',
                     'source_id' => $sys->id,
                     'source_detail' => $sys->name,
                     'severity' => $isCritical ? 'critical' : 'medium',
-                    'title' => 'Schema drift: ' . substr((string) $alert, 0, 80),
+                    'title' => 'Schema drift: '.substr((string) $alert, 0, 80),
                     'description' => (string) $alert,
                     'regulation_ref' => 'UU PDP Pasal 39',
                     'metadata' => ['system_id' => $sys->id, 'detected_at' => optional($sys->last_scanned_at)->toIso8601String()],
                 ];
             }
         }
+
         return $candidates;
     }
 
@@ -280,7 +291,7 @@ class PostureFindingService
                 ->where('status', 'approved')
                 ->whereNull('deleted_at')
                 ->exists();
-            if (!$hasApproved) {
+            if (! $hasApproved) {
                 $candidates[] = [
                     'source_pillar' => 'dpia_compliance',
                     'source_key' => "dpia_compliance:{$r->id}",
@@ -295,6 +306,7 @@ class PostureFindingService
                 ];
             }
         }
+
         return $candidates;
     }
 
@@ -313,30 +325,56 @@ class PostureFindingService
         foreach ($dpias as $d) {
             foreach (($d->mitigation_tracking ?? []) as $idx => $it) {
                 $status = $it['status'] ?? 'planned';
-                if (in_array($status, ['verified', 'cancelled', 'on_hold'], true)) continue;
-                if (empty($it['due_date'])) continue;
+                if (in_array($status, ['verified', 'cancelled', 'on_hold'], true)) {
+                    continue;
+                }
+                if (empty($it['due_date'])) {
+                    continue;
+                }
                 try {
                     $due = Carbon::parse($it['due_date']);
-                    if (!$due->lt($today)) continue;
-                } catch (\Throwable $e) { continue; }
+                    if (! $due->lt($today)) {
+                        continue;
+                    }
+                } catch (Throwable $e) {
+                    continue;
+                }
 
                 $daysOverdue = (int) $today->diffInDays($due);
                 $sev = $daysOverdue >= 30 ? 'critical' : ($daysOverdue >= 7 ? 'high' : 'medium');
                 $itemKey = $it['id'] ?? "idx_{$idx}";
+
+                // RTP item (Dpia::buildRtpItem) TIDAK punya key 'title'/'description'.
+                // Label risiko = 'risk_event'; rencana kerja = 'action'; catatan = 'notes'.
+                $label = trim((string) ($it['risk_event'] ?? ''));
+                if ($label === '') {
+                    $label = 'mitigation item';
+                }
+                // title/source_detail = varchar(255); risk_event bisa sampai 500 char.
+                $label = mb_substr($label, 0, 160);
+                $detail = trim((string) ($it['action'] ?? ''));
+                if ($detail === '') {
+                    $detail = trim((string) ($it['notes'] ?? ''));
+                }
+                if ($detail === '') {
+                    $detail = 'Risk treatment item lewat deadline.';
+                }
+
                 $candidates[] = [
                     'source_pillar' => 'rtp_hygiene',
                     'source_key' => "rtp_hygiene:{$d->id}:{$itemKey}",
                     'source_type' => 'dpia',
                     'source_id' => $d->id,
-                    'source_detail' => "{$d->registration_number} · " . ($it['title'] ?? 'mitigation item'),
+                    'source_detail' => "{$d->registration_number} · ".$label,
                     'severity' => $sev,
-                    'title' => "RTP overdue {$daysOverdue} hari: " . ($it['title'] ?? 'mitigation item'),
-                    'description' => ($it['description'] ?? 'Risk treatment item lewat deadline.') . " · Due: " . $due->format('d M Y'),
+                    'title' => "RTP overdue {$daysOverdue} hari: ".$label,
+                    'description' => $detail.' · Due: '.$due->format('d M Y'),
                     'regulation_ref' => 'UU PDP Pasal 35',
                     'metadata' => ['dpia_id' => $d->id, 'item_index' => $idx, 'days_overdue' => $daysOverdue],
                 ];
             }
         }
+
         return $candidates;
     }
 
@@ -356,8 +394,8 @@ class PostureFindingService
             $daysOverdue = (int) now()->diffInDays($v->next_assessment_due_at);
             $sev = match ($v->risk_level) {
                 'critical' => 'critical',
-                'high'     => 'high',
-                default    => 'medium',
+                'high' => 'high',
+                default => 'medium',
             };
             $candidates[] = [
                 'source_pillar' => 'vendor_risk',
@@ -372,6 +410,7 @@ class PostureFindingService
                 'metadata' => ['vendor_id' => $v->id, 'days_overdue' => $daysOverdue],
             ];
         }
+
         return $candidates;
     }
 
@@ -402,6 +441,7 @@ class PostureFindingService
                 'metadata' => ['cross_border_id' => $cbt->id],
             ];
         }
+
         return $candidates;
     }
 
@@ -419,8 +459,8 @@ class PostureFindingService
 
         foreach ($rows as $b) {
             $hoursOpen = (int) Carbon::parse($b->detected_at)->diffInHours(now());
-            $notified = !empty($b->notified_komdigi_at);
-            $sev = $hoursOpen > 72 && !$notified ? 'critical' : ($hoursOpen > 48 && !$notified ? 'high' : 'medium');
+            $notified = ! empty($b->notified_komdigi_at);
+            $sev = $hoursOpen > 72 && ! $notified ? 'critical' : ($hoursOpen > 48 && ! $notified ? 'high' : 'medium');
             $candidates[] = [
                 'source_pillar' => 'breach_readiness',
                 'source_key' => "breach_readiness:{$b->id}",
@@ -428,12 +468,13 @@ class PostureFindingService
                 'source_id' => $b->id,
                 'source_detail' => $b->incident_code,
                 'severity' => $sev,
-                'title' => "Breach aktif {$hoursOpen}h" . ($notified ? '' : ' (belum notif KOMDIGI)') . ": {$b->incident_code}",
-                'description' => "Breach {$b->incident_code} ('{$b->title}') terdeteksi {$hoursOpen} jam yang lalu. " . ($notified ? 'Sudah notif KOMDIGI.' : 'BELUM notif KOMDIGI — Pasal 46 batas 72h.'),
+                'title' => "Breach aktif {$hoursOpen}h".($notified ? '' : ' (belum notif KOMDIGI)').": {$b->incident_code}",
+                'description' => "Breach {$b->incident_code} ('{$b->title}') terdeteksi {$hoursOpen} jam yang lalu. ".($notified ? 'Sudah notif KOMDIGI.' : 'BELUM notif KOMDIGI — Pasal 46 batas 72h.'),
                 'regulation_ref' => 'UU PDP Pasal 46',
                 'metadata' => ['breach_id' => $b->id, 'hours_open' => $hoursOpen, 'notified_komdigi' => $notified],
             ];
         }
+
         return $candidates;
     }
 
@@ -466,6 +507,7 @@ class PostureFindingService
                 'metadata' => ['dsr_id' => $d->id, 'hours_late' => $hoursLate],
             ];
         }
+
         return $candidates;
     }
 
@@ -491,23 +533,32 @@ class PostureFindingService
         // Roles considered "expected" — these don't trigger findings even
         // with broad privilege. Operator can fine-tune later.
         $expectedRoles = ['postgres', 'root', 'admin', 'dba', 'app', 'application', 'service_account'];
-        $expectedPattern = '/^(' . implode('|', $expectedRoles) . ')(@|_|$)/i';
+        $expectedPattern = '/^('.implode('|', $expectedRoles).')(@|_|$)/i';
 
         foreach ($systems as $sys) {
             $accessPaths = $sys->scan_results['access_paths'] ?? null;
             $tables = $sys->scan_results['tables'] ?? [];
-            if (!$accessPaths || empty($accessPaths['grants'])) continue;
+            if (! $accessPaths || empty($accessPaths['grants'])) {
+                continue;
+            }
 
             // Build map: table_name → has spesifik PII / has umum PII
             $tablePii = [];
             foreach ($tables as $t) {
                 $tableName = $t['name'] ?? '';
-                $hasSpesifik = false; $hasPii = false;
+                $hasSpesifik = false;
+                $hasPii = false;
                 foreach (($t['columns'] ?? []) as $c) {
-                    if ($c['pii_detected'] ?? false) $hasPii = true;
-                    if (($c['pdp_category'] ?? null) === 'spesifik') $hasSpesifik = true;
+                    if ($c['pii_detected'] ?? false) {
+                        $hasPii = true;
+                    }
+                    if (($c['pdp_category'] ?? null) === 'spesifik') {
+                        $hasSpesifik = true;
+                    }
                 }
-                if ($hasPii) $tablePii[$tableName] = ['spesifik' => $hasSpesifik, 'pii' => true];
+                if ($hasPii) {
+                    $tablePii[$tableName] = ['spesifik' => $hasSpesifik, 'pii' => true];
+                }
             }
 
             // Group grants per (grantee, table) to summarize privileges
@@ -516,9 +567,13 @@ class PostureFindingService
                 $grantee = $g['grantee'];
                 $table = $g['table'];
                 $priv = strtoupper((string) $g['privilege']);
-                if (!isset($tablePii[$table])) continue;                  // not a PII table
-                if (preg_match($expectedPattern, $grantee)) continue;      // expected role
-                $key = $grantee . '|' . $table;
+                if (! isset($tablePii[$table])) {
+                    continue;
+                }                  // not a PII table
+                if (preg_match($expectedPattern, $grantee)) {
+                    continue;
+                }      // expected role
+                $key = $grantee.'|'.$table;
                 $byUserTable[$key] ??= ['grantee' => $grantee, 'table' => $table, 'privileges' => []];
                 $byUserTable[$key]['privileges'][] = $priv;
             }
@@ -528,7 +583,9 @@ class PostureFindingService
                 $hasWrite = (bool) array_intersect(['DELETE', 'TRUNCATE', 'DROP'], $privs);
                 $hasModify = (bool) array_intersect(['UPDATE', 'INSERT'], $privs);
                 $hasSelect = in_array('SELECT', $privs, true);
-                if (!$hasWrite && !$hasModify && !$hasSelect) continue;
+                if (! $hasWrite && ! $hasModify && ! $hasSelect) {
+                    continue;
+                }
 
                 $isSpesifik = $tablePii[$entry['table']]['spesifik'];
                 $severity = match (true) {
@@ -547,7 +604,7 @@ class PostureFindingService
                     'source_detail' => "{$sys->name} · {$entry['grantee']} → {$entry['table']}",
                     'severity' => $severity,
                     'title' => "Akses berlebih: {$entry['grantee']} punya {$privList} pada {$entry['table']}",
-                    'description' => "User '{$entry['grantee']}' punya privilege [{$privList}] pada tabel '{$entry['table']}' yang mengandung " . ($isSpesifik ? 'data spesifik (Pasal 4 ayat 2)' : 'PII') . " di sistem '{$sys->name}'. Verifikasi kebutuhan akses dan terapkan least-privilege.",
+                    'description' => "User '{$entry['grantee']}' punya privilege [{$privList}] pada tabel '{$entry['table']}' yang mengandung ".($isSpesifik ? 'data spesifik (Pasal 4 ayat 2)' : 'PII')." di sistem '{$sys->name}'. Verifikasi kebutuhan akses dan terapkan least-privilege.",
                     'regulation_ref' => 'UU PDP Pasal 39 + ISO 27001 A.9.4',
                     'metadata' => [
                         'system_id' => $sys->id,
@@ -559,6 +616,7 @@ class PostureFindingService
                 ];
             }
         }
+
         return $candidates;
     }
 
@@ -583,7 +641,9 @@ class PostureFindingService
         foreach ($systems as $sys) {
             $enc = $sys->scan_results['encryption'] ?? null;
             $tables = $sys->scan_results['tables'] ?? [];
-            if (!$enc) continue;   // encryption scan didn't run for this engine
+            if (! $enc) {
+                continue;
+            }   // encryption scan didn't run for this engine
 
             $colEncTables = array_flip($enc['column_encryption_observed']['tables'] ?? []);
             $tablespaceMap = [];
@@ -594,18 +654,25 @@ class PostureFindingService
 
             foreach ($tables as $t) {
                 $tableName = $t['name'] ?? '';
-                $hasSpesifik = false; $hasPii = false;
+                $hasSpesifik = false;
+                $hasPii = false;
                 foreach (($t['columns'] ?? []) as $c) {
-                    if ($c['pii_detected'] ?? false) $hasPii = true;
-                    if (($c['pdp_category'] ?? null) === 'spesifik') $hasSpesifik = true;
+                    if ($c['pii_detected'] ?? false) {
+                        $hasPii = true;
+                    }
+                    if (($c['pdp_category'] ?? null) === 'spesifik') {
+                        $hasSpesifik = true;
+                    }
                 }
-                if (!$hasPii) continue;
+                if (! $hasPii) {
+                    continue;
+                }
 
                 $tablespaceEncrypted = $tablespaceMap[$tableName] ?? null;
                 $hasColEnc = isset($colEncTables[$tableName]);
 
                 // No signal of any encryption + has spesifik PII = critical
-                if ($hasSpesifik && $tablespaceEncrypted === false && !$hasColEnc) {
+                if ($hasSpesifik && $tablespaceEncrypted === false && ! $hasColEnc) {
                     $candidates[] = [
                         'source_pillar' => 'encryption_at_rest',
                         'source_key' => "encryption_at_rest:{$sys->id}:{$tableName}",
@@ -645,6 +712,7 @@ class PostureFindingService
                 }
             }
         }
+
         return $candidates;
     }
 }

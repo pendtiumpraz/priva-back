@@ -79,6 +79,72 @@ class AssessmentPdfService
             ]);
     }
 
+    /**
+     * Contract Review (AI UU PDP clause analyzer) → branded PDF.
+     *
+     * $record is a plain row object from `contract_reviews` (the module is
+     * query-builder based, not Eloquent), so nothing is lazily loaded here.
+     */
+    public function contractReview(object $record, User $user, ?object $sourceDocument = null)
+    {
+        $org = Organization::findOrFail($record->org_id);
+        $payload = $this->commonPayload($org, $user, 'contract_review');
+        $payload['record'] = $record;
+        $payload['result'] = $this->decodeResult($record->review_result ?? null);
+        $payload['sourceDocument'] = $sourceDocument;
+
+        return Pdf::loadView('reports.reviews.contract', $payload)
+            ->setPaper('a4', 'portrait')
+            ->setOption([
+                'isHtml5ParserEnabled' => true,
+                'isRemoteEnabled' => true,
+                'defaultFont' => $payload['config']['font_family'] ?? 'DejaVu Sans',
+            ]);
+    }
+
+    /**
+     * Policy / SOP Review (AI compliance audit) → branded PDF.
+     *
+     * NOTE: `policy_reviews` has no `file_name` column — only `file_path`.
+     */
+    public function policyReview(object $record, User $user, ?object $sourceDocument = null)
+    {
+        $org = Organization::findOrFail($record->org_id);
+        $payload = $this->commonPayload($org, $user, 'policy_review');
+        $payload['record'] = $record;
+        $payload['result'] = $this->decodeResult($record->review_result ?? null);
+        $payload['sourceDocument'] = $sourceDocument;
+
+        return Pdf::loadView('reports.reviews.policy', $payload)
+            ->setPaper('a4', 'portrait')
+            ->setOption([
+                'isHtml5ParserEnabled' => true,
+                'isRemoteEnabled' => true,
+                'defaultFont' => $payload['config']['font_family'] ?? 'DejaVu Sans',
+            ]);
+    }
+
+    /**
+     * review_result may arrive as JSON string, array, or already-decoded object.
+     * Always hand the view a plain array so blade never fatals on a null/string.
+     */
+    private function decodeResult($raw): array
+    {
+        if (is_string($raw)) {
+            $decoded = json_decode($raw, true);
+
+            return is_array($decoded) ? $decoded : [];
+        }
+        if (is_array($raw)) {
+            return $raw;
+        }
+        if (is_object($raw)) {
+            return json_decode((string) json_encode($raw), true) ?: [];
+        }
+
+        return [];
+    }
+
     private function commonPayload(Organization $org, User $user, string $kind): array
     {
         $template = DocumentTemplate::activeForOrg($org->id, $kind);
@@ -99,25 +165,34 @@ class AssessmentPdfService
                 'lia' => 'Legitimate Interest Assessment',
                 'tia' => 'Transfer Impact Assessment',
                 'maturity' => 'Maturity Assessment UU PDP',
+                'contract_review' => 'Hasil Review Kontrak',
+                'policy_review' => 'Hasil Review Kebijakan / SOP',
                 default => 'Assessment',
             },
-            'generatedAt' => now()->locale('id')->isoFormat('D MMMM Y · HH:mm') . ' WIB',
+            'generatedAt' => now()->locale('id')->isoFormat('D MMMM Y · HH:mm').' WIB',
             'generatedBy' => $user->name,
         ];
     }
 
     private function toDataUri(?string $urlOrPath): ?string
     {
-        if (!$urlOrPath) return null;
-        if (str_starts_with($urlOrPath, 'data:')) return $urlOrPath;
+        if (! $urlOrPath) {
+            return null;
+        }
+        if (str_starts_with($urlOrPath, 'data:')) {
+            return $urlOrPath;
+        }
 
         // public URL → fetch via http only if remote; for local public/ we read disk
         if (str_starts_with($urlOrPath, 'http://') || str_starts_with($urlOrPath, 'https://')) {
             try {
                 $bytes = @file_get_contents($urlOrPath);
-                if ($bytes === false) return null;
+                if ($bytes === false) {
+                    return null;
+                }
                 $mime = $this->mimeFromUrl($urlOrPath);
-                return 'data:' . $mime . ';base64,' . base64_encode($bytes);
+
+                return 'data:'.$mime.';base64,'.base64_encode($bytes);
             } catch (\Throwable) {
                 return null;
             }
@@ -125,18 +200,23 @@ class AssessmentPdfService
 
         // local relative path under storage/public
         $relative = ltrim(parse_url($urlOrPath, PHP_URL_PATH) ?? $urlOrPath, '/');
-        if (str_starts_with($relative, 'storage/')) $relative = substr($relative, 8);
+        if (str_starts_with($relative, 'storage/')) {
+            $relative = substr($relative, 8);
+        }
         if (Storage::disk('public')->exists($relative)) {
             $bytes = Storage::disk('public')->get($relative);
             $mime = $this->mimeFromUrl($urlOrPath);
-            return 'data:' . $mime . ';base64,' . base64_encode($bytes);
+
+            return 'data:'.$mime.';base64,'.base64_encode($bytes);
         }
+
         return null;
     }
 
     private function mimeFromUrl(string $url): string
     {
         $ext = strtolower(pathinfo(parse_url($url, PHP_URL_PATH) ?? $url, PATHINFO_EXTENSION));
+
         return match ($ext) {
             'png' => 'image/png',
             'jpg', 'jpeg' => 'image/jpeg',

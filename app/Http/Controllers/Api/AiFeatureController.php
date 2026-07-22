@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Jobs\BatchAiReviewJob;
 use App\Models\AiResult;
+use App\Models\AuditLog;
 use App\Models\BreachIncident;
 use App\Models\BreachSimulation;
 use App\Models\ConsentCollectionPoint;
@@ -137,6 +138,30 @@ class AiFeatureController extends Controller
      *
      * @return string uuid baris yg di-insert ATAU baris existing yg cocok
      */
+    /**
+     * Resolve `source_document_id` dari request (alur prefill Document Maker
+     * `?source=docmaker&id=<uuid>`) menjadi id yang AMAN untuk disimpan.
+     *
+     * Mengembalikan null kalau field tidak dikirim, bukan UUID, atau dokumen
+     * tersebut bukan milik org pemanggil — invarian multi-tenancy: kolom ini
+     * tidak boleh dipakai menautkan record lintas org.
+     */
+    private function resolveSourceDocumentId(Request $request, string $orgId): ?string
+    {
+        $sourceId = $request->input('source_document_id');
+        if (! is_string($sourceId) || $sourceId === '' || ! Str::isUuid($sourceId)) {
+            return null;
+        }
+
+        $exists = DB::table('generated_documents')
+            ->where('id', $sourceId)
+            ->where('org_id', $orgId)
+            ->whereNull('deleted_at')
+            ->exists();
+
+        return $exists ? $sourceId : null;
+    }
+
     private function insertContractReviewDeduped(string $orgId, array $row): string
     {
         $existing = DB::table('contract_reviews')
@@ -1523,7 +1548,7 @@ class AiFeatureController extends Controller
 
         $org = $org->fresh();
         try {
-            \App\Models\AuditLog::log('ai_credits', $org->id, 'credit_topup', [
+            AuditLog::log('ai_credits', $org->id, 'credit_topup', [
                 'org_id' => $org->id,
                 'org_name' => $org->name,
                 'type' => $type,
@@ -1568,6 +1593,8 @@ class AiFeatureController extends Controller
         $request->validate([
             'contract_text' => 'required|string|min:50',
             'contract_type' => 'nullable|string',
+            // Alur prefill Document Maker — dipakai untuk tautan balik di halaman hasil.
+            'source_document_id' => 'nullable|uuid',
         ]);
 
         $ai = (new AiService($request->user()->org_id))->setLocale($request->user()->locale ?? 'id');
@@ -1629,9 +1656,12 @@ class AiFeatureController extends Controller
 
         $response = $ai->ask($systemPrompt, $userPrompt, 4000);
 
+        $sourceDocumentId = $this->resolveSourceDocumentId($request, $request->user()->org_id);
+
         $inputData = [
             'contract_type' => $contractType,
             'text_length' => strlen($request->contract_text),
+            'source_document_id' => $sourceDocumentId,
         ];
 
         // Persist to contract_reviews table
@@ -1645,6 +1675,8 @@ class AiFeatureController extends Controller
                 'overall_rating' => $response['overall_rating'] ?? null,
                 'status' => 'completed',
                 'created_by' => $request->user()->id,
+                'source_document_id' => $sourceDocumentId,
+                'source_module' => $sourceDocumentId ? 'document_maker' : null,
             ]);
         } catch (\Exception $e) {
             \Log::warning('contract_reviews save failed: '.$e->getMessage());
@@ -1805,6 +1837,9 @@ class AiFeatureController extends Controller
             return $creditErr;
         }
 
+        // Alur prefill Document Maker — dipakai untuk tautan balik di halaman hasil.
+        $request->validate(['source_document_id' => 'nullable|uuid']);
+
         // Accept either text or file
         $policyText = $request->input('policy_text', '');
         $docType = $request->input('doc_type', 'kebijakan_privasi');
@@ -1919,12 +1954,15 @@ class AiFeatureController extends Controller
 
         $response = $ai->ask($systemPrompt, $userPrompt, 5000);
 
+        $sourceDocumentId = $this->resolveSourceDocumentId($request, $request->user()->org_id);
+
         $inputData = [
             'title' => $title,
             'doc_type' => $docType,
             'file_name' => $fileName,
             'file_path' => $storedPath,
             'text_length' => mb_strlen($policyText),
+            'source_document_id' => $sourceDocumentId,
         ];
 
         // Save to policy_reviews table if it exists
@@ -1937,6 +1975,8 @@ class AiFeatureController extends Controller
                 'risk_score' => $response['overall_score'] ?? 0,
                 'status' => 'completed',
                 'created_by' => $request->user()->id,
+                'source_document_id' => $sourceDocumentId,
+                'source_module' => $sourceDocumentId ? 'document_maker' : null,
             ]);
         } catch (\Exception $e) {
             // Table may not exist yet, proceed anyway

@@ -49,12 +49,65 @@ class HoldingAssessmentReviewController extends Controller
     // INBOX + DETAIL
     // ===================================================================
 
+    /**
+     * Status yang boleh diminta lewat `?status=`. Alias disediakan supaya
+     * frontend bisa memakai tab bahasa Indonesia ("selesai") tanpa harus
+     * merangkai daftar status mentah.
+     *
+     * @var array<string, string[]>
+     */
+    private const INBOX_STATUS_FILTERS = [
+        // Default (tanpa parameter) — antrean yang masih perlu ditindak.
+        'pending' => ['submitted', 'review_in_progress'],
+        'antrean' => ['submitted', 'review_in_progress'],
+        'submitted' => ['submitted'],
+        'review_in_progress' => ['review_in_progress'],
+        'approved' => ['approved'],
+        'rejected' => ['rejected'],
+        // Riwayat yang sudah difinalisasi reviewer.
+        'selesai' => ['approved', 'rejected'],
+        'done' => ['approved', 'rejected'],
+        'all' => ['submitted', 'review_in_progress', 'approved', 'rejected'],
+        'semua' => ['submitted', 'review_in_progress', 'approved', 'rejected'],
+    ];
+
+    /**
+     * Inbox reviewer. Tanpa parameter perilakunya TIDAK berubah: hanya
+     * assessment berstatus submitted / review_in_progress. Dengan
+     * `?status=approved` (atau `selesai`, `rejected`, `all`, dst.) reviewer
+     * bisa menelusuri riwayat yang sudah difinalisasi langsung dari halaman
+     * review. Scope org tetap dijaga oleh trait BelongsToOrg pada model.
+     */
     public function inbox(Request $request)
     {
         $this->assertHoldingAccess($request);
 
+        $statusParam = trim((string) $request->query('status', ''));
+        if ($statusParam === '') {
+            $statuses = self::INBOX_STATUS_FILTERS['pending'];
+        } else {
+            $statuses = [];
+            foreach (explode(',', strtolower($statusParam)) as $token) {
+                $token = trim($token);
+                if ($token === '') {
+                    continue;
+                }
+                if (! isset(self::INBOX_STATUS_FILTERS[$token])) {
+                    return response()->json([
+                        'message' => 'Status filter tidak dikenal: '.$token,
+                        'allowed' => array_keys(self::INBOX_STATUS_FILTERS),
+                    ], 422);
+                }
+                $statuses = array_merge($statuses, self::INBOX_STATUS_FILTERS[$token]);
+            }
+            $statuses = array_values(array_unique($statuses));
+            if ($statuses === []) {
+                $statuses = self::INBOX_STATUS_FILTERS['pending'];
+            }
+        }
+
         $rows = HoldingAssessmentInstance::query()
-            ->whereIn('status', ['submitted', 'review_in_progress'])
+            ->whereIn('status', $statuses)
             ->orderByDesc('submitted_at')
             ->get()
             ->map(fn ($i) => [
@@ -67,9 +120,11 @@ class HoldingAssessmentReviewController extends Controller
                 'compliance_level' => $i->compliance_level,
                 'submitted_at' => $i->submitted_at,
                 'reviewer_id' => $i->reviewer_id,
+                'review_status' => $i->review_status,
+                'reviewed_at' => $i->reviewed_at,
             ]);
 
-        return response()->json(['data' => $rows]);
+        return response()->json(['data' => $rows, 'meta' => ['status' => $statuses]]);
     }
 
     public function show(Request $request, string $id)
@@ -276,17 +331,20 @@ class HoldingAssessmentReviewController extends Controller
             $question = $questionMap->get($qId);
             if (! $question) {
                 $stats['skipped']++;
+
                 continue;
             }
             $existingList = $this->normalizeList($analyses[$qId] ?? null);
             $already = collect($existingList)->firstWhere('attachment_path', $ev->file_path);
             if ($already) {
                 $stats['cached']++;
+
                 continue;
             }
             $ext = strtolower(pathinfo($ev->file_path, PATHINFO_EXTENSION));
             if (in_array($ext, $imageExts, true)) {
                 $stats['skipped']++;
+
                 continue;
             }
             if ($orgId) {
@@ -299,6 +357,7 @@ class HoldingAssessmentReviewController extends Controller
             $localPath = $this->resolveAttachmentPath($instance, $ev->file_path);
             if (! $localPath || ! is_file($localPath)) {
                 $stats['failed']++;
+
                 continue;
             }
             try {

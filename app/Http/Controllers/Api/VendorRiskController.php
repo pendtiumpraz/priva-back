@@ -1396,4 +1396,66 @@ class VendorRiskController extends Controller
             'document' => $documents[$request->kind],
         ]);
     }
+
+    /**
+     * GET /vendor-risk/{id}/intake-documents/{kind} — unduh dokumen intake
+     * pihak ketiga (akta_notaris / ktp / kontrak_kerjasama / company_profile).
+     *
+     * Dokumen ini disimpan lewat TenantStorageService::storeTenantPrivateFile
+     * (baik dari jalur internal uploadIntakeDocument maupun jalur token publik
+     * AsesmenPublikController::uploadDocument) → storage PRIVAT, tidak ada URL
+     * publik. Pola mengikuti DsrExecutionController::streamEvidence.
+     *
+     * Pengaman lintas-tenant:
+     *   1. vendor di-resolve dengan filter org_id pemanggil (404 kalau bukan
+     *      miliknya — sama dengan id tak dikenal, tidak membocorkan eksistensi);
+     *   2. `kind` di-whitelist, jadi tidak ada traversal ke key JSON lain;
+     *   3. path wajib di bawah prefix `tenants/{org_id}/`.
+     */
+    public function downloadIntakeDocument(Request $request, string $vendorId, string $kind, TenantStorageService $storage)
+    {
+        $orgId = $request->user()->org_id;
+        $vendor = Vendor::where('org_id', $orgId)->findOrFail($vendorId);
+
+        $allowedKinds = ['akta_notaris', 'ktp', 'kontrak_kerjasama', 'company_profile'];
+        if (! in_array($kind, $allowedKinds, true)) {
+            abort(404, 'Jenis dokumen tidak dikenal.');
+        }
+
+        $documents = is_array($vendor->documents) ? $vendor->documents : [];
+        $entry = $documents[$kind] ?? null;
+        if (! is_array($entry) || empty($entry['path'])) {
+            abort(404, 'Dokumen belum diunggah.');
+        }
+
+        $path = (string) $entry['path'];
+        if (! str_starts_with($path, "tenants/{$vendor->org_id}/")) {
+            abort(404, 'Dokumen tidak ditemukan.');
+        }
+
+        $org = Organization::findOrFail($vendor->org_id);
+        $disk = $storage->getDisk($org);
+        if (! $disk->exists($path)) {
+            abort(404, 'Dokumen tidak ditemukan pada penyimpanan.');
+        }
+
+        AuditLog::create([
+            'org_id' => $vendor->org_id,
+            'user_id' => $request->user()->id,
+            'user_name' => $request->user()->name ?? 'System',
+            'user_role' => $request->user()->role ?? 'user',
+            'module' => 'tprm.intake_document',
+            'action' => 'download',
+            'record_id' => $vendor->id,
+            'section' => 'vendor_documents',
+            'field' => $kind,
+            'changes' => [
+                'kind' => $kind,
+                'filename' => $entry['filename'] ?? null,
+            ],
+            'ip_address' => $request->ip(),
+        ]);
+
+        return $disk->download($path, $entry['filename'] ?? basename($path));
+    }
 }
