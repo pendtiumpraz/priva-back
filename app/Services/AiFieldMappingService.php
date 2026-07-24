@@ -247,7 +247,14 @@ TUGAS: Ekstrak dan mapping informasi dari dokumen berikut ke field-field yang di
 3. Berikan confidence score (0.0 - 1.0) untuk setiap field yang berhasil di-mapping.
 4. Untuk field array (data_categories, data_subjects, recipients), berikan sebagai array string.
 5. Untuk risk_level, tentukan berdasarkan konteks: "low", "medium", atau "high".
-6. Jawab HANYA dalam format JSON yang valid, tanpa markdown code blocks.
+6. Field pilihan (enum) WAJIB memakai SALAH SATU nilai persis di bawah ini (jika tidak ada di dokumen, isi null):
+   - kategori_pihak (array): "Pengendali Data (Controller)", "Pemroses Data (Processor)", "Pengendali Bersama (Joint Controller)", "Lainnya"
+   - pihak_ketiga: "Ya" atau "Tidak" (apakah ada pihak ketiga yang memproses data)
+   - transfer_luar: "Ya" atau "Tidak" (apakah data dikirim ke luar negeri)
+   - pernah_insiden: "Ya" atau "Tidak"
+   - kontrol_keamanan (array): "Enkripsi", "Tokenization", "Kontrol Akses", "Backup", "Audit Keamanan Reguler", "Vulnerability Assessment (Tambahan)", "Penetration Testing (Tambahan)"
+   - dasar_pemrosesan (legal_basis): "Persetujuan yang Sah Secara Eksplisit", "Pemenuhan Kewajiban Perjanjian", "Pemenuhan Kewajiban Hukum", "Pemenuhan Pelindungan Kepentingan Vital", "Pelaksanaan Tugas dalam Rangka Kepentingan Umum", "Pemenuhan Kepentingan yang Sah (Legitimate Interest)"
+7. Jawab HANYA dalam format JSON yang valid, tanpa markdown code blocks.
 
 FORMAT RESPONS (JSON):
 {$outputFormat}{$customOutputSlot}
@@ -284,19 +291,24 @@ PROMPT;
     "jenis_data": {"value": ["..."], "confidence": 0.8}
   },
   "penggunaan_penyimpanan": {
+    "pihak_pemroses": {"value": "...", "confidence": 0.7},
+    "kategori_pihak": {"value": ["Pengendali Data (Controller)"], "confidence": 0.6},
+    "pihak_ketiga": {"value": "Tidak", "confidence": 0.6},
+    "nama_pihak_ketiga": {"value": "...", "confidence": 0.6},
     "cara_pemrosesan": {"value": "...", "confidence": 0.7},
     "lokasi_penyimpanan": {"value": "...", "confidence": 0.8}
   },
   "pengiriman_data": {
-    "transfer_domestik": {"value": "...", "confidence": 0.6},
-    "transfer_internasional": {"value": "...", "confidence": 0.5},
+    "transfer_luar": {"value": "Tidak", "confidence": 0.6},
+    "transfer_basis": {"value": "...", "confidence": 0.5},
     "negara_tujuan": {"value": "...", "confidence": 0.5},
     "safeguards": {"value": "...", "confidence": 0.6}
   },
   "retensi_keamanan": {
-    "retention_period": {"value": "...", "confidence": 0.8},
+    "masa_retensi": {"value": "...", "confidence": 0.8},
+    "kontrol_keamanan": {"value": ["Enkripsi"], "confidence": 0.7},
     "prosedur_pemusnahan": {"value": "...", "confidence": 0.6},
-    "langkah_keamanan": {"value": "...", "confidence": 0.7}
+    "pernah_insiden": {"value": "Tidak", "confidence": 0.6}
   }
 }
 JSON;
