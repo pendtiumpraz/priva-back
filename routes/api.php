@@ -70,6 +70,7 @@ use App\Http\Controllers\Api\OrganizationAppController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PentestReportController;
 use App\Http\Controllers\Api\PlatformConfigController;
+use App\Http\Controllers\Api\Root\EmbeddingModelController;
 use App\Http\Controllers\Api\PlatformStorageSettingsController;
 use App\Http\Controllers\Api\PolicyGeneratorController;
 use App\Http\Controllers\Api\PolicyReviewCrudController;
@@ -1850,6 +1851,18 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // Mux (LMS video) credentials — root-managed, secrets encrypted/write-only.
     Route::get('/platform-config/mux', [PlatformConfigController::class, 'muxConfig']);
     Route::put('/platform-config/mux', [PlatformConfigController::class, 'updateMux']);
+
+    // Model embedding (root only) — mode penyajian (local/blob/api), model
+    // aktif, dan penyediaan artefaknya ke VPS / Vercel Blob.
+    Route::prefix('platform-config/embedding-models')->group(function () {
+        Route::get('/', [EmbeddingModelController::class, 'index']);
+        Route::put('/mode', [EmbeddingModelController::class, 'setMode']);
+        Route::post('/{modelId}/activate', [EmbeddingModelController::class, 'activate']);
+        Route::post('/{modelId}/download/{target}', [EmbeddingModelController::class, 'download'])
+            ->where('target', 'local|blob');
+        Route::get('/{modelId}/progress', [EmbeddingModelController::class, 'progress']);
+        Route::delete('/{modelId}/local', [EmbeddingModelController::class, 'removeLocal']);
+    });
     // Holding Dashboard tab visibility (GET: semua auth; PUT: superadmin/root).
     Route::get('/holding/dashboard-tabs', [PlatformConfigController::class, 'holdingTabs']);
     Route::put('/holding/dashboard-tabs', [PlatformConfigController::class, 'updateHoldingTabs']);

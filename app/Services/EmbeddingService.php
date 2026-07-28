@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Services\Embedding\EmbeddingModelManager;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -43,6 +44,10 @@ class EmbeddingService
         'tei' => 128,
         'openai' => 2048,
         'cohere' => 96,
+        // Sidecar ONNX berjalan di CPU dan memproses batch secara berurutan;
+        // batch besar hanya memperpanjang satu request tanpa menaikkan
+        // throughput, sekaligus memperbesar risiko timeout.
+        'local' => 32,
     ];
 
     private string $provider;
@@ -61,14 +66,68 @@ class EmbeddingService
     public function __construct()
     {
         $this->enabled = (bool) config('ai_embedding.enabled', false);
-        $this->provider = (string) config('ai_embedding.provider', 'tei');
         $this->cacheTtl = (int) config('ai_embedding.cache_ttl_seconds', 86400 * 30);
+        $this->provider = $this->resolveProvider();
 
         $providerConfig = config('ai_embedding.'.$this->provider);
         if (! is_array($providerConfig)) {
             $providerConfig = [];
         }
+
+        // Pada provider 'local', model dan dimensinya ditentukan katalog
+        // embedding_models (dapat diganti root tanpa deploy), bukan config
+        // statis. Nilai config tetap dipakai sebagai cadangan.
+        if ($this->provider === 'local') {
+            $providerConfig = array_merge($providerConfig, $this->activeLocalModelConfig());
+        }
+
         $this->config = $providerConfig;
+    }
+
+    /**
+     * Tentukan provider efektif.
+     *
+     * Mode artefak (embedding_models.mode) yang dikelola root menang atas
+     * ai_embedding.provider: 'local' dan 'blob' sama-sama dilayani sidecar
+     * ONNX (bedanya hanya asal berkas model), sedangkan 'api' menyerahkan
+     * pilihan kembali ke provider cloud/TEI di config.
+     */
+    private function resolveProvider(): string
+    {
+        $fallback = (string) config('ai_embedding.provider', 'tei');
+
+        try {
+            $mode = app(EmbeddingModelManager::class)->mode();
+        } catch (\Throwable $e) {
+            // Tanpa DB (boot, artisan awal, test tertentu) pakai config saja.
+            $mode = (string) config('embedding_models.mode', 'blob');
+        }
+
+        return $mode === 'api' ? $fallback : 'local';
+    }
+
+    /**
+     * Model + dimensi milik model yang sedang aktif di katalog.
+     *
+     * @return array<string, mixed>
+     */
+    private function activeLocalModelConfig(): array
+    {
+        try {
+            $manager = app(EmbeddingModelManager::class);
+            $active = $manager->activeConfig();
+
+            return [
+                'model' => $active['model_id'],
+                'dimension' => $active['dimension'],
+            ];
+        } catch (\Throwable $e) {
+            Log::warning('[EmbeddingService] gagal membaca model lokal aktif, memakai default config', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
     }
 
     /**
@@ -203,6 +262,7 @@ class EmbeddingService
         try {
             return match ($this->provider) {
                 'tei' => $this->probeTei(),
+                'local' => $this->probeLocal(),
                 'openai' => $this->probeOpenAi(),
                 'cohere' => $this->probeCohere(),
                 default => false,
@@ -229,6 +289,7 @@ class EmbeddingService
     {
         return match ($this->provider) {
             'tei' => $this->callTei($texts, $orgId),
+            'local' => $this->callLocal($texts, $orgId),
             'openai' => $this->callOpenAi($texts, $orgId),
             'cohere' => $this->callCohere($texts, $orgId),
             default => throw new RuntimeException("Unknown embedding provider: {$this->provider}"),
@@ -276,6 +337,55 @@ class EmbeddingService
 
         return array_map(
             fn ($vec) => $this->toFloatArray($vec, 'tei'),
+            $body
+        );
+    }
+
+    /**
+     * Sidecar ONNX lokal.
+     *
+     * Kontraknya sengaja dibuat kompatibel dengan TEI (POST /embed dengan
+     * body {"inputs": [...]}) sehingga keduanya dapat saling menggantikan.
+     * Tambahannya hanya field "model": sidecar melayani beberapa model dari
+     * katalog, jadi perlu tahu mana yang diminta.
+     *
+     * @param  array<int, string>  $texts
+     * @return array<int, array<int, float>>
+     */
+    private function callLocal(array $texts, ?string $orgId): array
+    {
+        $baseUrl = $this->requireConfig('base_url');
+        $timeout = (int) ($this->config['timeout'] ?? 30);
+
+        $response = Http::timeout($timeout)
+            ->acceptJson()
+            ->asJson()
+            ->post(rtrim($baseUrl, '/').'/embed', [
+                'inputs' => $texts,
+                'model' => $this->config['model'] ?? null,
+            ]);
+
+        if (! $response->successful()) {
+            Log::warning('[EmbeddingService] local ONNX sidecar request failed', [
+                'org_id' => $orgId,
+                'model' => $this->config['model'] ?? null,
+                'status' => $response->status(),
+                'body' => mb_substr($response->body(), 0, 300),
+            ]);
+            throw new RuntimeException("Local embedding sidecar returned HTTP {$response->status()}");
+        }
+
+        $body = $response->json();
+        if (! is_array($body)) {
+            throw new RuntimeException('Local sidecar response was not a JSON array');
+        }
+
+        if (isset($body['embeddings']) && is_array($body['embeddings'])) {
+            $body = $body['embeddings'];
+        }
+
+        return array_map(
+            fn ($vec) => $this->toFloatArray($vec, 'local'),
             $body
         );
     }
@@ -394,6 +504,19 @@ class EmbeddingService
         }
 
         // TEI exposes /health endpoint per HuggingFace TEI server convention.
+        $response = Http::timeout(5)->get(rtrim($baseUrl, '/').'/health');
+
+        return $response->successful();
+    }
+
+    private function probeLocal(): bool
+    {
+        $baseUrl = (string) ($this->config['base_url'] ?? '');
+        if ($baseUrl === '') {
+            return false;
+        }
+
+        // Sidecar meniru endpoint /health milik TEI.
         $response = Http::timeout(5)->get(rtrim($baseUrl, '/').'/health');
 
         return $response->successful();

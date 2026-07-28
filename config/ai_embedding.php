@@ -74,6 +74,33 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Local ONNX Sidecar — Model Kecil di VPS
+    |--------------------------------------------------------------------------
+    |
+    | Provider ini TIDAK dipilih lewat 'provider' di atas, melainkan otomatis
+    | dipakai saat mode artefak (config embedding_models.mode, dikelola root
+    | lewat UI) bernilai 'local' atau 'blob'. Bedanya hanya dari mana sidecar
+    | memuat berkas model: disk VPS atau Vercel Blob. Mode 'api' membuat
+    | resolusi kembali ke 'provider' di atas.
+    |
+    | Sidecar menjalankan model ONNX terkuantisasi (int8) berukuran 23-118 MB
+    | sehingga cukup di CPU. Kontrak HTTP-nya sengaja dibuat sama dengan TEI
+    | (POST /embed, body {"inputs": [...]}) supaya bisa saling menggantikan.
+    |
+    | `model` dan `dimension` di sini hanya cadangan — nilai sebenarnya
+    | diambil dari model yang sedang aktif di katalog embedding_models.
+    |
+    */
+
+    'local' => [
+        'base_url' => env('AI_EMBEDDING_LOCAL_URL', 'http://127.0.0.1:8091'),
+        'model' => env('AI_EMBEDDING_ACTIVE_MODEL', 'minilm-l6-v2'),
+        'dimension' => 384,
+        'timeout' => (int) env('AI_EMBEDDING_LOCAL_TIMEOUT', 30),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | OpenAI Embeddings — Cloud Default
     |--------------------------------------------------------------------------
     |
