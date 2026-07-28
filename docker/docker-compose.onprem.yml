@@ -169,12 +169,25 @@ services:
       LICENSE_MODE: ${LICENSE_MODE:-online}        # online | offline
       LICENSE_KEY: ${LICENSE_KEY:-}
       LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
+
+      # Embedding / RAG. Mati secara bawaan; nyalakan setelah sidecar
+      # embed-onnx berjalan (profil cpu-embed) atau setelah memilih mode api.
+      AI_EMBEDDING_ENABLED: ${AI_EMBEDDING_ENABLED:-false}
+      AI_EMBEDDING_MODE: ${AI_EMBEDDING_MODE:-blob}
+      AI_EMBEDDING_ACTIVE_MODEL: ${AI_EMBEDDING_ACTIVE_MODEL:-minilm-l6-v2}
+      # Harus sama dengan mount /models pada service embed-onnx: backend yang
+      # mengunduh artefaknya, sidecar yang membacanya.
+      AI_EMBEDDING_MODELS_DIR: /var/www/html/storage/embedding-models
+      AI_EMBEDDING_LOCAL_URL: http://embed-onnx:8091
+      priva_READ_WRITE_TOKEN: ${priva_READ_WRITE_TOKEN:-}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - backend_storage:/var/www/html/storage
       # On-prem deployments may want to mount logs to host for SIEM ingestion
       - ${BACKEND_LOGS_HOST_PATH:-./logs}:/var/www/html/storage/logs
+      # Dibagi dengan sidecar embed-onnx (lihat volume embed_models).
+      - embed_models:/var/www/html/storage/embedding-models
     networks:
       - privasimu-net
 
@@ -206,10 +219,58 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-privasimu_redis}
+
+      # DownloadEmbeddingModelJob berjalan DI SINI, bukan di container backend
+      # — jadi worker-lah yang benar-benar menulis berkas modelnya. Tanpa
+      # volume dan env di bawah, unduhan "berhasil" ke tempat yang salah dan
+      # sidecar tidak pernah menemukannya.
+      AI_EMBEDDING_ENABLED: ${AI_EMBEDDING_ENABLED:-false}
+      AI_EMBEDDING_MODE: ${AI_EMBEDDING_MODE:-blob}
+      AI_EMBEDDING_ACTIVE_MODEL: ${AI_EMBEDDING_ACTIVE_MODEL:-minilm-l6-v2}
+      AI_EMBEDDING_MODELS_DIR: /var/www/html/storage/embedding-models
+      AI_EMBEDDING_LOCAL_URL: http://embed-onnx:8091
+      priva_READ_WRITE_TOKEN: ${priva_READ_WRITE_TOKEN:-}
     volumes:
       - backend_storage:/var/www/html/storage
+      - embed_models:/var/www/html/storage/embedding-models
     networks:
       - privasimu-net
+
+  # ─── Sidecar embedding ONNX (CPU) ────────────────────────────────────────
+  # Menghitung vektor untuk mode "local" dan "blob" di panel root
+  # (Platform Config → Model Embedding). Mode "blob" adalah default dan TETAP
+  # memakai sidecar ini — blob hanya menentukan asal berkas modelnya.
+  #
+  # Di balik profil `cpu-embed` supaya deployment yang memakai mode "api"
+  # (provider cloud / TEI) tidak ikut menjalankannya:
+  #   docker compose -f docker/docker-compose.onprem.yml \
+  #     --profile cpu-embed up -d embed-onnx
+  embed-onnx:
+    build:
+      context: ./embed-onnx
+    container_name: privasimu-embed-onnx
+    restart: unless-stopped
+    profiles: ["cpu-embed"]
+    environment:
+      PORT: "8091"
+      MODELS_DIR: /models
+      CACHE_DIR: /tmp/embed-cache
+      EMBED_MODEL: ${AI_EMBEDDING_ACTIVE_MODEL:-minilm-l6-v2}
+      # Wajib untuk mode blob; kosongkan bila hanya memakai mode local.
+      BLOB_BASE_URL: ${AI_EMBEDDING_BLOB_BASE_URL:-}
+    volumes:
+      # Harus direktori yang sama dengan AI_EMBEDDING_MODELS_DIR di .env
+      # backend — panel root menulis ke sana, sidecar membacanya.
+      - embed_models:/models
+      - embed_cache:/tmp/embed-cache
+    networks:
+      - privasimu-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8091/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # ─── Frontend ────────────────────────────────────────────────────────────
   frontend:
@@ -259,6 +320,13 @@ volumes:
   minio_data:
     driver: local
   backend_storage:
+    driver: local
+  # Artefak model embedding. Ditulis backend saat root menekan "Unduh ke VPS",
+  # dibaca sidecar embed-onnx — karena itu volume-nya dibagi keduanya.
+  embed_models:
+    driver: local
+  # Cache unduhan mode blob, supaya restart tidak mengunduh ulang.
+  embed_cache:
     driver: local
 
 networks:

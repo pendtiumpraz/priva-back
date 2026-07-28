@@ -41,8 +41,10 @@ return [
     | Penyimpanan Lokal (VPS)
     |--------------------------------------------------------------------------
     |
-    | `dir` harus sama dengan direktori yang di-mount ke sidecar ONNX. Pada
-    | stack ai-onprem, samakan dengan MODELS_DIR di docker-compose.
+    | `dir` harus sama dengan direktori yang di-mount ke /models pada sidecar
+    | ONNX (docker/embed-onnx). Pada docker/docker-compose.onprem.yml keduanya
+    | sudah disatukan lewat volume `embed_models`. Kalau berbeda, unduhan mode
+    | `local` tampak berhasil tetapi sidecar tidak menemukan berkasnya.
     |
     */
 
