@@ -24,12 +24,11 @@ class VectorSearchService
      * SECURITY: $orgId is MANDATORY first parameter (tenant isolation).
      * Filter: WHERE org_id = $orgId — defense layer 2 (RLS = layer 1, BelongsToOrg = layer 3).
      *
-     * @param  string  $orgId          Tenant UUID (required, non-empty).
-     * @param  string  $query          Natural-language query text to embed.
-     * @param  int     $topK           Max results returned (after similarity filter).
-     * @param  array   $sourceTypes    Optional whitelist of source_type values (e.g. ['ropa','dpia']).
-     * @param  float   $minSimilarity  Minimum cosine similarity threshold (0..1), default 0.5.
-     *
+     * @param  string  $orgId  Tenant UUID (required, non-empty).
+     * @param  string  $query  Natural-language query text to embed.
+     * @param  int  $topK  Max results returned (after similarity filter).
+     * @param  array  $sourceTypes  Optional whitelist of source_type values (e.g. ['ropa','dpia']).
+     * @param  float  $minSimilarity  Minimum cosine similarity threshold (0..1), default 0.5.
      * @return array<int, array{
      *   id: string,
      *   source_type: string,
@@ -72,21 +71,27 @@ class VectorSearchService
         $vecStr = '['.implode(',', $vec).']';
 
         $hasSourceFilter = ! empty($sourceTypes);
+        $model = $this->embedding->getModelName();
 
         $sql = 'SELECT id, source_type, source_id, content_excerpt, metadata,
                        1 - (embedding <=> ?::vector) AS similarity
                 FROM vector_embeddings
                 WHERE org_id = ?
                   AND deleted_at IS NULL
+                  AND embedding_model = ?
                   '.($hasSourceFilter ? 'AND source_type = ANY(?)' : '').'
                 ORDER BY embedding <=> ?::vector
                 LIMIT ?';
 
         $bindings = $hasSourceFilter
-            ? [$vecStr, $orgId, '{'.implode(',', $sourceTypes).'}', $vecStr, $topK]
-            : [$vecStr, $orgId, $vecStr, $topK];
+            ? [$vecStr, $orgId, $model, '{'.implode(',', $sourceTypes).'}', $vecStr, $topK]
+            : [$vecStr, $orgId, $model, $vecStr, $topK];
 
         $rows = DB::select($sql, $bindings);
+
+        if (empty($rows)) {
+            $this->warnOnModelMismatch($orgId, $model);
+        }
 
         $filtered = array_filter(
             $rows,
@@ -134,15 +139,21 @@ class VectorSearchService
 
         // Ambil embedding row sumber. WHERE org_id WAJIB supaya tenant tidak
         // bisa probe embedding dari org lain via crafted source_id.
+        // embedding_model juga wajib: satu record bisa punya vektor sisa dari
+        // model lama, dan membandingkannya dengan vektor model aktif
+        // menghasilkan kemiripan yang tidak bermakna.
+        $model = $this->embedding->getModelName();
+
         $source = DB::selectOne(
             'SELECT id, embedding::text AS embedding_text
              FROM vector_embeddings
              WHERE org_id = ?
                AND source_type = ?
                AND source_id = ?
+               AND embedding_model = ?
                AND deleted_at IS NULL
              LIMIT 1',
-            [$orgId, $sourceType, $sourceId]
+            [$orgId, $sourceType, $sourceId, $model]
         );
 
         if (! $source || empty($source->embedding_text)) {
@@ -159,13 +170,52 @@ class VectorSearchService
                 FROM vector_embeddings
                 WHERE org_id = ?
                   AND deleted_at IS NULL
+                  AND embedding_model = ?
                   AND id <> ?
                 ORDER BY embedding <=> ?::vector
                 LIMIT ?';
 
-        $rows = DB::select($sql, [$vecStr, $orgId, $excludeId, $vecStr, $topK]);
+        $rows = DB::select($sql, [$vecStr, $orgId, $model, $excludeId, $vecStr, $topK]);
 
         return array_values(array_map(fn ($r) => $this->normalizeRow($r), $rows));
+    }
+
+    /**
+     * Hasil kosong bisa berarti dua hal yang sangat berbeda: memang tidak ada
+     * yang cocok, atau seluruh indeks org ini masih memakai model lama.
+     *
+     * Yang kedua terjadi setiap kali model embedding diganti tanpa re-embed,
+     * dan tanpa pesan ini gejalanya tampak seperti "AI-nya tiba-tiba bodoh"
+     * — bukan sebagai masalah konfigurasi. Karena itu satu COUNT murah
+     * dijalankan HANYA saat hasil kosong, lalu selisihnya dilaporkan.
+     */
+    private function warnOnModelMismatch(string $orgId, string $activeModel): void
+    {
+        try {
+            $other = DB::selectOne(
+                'SELECT embedding_model, COUNT(*) AS total
+                 FROM vector_embeddings
+                 WHERE org_id = ?
+                   AND deleted_at IS NULL
+                   AND embedding_model IS DISTINCT FROM ?
+                 GROUP BY embedding_model
+                 ORDER BY total DESC
+                 LIMIT 1',
+                [$orgId, $activeModel]
+            );
+        } catch (\Throwable $e) {
+            return; // Diagnostik tidak boleh menggagalkan pencarian.
+        }
+
+        if ($other && (int) $other->total > 0) {
+            Log::warning('[VectorSearchService] indeks memakai model lain — perlu re-embed', [
+                'org_id' => $orgId,
+                'active_model' => $activeModel,
+                'indexed_model' => $other->embedding_model,
+                'indexed_rows' => (int) $other->total,
+                'action' => 'jalankan: php artisan embeddings:backfill',
+            ]);
+        }
     }
 
     /**

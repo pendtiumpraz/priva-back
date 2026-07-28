@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\AiProvider;
 use App\Models\AiModel;
-use Illuminate\Http\Request;
-use App\Models\Organization;
-use Illuminate\Support\Facades\DB;
+use App\Models\AiProvider;
+use App\Models\AuditLog;
 use App\Support\OutboundHttp;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class AiProviderController extends Controller
 {
@@ -43,8 +46,8 @@ class AiProviderController extends Controller
     public function adminIndex()
     {
         $providers = AiProvider::withCount(['models', 'models as trashed_models_count' => function ($q) {
-                $q->onlyTrashed();
-            }])
+            $q->onlyTrashed();
+        }])
             ->with(['models' => function ($q) {
                 $q->orderBy('sort_order');
             }])
@@ -96,7 +99,7 @@ class AiProviderController extends Controller
         $provider = AiProvider::findOrFail($id);
         $request->validate([
             'name' => 'string|max:255',
-            'slug' => 'string|max:50|unique:ai_providers,slug,' . $id,
+            'slug' => 'string|max:50|unique:ai_providers,slug,'.$id,
             'api_base_url' => 'url|max:500',
             'auth_header' => 'nullable|string|max:100',
             'auth_prefix' => 'nullable|string|max:50',
@@ -137,7 +140,9 @@ class AiProviderController extends Controller
     public function trashedProviders()
     {
         $trashed = AiProvider::onlyTrashed()
-            ->withCount(['models' => function ($q) { $q->withTrashed(); }])
+            ->withCount(['models' => function ($q) {
+                $q->withTrashed();
+            }])
             ->orderBy('deleted_at', 'desc')
             ->get();
 
@@ -304,8 +309,8 @@ class AiProviderController extends Controller
         $orgId = $this->resolveOrgId($request);
         $isSuperAdmin = $request->user()->role === 'superadmin';
 
-        if (!$orgId && !$isSuperAdmin) {
-            return response()->json(['configs' => (object)[], 'selection' => null]);
+        if (! $orgId && ! $isSuperAdmin) {
+            return response()->json(['configs' => (object) [], 'selection' => null]);
         }
 
         // Get saved provider configs (API keys — masked)
@@ -318,8 +323,9 @@ class AiProviderController extends Controller
         $configs = $configsQuery->get()
             ->map(function ($c) {
                 $key = $c->api_key_encrypted;
-                $c->api_key_masked = substr($key, 0, 8) . str_repeat('•', max(0, strlen($key) - 12)) . substr($key, -4);
+                $c->api_key_masked = substr($key, 0, 8).str_repeat('•', max(0, strlen($key) - 12)).substr($key, -4);
                 unset($c->api_key_encrypted);
+
                 return $c;
             })
             ->keyBy('provider_id');
@@ -353,14 +359,14 @@ class AiProviderController extends Controller
 
             // Verify provider exists
             $provider = AiProvider::find($request->provider_id);
-            if (!$provider) {
+            if (! $provider) {
                 return response()->json(['message' => 'Provider tidak ditemukan. Pastikan migration dan seeder sudah dijalankan.'], 404);
             }
 
             $orgId = $this->resolveOrgId($request);
             $isSuperAdmin = $request->user()->role === 'superadmin';
 
-            if (!$orgId && !$isSuperAdmin) {
+            if (! $orgId && ! $isSuperAdmin) {
                 return response()->json(['message' => 'Tidak ada organisasi.'], 400);
             }
 
@@ -396,7 +402,7 @@ class AiProviderController extends Controller
             }
 
             try {
-                \App\Models\AuditLog::log('ai_provider', (string)$request->provider_id, 'api_key_saved', [
+                AuditLog::log('ai_provider', (string) $request->provider_id, 'api_key_saved', [
                     'provider_id' => $request->provider_id,
                 ], 'manual');
             } catch (\Exception $e) {
@@ -404,13 +410,14 @@ class AiProviderController extends Controller
             }
 
             return response()->json(['message' => 'API key saved successfully']);
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e; // Let Laravel handle validation errors normally
         } catch (\Exception $e) {
-            \Log::error('AI Provider saveApiKey error: ' . $e->getMessage() . ' | File: ' . $e->getFile() . ':' . $e->getLine());
+            \Log::error('AI Provider saveApiKey error: '.$e->getMessage().' | File: '.$e->getFile().':'.$e->getLine());
+
             return response()->json([
-                'message' => 'Error: ' . $e->getMessage(),
-                'file' => basename($e->getFile()) . ':' . $e->getLine(),
+                'message' => 'Error: '.$e->getMessage(),
+                'file' => basename($e->getFile()).':'.$e->getLine(),
             ], 500);
         }
     }
@@ -429,7 +436,7 @@ class AiProviderController extends Controller
 
         // Get API key: from request body or from saved config
         $apiKey = $request->api_key;
-        if (!$apiKey || $apiKey === 'saved') {
+        if (! $apiKey || $apiKey === 'saved') {
             // Load saved key
             $configQuery = DB::table('ai_provider_configs')
                 ->where('provider_id', $request->provider_id);
@@ -439,7 +446,7 @@ class AiProviderController extends Controller
                 $configQuery->whereNull('org_id');
             }
             $config = $configQuery->first();
-            if (!$config) {
+            if (! $config) {
                 return response()->json(['success' => false, 'message' => 'API key belum disimpan'], 400);
             }
             $apiKey = $config->api_key_encrypted;
@@ -449,9 +456,9 @@ class AiProviderController extends Controller
             // Try a minimal chat completion to verify
             $headers = ['Content-Type' => 'application/json'];
             $authH = $provider->auth_header ?: 'Authorization';
-            $authP = ($provider->auth_header && !$provider->auth_prefix) ? '' : ($provider->auth_prefix ?: 'Bearer');
+            $authP = ($provider->auth_header && ! $provider->auth_prefix) ? '' : ($provider->auth_prefix ?: 'Bearer');
             if ($authP) {
-                $headers[$authH] = $authP . ' ' . $apiKey;
+                $headers[$authH] = $authP.' '.$apiKey;
             } else {
                 $headers[$authH] = $apiKey;
             }
@@ -461,7 +468,7 @@ class AiProviderController extends Controller
             $response = OutboundHttp::client($baseUrl)
                 ->timeout(15)
                 ->withHeaders($headers)
-                ->post($baseUrl . '/chat/completions', [
+                ->post($baseUrl.'/chat/completions', [
                     'model' => $provider->models()->where('is_active', true)->first()?->model_id ?? 'gpt-4o',
                     'messages' => [['role' => 'user', 'content' => 'hi']],
                     'max_tokens' => 5,
@@ -481,9 +488,10 @@ class AiProviderController extends Controller
             } else {
                 $errBody = $response->json();
                 $errMsg = $errBody['error']['message'] ?? $response->body();
+
                 return response()->json([
                     'success' => false,
-                    'message' => "Gagal: " . substr($errMsg, 0, 200),
+                    'message' => 'Gagal: '.substr($errMsg, 0, 200),
                 ]);
             }
         } catch (\Exception $e) {
@@ -503,12 +511,15 @@ class AiProviderController extends Controller
             'mode' => 'required|in:chat,agent,document,avatar,voice',
             'provider_id' => 'required|integer',
             'model_id' => 'required|integer',
+            // Pengakuan risiko eksplisit untuk provider yang tidak disarankan.
+            // Hanya root yang boleh memakainya — lihat assertProviderAllowed().
+            'accept_pdp_risk' => 'sometimes|boolean',
         ]);
 
         $orgId = $this->resolveOrgId($request);
         $isSuperAdmin = $request->user()->role === 'superadmin';
-        
-        if (!$orgId && !$isSuperAdmin) {
+
+        if (! $orgId && ! $isSuperAdmin) {
             return response()->json(['error' => 'Tidak ada organisasi.'], 400);
         }
 
@@ -519,10 +530,15 @@ class AiProviderController extends Controller
             ->where('provider_id', $request->provider_id)
             ->firstOrFail();
 
+        // Gerbang kepatuhan PDP — lihat catatan di assertProviderAllowed().
+        if ($blocked = $this->assertProviderAllowed($request, $model->provider)) {
+            return $blocked;
+        }
+
         // Verify tenant has API key for this provider
         $hasKeyQuery = DB::table('ai_provider_configs')
             ->where('provider_id', $request->provider_id);
-            
+
         if ($orgId) {
             $hasKeyQuery->where('org_id', $orgId);
         } else {
@@ -530,16 +546,16 @@ class AiProviderController extends Controller
         }
         $hasKey = $hasKeyQuery->exists();
 
-        if (!$hasKey) {
+        if (! $hasKey) {
             return response()->json(['error' => 'API key belum disimpan untuk provider ini'], 400);
         }
 
-        $fields = match($mode) {
-            'chat'     => ['chat_provider_id' => $request->provider_id, 'chat_model_id' => $request->model_id],
-            'agent'    => ['agent_provider_id' => $request->provider_id, 'agent_model_id' => $request->model_id],
+        $fields = match ($mode) {
+            'chat' => ['chat_provider_id' => $request->provider_id, 'chat_model_id' => $request->model_id],
+            'agent' => ['agent_provider_id' => $request->provider_id, 'agent_model_id' => $request->model_id],
             'document' => ['document_provider_id' => $request->provider_id, 'document_model_id' => $request->model_id],
-            'avatar'   => ['avatar_provider_id' => $request->provider_id, 'avatar_model_id' => $request->model_id],
-            'voice'    => ['voice_provider_id' => $request->provider_id, 'voice_model_id' => $request->model_id],
+            'avatar' => ['avatar_provider_id' => $request->provider_id, 'avatar_model_id' => $request->model_id],
+            'voice' => ['voice_provider_id' => $request->provider_id, 'voice_model_id' => $request->model_id],
         };
 
         // Check if exists
@@ -566,7 +582,7 @@ class AiProviderController extends Controller
         }
 
         try {
-            \App\Models\AuditLog::log('ai_provider', (string)$request->provider_id, "active_{$mode}_model_set", [
+            AuditLog::log('ai_provider', (string) $request->provider_id, "active_{$mode}_model_set", [
                 'provider' => $model->provider->name,
                 'model' => $model->name,
             ], 'manual');
@@ -594,18 +610,18 @@ class AiProviderController extends Controller
         $orgId = $this->resolveOrgId($request);
         $isSuperAdmin = $request->user()->role === 'superadmin';
 
-        if (!$orgId && !$isSuperAdmin) {
+        if (! $orgId && ! $isSuperAdmin) {
             return response()->json(['error' => 'Tidak ada organisasi.'], 400);
         }
 
         $mode = $request->mode;
 
-        $fields = match($mode) {
-            'chat'     => ['chat_provider_id' => null, 'chat_model_id' => null],
-            'agent'    => ['agent_provider_id' => null, 'agent_model_id' => null],
+        $fields = match ($mode) {
+            'chat' => ['chat_provider_id' => null, 'chat_model_id' => null],
+            'agent' => ['agent_provider_id' => null, 'agent_model_id' => null],
             'document' => ['document_provider_id' => null, 'document_model_id' => null],
-            'avatar'   => ['avatar_provider_id' => null, 'avatar_model_id' => null],
-            'voice'    => ['voice_provider_id' => null, 'voice_model_id' => null],
+            'avatar' => ['avatar_provider_id' => null, 'avatar_model_id' => null],
+            'voice' => ['voice_provider_id' => null, 'voice_model_id' => null],
         };
 
         $updateQuery = DB::table('ai_active_selections');
@@ -662,7 +678,7 @@ class AiProviderController extends Controller
                 $updates['voice_provider_id'] = null;
                 $updates['voice_model_id'] = null;
             }
-            if (!empty($updates)) {
+            if (! empty($updates)) {
                 $updateQuery = DB::table('ai_active_selections');
                 if ($orgId) {
                     $updateQuery->where('org_id', $orgId);
@@ -688,21 +704,114 @@ class AiProviderController extends Controller
     /**
      * Get the active model config for internal use.
      * Used by AiService internally — not exposed as API route.
-     * 
+     *
      * Lookup order:
      * 1. Tenant-specific config (org_id = $orgId)
      * 2. Global/SuperAdmin config (org_id = NULL) as fallback
      */
+    /**
+     * Tolak provider yang ditandai berisiko untuk data pribadi.
+     *
+     * Kolom kepatuhan di tabel ai_providers (pdp_risk, no_training,
+     * zdr_available, jurisdiction) sebelumnya hanya metadata untuk ditampilkan
+     * — tidak ada satu pun yang mencegah pemilihan. Akibatnya provider seperti
+     * DeepSeek, yang catatannya sendiri berbunyi "no_training: false, tidak ada
+     * DPA, yurisdiksi Tiongkok, JANGAN untuk data pribadi", tetap bisa dipilih
+     * dan langsung menerima isi RoPA/DPIA tenant.
+     *
+     * Aturan sekarang:
+     *   - pdp_risk = not_recommended  -> ditolak untuk tenant. Root boleh
+     *     menembusnya dengan accept_pdp_risk=true, dan penembusan itu dicatat
+     *     di audit log dengan nama pelakunya.
+     *   - no_training = false         -> ditolak dengan alasan yang sama;
+     *     mengirim data pribadi ke provider yang melatih model darinya adalah
+     *     pengungkapan yang tidak bisa ditarik kembali.
+     *
+     * Mengembalikan JsonResponse bila ditolak, atau null bila boleh lanjut.
+     */
+    private function assertProviderAllowed(Request $request, ?AiProvider $provider): ?JsonResponse
+    {
+        if (! $provider) {
+            return null;
+        }
+
+        $risky = $provider->pdp_risk === 'not_recommended' || $provider->no_training === false;
+        if (! $risky) {
+            return null;
+        }
+
+        $user = $request->user();
+        $isRoot = ($user->role ?? null) === 'root';
+        $accepted = $request->boolean('accept_pdp_risk');
+
+        $reasons = [];
+        if ($provider->pdp_risk === 'not_recommended') {
+            $reasons[] = 'ditandai tidak disarankan untuk data pribadi';
+        }
+        if ($provider->no_training === false) {
+            $reasons[] = 'provider melatih model dari data yang dikirim';
+        }
+        if (! $provider->zdr_available) {
+            $reasons[] = 'tidak menyediakan zero-data-retention';
+        }
+        if (empty($provider->dpa_url)) {
+            $reasons[] = 'tidak ada DPA';
+        }
+
+        if (! $isRoot || ! $accepted) {
+            return response()->json([
+                'error' => "Provider {$provider->name} tidak dapat dipakai: ".implode(', ', $reasons).'.',
+                'pdp_risk' => $provider->pdp_risk,
+                'no_training' => $provider->no_training,
+                'jurisdiction' => $provider->jurisdiction,
+                'compliance_note' => $provider->compliance_note,
+                'override_available' => $isRoot,
+                'override_hint' => $isRoot
+                    ? 'Kirim ulang dengan accept_pdp_risk=true bila risiko ini memang diterima. Penembusan akan tercatat di audit log.'
+                    : 'Hubungi root bila provider ini memang diperlukan.',
+            ], 422);
+        }
+
+        // Root menembus sadar risiko — wajib meninggalkan jejak.
+        try {
+            AuditLog::log(
+                'ai_provider',
+                (string) $provider->id,
+                'pdp_risk_override',
+                [
+                    'provider' => $provider->name,
+                    'pdp_risk' => $provider->pdp_risk,
+                    'no_training' => $provider->no_training,
+                    'jurisdiction' => $provider->jurisdiction,
+                    'reasons' => $reasons,
+                    'accepted_by' => $user->name ?? $user->email ?? 'root',
+                ],
+                'manual'
+            );
+        } catch (\Throwable $e) {
+            Log::warning('[AiProviderController] gagal mencatat pdp_risk_override', [
+                'provider_id' => $provider->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return null;
+    }
+
     public static function getActiveConfig(?string $orgId, string $mode = 'chat'): ?array
     {
         // 1. Try tenant-specific config first
         $result = self::loadConfigForOrg($orgId, $mode);
-        if ($result) return $result;
+        if ($result) {
+            return $result;
+        }
 
         // 2. Fallback to global config (org_id = NULL) if tenant has no own config
         if ($orgId) {
             $result = self::loadConfigForOrg(null, $mode);
-            if ($result) return $result;
+            if ($result) {
+                return $result;
+            }
         }
 
         return null;
@@ -721,24 +830,28 @@ class AiProviderController extends Controller
         }
         $selection = $selQuery->first();
 
-        if (!$selection) return null;
+        if (! $selection) {
+            return null;
+        }
 
-        $providerId = match($mode) {
-            'agent'    => $selection->agent_provider_id,
+        $providerId = match ($mode) {
+            'agent' => $selection->agent_provider_id,
             'document' => $selection->document_provider_id ?? $selection->chat_provider_id,
-            'avatar'   => $selection->avatar_provider_id ?? $selection->chat_provider_id,
-            'voice'    => $selection->voice_provider_id ?? null,
-            default    => $selection->chat_provider_id,
+            'avatar' => $selection->avatar_provider_id ?? $selection->chat_provider_id,
+            'voice' => $selection->voice_provider_id ?? null,
+            default => $selection->chat_provider_id,
         };
-        $modelId = match($mode) {
-            'agent'    => $selection->agent_model_id,
+        $modelId = match ($mode) {
+            'agent' => $selection->agent_model_id,
             'document' => $selection->document_model_id ?? $selection->chat_model_id,
-            'avatar'   => $selection->avatar_model_id ?? $selection->chat_model_id,
-            'voice'    => $selection->voice_model_id ?? null,
-            default    => $selection->chat_model_id,
+            'avatar' => $selection->avatar_model_id ?? $selection->chat_model_id,
+            'voice' => $selection->voice_model_id ?? null,
+            default => $selection->chat_model_id,
         };
 
-        if (!$providerId || !$modelId) return null;
+        if (! $providerId || ! $modelId) {
+            return null;
+        }
 
         $provider = AiProvider::find($providerId);
         $model = AiModel::find($modelId);
@@ -754,14 +867,16 @@ class AiProviderController extends Controller
         $config = $configQuery->first();
 
         // If tenant has no API key for this provider, try global key
-        if (!$config && $orgId) {
+        if (! $config && $orgId) {
             $config = DB::table('ai_provider_configs')
                 ->where('provider_id', $providerId)
                 ->whereNull('org_id')
                 ->first();
         }
 
-        if (!$provider || !$model || !$config) return null;
+        if (! $provider || ! $model || ! $config) {
+            return null;
+        }
 
         return [
             'provider' => $provider,
