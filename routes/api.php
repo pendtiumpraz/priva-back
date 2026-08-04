@@ -38,6 +38,8 @@ use App\Http\Controllers\Api\DecryptorProfileController;
 use App\Http\Controllers\Api\DepartmentController;
 use App\Http\Controllers\Api\DiscoveryChangelogController;
 use App\Http\Controllers\Api\DocumentImportController;
+use App\Http\Controllers\Api\PrivacyNoticeController;
+use App\Http\Controllers\Api\PrivacyNoticePublicController;
 use App\Http\Controllers\Api\DocumentMakerController;
 use App\Http\Controllers\Api\DocumentTemplateController;
 use App\Http\Controllers\Api\DpiaAssessmentFrameworkController;
@@ -179,6 +181,12 @@ Route::middleware('throttle:api')->group(function () {
     // Public DSR endpoints (untuk embed widget di klien websites)
     // =============================================
     Route::get('/public/dsr/config/{embed_token}', [DsrPublicController::class, 'config']);
+
+    // Privacy Notice publik — disematkan di situs/aplikasi klien. Hanya versi
+    // berstatus TERBIT yang keluar dari sini; draft dan versi yang menunggu
+    // persetujuan tidak boleh bocor lewat penebakan parameter.
+    Route::get('/public/privacy-notice/{token}', [PrivacyNoticePublicController::class, 'show'])
+        ->middleware('throttle:60,1');
     Route::post('/public/dsr/submit/{embed_token}', [DsrPublicController::class, 'submit'])
         ->middleware('throttle:30,1');  // 30 req/min per IP
     Route::get('/public/dsr/verify/{token}', [DsrPublicController::class, 'verify']);
@@ -1757,6 +1765,23 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     //   Generate/autofill live under /ai-features/policy/* (gated). CRUD +
     //   download/embed below, tenant-scoped by org_id in the controller.
     // =============================================
+    // Privacy Notice — pengelolaan terpusat, bertahap versi, dengan
+    // persetujuan dan penjadwalan terbit.
+    Route::prefix('privacy-notices')->group(function () {
+        Route::get('/', [PrivacyNoticeController::class, 'index'])->middleware('permission:privacy_notice,read');
+        Route::post('/', [PrivacyNoticeController::class, 'store'])->middleware('permission:privacy_notice,write');
+        Route::get('/{id}', [PrivacyNoticeController::class, 'show'])->middleware('permission:privacy_notice,read')->where('id', '[0-9a-fA-F-]{36}');
+        Route::put('/{id}', [PrivacyNoticeController::class, 'update'])->middleware('permission:privacy_notice,write')->where('id', '[0-9a-fA-F-]{36}');
+        Route::delete('/{id}', [PrivacyNoticeController::class, 'destroy'])->middleware('permission:privacy_notice,write')->where('id', '[0-9a-fA-F-]{36}');
+
+        Route::post('/{id}/versions', [PrivacyNoticeController::class, 'storeVersion'])->middleware('permission:privacy_notice,write');
+        Route::put('/{id}/versions/{versionId}/content', [PrivacyNoticeController::class, 'updateVersionContent'])->middleware('permission:privacy_notice,write');
+        Route::post('/{id}/versions/{versionId}/submit', [PrivacyNoticeController::class, 'submitVersion'])->middleware('permission:privacy_notice,write');
+        Route::post('/{id}/versions/{versionId}/approve', [PrivacyNoticeController::class, 'approveVersion'])->middleware('permission:privacy_notice,write');
+        Route::post('/{id}/versions/{versionId}/reject', [PrivacyNoticeController::class, 'rejectVersion'])->middleware('permission:privacy_notice,write');
+        Route::post('/{id}/versions/{versionId}/publish', [PrivacyNoticeController::class, 'publishVersion'])->middleware('permission:privacy_notice,write');
+    });
+
     Route::prefix('policy-generations')->group(function () {
         Route::get('/', [PolicyGeneratorController::class, 'index']);
         Route::get('/{id}/download.docx', [PolicyGeneratorController::class, 'downloadDocx'])->where('id', '[0-9a-fA-F-]{36}');

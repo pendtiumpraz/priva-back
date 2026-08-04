@@ -19,6 +19,10 @@ Artisan::command('inspire', function () {
 // RTP — reminder deadline mitigasi (jatuh tempo <=7 hari + overdue). Anti-spam 20 jam.
 \Illuminate\Support\Facades\Schedule::command('notifications:scan-rtp-deadlines')->dailyAt('06:15')->withoutOverlapping();
 \Illuminate\Support\Facades\Schedule::command('consent:prune-cookie-logs')->dailyAt('02:30');
+// Privacy Notice — terbitkan versi yang penjadwalannya sudah jatuh tempo.
+// Tiap 15 menit: penjadwalan naskah hukum lazim ditetapkan pada jam bulat,
+// dan menunggu sampai sehari kemudian bukan pilihan yang dapat diterima.
+\Illuminate\Support\Facades\Schedule::command('privacy-notices:publish-scheduled')->everyFifteenMinutes()->withoutOverlapping();
 // Phase 3a — daily privacy posture snapshot per org. Drives trend chart.
 \Illuminate\Support\Facades\Schedule::command('privasimu:posture-snapshot')->dailyAt('05:00')->withoutOverlapping();
 // Audit log retention — prune entries lebih lama dari security.audit_log_retention_days.
