@@ -73,10 +73,13 @@ class MenuRegistrySeeder extends Seeder
             ['menu_key' => 'privacy-notice', 'label' => 'Pemberitahuan Privasi', 'href' => '/privacy-notice', 'icon' => 'FileText', 'section' => 'PDP Modules', 'sort' => 167, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'risk-treatment-plan', 'label' => 'Risk Treatment Plan', 'href' => '/risk-treatment-plan', 'icon' => 'ShieldAlert', 'section' => 'PDP Modules', 'sort' => 170, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'ropa-data-flow', 'label' => 'Peta Alur Data', 'href' => '/ropa-data-flow', 'icon' => 'Workflow', 'section' => 'PDP Modules', 'sort' => 175, 'roles' => array_merge(['root'], self::COMPLIANCE)],
+            ['menu_key' => 'control-library', 'label' => 'Pustaka Kontrol', 'href' => '/control-library', 'icon' => 'ShieldCheck', 'section' => 'PDP Modules', 'sort' => 178, 'roles' => array_merge(['root'], self::COMPLIANCE)],
 
             // Data Management
             ['menu_key' => 'data-discovery', 'label' => 'Data Discovery', 'href' => '/data-discovery', 'icon' => 'Scan', 'section' => 'Data Management', 'sort' => 210, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'data-catalog', 'label' => 'Katalog & Silsilah Data', 'href' => '/data-catalog', 'icon' => 'Network', 'section' => 'Data Management', 'sort' => 215, 'roles' => array_merge(['root'], self::COMPLIANCE)],
+            ['menu_key' => 'discovery-probe', 'label' => 'Penemuan Data Store', 'href' => '/discovery-probe', 'icon' => 'Radar', 'section' => 'Data Management', 'sort' => 218, 'roles' => array_merge(['root'], self::COMPLIANCE)],
+            ['menu_key' => 'dsr-channels', 'label' => 'Kanal DSR', 'href' => '/dsr-channels', 'icon' => 'Share2', 'section' => 'Data Management', 'sort' => 219, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'contract-review', 'label' => 'Contract Review', 'href' => '/contract-review', 'icon' => 'FileSearch', 'section' => 'Data Management', 'sort' => 220, 'roles' => array_merge(['root'], self::EDITOR)],
             ['menu_key' => 'vendor-risk', 'label' => 'Third Party Management', 'href' => '/vendor-risk', 'icon' => 'Building2', 'section' => 'Data Management', 'sort' => 230, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             // Sub-feature TPRM (Bank Pertanyaan, Antrian Review, Antrian Approval,
