@@ -101,12 +101,28 @@ class DataDiscoveryController extends Controller
         $config = $system->connection_config ?? [];
         $sourceType = $system->source_type;
 
-        // Attempt real scan
+        // Pemindaian nyata.
         $scanResult = DatabaseScanner::scanSchema($sourceType, $config);
 
-        // If real scan fails or returns empty, fallback to simulation
-        if (empty($scanResult['tables']) && ! isset($scanResult['error'])) {
+        // Jatuh ke data contoh HANYA bila diminta secara eksplisit.
+        //
+        // Sebelumnya jalur ini otomatis menyulih data contoh setiap kali hasil
+        // pemindaian kosong, tanpa penanda apa pun di respons — sehingga sumber
+        // yang gagal dipindai tetap tampak berhasil dan terisi. Pada evaluasi
+        // (mis. PoC), kegagalan yang tidak terlihat jauh lebih merusak daripada
+        // kegagalan yang jujur, karena penilaian sudah terlanjur dibuat di atas
+        // data yang tidak pernah berasal dari sistem klien.
+        //
+        // `demo_data=1` tetap disediakan untuk keperluan peragaan, dan hasilnya
+        // membawa penanda `simulated` sampai ke antarmuka.
+        $allowDemo = $request->boolean('demo_data');
+        if (empty($scanResult['tables']) && ! isset($scanResult['error']) && $allowDemo) {
             $scanResult = DatabaseScanner::simulateScan($sourceType);
+        }
+
+        if (empty($scanResult['tables']) && ! isset($scanResult['error'])) {
+            $scanResult['error'] = 'Pemindaian tidak menemukan tabel apa pun. Periksa kredensial, hak akses, '
+                .'dan nama database. Tambahkan demo_data=1 bila memang menginginkan data contoh untuk peragaan.';
         }
 
         // Sprint E2: selective scan via ?selected_tables / ?selected_columns
@@ -227,6 +243,12 @@ class DataDiscoveryController extends Controller
                 'total_rows_scanned' => array_sum(array_column($tables, 'row_count')),
                 'engine_version' => 'PRIVASIMU Scanner v3.0 ('.$engine.')',
                 'engine' => $engine,
+                // Penanda ini ikut tersimpan agar hasil contoh tetap dapat
+                // dikenali di kemudian hari — termasuk pada ekspor dan bukti
+                // audit, bukan hanya pada respons saat pemindaian dijalankan.
+                'simulated' => (bool) ($scanResult['simulated'] ?? false),
+                'simulated_reason' => $scanResult['simulated_reason'] ?? null,
+                'driver_missing' => (bool) ($scanResult['driver_missing'] ?? false),
                 'error' => $scanResult['error'] ?? null,
                 'diff_alerts' => $diffAlerts,
                 'access_paths' => $accessPaths,    // Phase 3c

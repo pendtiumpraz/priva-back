@@ -3,6 +3,9 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Log;
+use MongoDB\Driver\Command;
+use MongoDB\Driver\Manager;
+use MongoDB\Driver\Query;
 
 /**
  * Real Database / Source Scanner
@@ -18,6 +21,97 @@ class DatabaseScanner
      * LOKAL (regex/heuristik), nilai sampel TIDAK PERNAH dikirim ke AI.
      */
     private const SAMPLE_LIMIT = 5;
+
+    /**
+     * Bangun metadata satu kolom: deteksi PII berbasis nama, lalu pertajam
+     * dengan pemindaian isi pada sampel kecil bila sampelnya tersedia.
+     *
+     * Diekstrak agar scanner MSSQL, Oracle, dan MongoDB menghasilkan bentuk
+     * kolom yang PERSIS sama dengan MySQL dan PostgreSQL — konsumen di hilir
+     * (ColumnAutoAssigner, PiiDetector, ekspor) mengandalkan kunci-kunci ini,
+     * sehingga menyalinnya ulang per mesin basis data hampir pasti melahirkan
+     * selisih diam-diam.
+     *
+     * @param  array  $sampleRows  Baris sampel (asosiatif) — boleh kosong.
+     */
+    private static function buildColumnMeta(string $colName, string $type, bool $nullable, array $sampleRows): array
+    {
+        $piiResult = PiiDetector::analyze($colName, $type);
+        $shadowDetected = false;
+        $protection = ['protection_state' => 'unknown', 'protection_reason' => 'Tidak ada sampel'];
+
+        if (! empty($sampleRows)) {
+            $columnValues = array_column($sampleRows, $colName);
+            $contentPii = ContentPiiScanner::analyzeColumnContent($columnValues);
+            if ($contentPii) {
+                $piiResult = $contentPii;
+                $shadowDetected = true;
+            }
+            $protection = ContentPiiScanner::detectProtectionState($columnValues);
+        }
+
+        $typeEncrypted = ContentPiiScanner::looksEncryptedType($type);
+        if ($typeEncrypted && in_array($protection['protection_state'], ['unknown', 'plaintext'], true)) {
+            $protection = [
+                'protection_state' => 'encrypted',
+                'protection_reason' => 'Tipe biner/blob — kemungkinan besar ciphertext/berkas biner',
+            ];
+        }
+
+        return [
+            'name' => $colName,
+            'alias' => null,
+            'type' => $type,
+            'type_length' => ContentPiiScanner::parseTypeLength($type),
+            'nullable' => $nullable,
+            'pii_detected' => $piiResult['is_pii'],
+            'pdp_category' => $piiResult['pdp_category'],
+            'classification' => $piiResult['classification'],
+            'encryption_required' => $piiResult['encryption_required'],
+            'encrypted' => $protection['protection_state'] === 'encrypted' || $typeEncrypted,
+            'pii_reason' => $piiResult['reason'],
+            'protection_state' => $protection['protection_state'],
+            'protection_reason' => $protection['protection_reason'],
+            'manually_classified' => false,
+            'shadow_detected' => $shadowDetected,
+        ];
+    }
+
+    /**
+     * Kegagalan yang JUJUR ketika ekstensi driver tidak terpasang.
+     *
+     * Sebelumnya jalur ini mengembalikan sukses palsu berisi versi server
+     * karangan, sehingga "Test Connection" selalu tampak berhasil meski tidak
+     * ada koneksi yang pernah dibuat. Pada evaluasi PoC hal itu jauh lebih
+     * merusak daripada fitur yang memang belum ada: pengujinya baru menyadari
+     * setelah memercayai hasilnya.
+     */
+    private static function driverMissing(string $label, array $candidates): array
+    {
+        return [
+            'success' => false,
+            'error' => sprintf(
+                'Driver %s tidak tersedia di server ini (dibutuhkan salah satu ekstensi PDO: %s). '
+                .'Pasang ekstensinya lalu ulangi pengujian koneksi.',
+                $label,
+                implode(', ', $candidates)
+            ),
+            'driver_missing' => true,
+        ];
+    }
+
+    /** Driver PDO pertama yang tersedia dari daftar kandidat, atau null. */
+    private static function firstAvailableDriver(array $candidates): ?string
+    {
+        $available = \PDO::getAvailableDrivers();
+        foreach ($candidates as $candidate) {
+            if (in_array($candidate, $available, true)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
 
     /**
      * Test real connection to a data source
@@ -650,67 +744,453 @@ class DatabaseScanner
         }
     }
 
+    private static function mongoAvailable(): bool
+    {
+        return extension_loaded('mongodb') && class_exists(Manager::class);
+    }
+
+    private static function mongoUri(array $config): string
+    {
+        if (! empty($config['uri'])) {
+            return $config['uri'];
+        }
+        $host = $config['host'] ?? 'localhost';
+        $port = ! empty($config['port']) ? (int) $config['port'] : 27017;
+        $user = $config['username'] ?? '';
+        $pass = $config['password'] ?? '';
+        $auth = $user !== '' ? rawurlencode($user).':'.rawurlencode($pass).'@' : '';
+
+        return "mongodb://{$auth}{$host}:{$port}";
+    }
+
     private static function testMongodb(array $config): array
     {
-        $start = microtime(true);
-        $ms = round((microtime(true) - $start) * 1000 + rand(15, 80));
+        if (! self::mongoAvailable()) {
+            return self::driverMissing('MongoDB', ['ext-mongodb']);
+        }
 
-        return [
-            'success' => true,
-            'latency_ms' => $ms,
-            'server_version' => 'MongoDB 7.0',
-            'collections_found' => rand(3, 20),
-            'note' => 'Connection simulated (MongoDB PHP driver not installed)',
-        ];
+        try {
+            $start = microtime(true);
+            $manager = new Manager(self::mongoUri($config));
+
+            $buildInfo = $manager->executeCommand(
+                'admin',
+                new Command(['buildInfo' => 1])
+            )->toArray()[0] ?? null;
+            $ms = round((microtime(true) - $start) * 1000);
+
+            $db = $config['database'] ?? 'admin';
+            $collections = $manager->executeCommand(
+                $db,
+                new Command(['listCollections' => 1, 'nameOnly' => true])
+            )->toArray();
+
+            return [
+                'success' => true,
+                'latency_ms' => $ms,
+                'server_version' => 'MongoDB '.($buildInfo->version ?? 'unknown'),
+                'collections_found' => count($collections),
+                'ssl_enabled' => str_contains(self::mongoUri($config), 'ssl=true'),
+            ];
+        } catch (\Throwable $e) {
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
     }
 
+    /**
+     * MongoDB tidak punya skema, jadi "kolom" disimpulkan dari sampel dokumen:
+     * gabungan seluruh field yang muncul, dengan tipe diambil dari nilai
+     * pertama yang bukan null. Field yang tidak muncul di semua dokumen sampel
+     * ditandai nullable — itu perkiraan yang jujur, bukan kepastian, dan itulah
+     * batas yang memang melekat pada basis data schema-less.
+     */
     private static function scanMongodb(array $config): array
     {
-        return self::simulateScan('mongodb');
+        if (! self::mongoAvailable()) {
+            return [
+                'tables' => [],
+                'error' => self::driverMissing('MongoDB', ['ext-mongodb'])['error'],
+                'driver_missing' => true,
+            ];
+        }
+
+        try {
+            $manager = new Manager(self::mongoUri($config));
+            $db = $config['database'] ?? '';
+            if ($db === '') {
+                return ['tables' => [], 'error' => 'Nama database wajib diisi untuk MongoDB'];
+            }
+
+            $collections = $manager->executeCommand(
+                $db,
+                new Command(['listCollections' => 1, 'nameOnly' => true])
+            )->toArray();
+
+            $tables = [];
+            foreach ($collections as $coll) {
+                $name = $coll->name ?? null;
+                if (! $name) {
+                    continue;
+                }
+
+                $docs = [];
+                try {
+                    $cursor = $manager->executeQuery(
+                        "{$db}.{$name}",
+                        new Query([], ['limit' => self::SAMPLE_LIMIT])
+                    );
+                    foreach ($cursor as $doc) {
+                        $docs[] = json_decode(json_encode($doc), true) ?: [];
+                    }
+                } catch (\Throwable) {
+                }
+
+                $rowCount = 0;
+                try {
+                    $res = $manager->executeCommand(
+                        $db,
+                        new Command(['count' => $name])
+                    )->toArray()[0] ?? null;
+                    $rowCount = (int) ($res->n ?? 0);
+                } catch (\Throwable) {
+                }
+
+                // Gabungan field lintas dokumen sampel, urutan kemunculan dijaga.
+                $fields = [];
+                foreach ($docs as $doc) {
+                    foreach (array_keys($doc) as $key) {
+                        $fields[$key] = true;
+                    }
+                }
+
+                $columns = [];
+                foreach (array_keys($fields) as $field) {
+                    $type = 'unknown';
+                    $presentIn = 0;
+                    foreach ($docs as $doc) {
+                        if (! array_key_exists($field, $doc)) {
+                            continue;
+                        }
+                        $presentIn++;
+                        if ($type === 'unknown' && $doc[$field] !== null) {
+                            $type = self::bsonTypeName($doc[$field]);
+                        }
+                    }
+                    $columns[] = self::buildColumnMeta(
+                        $field,
+                        $type,
+                        $presentIn < count($docs),
+                        $docs
+                    );
+                }
+
+                $tables[] = [
+                    'name' => $name,
+                    'columns' => $columns,
+                    'row_count' => $rowCount,
+                    'size_mb' => 0,
+                ];
+            }
+
+            return ['tables' => $tables, 'engine' => 'real_mongodb'];
+        } catch (\Throwable $e) {
+            Log::error('MongoDB scan failed: '.$e->getMessage());
+
+            return ['tables' => [], 'error' => $e->getMessage()];
+        }
+    }
+
+    /** Nama tipe yang terbaca manusia untuk satu nilai dokumen Mongo. */
+    private static function bsonTypeName(mixed $value): string
+    {
+        return match (true) {
+            is_bool($value) => 'boolean',
+            is_int($value) => 'int',
+            is_float($value) => 'double',
+            is_array($value) => array_is_list($value) ? 'array' : 'object',
+            is_string($value) => 'string('.mb_strlen($value).')',
+            default => 'unknown',
+        };
     }
 
     // =============================================
-    // MSSQL — fallback to simulation
+    // MSSQL (SQL Server) — koneksi nyata
+    //
+    // Dua driver PDO dipakai bergantian: `sqlsrv` (driver resmi Microsoft,
+    // lazim di Windows) dan `dblib` (FreeTDS, lazim di kontainer Linux).
+    // Bentuk DSN keduanya berbeda, jadi dipisah — bukan detail kosmetik:
+    // memakai bentuk yang salah menghasilkan galat koneksi yang menyesatkan.
     // =============================================
+    private const MSSQL_DRIVERS = ['sqlsrv', 'dblib'];
+
+    private static function mssqlDsn(string $driver, array $config): string
+    {
+        $host = $config['host'] ?? 'localhost';
+        $port = ! empty($config['port']) ? (int) $config['port'] : 1433;
+        $db = $config['database'] ?? '';
+
+        return $driver === 'sqlsrv'
+            ? "sqlsrv:Server={$host},{$port};Database={$db};TrustServerCertificate=1"
+            : "dblib:host={$host}:{$port};dbname={$db};charset=UTF-8";
+    }
+
+    private static function mssqlConnect(array $config, int $timeout): \PDO
+    {
+        $driver = self::firstAvailableDriver(self::MSSQL_DRIVERS);
+        if ($driver === null) {
+            throw new \RuntimeException('driver_missing');
+        }
+
+        return new \PDO(
+            self::mssqlDsn($driver, $config),
+            $config['username'] ?? '',
+            $config['password'] ?? '',
+            [\PDO::ATTR_TIMEOUT => $timeout, \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]
+        );
+    }
+
     private static function testMssql(array $config): array
     {
-        $start = microtime(true);
-        $ms = round((microtime(true) - $start) * 1000 + rand(20, 100));
+        if (self::firstAvailableDriver(self::MSSQL_DRIVERS) === null) {
+            return self::driverMissing('SQL Server', self::MSSQL_DRIVERS);
+        }
 
-        return [
-            'success' => true,
-            'latency_ms' => $ms,
-            'server_version' => 'Microsoft SQL Server 2022 (RTM) - 16.0.1000.6',
-            'tables_found' => rand(15, 50),
-            'note' => 'Connection simulated (sqlsrv driver not available in environment)',
-        ];
+        try {
+            $start = microtime(true);
+            $pdo = self::mssqlConnect($config, 5);
+            $ms = round((microtime(true) - $start) * 1000);
+
+            $version = (string) $pdo->query('SELECT @@VERSION')->fetchColumn();
+            $tableCount = (int) $pdo->query(
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'"
+            )->fetchColumn();
+
+            return [
+                'success' => true,
+                'latency_ms' => $ms,
+                'server_version' => trim(substr(str_replace(["\n", "\r"], ' ', $version), 0, 60)),
+                'tables_found' => $tableCount,
+                'ssl_enabled' => true,
+            ];
+        } catch (\Throwable $e) {
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
     }
 
     private static function scanMssql(array $config): array
     {
-        return self::simulateScan('mssql');
+        if (self::firstAvailableDriver(self::MSSQL_DRIVERS) === null) {
+            return [
+                'tables' => [],
+                'error' => self::driverMissing('SQL Server', self::MSSQL_DRIVERS)['error'],
+                'driver_missing' => true,
+            ];
+        }
+
+        try {
+            $pdo = self::mssqlConnect($config, 10);
+
+            $rows = $pdo->query(
+                "SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+                 WHERE TABLE_TYPE='BASE TABLE' ORDER BY TABLE_SCHEMA, TABLE_NAME"
+            )->fetchAll(\PDO::FETCH_ASSOC);
+
+            $tables = [];
+            foreach ($rows as $row) {
+                $schema = $row['TABLE_SCHEMA'];
+                $tableName = $row['TABLE_NAME'];
+                $quoted = '['.str_replace(']', ']]', $schema).'].['.str_replace(']', ']]', $tableName).']';
+
+                $colStmt = $pdo->prepare(
+                    'SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH
+                     FROM INFORMATION_SCHEMA.COLUMNS
+                     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION'
+                );
+                $colStmt->execute([$schema, $tableName]);
+                $cols = $colStmt->fetchAll(\PDO::FETCH_ASSOC);
+
+                $rowCount = 0;
+                try {
+                    $rowCount = (int) $pdo->query("SELECT COUNT(*) FROM {$quoted}")->fetchColumn();
+                } catch (\Throwable) {
+                }
+
+                $sampleRows = [];
+                try {
+                    $sampleRows = $pdo->query(
+                        'SELECT TOP '.self::SAMPLE_LIMIT." * FROM {$quoted}"
+                    )->fetchAll(\PDO::FETCH_ASSOC);
+                } catch (\Throwable) {
+                }
+
+                $columns = [];
+                foreach ($cols as $col) {
+                    // CHARACTER_MAXIMUM_LENGTH dilampirkan agar parseTypeLength
+                    // melihat bentuk yang sama seperti "varchar(255)" di MySQL.
+                    $type = $col['DATA_TYPE'];
+                    $len = $col['CHARACTER_MAXIMUM_LENGTH'] ?? null;
+                    if ($len !== null && (int) $len > 0) {
+                        $type .= '('.(int) $len.')';
+                    }
+                    $columns[] = self::buildColumnMeta(
+                        $col['COLUMN_NAME'],
+                        $type,
+                        strtoupper((string) $col['IS_NULLABLE']) === 'YES',
+                        $sampleRows
+                    );
+                }
+
+                $tables[] = [
+                    // Skema disertakan hanya bila bukan `dbo`, supaya nama tabel
+                    // di UI tetap ringkas untuk kasus yang paling umum.
+                    'name' => $schema === 'dbo' ? $tableName : $schema.'.'.$tableName,
+                    'columns' => $columns,
+                    'row_count' => $rowCount,
+                    'size_mb' => 0,
+                ];
+            }
+
+            return ['tables' => $tables, 'engine' => 'real_mssql'];
+        } catch (\Throwable $e) {
+            Log::error('MSSQL scan failed: '.$e->getMessage());
+
+            return ['tables' => [], 'error' => $e->getMessage()];
+        }
     }
 
     // =============================================
-    // Oracle — fallback to simulation
+    // Oracle — koneksi nyata
+    //
+    // `service_name` dan `sid` keduanya diterima karena penamaan di lapangan
+    // masih campur; bentuk EZCONNECT (//host:port/service) dipakai untuk yang
+    // pertama, dan bentuk SID lawas untuk yang kedua.
     // =============================================
+    private const ORACLE_DRIVERS = ['oci', 'oci8'];
+
+    private static function oracleConnect(array $config, int $timeout): \PDO
+    {
+        $driver = self::firstAvailableDriver(self::ORACLE_DRIVERS);
+        if ($driver === null) {
+            throw new \RuntimeException('driver_missing');
+        }
+
+        $host = $config['host'] ?? 'localhost';
+        $port = ! empty($config['port']) ? (int) $config['port'] : 1521;
+        $service = $config['service_name'] ?? $config['database'] ?? '';
+        $sid = $config['sid'] ?? null;
+
+        $dbname = $sid
+            ? "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST={$host})(PORT={$port}))(CONNECT_DATA=(SID={$sid})))"
+            : "//{$host}:{$port}/{$service}";
+
+        return new \PDO(
+            "oci:dbname={$dbname};charset=AL32UTF8",
+            $config['username'] ?? '',
+            $config['password'] ?? '',
+            [\PDO::ATTR_TIMEOUT => $timeout, \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]
+        );
+    }
+
     private static function testOracle(array $config): array
     {
-        $start = microtime(true);
-        $ms = round((microtime(true) - $start) * 1000 + rand(50, 150));
+        if (self::firstAvailableDriver(self::ORACLE_DRIVERS) === null) {
+            return self::driverMissing('Oracle', self::ORACLE_DRIVERS);
+        }
 
-        return [
-            'success' => true,
-            'latency_ms' => $ms,
-            'server_version' => 'Oracle Database 19c Enterprise Edition Release 19.0.0.0.0',
-            'tables_found' => rand(20, 100),
-            'note' => 'Connection simulated (oci8 driver not available in environment)',
-        ];
+        try {
+            $start = microtime(true);
+            $pdo = self::oracleConnect($config, 5);
+            $ms = round((microtime(true) - $start) * 1000);
+
+            $version = (string) $pdo->query('SELECT banner FROM v$version WHERE ROWNUM = 1')->fetchColumn();
+            $tableCount = (int) $pdo->query('SELECT COUNT(*) FROM user_tables')->fetchColumn();
+
+            return [
+                'success' => true,
+                'latency_ms' => $ms,
+                'server_version' => trim(substr($version, 0, 60)),
+                'tables_found' => $tableCount,
+                'ssl_enabled' => false,
+            ];
+        } catch (\Throwable $e) {
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
     }
 
     private static function scanOracle(array $config): array
     {
-        return self::simulateScan('oracle');
+        if (self::firstAvailableDriver(self::ORACLE_DRIVERS) === null) {
+            return [
+                'tables' => [],
+                'error' => self::driverMissing('Oracle', self::ORACLE_DRIVERS)['error'],
+                'driver_missing' => true,
+            ];
+        }
+
+        try {
+            $pdo = self::oracleConnect($config, 10);
+
+            $tableNames = $pdo->query(
+                'SELECT table_name FROM user_tables ORDER BY table_name'
+            )->fetchAll(\PDO::FETCH_COLUMN);
+
+            $tables = [];
+            foreach ($tableNames as $tableName) {
+                $quoted = '"'.str_replace('"', '""', $tableName).'"';
+
+                $colStmt = $pdo->prepare(
+                    'SELECT column_name, data_type, nullable, data_length, data_precision
+                     FROM user_tab_columns WHERE table_name = :t ORDER BY column_id'
+                );
+                $colStmt->execute([':t' => $tableName]);
+                $cols = $colStmt->fetchAll(\PDO::FETCH_ASSOC);
+
+                $rowCount = 0;
+                try {
+                    $rowCount = (int) $pdo->query("SELECT COUNT(*) FROM {$quoted}")->fetchColumn();
+                } catch (\Throwable) {
+                }
+
+                $sampleRows = [];
+                try {
+                    // Oracle sebelum 12c tidak mengenal FETCH FIRST, jadi ROWNUM
+                    // dipakai agar sampling tetap jalan pada 11g yang masih
+                    // banyak dipakai di lingkungan perbankan.
+                    $sampleRows = $pdo->query(
+                        "SELECT * FROM {$quoted} WHERE ROWNUM <= ".self::SAMPLE_LIMIT
+                    )->fetchAll(\PDO::FETCH_ASSOC);
+                } catch (\Throwable) {
+                }
+
+                $columns = [];
+                foreach ($cols as $col) {
+                    $type = strtolower((string) $col['data_type']);
+                    $len = $col['data_length'] ?? null;
+                    if (in_array($type, ['varchar2', 'nvarchar2', 'char', 'nchar', 'raw'], true) && (int) $len > 0) {
+                        $type .= '('.(int) $len.')';
+                    }
+                    $columns[] = self::buildColumnMeta(
+                        $col['column_name'],
+                        $type,
+                        strtoupper((string) $col['nullable']) === 'Y',
+                        $sampleRows
+                    );
+                }
+
+                $tables[] = [
+                    'name' => $tableName,
+                    'columns' => $columns,
+                    'row_count' => $rowCount,
+                    'size_mb' => 0,
+                ];
+            }
+
+            return ['tables' => $tables, 'engine' => 'real_oracle'];
+        } catch (\Throwable $e) {
+            Log::error('Oracle scan failed: '.$e->getMessage());
+
+            return ['tables' => [], 'error' => $e->getMessage()];
+        }
     }
 
     // =============================================
@@ -860,6 +1340,14 @@ class DatabaseScanner
     // =============================================
     // Simulation fallback (for unsupported types)
     // =============================================
+    /**
+     * Data contoh untuk demo dan pengembangan.
+     *
+     * Keluarannya WAJIB menandai dirinya sendiri lewat `simulated => true`.
+     * Pemanggil meneruskan penanda itu sampai ke respons API dan antarmuka,
+     * supaya hasil contoh tidak pernah dapat disalahartikan sebagai hasil
+     * pemindaian sistem yang sesungguhnya.
+     */
     public static function simulateScan(string $sourceType): array
     {
         $tableTemplates = [
@@ -898,7 +1386,12 @@ class DatabaseScanner
             }
         }
 
-        return ['tables' => $selected, 'engine' => 'simulated'];
+        return [
+            'tables' => $selected,
+            'engine' => 'simulated',
+            'simulated' => true,
+            'simulated_reason' => 'Data contoh — tidak ada koneksi ke sistem sumber yang dilakukan.',
+        ];
     }
 
     // =============================================
