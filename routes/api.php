@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\ConsentItemController;
 use App\Http\Controllers\Api\ConsentLogController;
 use App\Http\Controllers\Api\ContainmentController;
 use App\Http\Controllers\Api\ContractReviewCrudController;
+use App\Http\Controllers\Api\ControlLibraryController;
 use App\Http\Controllers\Api\CrossBorderController;
 use App\Http\Controllers\Api\CustomFieldController;
 use App\Http\Controllers\Api\CustomSectionController;
@@ -483,6 +484,20 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // =============================================
     Route::get('/dpia/risk-event-templates', [DpiaRiskEventTemplateController::class, 'index'])
         ->middleware('permission:dpia,read');
+
+    // =============================================
+    // DPIA — Pustaka Kontrol (melengkapi pustaka risiko di dpia/framework)
+    // =============================================
+    Route::prefix('dpia/control-library')->group(function () {
+        Route::get('/', [ControlLibraryController::class, 'index'])->middleware('permission:dpia,read');
+        Route::post('/', [ControlLibraryController::class, 'store'])->middleware('permission:dpia,write');
+        Route::post('/reset', [ControlLibraryController::class, 'reset'])->middleware('permission:dpia,write');
+        Route::put('/{id}', [ControlLibraryController::class, 'update'])->middleware('permission:dpia,write')->where('id', '[0-9a-fA-F-]{36}');
+        Route::delete('/{id}', [ControlLibraryController::class, 'destroy'])->middleware('permission:dpia,write')->where('id', '[0-9a-fA-F-]{36}');
+    });
+    // Terapkan kontrol dari pustaka ke sebuah DPIA sebagai item RTP.
+    Route::post('/dpia/{id}/apply-controls', [ControlLibraryController::class, 'applyToDpia'])
+        ->middleware('permission:dpia,write')->where('id', '[0-9a-fA-F-]{36}');
 
     // =============================================
     // DPIA — Assessment Framework (DPO-customizable categories + risks)
