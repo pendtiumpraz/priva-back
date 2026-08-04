@@ -73,6 +73,7 @@ use App\Http\Controllers\Api\NotificationPreferenceController;
 use App\Http\Controllers\Api\OrganizationAppController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PentestReportController;
+use App\Http\Controllers\Api\PiiPatternRuleController;
 use App\Http\Controllers\Api\PlatformConfigController;
 use App\Http\Controllers\Api\PlatformStorageSettingsController;
 use App\Http\Controllers\Api\PolicyGeneratorController;
@@ -1077,6 +1078,16 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // =============================================
     // Data Discovery — Advanced Endpoints
     // =============================================
+    // Pola pengenal data pribadi milik organisasi — melengkapi pola bawaan
+    // (NIK, NPWP) yang berlaku universal.
+    Route::prefix('pii-patterns')->group(function () {
+        Route::get('/', [PiiPatternRuleController::class, 'index'])->middleware('permission:data_discovery,read');
+        Route::post('/', [PiiPatternRuleController::class, 'store'])->middleware('permission:data_discovery,write');
+        Route::post('/test', [PiiPatternRuleController::class, 'test'])->middleware('permission:data_discovery,read');
+        Route::put('/{id}', [PiiPatternRuleController::class, 'update'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
+        Route::delete('/{id}', [PiiPatternRuleController::class, 'destroy'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
+    });
+
     Route::prefix('data-discovery')->group(function () {
         Route::post('/{id}/test-connection', [DataDiscoveryController::class, 'testConnection'])->middleware('permission:data_discovery,read');
         Route::post('/{id}/scan', [DataDiscoveryController::class, 'triggerScan'])->middleware('permission:data_discovery,write');

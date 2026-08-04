@@ -2,8 +2,19 @@
 
 namespace App\Services;
 
+use App\Models\PiiPatternRule;
+
 class ContentPiiScanner
 {
+    /**
+     * Cache pola kustom per proses. Null berarti belum dimuat; array kosong
+     * adalah jawaban yang sah (organisasi tanpa pola tambahan), sehingga
+     * keduanya harus dibedakan.
+     *
+     * @var array<string, array<string, mixed>>|null
+     */
+    private static ?array $customCache = null;
+
     /**
      * Map of regex patterns to PII classifications
      */
@@ -106,11 +117,73 @@ class ContentPiiScanner
     }
 
     /**
+     * Pola tambahan milik organisasi yang sedang aktif.
+     *
+     * Pola bawaan berlaku universal di Indonesia; yang tidak dapat diketahui di
+     * muka adalah pengenal khas tiap organisasi — nomor CIF, nomor polis, nomor
+     * rekam medis. Tanpa jalur ini, kolom berisi pengenal semacam itu tidak
+     * akan pernah terdeteksi sebagai data pribadi.
+     *
+     * Hasilnya di-cache per permintaan: analyzeColumnContent dipanggil sekali
+     * per KOLOM, sehingga pemindaian basis data besar akan menanyakan pola yang
+     * sama ratusan kali dalam satu proses.
+     *
+     * Mengembalikan array kosong di luar konteks HTTP (mis. artisan tanpa
+     * tenant) — di sana CurrentOrgContext kosong dan pola milik siapa pun tidak
+     * boleh ikut terbawa.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private static function customPatterns(): array
+    {
+        if (self::$customCache !== null) {
+            return self::$customCache;
+        }
+
+        try {
+            $orgId = app(CurrentOrgContext::class)->get();
+            if ($orgId === null) {
+                return self::$customCache = [];
+            }
+
+            self::$customCache = PiiPatternRule::where('is_active', true)
+                ->orderBy('sequence')
+                ->get()
+                ->mapWithKeys(fn ($rule) => ['custom:'.$rule->key => [
+                    'pattern' => $rule->pattern,
+                    'pdp_category' => $rule->pdp_category,
+                    'classification' => $rule->classification,
+                    'encryption_required' => (bool) $rule->encryption_required,
+                    'weight' => (float) $rule->weight,
+                    'reason' => $rule->reason ?: ('Pola "'.$rule->label.'" terdeteksi di isi data'),
+                ]])
+                ->all();
+        } catch (\Throwable) {
+            // Tabelnya bisa saja belum ada saat migrasi berjalan. Pemindaian
+            // harus tetap bekerja dengan pola bawaan alih-alih gagal total.
+            self::$customCache = [];
+        }
+
+        return self::$customCache;
+    }
+
+    /**
+     * Kosongkan cache pola.
+     *
+     * Wajib dipanggil setelah pola disunting, dan dipakai test agar satu kasus
+     * tidak mewarisi pola milik kasus sebelumnya dalam proses yang sama.
+     */
+    public static function flushCustomPatterns(): void
+    {
+        self::$customCache = null;
+    }
+
+    /**
      * Sample rows and return the overall PII classification for the column
      */
     public static function analyzeColumnContent(array $sampledValues): ?array
     {
-        $patterns = self::getPatterns();
+        $patterns = self::getPatterns() + self::customPatterns();
         $totalSamples = count($sampledValues);
         if ($totalSamples === 0) {
             return null;
