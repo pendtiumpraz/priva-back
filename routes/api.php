@@ -38,8 +38,6 @@ use App\Http\Controllers\Api\DecryptorProfileController;
 use App\Http\Controllers\Api\DepartmentController;
 use App\Http\Controllers\Api\DiscoveryChangelogController;
 use App\Http\Controllers\Api\DocumentImportController;
-use App\Http\Controllers\Api\PrivacyNoticeController;
-use App\Http\Controllers\Api\PrivacyNoticePublicController;
 use App\Http\Controllers\Api\DocumentMakerController;
 use App\Http\Controllers\Api\DocumentTemplateController;
 use App\Http\Controllers\Api\DpiaAssessmentFrameworkController;
@@ -72,7 +70,6 @@ use App\Http\Controllers\Api\OrganizationAppController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PentestReportController;
 use App\Http\Controllers\Api\PlatformConfigController;
-use App\Http\Controllers\Api\Root\EmbeddingModelController;
 use App\Http\Controllers\Api\PlatformStorageSettingsController;
 use App\Http\Controllers\Api\PolicyGeneratorController;
 use App\Http\Controllers\Api\PolicyReviewCrudController;
@@ -80,15 +77,19 @@ use App\Http\Controllers\Api\PositionController;
 use App\Http\Controllers\Api\PostureController;
 use App\Http\Controllers\Api\PostureFindingController;
 use App\Http\Controllers\Api\PraAsesmenPublikController;
+use App\Http\Controllers\Api\PrivacyNoticeController;
+use App\Http\Controllers\Api\PrivacyNoticePublicController;
 use App\Http\Controllers\Api\ProcessingCategoryController;
 use App\Http\Controllers\Api\PublicLandingController;
 use App\Http\Controllers\Api\RaciTemplateController;
 use App\Http\Controllers\Api\RetentionPolicyController;
 use App\Http\Controllers\Api\RiskTreatmentPlanController;
 use App\Http\Controllers\Api\Root\DueDiligenceController;
+use App\Http\Controllers\Api\Root\EmbeddingModelController;
 use App\Http\Controllers\Api\Root\QaCenterController;
 use App\Http\Controllers\Api\RootDashboardController;
 use App\Http\Controllers\Api\RopaApprovalController;
+use App\Http\Controllers\Api\RopaDataFlowController;
 use App\Http\Controllers\Api\RopaLinkController;
 use App\Http\Controllers\Api\RopaTemplateController;
 use App\Http\Controllers\Api\SimulationController;
@@ -532,6 +533,11 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // RoPA — DPO Approval Workflow
     // =============================================
     Route::prefix('ropa/{id}')->group(function () {
+        // Peta alur data — otomatis diturunkan dari isi RoPA, dengan lapisan
+        // suntingan manual di atasnya. Lihat RopaDataFlowBuilder.
+        Route::get('/data-flow', [RopaDataFlowController::class, 'show'])->middleware('permission:ropa,read');
+        Route::put('/data-flow', [RopaDataFlowController::class, 'update'])->middleware('permission:ropa,write');
+        Route::delete('/data-flow', [RopaDataFlowController::class, 'reset'])->middleware('permission:ropa,write');
         Route::post('/submit', [RopaApprovalController::class, 'submit'])->middleware('permission:ropa,write');
         Route::post('/approve', [RopaApprovalController::class, 'approve'])->middleware('permission:ropa,write');
         Route::post('/reject', [RopaApprovalController::class, 'reject'])->middleware('permission:ropa,write');
