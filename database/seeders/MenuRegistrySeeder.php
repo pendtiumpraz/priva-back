@@ -70,6 +70,7 @@ class MenuRegistrySeeder extends Seeder
             ['menu_key' => 'maturity', 'label' => 'Maturity Assessment', 'href' => '/maturity', 'icon' => 'BarChart3', 'section' => 'PDP Modules', 'sort' => 150, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'policy-review', 'label' => 'Policy Review', 'href' => '/policy-review', 'icon' => 'BookCheck', 'section' => 'PDP Modules', 'sort' => 160, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'policy-generator', 'label' => 'Policy Notice Generator', 'href' => '/policy-generator', 'icon' => 'FilePlus2', 'section' => 'PDP Modules', 'sort' => 165, 'roles' => array_merge(['root'], self::COMPLIANCE)],
+            ['menu_key' => 'privacy-notice', 'label' => 'Pemberitahuan Privasi', 'href' => '/privacy-notice', 'icon' => 'FileText', 'section' => 'PDP Modules', 'sort' => 167, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'risk-treatment-plan', 'label' => 'Risk Treatment Plan', 'href' => '/risk-treatment-plan', 'icon' => 'ShieldAlert', 'section' => 'PDP Modules', 'sort' => 170, 'roles' => array_merge(['root'], self::COMPLIANCE)],
 
             // Data Management
