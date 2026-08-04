@@ -40,6 +40,7 @@ use App\Http\Controllers\Api\DataDiscoveryScanController;
 use App\Http\Controllers\Api\DecryptorProfileController;
 use App\Http\Controllers\Api\DepartmentController;
 use App\Http\Controllers\Api\DiscoveryChangelogController;
+use App\Http\Controllers\Api\DiscoveryProbeController;
 use App\Http\Controllers\Api\DocumentImportController;
 use App\Http\Controllers\Api\DocumentMakerController;
 use App\Http\Controllers\Api\DocumentTemplateController;
@@ -1079,6 +1080,17 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // =============================================
     // Data Discovery — Advanced Endpoints
     // =============================================
+    // Penemuan data store yang belum terdaftar. Mode pasif (bawaan) membaca
+    // jejak yang sudah ada; mode aktif memindai jaringan dan dijaga berlapis.
+    Route::prefix('discovery-probe')->group(function () {
+        Route::get('/config', [DiscoveryProbeController::class, 'config'])->middleware('permission:data_discovery,read');
+        Route::put('/config', [DiscoveryProbeController::class, 'updateConfig'])->middleware('permission:data_discovery,write');
+        Route::post('/ingest', [DiscoveryProbeController::class, 'ingest'])->middleware('permission:data_discovery,write');
+        Route::post('/scan', [DiscoveryProbeController::class, 'scan'])->middleware('permission:data_discovery,write');
+        Route::get('/candidates', [DiscoveryProbeController::class, 'candidates'])->middleware('permission:data_discovery,read');
+        Route::put('/candidates/{id}', [DiscoveryProbeController::class, 'updateCandidate'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
+    });
+
     // Katalog metadata terpusat + silsilah (lineage) antar aset data.
     Route::prefix('data-catalog')->group(function () {
         Route::get('/', [DataCatalogController::class, 'index'])->middleware('permission:data_discovery,read');

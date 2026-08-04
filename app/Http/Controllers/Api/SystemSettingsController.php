@@ -55,6 +55,16 @@ class SystemSettingsController extends Controller
 
     /** Section → list of setting keys (single source of truth for save/read). */
     private const SECTION_KEYS = [
+        // Penemuan data store. Saklar pemindaian aktif sengaja platform-wide:
+        // pemindaian dijalankan infrastruktur kami terhadap jaringan klien,
+        // jadi penyedia platform tidak boleh menanggung akibat tindakan yang
+        // tidak pernah ia setujui.
+        'discovery' => [
+            'discovery.default_mode',
+            'discovery.active_scan_allowed',
+            'discovery.active_scan_max_hosts',
+            'discovery.active_scan_timeout_ms',
+        ],
         'infrastructure' => [
             'infrastructure.hosting_tier',
             'infrastructure.queue_driver',
@@ -456,6 +466,7 @@ class SystemSettingsController extends Controller
             'mail' => MailRequest::class,
             'deployment' => DeploymentRequest::class,
             'security' => SecurityRequest::class,
+            'discovery' => \App\Http\Requests\SystemSettings\DiscoveryRequest::class,
             default => null,
         };
 
@@ -508,6 +519,7 @@ class SystemSettingsController extends Controller
             // Provider creds optional sampai user enable cloud provider.
             'ai_embedding' => ['ai_embedding.enabled', 'ai_embedding.provider'],
             'deployment' => ['deployment.mode'],
+            'discovery' => ['discovery.default_mode', 'discovery.active_scan_allowed'],
             'security' => [
                 'security.lockout_enabled',
                 'security.lockout_tier1_attempts',
