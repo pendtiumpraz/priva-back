@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\ContainmentController;
 use App\Http\Controllers\Api\ContractReviewCrudController;
 use App\Http\Controllers\Api\ControlLibraryController;
 use App\Http\Controllers\Api\CrossBorderController;
+use App\Http\Controllers\Api\CustomDashboardController;
 use App\Http\Controllers\Api\CustomFieldController;
 use App\Http\Controllers\Api\CustomSectionController;
 use App\Http\Controllers\Api\DashboardController;
@@ -90,6 +91,7 @@ use App\Http\Controllers\Api\Root\EmbeddingModelController;
 use App\Http\Controllers\Api\Root\QaCenterController;
 use App\Http\Controllers\Api\RootDashboardController;
 use App\Http\Controllers\Api\RopaApprovalController;
+use App\Http\Controllers\Api\RopaCsvImportController;
 use App\Http\Controllers\Api\RopaDataFlowController;
 use App\Http\Controllers\Api\RopaLinkController;
 use App\Http\Controllers\Api\RopaTemplateController;
@@ -484,6 +486,22 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // =============================================
     Route::get('/dpia/risk-event-templates', [DpiaRiskEventTemplateController::class, 'index'])
         ->middleware('permission:dpia,read');
+
+    // Dashboard kustom — susunan widget per tenant, disaring matriks hak akses.
+    Route::prefix('custom-dashboards')->group(function () {
+        Route::get('/', [CustomDashboardController::class, 'index']);
+        Route::post('/', [CustomDashboardController::class, 'store']);
+        Route::get('/{id}/render', [CustomDashboardController::class, 'render'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::put('/{id}', [CustomDashboardController::class, 'update'])->where('id', '[0-9a-fA-F-]{36}');
+        Route::delete('/{id}', [CustomDashboardController::class, 'destroy'])->where('id', '[0-9a-fA-F-]{36}');
+    });
+
+    // Impor RoPA dari CSV — deterministik, dua tahap (pratinjau lalu simpan).
+    Route::prefix('ropa/import')->group(function () {
+        Route::get('/template', [RopaCsvImportController::class, 'template'])->middleware('permission:ropa,read');
+        Route::post('/preview', [RopaCsvImportController::class, 'preview'])->middleware('permission:ropa,write');
+        Route::post('/commit', [RopaCsvImportController::class, 'commit'])->middleware('permission:ropa,write');
+    });
 
     // =============================================
     // DPIA — Pustaka Kontrol (melengkapi pustaka risiko di dpia/framework)
