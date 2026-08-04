@@ -34,6 +34,7 @@ use App\Http\Controllers\Api\CustomFieldController;
 use App\Http\Controllers\Api\CustomSectionController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DatabasePoolController;
+use App\Http\Controllers\Api\DataCatalogController;
 use App\Http\Controllers\Api\DataDiscoveryController;
 use App\Http\Controllers\Api\DataDiscoveryScanController;
 use App\Http\Controllers\Api\DecryptorProfileController;
@@ -1078,6 +1079,19 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // =============================================
     // Data Discovery — Advanced Endpoints
     // =============================================
+    // Katalog metadata terpusat + silsilah (lineage) antar aset data.
+    Route::prefix('data-catalog')->group(function () {
+        Route::get('/', [DataCatalogController::class, 'index'])->middleware('permission:data_discovery,read');
+        Route::get('/summary', [DataCatalogController::class, 'summary'])->middleware('permission:data_discovery,read');
+        Route::get('/trace', [DataCatalogController::class, 'trace'])->middleware('permission:data_discovery,read');
+        Route::post('/sync', [DataCatalogController::class, 'sync'])->middleware('permission:data_discovery,write');
+        Route::post('/import', [DataCatalogController::class, 'import'])->middleware('permission:data_discovery,write');
+        Route::post('/assets', [DataCatalogController::class, 'store'])->middleware('permission:data_discovery,write');
+        Route::put('/assets/{id}', [DataCatalogController::class, 'update'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
+        Route::post('/lineage', [DataCatalogController::class, 'storeLineage'])->middleware('permission:data_discovery,write');
+        Route::delete('/lineage/{id}', [DataCatalogController::class, 'destroyLineage'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
+    });
+
     // Pola pengenal data pribadi milik organisasi — melengkapi pola bawaan
     // (NIK, NPWP) yang berlaku universal.
     Route::prefix('pii-patterns')->group(function () {
