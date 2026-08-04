@@ -74,6 +74,7 @@ class MenuRegistrySeeder extends Seeder
 
             // Data Management
             ['menu_key' => 'data-discovery', 'label' => 'Data Discovery', 'href' => '/data-discovery', 'icon' => 'Scan', 'section' => 'Data Management', 'sort' => 210, 'roles' => array_merge(['root'], self::COMPLIANCE)],
+            ['menu_key' => 'data-catalog', 'label' => 'Katalog & Silsilah Data', 'href' => '/data-catalog', 'icon' => 'Network', 'section' => 'Data Management', 'sort' => 215, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'contract-review', 'label' => 'Contract Review', 'href' => '/contract-review', 'icon' => 'FileSearch', 'section' => 'Data Management', 'sort' => 220, 'roles' => array_merge(['root'], self::EDITOR)],
             ['menu_key' => 'vendor-risk', 'label' => 'Third Party Management', 'href' => '/vendor-risk', 'icon' => 'Building2', 'section' => 'Data Management', 'sort' => 230, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             // Sub-feature TPRM (Bank Pertanyaan, Antrian Review, Antrian Approval,
