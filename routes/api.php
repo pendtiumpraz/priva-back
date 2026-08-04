@@ -46,7 +46,9 @@ use App\Http\Controllers\Api\DpiaAssessmentFrameworkController;
 use App\Http\Controllers\Api\DpiaRiskEventTemplateController;
 use App\Http\Controllers\Api\DpiaRtpController;
 use App\Http\Controllers\Api\DsrAppController;
+use App\Http\Controllers\Api\DsrChannelController;
 use App\Http\Controllers\Api\DsrExecutionController;
+use App\Http\Controllers\Api\DsrInboundPublicController;
 use App\Http\Controllers\Api\DsrPublicController;
 use App\Http\Controllers\Api\DsrRequestScopeController;
 use App\Http\Controllers\Api\DsrSqlPackController;
@@ -194,6 +196,11 @@ Route::middleware('throttle:api')->group(function () {
     Route::post('/public/dsr/submit/{embed_token}', [DsrPublicController::class, 'submit'])
         ->middleware('throttle:30,1');  // 30 req/min per IP
     Route::get('/public/dsr/verify/{token}', [DsrPublicController::class, 'verify']);
+
+    // Penerimaan permohonan DSR dari penyedia surel (inbound parse).
+    // Rahasianya ada pada URL; penyedia surel tidak dapat membawa token sesi.
+    Route::post('/public/dsr/inbound/{token}', [DsrInboundPublicController::class, 'receive'])
+        ->middleware('throttle:120,1');
 
     // =============================================
     // Asesmen Publik — TPRM (Sprint G)
@@ -486,6 +493,25 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // =============================================
     Route::get('/dpia/risk-event-templates', [DpiaRiskEventTemplateController::class, 'index'])
         ->middleware('permission:dpia,read');
+
+    // DSR — kanal keluar (API/CRM) dan kanal masuk (surel).
+    Route::prefix('dsr-channels')->group(function () {
+        Route::get('/targets', [DsrChannelController::class, 'indexTargets'])->middleware('permission:dsr,read');
+        Route::post('/targets', [DsrChannelController::class, 'storeTarget'])->middleware('permission:dsr,write');
+        Route::put('/targets/{id}', [DsrChannelController::class, 'updateTarget'])->middleware('permission:dsr,write')->where('id', '[0-9a-fA-F-]{36}');
+        Route::delete('/targets/{id}', [DsrChannelController::class, 'destroyTarget'])->middleware('permission:dsr,write')->where('id', '[0-9a-fA-F-]{36}');
+
+        Route::get('/inbound', [DsrChannelController::class, 'indexChannels'])->middleware('permission:dsr,read');
+        Route::post('/inbound', [DsrChannelController::class, 'storeChannel'])->middleware('permission:dsr,write');
+        Route::post('/inbound/{id}/test', [DsrChannelController::class, 'testChannel'])->middleware('permission:dsr,write')->where('id', '[0-9a-fA-F-]{36}');
+        Route::delete('/inbound/{id}', [DsrChannelController::class, 'destroyChannel'])->middleware('permission:dsr,write')->where('id', '[0-9a-fA-F-]{36}');
+    });
+
+    Route::prefix('dsr/{id}')->where(['id' => '[0-9a-fA-F-]{36}'])->group(function () {
+        Route::post('/send-report', [DsrChannelController::class, 'sendReport'])->middleware('permission:dsr,write');
+        Route::post('/push', [DsrChannelController::class, 'push'])->middleware('permission:dsr,write');
+        Route::get('/payload-preview', [DsrChannelController::class, 'previewPayload'])->middleware('permission:dsr,read');
+    });
 
     // Dashboard kustom — susunan widget per tenant, disaring matriks hak akses.
     Route::prefix('custom-dashboards')->group(function () {
