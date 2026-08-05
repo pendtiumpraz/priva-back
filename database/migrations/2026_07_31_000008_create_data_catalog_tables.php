@@ -34,7 +34,14 @@ return new class extends Migration
             // "system:<uuid>", "dataset:<uuid>/users", "field:<uuid>/users/nik".
             // Deterministik supaya sinkronisasi ulang memperbarui baris yang
             // sama alih-alih menggandakannya.
-            $table->string('asset_key', 400);
+            // Panjang 300 (bukan 400) karena kolom ini diindeks unik bersama
+            // org_id. Di MySQL utf8mb4 satu karakter dihitung 4 byte, dan batas
+            // panjang kunci InnoDB adalah 3072 byte — lihat catatan di indeks
+            // dcl_unique_edge tabel silsilah di bawah. Kunci terpanjang yang
+            // benar-benar dihasilkan berbentuk "field:<uuid>/<tabel>/<kolom>"
+            // (~172 karakter, karena pengenal MySQL sendiri maksimal 64), jadi
+            // 300 masih menyisakan ruang lebih dari cukup.
+            $table->string('asset_key', 300);
 
             // system | dataset | field | file | report
             $table->string('asset_type', 32);
@@ -80,8 +87,12 @@ return new class extends Migration
             // dari katalog luar kerap menyebut aset yang belum (atau tidak
             // pernah) diimpor, dan memaksakan relasi akan membuang tepi yang
             // justru paling menarik — yang menunjuk ke luar batas sistem kami.
-            $table->string('from_key', 400);
-            $table->string('to_key', 400);
+            // Sama panjang dengan asset_key: nilainya memang berupa asset_key,
+            // jadi keduanya harus sanggup menampung apa pun yang boleh masuk ke
+            // sana. Membedakannya akan membuat aset berkunci panjang diam-diam
+            // tidak bisa punya tepi silsilah.
+            $table->string('from_key', 300);
+            $table->string('to_key', 300);
 
             // feeds | derives | copies | exports | references | processes
             $table->string('relation', 32)->default('feeds');
@@ -92,6 +103,16 @@ return new class extends Migration
             $table->timestamps();
 
             $table->foreign('org_id')->references('id')->on('organizations')->onDelete('cascade');
+            // Anggaran panjang kunci InnoDB (utf8mb4, 4 byte per karakter):
+            //   org_id  char(36)     =  144 byte
+            //   from_key varchar(300) = 1200 byte
+            //   to_key   varchar(300) = 1200 byte
+            //   relation varchar(32)  =  128 byte
+            //                          -----------
+            //                           2672 byte, di bawah batas 3072.
+            // Versi pertama memakai 400 karakter untuk kedua kunci dan mencapai
+            // 3472 byte, sehingga migrasinya gagal di MySQL. SQLite tidak punya
+            // batas ini, jadi kegagalannya tidak muncul saat pengujian lokal.
             $table->unique(['org_id', 'from_key', 'to_key', 'relation'], 'dcl_unique_edge');
             $table->index(['org_id', 'from_key']);
             $table->index(['org_id', 'to_key']);

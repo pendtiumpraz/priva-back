@@ -77,7 +77,7 @@ class DataCatalogController extends Controller
     public function trace(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'asset_key' => 'required|string|max:400',
+            'asset_key' => 'required|string|max:300',
             'depth' => 'nullable|integer|min:1|max:6',
         ]);
 
@@ -94,7 +94,7 @@ class DataCatalogController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'asset_key' => 'required|string|max:400',
+            'asset_key' => 'required|string|max:300',
             'asset_type' => 'required|in:'.implode(',', DataCatalogAsset::TYPES),
             'name' => 'required|string|max:400',
             'qualified_name' => 'nullable|string|max:600',
@@ -136,8 +136,8 @@ class DataCatalogController extends Controller
     public function storeLineage(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'from_key' => 'required|string|max:400',
-            'to_key' => 'required|string|max:400|different:from_key',
+            'from_key' => 'required|string|max:300',
+            'to_key' => 'required|string|max:300|different:from_key',
             'relation' => 'required|in:'.implode(',', DataCatalogLineage::RELATIONS),
             'description' => 'nullable|string|max:500',
         ]);
