@@ -26,6 +26,21 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Percobaan pertama migrasi ini gagal di MySQL setelah kedua tabel
+        // terlanjur dibuat: indeks dcl_unique_edge melampaui batas panjang
+        // kunci InnoDB (rinciannya di bawah). MySQL tidak dapat membatalkan
+        // perubahan struktur, jadi tabel setengah jadi itu tertinggal dan
+        // membuat percobaan ulang berhenti dengan "table already exists".
+        //
+        // Dua baris di bawah membersihkan sisa itu. Keduanya HANYA berjalan
+        // pada basis data yang belum pernah mencatat migrasi ini selesai —
+        // begitu ia sukses, Laravel tidak akan menjalankannya lagi. Jadi
+        // sasarannya adalah puing percobaan yang gagal, bukan data yang hidup:
+        // kedua tabel ini belum pernah berhasil terpasang di mana pun, dan
+        // isinya dapat dibangun ulang lewat sinkronisasi katalog.
+        Schema::dropIfExists('data_catalog_lineage');
+        Schema::dropIfExists('data_catalog_assets');
+
         Schema::create('data_catalog_assets', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('org_id');
