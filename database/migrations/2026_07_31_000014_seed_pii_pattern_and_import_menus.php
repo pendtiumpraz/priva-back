@@ -6,17 +6,21 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
- * Daftarkan menu Pola Pengenal PII dan Impor RoPA pada deployment berjalan.
+ * Daftarkan menu Pola Pengenal PII pada deployment berjalan.
  *
- * Impor RoPA sengaja dibatasi peran yang dapat menulis: mengimpor ratusan RoPA
- * sekaligus mengubah isi modul secara masif, dan itu bukan tindakan yang layak
- * dibuka untuk peran baca-saja.
+ * Semula migrasi ini juga mendaftarkan "Impor RoPA (CSV)" sebagai menu
+ * tersendiri. Itu keliru dan sudah dicabut: impor adalah tindakan MILIK modul
+ * RoPA — izinnya sama (`ropa,write`) dan hasilnya mendarat di tabel yang sama.
+ * Orang yang hendak menambah RoPA secara massal membukanya dari halaman RoPA,
+ * bukan mencari entri terpisah di sidebar yang sudah memuat puluhan modul.
+ * Kini ia berupa tombol "Impor CSV" pada toolbar RoPA.
+ *
+ * Rutenya sendiri (`/api/ropa/import/*`) tidak berubah.
  */
 return new class extends Migration
 {
     private array $menus = [
         ['pii-patterns', 'Pola Pengenal PII', '/pii-patterns', 'Fingerprint', 'Data Management', 217, ['root', 'superadmin', 'admin', 'dpo', 'maker', 'viewer']],
-        ['ropa-import', 'Impor RoPA (CSV)', '/ropa-import', 'FileSpreadsheet', 'PDP Modules', 176, ['root', 'superadmin', 'admin', 'dpo', 'maker']],
     ];
 
     public function up(): void
