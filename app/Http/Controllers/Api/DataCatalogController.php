@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\DataCatalogAsset;
 use App\Models\DataCatalogLineage;
 use App\Services\DataCatalogService;
+use App\Services\PurviewConnector;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -194,10 +195,72 @@ class DataCatalogController extends Controller
     }
 
     /**
-     * Impor aset dari katalog data pihak lain.
+     * Tarik aset langsung dari Microsoft Purview.
+     *
+     * Melengkapi `import` yang menerima ekspor tempelan. Bedanya bukan sekadar
+     * kenyamanan: tempelan adalah potret sesaat, sedangkan ini dapat dijalankan
+     * ulang kapan pun sehingga katalog mengikuti perubahan di Purview.
+     *
+     * Kredensial TIDAK disimpan di sini. Ia dikirim per permintaan dan hanya
+     * hidup selama pemanggilan — modul katalog bukan tempat menyimpan rahasia
+     * Azure, dan menyimpannya akan menuntut penjagaan yang belum ada di sini.
+     */
+    public function syncPurview(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'tenant_id' => 'required|string|max:100',
+            'client_id' => 'required|string|max:100',
+            'client_secret' => 'required|string|max:500',
+            'account_name' => 'required|string|max:100',
+            'keyword' => 'nullable|string|max:200',
+            'test_only' => 'sometimes|boolean',
+        ]);
+
+        try {
+            $purview = PurviewConnector::fromConfig($data);
+
+            if ($request->boolean('test_only')) {
+                return response()->json(['data' => $purview->testConnection()]);
+            }
+
+            $fetched = $purview->fetchAssets($data['keyword'] ?? null);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        if (! $fetched['rows']) {
+            return response()->json([
+                'message' => 'Purview tidak mengembalikan aset. Periksa kata kunci, atau pastikan koleksi yang dituju berisi aset yang dapat dibaca peran ini.',
+                'data' => ['imported' => 0, 'skipped' => 0, 'edges' => 0],
+            ]);
+        }
+
+        $result = $this->catalog->import(
+            $request->user()->org_id,
+            $fetched['rows'],
+            'purview',
+        );
+
+        AuditLog::log('data-discovery', $request->user()->org_id, 'purview_synced', array_merge($result, [
+            'account' => $data['account_name'],
+            'fetched' => count($fetched['rows']),
+            'truncated' => $fetched['truncated'],
+        ]), 'catalog');
+
+        return response()->json([
+            'message' => "{$result['imported']} aset ditarik dari Purview.".
+                ($fetched['truncated'] ? ' Sebagian dipotong karena melebihi batas satu sinkronisasi.' : ''),
+            'data' => array_merge($result, ['truncated' => $fetched['truncated']]),
+        ]);
+    }
+
+    /**
+     * Impor aset dari ekspor katalog pihak lain.
      *
      * Menerima bentuk umum ekspor Collibra, Alation, dan Purview dengan
-     * pemetaan kolom yang dapat disesuaikan.
+     * pemetaan kolom yang dapat disesuaikan. Tetap dipertahankan berdampingan
+     * dengan syncPurview: tidak semua klien bersedia memberikan kredensial
+     * Azure, dan sebagian katalog memang hanya bisa dikeluarkan sebagai berkas.
      */
     public function import(Request $request): JsonResponse
     {

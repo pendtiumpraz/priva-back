@@ -1085,6 +1085,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::get('/trace', [DataCatalogController::class, 'trace'])->middleware('permission:data_discovery,read');
         Route::post('/sync', [DataCatalogController::class, 'sync'])->middleware('permission:data_discovery,write');
         Route::post('/import', [DataCatalogController::class, 'import'])->middleware('permission:data_discovery,write');
+        Route::post('/sync-purview', [DataCatalogController::class, 'syncPurview'])->middleware('permission:data_discovery,write');
         Route::post('/assets', [DataCatalogController::class, 'store'])->middleware('permission:data_discovery,write');
         Route::put('/assets/{id}', [DataCatalogController::class, 'update'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
         Route::delete('/assets/{id}', [DataCatalogController::class, 'destroyAsset'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
