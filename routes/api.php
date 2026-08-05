@@ -97,7 +97,6 @@ use App\Http\Controllers\Api\Root\QaCenterController;
 use App\Http\Controllers\Api\RootDashboardController;
 use App\Http\Controllers\Api\RopaApprovalController;
 use App\Http\Controllers\Api\RopaCsvImportController;
-use App\Http\Controllers\Api\RopaDataFlowController;
 use App\Http\Controllers\Api\RopaLinkController;
 use App\Http\Controllers\Api\RopaTemplateController;
 use App\Http\Controllers\Api\SimulationController;
@@ -595,11 +594,6 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // RoPA — DPO Approval Workflow
     // =============================================
     Route::prefix('ropa/{id}')->group(function () {
-        // Peta alur data — otomatis diturunkan dari isi RoPA, dengan lapisan
-        // suntingan manual di atasnya. Lihat RopaDataFlowBuilder.
-        Route::get('/data-flow', [RopaDataFlowController::class, 'show'])->middleware('permission:ropa,read');
-        Route::put('/data-flow', [RopaDataFlowController::class, 'update'])->middleware('permission:ropa,write');
-        Route::delete('/data-flow', [RopaDataFlowController::class, 'reset'])->middleware('permission:ropa,write');
         Route::post('/submit', [RopaApprovalController::class, 'submit'])->middleware('permission:ropa,write');
         Route::post('/approve', [RopaApprovalController::class, 'approve'])->middleware('permission:ropa,write');
         Route::post('/reject', [RopaApprovalController::class, 'reject'])->middleware('permission:ropa,write');
