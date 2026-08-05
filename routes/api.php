@@ -1087,8 +1087,11 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::post('/import', [DataCatalogController::class, 'import'])->middleware('permission:data_discovery,write');
         Route::post('/assets', [DataCatalogController::class, 'store'])->middleware('permission:data_discovery,write');
         Route::put('/assets/{id}', [DataCatalogController::class, 'update'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
+        Route::delete('/assets/{id}', [DataCatalogController::class, 'destroyAsset'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
+        Route::post('/assets/{id}/restore', [DataCatalogController::class, 'restoreAsset'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
         Route::post('/lineage', [DataCatalogController::class, 'storeLineage'])->middleware('permission:data_discovery,write');
         Route::delete('/lineage/{id}', [DataCatalogController::class, 'destroyLineage'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
+        Route::post('/lineage/{id}/restore', [DataCatalogController::class, 'restoreLineage'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
     });
 
     // Pola pengenal data pribadi milik organisasi — melengkapi pola bawaan
@@ -1097,8 +1100,11 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::get('/', [PiiPatternRuleController::class, 'index'])->middleware('permission:data_discovery,read');
         Route::post('/', [PiiPatternRuleController::class, 'store'])->middleware('permission:data_discovery,write');
         Route::post('/test', [PiiPatternRuleController::class, 'test'])->middleware('permission:data_discovery,read');
+        Route::post('/reset', [PiiPatternRuleController::class, 'reset'])->middleware('permission:data_discovery,write');
         Route::put('/{id}', [PiiPatternRuleController::class, 'update'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
         Route::delete('/{id}', [PiiPatternRuleController::class, 'destroy'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
+        Route::post('/{id}/restore', [PiiPatternRuleController::class, 'restore'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
+        Route::delete('/{id}/force', [PiiPatternRuleController::class, 'forceDelete'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
     });
 
     Route::prefix('data-discovery')->group(function () {

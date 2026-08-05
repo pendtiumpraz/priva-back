@@ -5,11 +5,12 @@ namespace App\Models;
 use App\Models\Concerns\BelongsToOrg;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /** Data store yang terdeteksi tetapi belum terdaftar sebagai sistem informasi. */
 class DiscoveryCandidate extends Model
 {
-    use BelongsToOrg, HasUuids;
+    use BelongsToOrg, HasUuids, SoftDeletes;
 
     public const SOURCES = ['cmdb', 'config_file', 'connection_log', 'network_scan', 'manual'];
 

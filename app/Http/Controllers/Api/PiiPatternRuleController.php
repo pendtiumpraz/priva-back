@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\PiiPatternRule;
 use App\Services\ContentPiiScanner;
+use App\Services\PiiPatternRuleService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Pola pengenal data pribadi yang dapat ditambah organisasi sendiri.
@@ -22,14 +24,74 @@ class PiiPatternRuleController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        $seeded = PiiPatternRuleService::ensureSeeded($request->user()->org_id);
+
+        $query = PiiPatternRule::query();
+
+        // Keranjang sampah, seragam dengan modul lain.
+        if ($request->boolean('trashed')) {
+            $query->onlyTrashed();
+        }
+
         return response()->json([
-            'data' => PiiPatternRule::orderBy('sequence')->orderBy('label')->get(),
+            'data' => $query->orderBy('sequence')->orderBy('label')->get(),
             'meta' => [
                 'categories' => PiiPatternRule::CATEGORIES,
                 'classifications' => PiiPatternRule::CLASSIFICATIONS,
-                'builtin_note' => 'Pola bawaan (NIK, NPWP, dan sejenisnya) selalu aktif dan tidak perlu ditambahkan di sini.',
+                'seeded' => $seeded,
+                'trashed_count' => PiiPatternRule::onlyTrashed()->count(),
+                'builtin_note' => 'Pencocokan berdasarkan NAMA kolom (nik, no_ktp, npwp, dan sejenisnya) sudah tertanam di kode dan selalu aktif. Pola di halaman ini bekerja pada ISI datanya — itulah yang menangkap kolom bernama samar seperti "field_123" yang ternyata memuat NIK.',
             ],
         ]);
+    }
+
+    /**
+     * Kembalikan katalog bawaan.
+     *
+     * Menghapus seluruh pola tenant lalu menyemai ulang. Dipakai ketika
+     * penyuntingan terlanjur berantakan dan lebih murah mengulang daripada
+     * membetulkan satu per satu.
+     */
+    public function reset(Request $request): JsonResponse
+    {
+        $orgId = $request->user()->org_id;
+
+        $count = DB::transaction(function () use ($orgId) {
+            PiiPatternRule::withTrashed()->forceDelete();
+
+            return PiiPatternRuleService::seed($orgId);
+        });
+
+        ContentPiiScanner::flushCustomPatterns();
+
+        // Reset tidak menyangkut satu baris, melainkan seluruh katalog milik
+        // organisasi — jadi org yang dicatat sebagai record-nya.
+        AuditLog::log('pii_patterns', $orgId, 'reset', ['seeded' => $count], 'manual');
+
+        return response()->json([
+            'message' => "Katalog dikembalikan ke {$count} pola bawaan.",
+            'seeded' => $count,
+        ]);
+    }
+
+    /** Kembalikan pola yang sudah dihapus. */
+    public function restore(Request $request, string $id): JsonResponse
+    {
+        $rule = PiiPatternRule::onlyTrashed()->findOrFail($id);
+        $rule->restore();
+        ContentPiiScanner::flushCustomPatterns();
+
+        return response()->json(['message' => 'Pola dikembalikan.', 'data' => $rule]);
+    }
+
+    /** Hapus permanen — hanya untuk pola yang sudah ada di keranjang sampah. */
+    public function forceDelete(Request $request, string $id): JsonResponse
+    {
+        $rule = PiiPatternRule::onlyTrashed()->findOrFail($id);
+        $rule->forceDelete();
+        ContentPiiScanner::flushCustomPatterns();
+
+        return response()->json(['message' => 'Pola dihapus permanen.']);
     }
 
     public function store(Request $request): JsonResponse

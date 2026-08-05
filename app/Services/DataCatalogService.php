@@ -148,11 +148,18 @@ class DataCatalogService
     {
         // Tepi turunan dibuang lebih dulu supaya keterkaitan yang sudah
         // dihapus di sumbernya tidak tertinggal sebagai silsilah hantu.
+        //
+        // forceDelete, BUKAN delete. Tepi turunan dibangun ulang utuh pada
+        // setiap sinkronisasi, jadi mengarsipkannya tidak menyelamatkan apa pun
+        // — yang ada keranjang sampah membengkak ribuan baris tiap sync, dan
+        // updateOrCreate di bawah tidak melihat baris terarsip sehingga
+        // menabrak indeks unik dcl_unique_edge. Soft delete hanya bermakna
+        // untuk tepi manual dan impor, yang tidak dapat diturunkan ulang.
         DataCatalogLineage::withoutGlobalScope('org')
             ->where('org_id', $orgId)
             ->where('source', 'auto')
             ->where('relation', 'feeds')
-            ->delete();
+            ->forceDelete();
 
         $count = 0;
         $ropas = Ropa::withoutGlobalScope('org')
@@ -391,6 +398,22 @@ class DataCatalogService
     private function edge(string $orgId, string $from, string $to, string $relation, string $source, ?string $description = null): void
     {
         try {
+            // Tepi yang sudah dihapus tenant tidak dihidupkan lagi. Penghapusan
+            // manual adalah keputusan — kalau sinkronisasi berikutnya
+            // memunculkannya kembali, penghapusan itu tidak pernah berarti dan
+            // tenant akan menghapusnya berulang kali tanpa hasil.
+            $trashed = DataCatalogLineage::withoutGlobalScope('org')
+                ->onlyTrashed()
+                ->where('org_id', $orgId)
+                ->where('from_key', $from)
+                ->where('to_key', $to)
+                ->where('relation', $relation)
+                ->exists();
+
+            if ($trashed) {
+                return;
+            }
+
             DataCatalogLineage::withoutGlobalScope('org')->updateOrCreate(
                 ['org_id' => $orgId, 'from_key' => $from, 'to_key' => $to, 'relation' => $relation],
                 ['source' => $source, 'description' => $description]

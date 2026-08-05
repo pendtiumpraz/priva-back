@@ -5,11 +5,12 @@ namespace App\Models;
 use App\Models\Concerns\BelongsToOrg;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /** Konfigurasi penemuan data store per organisasi. */
 class DiscoveryProbeConfig extends Model
 {
-    use BelongsToOrg, HasUuids;
+    use BelongsToOrg, HasUuids, SoftDeletes;
 
     public const MODE_PASSIVE = 'passive';
 

@@ -158,11 +158,15 @@ class PiiPatternAndCloudScanTest extends TestCase
     #[Test]
     public function pola_satu_organisasi_tidak_dipakai_organisasi_lain(): void
     {
+        // Kunci sengaja dipilih yang TIDAK ada di katalog bawaan. Sejak katalog
+        // disemai per tenant, memakai kunci bawaan (mis. 'cif') tidak lagi
+        // menguji isolasi — organisasi lain memang punya polanya sendiri, dan
+        // tesnya akan gagal karena alasan yang salah.
         Sanctum::actingAs($this->user);
         $this->postJson('/api/pii-patterns', [
-            'key' => 'cif',
-            'label' => 'CIF',
-            'pattern' => '/^CIF\d{10}$/',
+            'key' => 'kode_internal_abc',
+            'label' => 'Kode Internal ABC',
+            'pattern' => '/^ZX-\d{2}-QQ\d{4}$/',
         ])->assertStatus(201);
 
         $otherOrg = Organization::create(['name' => 'Bank Lain', 'slug' => 'lain-'.uniqid()]);
@@ -183,11 +187,14 @@ class PiiPatternAndCloudScanTest extends TestCase
         Sanctum::actingAs($otherUser);
         ContentPiiScanner::flushCustomPatterns();
 
-        $this->assertCount(0, $this->getJson('/api/pii-patterns')->json('data'));
+        // Organisasi lain punya katalog bawaannya sendiri, tetapi TIDAK boleh
+        // memuat pola yang disusun organisasi pertama.
+        $keys = array_column($this->getJson('/api/pii-patterns')->json('data'), 'key');
+        $this->assertNotContains('kode_internal_abc', $keys);
 
-        // Nomor CIF tidak boleh terdeteksi di organisasi yang tidak punya polanya.
+        // Dan nilainya pun tidak boleh terdeteksi di sana.
         $result = ContentPiiScanner::analyzeColumnContent([
-            'CIF0012345678', 'CIF0087654321', 'CIF0011112222',
+            'ZX-88-QQ1234', 'ZX-77-QQ5678', 'ZX-11-QQ9012',
         ]);
         $this->assertNull($result);
     }

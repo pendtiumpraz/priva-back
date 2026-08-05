@@ -5,17 +5,23 @@ namespace App\Models;
 use App\Models\Concerns\BelongsToOrg;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Satu tepi silsilah antar aset data.
  *
- * Tanpa soft delete: tepi tidak diarsipkan melainkan dibangun ulang setiap
- * sinkronisasi. Yang dipertahankan hanyalah tepi bersumber manual dan impor,
- * karena keduanya tidak dapat diturunkan ulang.
+ * Soft delete berlaku, tetapi hanya bermakna untuk tepi bersumber MANUAL dan
+ * IMPOR — keduanya pengetahuan yang diketik orang dan tidak dapat diturunkan
+ * ulang, jadi salah klik tidak boleh menghilangkannya selamanya.
+ *
+ * Tepi turunan ('auto') justru dibuang permanen oleh
+ * DataCatalogService::rebuildLineage(): ia dibangun ulang utuh setiap
+ * sinkronisasi, sehingga mengarsipkannya hanya menggelembungkan keranjang
+ * sampah dan membuat updateOrCreate menabrak indeks unik dcl_unique_edge.
  */
 class DataCatalogLineage extends Model
 {
-    use BelongsToOrg, HasUuids;
+    use BelongsToOrg, HasUuids, SoftDeletes;
 
     protected $table = 'data_catalog_lineage';
 

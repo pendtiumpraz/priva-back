@@ -164,6 +164,36 @@ class DataCatalogController extends Controller
     }
 
     /**
+     * Kembalikan tepi silsilah yang dihapus.
+     *
+     * Paling menolong untuk tepi bersumber manual: ia pengetahuan yang diketik
+     * orang dan tidak dapat dibangun ulang oleh sinkronisasi.
+     */
+    public function restoreLineage(Request $request, string $id): JsonResponse
+    {
+        $edge = DataCatalogLineage::onlyTrashed()->findOrFail($id);
+        $edge->restore();
+
+        return response()->json(['message' => 'Tepi silsilah dikembalikan.', 'data' => $edge]);
+    }
+
+    public function destroyAsset(Request $request, string $id): JsonResponse
+    {
+        $asset = DataCatalogAsset::findOrFail($id);
+        $asset->delete();
+
+        return response()->json(['message' => 'Aset dihapus.']);
+    }
+
+    public function restoreAsset(Request $request, string $id): JsonResponse
+    {
+        $asset = DataCatalogAsset::onlyTrashed()->findOrFail($id);
+        $asset->restore();
+
+        return response()->json(['message' => 'Aset dikembalikan.', 'data' => $asset]);
+    }
+
+    /**
      * Impor aset dari katalog data pihak lain.
      *
      * Menerima bentuk umum ekspor Collibra, Alation, dan Purview dengan
