@@ -388,14 +388,46 @@ class DataCatalogService
     }
 
     /** @param  array<string, mixed>  $attrs */
+    /**
+     * Kolom klasifikasi yang menjadi milik manusia begitu ia menetapkannya.
+     *
+     * Sinkronisasi boleh memperbarui apa pun tentang STRUKTUR aset — nama,
+     * tipe, deskripsi, pemilik — tetapi tidak boleh menyentuh KEPUTUSAN
+     * tentang sensitivitasnya.
+     */
+    private const HUMAN_OWNED = ['classification', 'pdp_category', 'encryption_required'];
+
     private function upsert(string $orgId, array $attrs): void
     {
         $key = $attrs['asset_key'];
         unset($attrs['asset_key']);
 
-        DataCatalogAsset::withoutGlobalScope('org')->updateOrCreate(
-            ['org_id' => $orgId, 'asset_key' => $key],
-            $attrs
+        $existing = DataCatalogAsset::withoutGlobalScope('org')
+            ->where('org_id', $orgId)
+            ->where('asset_key', $key)
+            ->first();
+
+        // Klasifikasi yang ditetapkan manusia tidak pernah ditimpa sinkronisasi.
+        //
+        // Inilah yang membuat "satu pintu" berarti: organisasi menetapkan
+        // sensitivitas di sini, dan tarikan berikutnya dari Purview — atau
+        // pemindaian ulang — tidak mengembalikannya ke versi sistem luar.
+        // Tanpa penjagaan ini, keputusan itu hilang tanpa pesan galat apa pun;
+        // sebuah kolom hanya berubah diam-diam dari "spesifik" menjadi "umum".
+        if ($existing && $existing->manually_classified) {
+            foreach (self::HUMAN_OWNED as $field) {
+                unset($attrs[$field]);
+            }
+        }
+
+        if ($existing) {
+            $existing->fill($attrs)->save();
+
+            return;
+        }
+
+        DataCatalogAsset::withoutGlobalScope('org')->create(
+            array_merge($attrs, ['org_id' => $orgId, 'asset_key' => $key]),
         );
     }
 

@@ -123,14 +123,68 @@ class DataCatalogController extends Controller
             'description' => 'sometimes|nullable|string',
             'classification' => 'sometimes|nullable|string|max:32',
             'pdp_category' => 'sometimes|nullable|string|max:20',
+            // Sempat terlewat dari daftar ini, sehingga kewajiban enkripsi yang
+            // ditetapkan pengguna dibuang diam-diam oleh validator — tersimpan
+            // menurut layar, hilang menurut basis data.
+            'encryption_required' => 'sometimes|boolean',
             'steward' => 'sometimes|nullable|string|max:200',
             'owner_user_id' => 'sometimes|nullable|uuid',
             'tags' => 'sometimes|nullable|array',
             'is_active' => 'sometimes|boolean',
         ]);
+
+        // Menyentuh salah satu dari tiga kolom ini berarti manusia mengambil
+        // alih keputusan sensitivitasnya. Sejak itu, sinkronisasi — baik dari
+        // pemindaian sendiri maupun tarikan Purview — tidak boleh menimpanya
+        // lagi. Inilah yang membuat klasifikasi cukup ditetapkan di satu
+        // tempat, dan tetap bertahan di sana.
+        $claimsClassification = array_intersect_key(
+            $data,
+            array_flip(['classification', 'pdp_category', 'encryption_required']),
+        );
+
+        if ($claimsClassification !== []) {
+            $data['manually_classified'] = true;
+            $data['classified_by'] = $request->user()->id;
+            $data['classified_at'] = now();
+
+            AuditLog::log('data-discovery', $asset->id, 'asset_classified', [
+                'asset_key' => $asset->asset_key,
+                'from' => $asset->only(['classification', 'pdp_category', 'encryption_required']),
+                'to' => $claimsClassification,
+            ], 'catalog');
+        }
+
         $asset->update($data);
 
         return response()->json(['data' => $asset->fresh()]);
+    }
+
+    /**
+     * Kembalikan aset agar mengikuti klasifikasi sumbernya lagi.
+     *
+     * Kebalikan dari penyuntingan manual. Disediakan supaya keputusan yang
+     * terlanjur salah dapat dicabut — tanpa ini, satu-satunya jalan pulang
+     * adalah menyunting basis data secara langsung.
+     */
+    public function releaseClassification(Request $request, string $id): JsonResponse
+    {
+        $asset = DataCatalogAsset::findOrFail($id);
+
+        $asset->update([
+            'manually_classified' => false,
+            'classified_by' => null,
+            'classified_at' => null,
+        ]);
+
+        AuditLog::log('data-discovery', $asset->id, 'asset_classification_released', [
+            'asset_key' => $asset->asset_key,
+        ], 'catalog');
+
+        return response()->json([
+            'message' => 'Aset kembali mengikuti klasifikasi sumbernya pada sinkronisasi berikutnya.',
+            'data' => $asset->fresh(),
+        ]);
     }
 
     /** Tambah tepi silsilah secara manual. */

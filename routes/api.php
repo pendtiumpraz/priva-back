@@ -1090,6 +1090,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::put('/assets/{id}', [DataCatalogController::class, 'update'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
         Route::delete('/assets/{id}', [DataCatalogController::class, 'destroyAsset'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
         Route::post('/assets/{id}/restore', [DataCatalogController::class, 'restoreAsset'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
+        Route::post('/assets/{id}/release-classification', [DataCatalogController::class, 'releaseClassification'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
         Route::post('/lineage', [DataCatalogController::class, 'storeLineage'])->middleware('permission:data_discovery,write');
         Route::delete('/lineage/{id}', [DataCatalogController::class, 'destroyLineage'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');
         Route::post('/lineage/{id}/restore', [DataCatalogController::class, 'restoreLineage'])->middleware('permission:data_discovery,write')->where('id', '[0-9a-fA-F-]{36}');

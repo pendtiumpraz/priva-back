@@ -20,6 +20,7 @@ class DataCatalogAsset extends Model
         'org_id', 'asset_key', 'asset_type', 'name', 'qualified_name', 'description',
         'source', 'source_ref', 'information_system_id', 'owner_user_id', 'steward',
         'classification', 'pdp_category', 'encryption_required',
+        'manually_classified', 'classified_by', 'classified_at',
         'tags', 'metadata', 'is_active', 'last_synced_at',
     ];
 
@@ -27,6 +28,8 @@ class DataCatalogAsset extends Model
         'tags' => 'array',
         'metadata' => 'array',
         'encryption_required' => 'boolean',
+        'manually_classified' => 'boolean',
+        'classified_at' => 'datetime',
         'is_active' => 'boolean',
         'last_synced_at' => 'datetime',
     ];

@@ -229,4 +229,95 @@ class PurviewMetadataMappingTest extends TestCase
 
         $this->assertStringContainsString('Azure AD menolak kredensial', $res->json('message'));
     }
+
+    public function test_klasifikasi_manual_bertahan_melewati_sinkronisasi_ulang(): void
+    {
+        // Inti dari "satu pintu". Organisasi menetapkan sensitivitas di sini,
+        // lalu Purview ditarik ulang seminggu kemudian. Tanpa penjagaan,
+        // keputusan itu kembali ke versi Purview tanpa pesan galat apa pun —
+        // sebuah kolom hanya berubah diam-diam dari spesifik menjadi umum.
+        Http::fake(array_merge($this->fakeToken(), $this->fakeSearch()));
+
+        $this->postJson('/api/data-catalog/sync-purview', $this->creds())->assertOk();
+
+        // Purview menyebut kolom email sebagai data pribadi umum; organisasi
+        // menilainya spesifik karena konteks pemakaiannya.
+        $email = DataCatalogAsset::where('name', 'email')->firstOrFail();
+        $this->putJson("/api/data-catalog/assets/{$email->id}", [
+            'classification' => 'sensitive',
+            'pdp_category' => 'spesifik',
+            'encryption_required' => true,
+        ])->assertOk();
+
+        $this->assertTrue($email->fresh()->manually_classified);
+
+        // Tarik ulang dari Purview, yang tetap menyebutnya pii/umum.
+        $this->postJson('/api/data-catalog/sync-purview', $this->creds())->assertOk();
+
+        $after = $email->fresh();
+        $this->assertSame('sensitive', $after->classification, 'Klasifikasi manual tertimpa sinkronisasi.');
+        $this->assertSame('spesifik', $after->pdp_category);
+        $this->assertTrue($after->encryption_required);
+    }
+
+    public function test_struktur_tetap_diperbarui_walau_klasifikasi_dikunci(): void
+    {
+        // Penguncian hanya berlaku pada KEPUTUSAN sensitivitas. Nama, deskripsi,
+        // dan pemilik tetap harus mengikuti sumbernya — kalau ikut beku,
+        // katalog akan basi justru pada aset yang paling diperhatikan orang.
+        //
+        // Dua balasan berbeda disusun sebagai SEQUENCE, bukan dua panggilan
+        // Http::fake terpisah: memanggil fake dua kali tidak menggantikan stub
+        // yang pertama, dan stub pertama itulah yang tetap menang.
+        Http::fake(array_merge($this->fakeToken(), [
+            '*purview.azure.com*' => Http::sequence()
+                ->push([
+                    '@search.count' => 1,
+                    'value' => [[
+                        'id' => 'guid-table',
+                        'name' => 'customers',
+                        'entityType' => 'azure_sql_table',
+                        'qualifiedName' => 'mssql://srv01/COREBANK/dbo/customers',
+                        'description' => 'Master nasabah',
+                    ]],
+                ], 200)
+                ->push([
+                    '@search.count' => 1,
+                    'value' => [[
+                        'id' => 'guid-table',
+                        'name' => 'customers',
+                        'entityType' => 'azure_sql_table',
+                        'qualifiedName' => 'mssql://srv01/COREBANK/dbo/customers',
+                        'description' => 'Master nasabah — diperbarui',
+                    ]],
+                ], 200),
+        ]));
+
+        $this->postJson('/api/data-catalog/sync-purview', $this->creds())->assertOk();
+
+        $table = DataCatalogAsset::where('name', 'customers')->firstOrFail();
+        $this->putJson("/api/data-catalog/assets/{$table->id}", ['classification' => 'sensitive'])->assertOk();
+
+        $this->postJson('/api/data-catalog/sync-purview', $this->creds())->assertOk();
+
+        $after = $table->fresh();
+        $this->assertSame('Master nasabah — diperbarui', $after->description, 'Deskripsi seharusnya tetap mengikuti sumber.');
+        $this->assertSame('sensitive', $after->classification, 'Klasifikasi manual seharusnya tetap.');
+    }
+
+    public function test_penguncian_dapat_dicabut(): void
+    {
+        Http::fake(array_merge($this->fakeToken(), $this->fakeSearch()));
+        $this->postJson('/api/data-catalog/sync-purview', $this->creds())->assertOk();
+
+        $email = DataCatalogAsset::where('name', 'email')->firstOrFail();
+        $this->putJson("/api/data-catalog/assets/{$email->id}", ['classification' => 'sensitive'])->assertOk();
+        $this->postJson("/api/data-catalog/assets/{$email->id}/release-classification")->assertOk();
+
+        $this->assertFalse($email->fresh()->manually_classified);
+
+        $this->postJson('/api/data-catalog/sync-purview', $this->creds())->assertOk();
+
+        $this->assertSame('pii', $email->fresh()->classification, 'Setelah dicabut, aset harus mengikuti sumbernya lagi.');
+    }
 }
