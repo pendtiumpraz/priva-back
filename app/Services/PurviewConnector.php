@@ -119,7 +119,26 @@ class PurviewConnector
             }
         }
 
-        return ['rows' => $rows, 'truncated' => $truncated];
+        // Buang rujukan induk yang asetnya tidak ikut tertarik.
+        //
+        // qualifiedName bersifat hierarkis, jadi memotong ruas terakhir selalu
+        // menghasilkan "induk" — termasuk untuk aset teratas, yang induknya
+        // (mis. nama server) tidak pernah dikembalikan Purview sebagai aset.
+        // Dibiarkan, tiap sinkronisasi menambah tepi silsilah yang menunjuk
+        // aset tidak ada: peta terlihat punya simpul yang tidak bisa dibuka,
+        // dan tidak ada satu pun pesan galat yang menjelaskannya.
+        //
+        // Hal yang sama terjadi saat pencarian dipersempit kata kunci atau
+        // terpotong batas halaman — induknya nyata di Purview, tetapi tidak
+        // ada di tarikan ini.
+        $present = array_flip(array_column($rows, 'id'));
+        foreach ($rows as $i => $row) {
+            if (isset($row['parent_id']) && ! isset($present[$row['parent_id']])) {
+                unset($rows[$i]['parent_id']);
+            }
+        }
+
+        return ['rows' => array_values($rows), 'truncated' => $truncated];
     }
 
     /**
@@ -144,8 +163,22 @@ class PurviewConnector
         $lower = strtolower(implode(' ', $classifications));
         $mapped = null;
         if ($lower !== '') {
-            $sensitive = ['nik', 'ktp', 'passport', 'paspor', 'health', 'kesehatan', 'financial', 'credit card', 'bank account'];
-            $pii = ['person', 'personal', 'pii', 'email', 'phone', 'name', 'address'];
+            // Dicocokkan dengan nama klasifikasi bawaan Purview, yang berbentuk
+            // MICROSOFT.PERSONAL.NATIONAL_ID, MICROSOFT.FINANCIAL.CREDIT_CARD_NUMBER,
+            // MICROSOFT.GOVERNMENT.*, dan seterusnya.
+            //
+            // Urutannya menentukan: hampir SEMUA klasifikasi Purview memuat kata
+            // "personal", jadi bila daftar pii diperiksa lebih dulu, NIK pun akan
+            // turun menjadi sekadar data pribadi umum. Yang spesifik diperiksa
+            // duluan, dan itu penting karena Pasal 4 UU PDP membedakan keduanya
+            // beserta kewajiban yang mengikutinya.
+            $sensitive = [
+                'national', 'nik', 'ktp', 'passport', 'paspor', 'government', 'tax', 'npwp',
+                'health', 'healthcare', 'medical', 'kesehatan', 'biometric', 'genetic',
+                'financial', 'credit card', 'credit_card', 'bank account', 'bank_account', 'iban', 'swift',
+                'driver', 'sim', 'religio', 'ethnic', 'criminal', 'sexual', 'political',
+            ];
+            $pii = ['person', 'personal', 'pii', 'email', 'phone', 'name', 'address', 'contact', 'ip_address'];
             foreach ($sensitive as $needle) {
                 if (str_contains($lower, $needle)) { $mapped = 'sensitive'; break; }
             }
@@ -157,7 +190,17 @@ class PurviewConnector
         }
 
         return array_filter([
-            'id' => (string) ($item['id'] ?? $qualified),
+            // qualifiedName dipakai sebagai kunci, BUKAN GUID — dan ini bukan
+            // preferensi gaya. Induk sebuah aset diturunkan dari qualifiedName
+            // (lihat parentQualifiedName), jadi memakai GUID sebagai kunci
+            // membuat setiap tepi silsilah menunjuk kunci yang tidak pernah
+            // ada: hierarkinya terbentuk tetapi seluruhnya menggantung.
+            //
+            // qualifiedName juga lebih baik sebagai identitas: ia stabil,
+            // terbaca manusia, dan tetap sama bila aset dibuat ulang di
+            // Purview — sedangkan GUID berubah.
+            'id' => $qualified !== '' ? $qualified : (string) ($item['id'] ?? ''),
+            'purview_guid' => $item['id'] ?? null,
             'name' => (string) ($item['name'] ?? $qualified),
             'type' => $this->mapAssetType((string) ($item['entityType'] ?? '')),
             'qualified_name' => $qualified ?: null,
