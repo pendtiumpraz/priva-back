@@ -160,8 +160,38 @@ class PurviewMetadataMappingTest extends TestCase
         $this->postJson('/api/data-catalog/sync-purview', $this->creds())->assertOk();
 
         // NATIONAL_ID menyiratkan NIK — data pribadi spesifik, bukan sekadar pii.
-        $this->assertSame('sensitive', DataCatalogAsset::where('name', 'nik')->firstOrFail()->classification);
-        $this->assertSame('pii', DataCatalogAsset::where('name', 'email')->firstOrFail()->classification);
+        $nik = DataCatalogAsset::where('name', 'nik')->firstOrFail();
+        $email = DataCatalogAsset::where('name', 'email')->firstOrFail();
+
+        $this->assertSame('sensitive', $nik->classification);
+        $this->assertSame('pii', $email->classification);
+
+        // Kategori PDP dan kewajiban enkripsi harus ikut, bukan dibiarkan
+        // kosong. Aset hasil pemindaian sendiri selalu memilikinya; kalau aset
+        // impor tidak, laporan yang menghitung data spesifik akan melewatkan
+        // seluruh aset dari Purview tanpa memberi tanda ada yang terlewat.
+        $this->assertSame('spesifik', $nik->pdp_category);
+        $this->assertTrue($nik->encryption_required);
+
+        $this->assertSame('umum', $email->pdp_category);
+        $this->assertFalse($email->encryption_required);
+    }
+
+    public function test_aset_tanpa_klasifikasi_purview_tidak_ditebak(): void
+    {
+        // Purview hanya mengisi klasifikasi bila pemindaian klasifikasinya
+        // sudah dijalankan di sana. Bila belum, aset tetap ditarik tetapi
+        // TANPA sensitivitas — dan itu tidak boleh ditebak-tebak, karena
+        // tebakan yang salah pada arah ini menyembunyikan data pribadi.
+        Http::fake(array_merge($this->fakeToken(), $this->fakeSearch()));
+
+        $this->postJson('/api/data-catalog/sync-purview', $this->creds())->assertOk();
+
+        $table = DataCatalogAsset::where('name', 'customers')->firstOrFail();
+
+        $this->assertNull($table->classification);
+        $this->assertNull($table->pdp_category);
+        $this->assertFalse($table->encryption_required);
     }
 
     public function test_uji_sambungan_tidak_menulis_apa_pun(): void

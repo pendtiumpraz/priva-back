@@ -333,6 +333,8 @@ class DataCatalogService
             'qualified_name' => 'qualified_name',
             'description' => 'description',
             'classification' => 'classification',
+            'pdp_category' => 'pdp_category',
+            'encryption_required' => 'encryption_required',
             'steward' => 'steward',
             'parent_key' => 'parent_id',
         ], $mapping);
@@ -365,6 +367,8 @@ class DataCatalogService
                 'qualified_name' => $row[$map['qualified_name']] ?? null,
                 'description' => $row[$map['description']] ?? null,
                 'classification' => $row[$map['classification']] ?? null,
+                'pdp_category' => $row[$map['pdp_category']] ?? null,
+                'encryption_required' => (bool) ($row[$map['encryption_required']] ?? false),
                 'steward' => $row[$map['steward']] ?? null,
                 'source' => in_array($source, DataCatalogAsset::SOURCES, true) ? $source : 'custom',
                 'source_ref' => (string) $rawKey,

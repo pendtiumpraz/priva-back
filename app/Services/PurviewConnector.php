@@ -206,6 +206,20 @@ class PurviewConnector
             'qualified_name' => $qualified ?: null,
             'description' => $item['description'] ?? null,
             'classification' => $mapped,
+
+            // Kategori PDP dan kewajiban enkripsi diturunkan dari klasifikasi,
+            // bukan dibiarkan kosong. Aset hasil pemindaian sendiri selalu
+            // memilikinya; kalau aset impor tidak, katalog jadi memuat dua
+            // kelas warga — dan laporan yang menghitung data spesifik akan
+            // melewatkan seluruh aset yang datang dari Purview tanpa memberi
+            // tanda apa pun bahwa ada yang terlewat.
+            'pdp_category' => match ($mapped) {
+                'sensitive' => 'spesifik',
+                'pii' => 'umum',
+                default => null,
+            },
+            'encryption_required' => $mapped === 'sensitive' ? true : null,
+
             'steward' => $this->firstOwner($item),
             'parent_id' => $this->parentQualifiedName($qualified),
         ], fn ($v) => $v !== null && $v !== '');
