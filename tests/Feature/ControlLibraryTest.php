@@ -106,7 +106,7 @@ class ControlLibraryTest extends TestCase
         $this->getJson('/api/dpia/control-library');
 
         $created = $this->postJson('/api/dpia/control-library', [
-            'code' => 'BRI-01',
+            'code' => 'ORG-99',
             'category' => 'teknis',
             'title' => 'Tokenisasi nomor rekening',
             'control_type' => 'preventif',

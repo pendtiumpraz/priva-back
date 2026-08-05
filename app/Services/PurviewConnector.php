@@ -42,6 +42,148 @@ class PurviewConnector
         private string $accountName,
     ) {}
 
+    /**
+     * Uji sambungan untuk jalur Data Discovery.
+     *
+     * Bentuk keluarannya mengikuti konektor basis data, sehingga Purview dapat
+     * menjadi Sistem Informasi biasa: koneksinya disimpan, diuji, dipindai, dan
+     * kolomnya diklasifikasikan lewat alur yang sama persis dengan MySQL atau
+     * Oracle. Itu yang membuat klasifikasi benar-benar satu pintu — bukan
+     * layar tersendiri yang berdiri di samping alur utama.
+     *
+     * @param  array<string, mixed>  $config
+     */
+    public static function testConnectionFor(array $config): array
+    {
+        try {
+            return self::fromConfig($config)->testConnection();
+        } catch (\Throwable $e) {
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Tarik metadata Purview sebagai skema: dataset menjadi tabel, kolom
+     * menjadi kolom.
+     *
+     * Klasifikasi Purview dipakai bila ada. Bila tidak — dan itu lumrah, karena
+     * Purview hanya mengisinya setelah pemindaian klasifikasi dijalankan di
+     * sana — nama kolomnya tetap diperiksa PiiDetector. Lebih baik daripada
+     * membiarkan seluruh katalog masuk tanpa satu pun sinyal.
+     *
+     * @param  array<string, mixed>  $config
+     */
+    public static function scanSchemaFor(array $config): array
+    {
+        try {
+            $rows = self::fromConfig($config)->fetchAssets($config['keyword'] ?? null)['rows'];
+        } catch (\Throwable $e) {
+            return ['tables' => [], 'error' => $e->getMessage()];
+        }
+
+        if (! $rows) {
+            return ['tables' => [], 'error' => 'Purview tidak mengembalikan aset yang dapat dibaca peran ini.'];
+        }
+
+        $byKey = [];
+        foreach ($rows as $row) {
+            $byKey[$row['id']] = $row;
+        }
+
+        // Kolom dikelompokkan ke induknya. Kolom yang induknya tidak ikut
+        // tertarik dikumpulkan terpisah, bukan dibuang — aset tanpa wadah tetap
+        // perlu terlihat, karena justru itu yang menandakan tarikan tidak utuh.
+        $grouped = [];
+        $orphans = [];
+
+        foreach ($rows as $row) {
+            if (($row['type'] ?? '') !== 'field') {
+                continue;
+            }
+            $parent = $row['parent_id'] ?? null;
+            if ($parent && isset($byKey[$parent])) {
+                $grouped[$parent][] = $row;
+            } else {
+                $orphans[] = $row;
+            }
+        }
+
+        $tables = [];
+
+        foreach ($rows as $row) {
+            if (! in_array($row['type'] ?? '', ['dataset', 'file', 'report'], true)) {
+                continue;
+            }
+
+            $tables[] = [
+                'name' => (string) ($row['qualified_name'] ?? $row['name']),
+                'columns' => array_map(fn ($c) => self::columnShape($c), $grouped[$row['id']] ?? []),
+                'row_count' => 0,
+                'size_mb' => 0,
+            ];
+        }
+
+        if ($orphans) {
+            $tables[] = [
+                'name' => '(kolom tanpa induk di Purview)',
+                'columns' => array_map(fn ($c) => self::columnShape($c), $orphans),
+                'row_count' => 0,
+                'size_mb' => 0,
+            ];
+        }
+
+        return ['tables' => $tables, 'engine' => 'real_purview'];
+    }
+
+    /**
+     * Ubah satu aset kolom Purview menjadi bentuk kolom baku.
+     *
+     * @param  array<string, mixed>  $asset
+     * @return array<string, mixed>
+     */
+    private static function columnShape(array $asset): array
+    {
+        $name = (string) ($asset['name'] ?? '');
+        $classification = $asset['classification'] ?? null;
+
+        if ($classification) {
+            $result = [
+                'is_pii' => true,
+                'pdp_category' => $asset['pdp_category'] ?? ($classification === 'sensitive' ? 'spesifik' : 'umum'),
+                'classification' => $classification,
+                'encryption_required' => (bool) ($asset['encryption_required'] ?? ($classification === 'sensitive')),
+                'reason' => 'Klasifikasi dari Microsoft Purview.',
+            ];
+        } else {
+            // Purview belum mengklasifikasi kolom ini. Nama kolomnya tetap
+            // diperiksa — sinyal lemah lebih berguna daripada tidak ada sinyal.
+            $result = PiiDetector::analyze($name, 'unknown');
+            if ($result['is_pii']) {
+                $result['reason'] = ($result['reason'] ?? '').' (dikenali dari nama kolom; Purview belum mengklasifikasinya)';
+            }
+        }
+
+        return [
+            'name' => $name,
+            'alias' => null,
+            'type' => 'unknown',
+            'type_length' => null,
+            'nullable' => true,
+            'pii_detected' => $result['is_pii'],
+            'pdp_category' => $result['pdp_category'],
+            'classification' => $result['classification'],
+            'encryption_required' => $result['encryption_required'],
+            'encrypted' => false,
+            'pii_reason' => $result['reason'],
+            // Purview menyimpan metadata, bukan nilainya — jadi tidak ada
+            // sampel yang dapat dipakai menilai apakah isinya terenkripsi.
+            'protection_state' => 'unknown',
+            'protection_reason' => 'Purview tidak menyimpan nilai data, jadi status proteksi tidak dapat dinilai dari sini.',
+            'manually_classified' => false,
+            'shadow_detected' => false,
+        ];
+    }
+
     /** @param array<string, mixed> $config */
     public static function fromConfig(array $config): self
     {
