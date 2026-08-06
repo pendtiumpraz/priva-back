@@ -94,6 +94,7 @@ use App\Http\Controllers\Api\Root\EmbeddingModelController;
 use App\Http\Controllers\Api\Root\QaCenterController;
 use App\Http\Controllers\Api\RootDashboardController;
 use App\Http\Controllers\Api\RopaApprovalController;
+use App\Http\Controllers\Api\RopaGraphController;
 use App\Http\Controllers\Api\RopaCsvImportController;
 use App\Http\Controllers\Api\RopaLinkController;
 use App\Http\Controllers\Api\RopaTemplateController;
@@ -587,6 +588,8 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // RoPA — DPO Approval Workflow
     // =============================================
     Route::prefix('ropa/{id}')->group(function () {
+        // Peta koneksi RoPA ke seluruh modul terkait (read-only, gaya blueprint).
+        Route::get('/graph', [RopaGraphController::class, 'show'])->middleware('permission:ropa,read');
         Route::post('/submit', [RopaApprovalController::class, 'submit'])->middleware('permission:ropa,write');
         Route::post('/approve', [RopaApprovalController::class, 'approve'])->middleware('permission:ropa,write');
         Route::post('/reject', [RopaApprovalController::class, 'reject'])->middleware('permission:ropa,write');
