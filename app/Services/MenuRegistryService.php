@@ -65,6 +65,19 @@ class MenuRegistryService
     }
 
     /**
+     * Peta lengkap menu_key → module id.
+     *
+     * Diekspos supaya EntitlementService dapat membalikkannya (module → menu)
+     * tanpa menyalin peta ini, yang akan membuat keduanya bergeser diam-diam.
+     *
+     * @return array<string, string>
+     */
+    public static function permissionMenuMap(): array
+    {
+        return self::PERMISSION_MENU_MAP;
+    }
+
+    /**
      * Does a tenant role's permission list grant access to a module? Accepts
      * '*' (all), bare 'module', or 'module:read|write|approve'. Hyphens and
      * underscores are treated as equivalent (e.g. data-discovery == data_discovery).

@@ -49,6 +49,16 @@ class ModuleCrudController extends Controller
 
         $moduleId = $this->permissionModuleId($module);
 
+        // Gerbang komersial lebih dulu — cermin dari CheckPermission middleware.
+        // Route universal ini tidak melewati middleware itu, jadi tanpa
+        // penjagaan di sini modul yang dicabut tetap dapat diakses lewat
+        // /api/m/{module}.
+        if (! app(\App\Services\EntitlementService::class)->allowsModule($user, $moduleId)) {
+            return response()->json([
+                'message' => 'Modul ini tidak aktif untuk organisasi Anda. Hubungi administrator platform.',
+            ], 403);
+        }
+
         // Decision logic centralized in PermissionService (shared with the
         // CheckPermission middleware so the two can't drift out of sync).
         if (app(\App\Services\PermissionService::class)->allows($user, $moduleId, $action)) {

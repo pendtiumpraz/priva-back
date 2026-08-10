@@ -15,6 +15,11 @@ class AppServiceProvider extends ServiceProvider
         // Read by BelongsToOrg trait's global scope.
         $this->app->singleton(\App\Services\CurrentOrgContext::class);
 
+        // Scoped: satu instance per request, supaya cache menu_id yang dicabut
+        // dipakai bersama oleh CheckPermission, ModuleCrudController, dan
+        // middleware entitlement tanpa mengulang query per pemeriksaan.
+        $this->app->scoped(\App\Services\EntitlementService::class);
+
         // Tenancy services — singletons because they hold per-request
         // connection caches that must be shared across the request.
         $this->app->singleton(\App\Services\TenantDb\TenantDatabaseService::class);

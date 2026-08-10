@@ -6,6 +6,7 @@ use App\Http\Middleware\AuthenticateDsrApiKey;
 use App\Http\Middleware\CheckPermission;
 use App\Http\Middleware\EnforceTenantReadOnly;
 use App\Http\Middleware\EnsureLmsEntitled;
+use App\Http\Middleware\EnsureModuleEntitled;
 use App\Http\Middleware\InitializeTenantDatabase;
 use App\Http\Middleware\PublicAssessmentTokenMiddleware;
 use App\Http\Middleware\PublicHoldingAssessmentTokenMiddleware;
@@ -49,6 +50,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'ai-throttle' => AiCallRateLimit::class,
             // LMS (DPO Academy) — gate routes behind tenant LMS entitlement.
             'lms.entitled' => EnsureLmsEntitled::class,
+            'entitlement' => EnsureModuleEntitled::class,
         ]);
 
         // Stamp security headers (HSTS, frame-options, referrer-policy, dst)
