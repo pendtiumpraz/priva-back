@@ -10,10 +10,11 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class CrossBorderTransfer extends Model
 {
-    use HasFactory, HasUuids, SoftDeletes, BelongsToOrg;
+    use BelongsToOrg, HasFactory, HasUuids, SoftDeletes;
 
     /** Volume bands — drives risk_data_leak metric in TIA. */
     public const VOLUME_BANDS = ['small', 'medium', 'large', 'mass'];
+
     public const VOLUME_BAND_LABELS = [
         'small' => 'Kecil (<1.000 record)',
         'medium' => 'Sedang (1k–100k record)',
@@ -22,6 +23,7 @@ class CrossBorderTransfer extends Model
     ];
 
     public const FREQUENCIES = ['one_time', 'monthly', 'weekly', 'daily', 'realtime'];
+
     public const FREQUENCY_LABELS = [
         'one_time' => 'Sekali (one-time)',
         'monthly' => 'Bulanan',
@@ -31,6 +33,7 @@ class CrossBorderTransfer extends Model
     ];
 
     public const SENSITIVITIES = ['general', 'personal', 'sensitive_specific', 'extra_sensitive'];
+
     public const SENSITIVITY_LABELS = [
         'general' => 'Umum (non-PDP)',
         'personal' => 'Pribadi (UU PDP Pasal 4 ayat 1)',
@@ -39,6 +42,7 @@ class CrossBorderTransfer extends Model
     ];
 
     public const MECHANISMS = ['api', 'batch_export', 'replication', 'manual_email', 'cloud_sync', 'file_share'];
+
     public const MECHANISM_LABELS = [
         'api' => 'API / Webhook',
         'batch_export' => 'Batch Export (file periodik)',
@@ -70,12 +74,16 @@ class CrossBorderTransfer extends Model
         'retention_period_days',
         'recipient_dpo_name', 'recipient_dpo_email',
         'linked_ropa_id',
+        // PP 33/2026 Pasal 162 & 169(2)
+        'transfer_sector', 'storage_location', 'onward_transfer_allowed',
+        'onward_transfer_detail', 'accountability_doc',
     ];
 
     protected $casts = [
         'data_categories' => 'array',
         'safeguards' => 'array',
         'tia_answers' => 'array',
+        'onward_transfer_allowed' => 'boolean',
         'risk_score' => 'integer',
         'approved_at' => 'date',
         'review_due_at' => 'date',

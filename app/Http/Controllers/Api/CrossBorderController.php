@@ -382,6 +382,13 @@ class CrossBorderController extends Controller
             'recipient_dpo_name' => "{$opt}|string|max:255",
             'recipient_dpo_email' => "{$opt}|email|max:255",
             'linked_ropa_id' => "{$opt}|uuid|exists:ropas,id",
+
+            // PP 33/2026 Pasal 162 & 169(2)
+            'transfer_sector' => "{$opt}|string|max:150",
+            'storage_location' => "{$opt}|string|max:200",
+            'onward_transfer_allowed' => "{$opt}|boolean",
+            'onward_transfer_detail' => "{$opt}|string|max:2000",
+            'accountability_doc' => "{$opt}|string|max:2000",
         ];
     }
 
