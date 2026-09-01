@@ -1,8 +1,10 @@
 <?php
+
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Services\RegulationService;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
 
 class KnowledgeBaseSection extends Model
 {
@@ -10,7 +12,7 @@ class KnowledgeBaseSection extends Model
 
     protected $fillable = [
         'org_id', 'module_key', 'title', 'content', 'summary', 'keywords',
-        'feature_tags', 'category', 'sort_order', 'is_active',
+        'feature_tags', 'category', 'regulation_code', 'sort_order', 'is_active',
     ];
 
     protected $casts = [
@@ -32,10 +34,11 @@ class KnowledgeBaseSection extends Model
      */
     public function scopeVisibleTo($query, ?string $orgId)
     {
-        if (!$orgId) {
+        if (! $orgId) {
             // Fail-closed: cuma shared platform-level KB yang visible
             return $query->whereNull('org_id');
         }
+
         return $query->where(function ($q) use ($orgId) {
             $q->where('org_id', $orgId)->orWhereNull('org_id');
         });
@@ -47,11 +50,11 @@ class KnowledgeBaseSection extends Model
      * $orgId is provided, tenant-owned sections are considered alongside
      * shared ones and tenant-owned entries beat shared ones on tie-break.
      *
-     * @param  string       $query       Free-text user query
-     * @param  string|null  $orgId       Tenant scope (null = system-only)
+     * @param  string  $query  Free-text user query
+     * @param  string|null  $orgId  Tenant scope (null = system-only)
      * @param  string|null  $featureTag  Filter to sections tagged for this AI feature
      *                                   (e.g. 'ropa_autofill', 'contract_review')
-     * @param  int          $limit       Max sections returned (default 3)
+     * @param  int  $limit  Max sections returned (default 3)
      */
     public static function findRelevant(
         string $query,
@@ -60,6 +63,14 @@ class KnowledgeBaseSection extends Model
         int $limit = 3
     ): array {
         $q = self::where('is_active', true)->visibleTo($orgId)->orderBy('sort_order');
+
+        // Gating regulasi add-on untuk grounding AI: hanya konten tanpa kode
+        // (umum) atau regulasi core/enabled tenant. Fail-closed saat orgId null
+        // (hanya core yang lolos). UU PDP + PP 33 = core → selalu tersedia.
+        $enabledRegs = app(RegulationService::class)->enabledCodesFor($orgId);
+        $q->where(function ($sub) use ($enabledRegs) {
+            $sub->whereNull('regulation_code')->orWhereIn('regulation_code', $enabledRegs);
+        });
 
         // Feature-tag filter — only consider sections relevant to this AI feature
         if ($featureTag) {
@@ -82,7 +93,7 @@ class KnowledgeBaseSection extends Model
             }
 
             foreach ($keywords as $keyword) {
-                if (!empty($keyword) && str_contains($query, $keyword)) {
+                if (! empty($keyword) && str_contains($query, $keyword)) {
                     $score += 3;
                 }
             }
@@ -92,7 +103,9 @@ class KnowledgeBaseSection extends Model
             }
 
             // Tenant-owned entries get a small boost so they override shared content.
-            if ($section->org_id) $score += 1;
+            if ($section->org_id) {
+                $score += 1;
+            }
 
             // Feature-tagged sections get a boost when filter is active
             if ($featureTag && str_contains((string) $section->feature_tags, $featureTag)) {
@@ -102,15 +115,15 @@ class KnowledgeBaseSection extends Model
             $scored[] = ['section' => $section, 'score' => $score];
         }
 
-        usort($scored, fn($a, $b) => $b['score'] - $a['score']);
-        $relevant = array_filter($scored, fn($s) => $s['score'] > 0);
+        usort($scored, fn ($a, $b) => $b['score'] - $a['score']);
+        $relevant = array_filter($scored, fn ($s) => $s['score'] > 0);
         $relevant = array_slice($relevant, 0, $limit);
 
         if (count($relevant) === 0) {
             $relevant = array_slice($scored, 0, min(2, $limit));
         }
 
-        return array_map(fn($s) => $s['section'], $relevant);
+        return array_map(fn ($s) => $s['section'], $relevant);
     }
 
     /**
@@ -133,18 +146,21 @@ class KnowledgeBaseSection extends Model
         int $limit = 3
     ): string {
         $sections = self::findRelevant($query, $orgId, $featureTag, $limit);
-        if (empty($sections)) return '';
+        if (empty($sections)) {
+            return '';
+        }
 
         $out = "## Knowledge Base Context (grounded from Privasimu KB)\n\n";
         foreach ($sections as $s) {
             $out .= "### {$s->title}\n\n";
             $body = match ($mode) {
                 'summary' => (string) ($s->summary ?: $s->content),
-                'full'    => (string) $s->content,
-                default   => (string) ($s->content ?: $s->summary),
+                'full' => (string) $s->content,
+                default => (string) ($s->content ?: $s->summary),
             };
-            $out .= trim($body) . "\n\n---\n\n";
+            $out .= trim($body)."\n\n---\n\n";
         }
+
         return $out;
     }
 }

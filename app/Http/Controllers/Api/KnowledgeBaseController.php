@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\KnowledgeBaseSection;
+use App\Services\RegulationService;
 use Illuminate\Http\Request;
 
 /**
@@ -20,7 +21,7 @@ class KnowledgeBaseController extends Controller
         $user = $request->user();
         $q = KnowledgeBaseSection::query()->orderBy('sort_order');
 
-        if (in_array($user->role, ['root','superadmin'], true)) {
+        if (in_array($user->role, ['root', 'superadmin'], true)) {
             // Superadmin melihat shared rules + bisa preview per-tenant via ?org_id=.
             if ($request->filled('org_id')) {
                 $q->where('org_id', $request->org_id);
@@ -31,6 +32,14 @@ class KnowledgeBaseController extends Controller
         } else {
             // Tenant admin: shared + milik tenant sendiri.
             $q->visibleTo($user->org_id);
+
+            // Gating regulasi add-on: section ber-regulation_code hanya tampil
+            // bila regulasinya core atau di-enable tenant. Section tanpa kode
+            // (konten umum) selalu tampil. UU PDP + PP 33 = core → selalu lolos.
+            $enabled = app(RegulationService::class)->enabledCodesFor($user->org_id);
+            $q->where(function ($sub) use ($enabled) {
+                $sub->whereNull('regulation_code')->orWhereIn('regulation_code', $enabled);
+            });
         }
 
         return response()->json(['data' => $q->get()]);
@@ -52,17 +61,20 @@ class KnowledgeBaseController extends Controller
         // Role-locked ownership:
         //   Superadmin → selalu buat shared rule (org_id = null)
         //   Tenant     → selalu org_id = user.org_id
-        $orgId = in_array($user->role, ['root','superadmin'], true) ? null : $user->org_id;
+        $orgId = in_array($user->role, ['root', 'superadmin'], true) ? null : $user->org_id;
 
-        if (!$orgId && ! in_array($user->role, ['root','superadmin'], true)) {
+        if (! $orgId && ! in_array($user->role, ['root', 'superadmin'], true)) {
             return response()->json(['message' => 'User tanpa org_id tidak bisa membuat section'], 422);
         }
 
         $exists = KnowledgeBaseSection::query()
             ->where('module_key', $data['module_key'])
             ->where(function ($q) use ($orgId) {
-                if ($orgId) $q->where('org_id', $orgId);
-                else $q->whereNull('org_id');
+                if ($orgId) {
+                    $q->where('org_id', $orgId);
+                } else {
+                    $q->whereNull('org_id');
+                }
             })
             ->exists();
         if ($exists) {
@@ -85,7 +97,7 @@ class KnowledgeBaseController extends Controller
         $section = KnowledgeBaseSection::findOrFail($id);
 
         // Superadmin hanya boleh edit shared rule (org_id = null).
-        if (in_array($user->role, ['root','superadmin'], true)) {
+        if (in_array($user->role, ['root', 'superadmin'], true)) {
             if ($section->org_id !== null) {
                 return response()->json(['message' => 'Superadmin hanya boleh mengelola shared rule. Minta tenant admin untuk edit KB tenant-nya sendiri.'], 403);
             }
@@ -105,6 +117,7 @@ class KnowledgeBaseController extends Controller
         ]);
 
         $section->update($data);
+
         return response()->json(['message' => 'Section diperbarui', 'data' => $section->fresh()]);
     }
 
@@ -113,7 +126,7 @@ class KnowledgeBaseController extends Controller
         $user = $request->user();
         $section = KnowledgeBaseSection::findOrFail($id);
 
-        if (in_array($user->role, ['root','superadmin'], true)) {
+        if (in_array($user->role, ['root', 'superadmin'], true)) {
             if ($section->org_id !== null) {
                 return response()->json(['message' => 'Superadmin hanya boleh menghapus shared rule.'], 403);
             }
@@ -124,6 +137,7 @@ class KnowledgeBaseController extends Controller
         }
 
         $section->delete();
+
         return response()->json(['message' => 'Section dihapus']);
     }
 }

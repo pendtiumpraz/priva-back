@@ -88,6 +88,7 @@ use App\Http\Controllers\Api\PraAsesmenPublikController;
 use App\Http\Controllers\Api\ProcessingCategoryController;
 use App\Http\Controllers\Api\PublicLandingController;
 use App\Http\Controllers\Api\RaciTemplateController;
+use App\Http\Controllers\Api\RegulationController;
 use App\Http\Controllers\Api\RetentionPolicyController;
 use App\Http\Controllers\Api\RiskTreatmentPlanController;
 use App\Http\Controllers\Api\Root\DueDiligenceController;
@@ -539,6 +540,13 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // Terapkan kontrol dari pustaka ke sebuah DPIA sebagai item RTP.
     Route::post('/dpia/{id}/apply-controls', [ControlLibraryController::class, 'applyToDpia'])
         ->middleware('permission:dpia,write')->where('id', '[0-9a-fA-F-]{36}');
+
+    // =============================================
+    // Regulasi — add-on opsional per tenant (UU PDP + PP 33 core, selalu aktif)
+    // =============================================
+    Route::get('/regulation-addons', [RegulationController::class, 'index'])->middleware('permission:settings,read');
+    Route::put('/regulation-addons/{code}', [RegulationController::class, 'update'])
+        ->middleware('permission:settings,write')->where('code', '[a-z0-9_]+');
 
     // =============================================
     // PPDP — Penunjukan Pejabat Pelindungan Data Pribadi (PP 33/2026 Pasal 142-143)

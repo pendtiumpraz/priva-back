@@ -38,12 +38,14 @@ class UuPdpPasalSeeder extends Seeder
         $path = database_path('seeders/data/uu_pdp_pasal.json');
         if (! is_file($path)) {
             $this->command->error("File data tidak ditemukan: {$path}");
+
             return;
         }
 
         $data = json_decode(file_get_contents($path), true);
         if (! is_array($data) || empty($data['bab'])) {
             $this->command->error('Format JSON UU PDP tidak valid.');
+
             return;
         }
 
@@ -78,6 +80,7 @@ class UuPdpPasalSeeder extends Seeder
                 'org_id' => null,
                 'title' => 'UU PDP No. 27/2022 — Struktur Lengkap (16 Bab, 76 Pasal)',
                 'category' => 'regulation',
+                'regulation_code' => 'uu_pdp',
                 'feature_tags' => 'chat,policy_review,remediation',
                 'keywords' => 'uu pdp,uu 27 2022,pelindungan data pribadi,struktur,bab,pasal,daftar,index,seluruh pasal,76 pasal',
                 'summary' => 'Indeks lengkap UU PDP No. 27 Tahun 2022 — 16 Bab dan 76 Pasal. Tiap pasal tersedia sebagai entry KB terpisah (uupdp_pasal_N).',
@@ -107,8 +110,8 @@ class UuPdpPasalSeeder extends Seeder
                     $content .= "_BAB {$bab['nomor']} — {$bab['judul']}_\n\n";
                     $content .= "**Topik:** {$topik}\n\n";
                     $content .= "> **[Teks verbatim belum tersedia di repo]** — Bunyi resmi Pasal {$no} ".
-                                "belum disalin ke knowledge base. Jangan mengarang teks pasal. ".
-                                "Salin teks resmi dari naskah UU 27/2022";
+                                'belum disalin ke knowledge base. Jangan mengarang teks pasal. '.
+                                'Salin teks resmi dari naskah UU 27/2022';
                     if ($officialUrl) {
                         $content .= " ({$officialUrl})";
                     }
@@ -123,6 +126,7 @@ class UuPdpPasalSeeder extends Seeder
                         'org_id' => null,
                         'title' => $title,
                         'category' => 'regulation',
+                        'regulation_code' => 'uu_pdp',
                         'feature_tags' => 'chat,policy_review,remediation,ropa_autofill,dpia_autofill',
                         'keywords' => $this->keywords($no, $bab, $topik),
                         'summary' => "UU PDP Pasal {$no} (BAB {$bab['nomor']} — {$bab['judul']}): {$topik}",
@@ -135,7 +139,7 @@ class UuPdpPasalSeeder extends Seeder
             }
         }
 
-        $this->command->info("✅ UU PDP KB: {$created} entry ditanam (1 indeks + ".($created - 1)." pasal).");
+        $this->command->info("✅ UU PDP KB: {$created} entry ditanam (1 indeks + ".($created - 1).' pasal).');
         $this->command->info("   • {$withVerbatim} pasal dengan teks verbatim, {$skeletonOnly} pasal skeleton (teks verbatim belum di-supply).");
         if ($skeletonOnly > 0) {
             $this->command->warn("   ⚠ {$skeletonOnly} pasal masih SKELETON. Isi field \"content\" di database/seeders/data/uu_pdp_pasal.json dengan teks resmi UU 27/2022, lalu seed ulang.");
@@ -147,6 +151,7 @@ class UuPdpPasalSeeder extends Seeder
         // Ambil frasa pertama yang ringkas untuk judul.
         $first = preg_split('/[\(\—\-,;]/u', $topik)[0] ?? $topik;
         $first = trim($first);
+
         return mb_strlen($first) > 80 ? mb_substr($first, 0, 77).'…' : $first;
     }
 
@@ -155,9 +160,10 @@ class UuPdpPasalSeeder extends Seeder
         $base = "uu pdp,pdp,uu 27 2022,pelindungan data pribadi,pasal {$no},pasal{$no},bab {$bab['nomor']},{$bab['judul']}";
         // Tambah kata kunci topik (huruf kecil) yang signifikan.
         $words = preg_split('/[^\p{L}0-9]+/u', mb_strtolower($topik), -1, PREG_SPLIT_NO_EMPTY);
-        $stop = ['dan','atau','yang','data','pribadi','dalam','untuk','dari','pada','tidak','dengan','oleh','ke','di','hal','terhadap'];
+        $stop = ['dan', 'atau', 'yang', 'data', 'pribadi', 'dalam', 'untuk', 'dari', 'pada', 'tidak', 'dengan', 'oleh', 'ke', 'di', 'hal', 'terhadap'];
         $keep = array_values(array_unique(array_filter($words, fn ($w) => mb_strlen($w) > 3 && ! in_array($w, $stop, true))));
         $keep = array_slice($keep, 0, 12);
+
         return $keep ? $base.','.implode(',', $keep) : $base;
     }
 }

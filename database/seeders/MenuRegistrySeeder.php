@@ -69,6 +69,7 @@ class MenuRegistrySeeder extends Seeder
             ['menu_key' => 'tia', 'label' => 'TIA', 'href' => '/tia', 'icon' => 'Globe', 'section' => 'PDP Modules', 'sort' => 140, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'maturity', 'label' => 'Maturity Assessment', 'href' => '/maturity', 'icon' => 'BarChart3', 'section' => 'PDP Modules', 'sort' => 150, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'ppdp', 'label' => 'PPDP / DPO', 'href' => '/ppdp', 'icon' => 'UserCog', 'section' => 'PDP Modules', 'sort' => 155, 'roles' => array_merge(['root'], self::COMPLIANCE)],
+            ['menu_key' => 'regulations', 'label' => 'Regulasi', 'href' => '/regulations', 'icon' => 'Scale', 'section' => 'PDP Modules', 'sort' => 156, 'roles' => ['admin', 'dpo']],
             ['menu_key' => 'policy-review', 'label' => 'Policy Review', 'href' => '/policy-review', 'icon' => 'BookCheck', 'section' => 'PDP Modules', 'sort' => 160, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'policy-generator', 'label' => 'Policy Notice Generator', 'href' => '/policy-generator', 'icon' => 'FilePlus2', 'section' => 'PDP Modules', 'sort' => 165, 'roles' => array_merge(['root'], self::COMPLIANCE)],
             ['menu_key' => 'risk-treatment-plan', 'label' => 'Risk Treatment Plan', 'href' => '/risk-treatment-plan', 'icon' => 'ShieldAlert', 'section' => 'PDP Modules', 'sort' => 170, 'roles' => array_merge(['root'], self::COMPLIANCE)],
