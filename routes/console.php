@@ -2,39 +2,42 @@
 
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-\Illuminate\Support\Facades\Schedule::command('privasimu:scan-scheduled-systems')->daily();
-\Illuminate\Support\Facades\Schedule::command('entitlements:cleanup-expired')->dailyAt('02:00');
-\Illuminate\Support\Facades\Schedule::command('tenants:cleanup-archived')->dailyAt('03:00');
-\Illuminate\Support\Facades\Schedule::command('consent:recount')->everyFiveMinutes()->withoutOverlapping();
-\Illuminate\Support\Facades\Schedule::command('notifications:scan-license-expiry')->dailyAt('06:00');
-\Illuminate\Support\Facades\Schedule::command('notifications:scan-all')->dailyAt('07:00');
-\Illuminate\Support\Facades\Schedule::command('notifications:digest daily')->dailyAt('08:00');
-\Illuminate\Support\Facades\Schedule::command('notifications:digest weekly')->weeklyOn(1, '08:00'); // Monday 08:00
-\Illuminate\Support\Facades\Schedule::command('dsr:scan-sla')->hourly()->withoutOverlapping();
+Schedule::command('privasimu:scan-scheduled-systems')->daily();
+Schedule::command('entitlements:cleanup-expired')->dailyAt('02:00');
+Schedule::command('tenants:cleanup-archived')->dailyAt('03:00');
+Schedule::command('consent:recount')->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('notifications:scan-license-expiry')->dailyAt('06:00');
+Schedule::command('notifications:scan-all')->dailyAt('07:00');
+Schedule::command('notifications:digest daily')->dailyAt('08:00');
+Schedule::command('notifications:digest weekly')->weeklyOn(1, '08:00'); // Monday 08:00
+Schedule::command('dsr:scan-sla')->hourly()->withoutOverlapping();
 // RTP — reminder deadline mitigasi (jatuh tempo <=7 hari + overdue). Anti-spam 20 jam.
-\Illuminate\Support\Facades\Schedule::command('notifications:scan-rtp-deadlines')->dailyAt('06:15')->withoutOverlapping();
-\Illuminate\Support\Facades\Schedule::command('consent:prune-cookie-logs')->dailyAt('02:30');
+Schedule::command('notifications:scan-rtp-deadlines')->dailyAt('06:15')->withoutOverlapping();
+// RoPA — masa retensi (PP 33 Pasal 80): reminder jatuh tempo <=30 hari + overdue. Anti-spam 20 jam.
+Schedule::command('notifications:scan-ropa-retention')->dailyAt('06:30')->withoutOverlapping();
+Schedule::command('consent:prune-cookie-logs')->dailyAt('02:30');
 // Privacy Notice — terbitkan versi yang penjadwalannya sudah jatuh tempo.
 // Tiap 15 menit: penjadwalan naskah hukum lazim ditetapkan pada jam bulat,
 // dan menunggu sampai sehari kemudian bukan pilihan yang dapat diterima.
 // Phase 3a — daily privacy posture snapshot per org. Drives trend chart.
-\Illuminate\Support\Facades\Schedule::command('privasimu:posture-snapshot')->dailyAt('05:00')->withoutOverlapping();
+Schedule::command('privasimu:posture-snapshot')->dailyAt('05:00')->withoutOverlapping();
 // Audit log retention — prune entries lebih lama dari security.audit_log_retention_days.
 // No-op kalau setting = 0 (keep forever, default).
-\Illuminate\Support\Facades\Schedule::command('audit-logs:prune')->dailyAt('04:00');
+Schedule::command('audit-logs:prune')->dailyAt('04:00');
 
 // Audit log hash-chain verify — daily integrity check.
 // Kalau chain disabled, command no-op (langsung exit). Kalau enabled +
 // chain rusak, log warning level (akan muncul di alert dashboard).
-\Illuminate\Support\Facades\Schedule::command('audit-logs:chain verify')->dailyAt('04:30');
+Schedule::command('audit-logs:chain verify')->dailyAt('04:30');
 
 // Sanctum — prune expired personal access tokens (24+ jam past expiry).
 // SanctumTokenRefresh tidak delete old token saat rotate (cegah race condition
 // dengan in-flight parallel requests), jadi cleanup happens here. Built-in
 // Sanctum command pakai sanctum.expiration config (10080 menit = 7 hari).
-\Illuminate\Support\Facades\Schedule::command('sanctum:prune-expired --hours=24')->dailyAt('05:30');
+Schedule::command('sanctum:prune-expired --hours=24')->dailyAt('05:30');

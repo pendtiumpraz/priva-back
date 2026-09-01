@@ -32,6 +32,8 @@ class DashboardWidgetRegistry
             'ropa.by_status' => ['label' => 'RoPA menurut status', 'permission' => 'ropa', 'type' => 'breakdown'],
             'ropa.by_division' => ['label' => 'RoPA menurut divisi', 'permission' => 'ropa', 'type' => 'breakdown'],
             'ropa.high_risk' => ['label' => 'RoPA berisiko tinggi', 'permission' => 'ropa', 'type' => 'stat'],
+            'ropa.retention_overdue' => ['label' => 'RoPA masa retensi terlampaui', 'permission' => 'ropa', 'type' => 'stat'],
+            'ropa.retention_due_soon' => ['label' => 'RoPA retensi jatuh tempo <=30 hari', 'permission' => 'ropa', 'type' => 'stat'],
             'dpia.total' => ['label' => 'Total DPIA', 'permission' => 'dpia', 'type' => 'stat'],
             'dpia.by_status' => ['label' => 'DPIA menurut status', 'permission' => 'dpia', 'type' => 'breakdown'],
             'rtp.by_status' => ['label' => 'Rencana penanganan risiko menurut status', 'permission' => 'dpia', 'type' => 'breakdown'],
@@ -60,6 +62,8 @@ class DashboardWidgetRegistry
         return match ($source) {
             'ropa.total' => ['value' => Ropa::count()],
             'ropa.high_risk' => ['value' => Ropa::where('risk_level', 'high')->count()],
+            'ropa.retention_overdue' => ['value' => Ropa::whereNotNull('retention_due_date')->where('status', '!=', 'draft')->whereDate('retention_due_date', '<', now())->count()],
+            'ropa.retention_due_soon' => ['value' => Ropa::whereNotNull('retention_due_date')->where('status', '!=', 'draft')->whereDate('retention_due_date', '>=', now())->whereDate('retention_due_date', '<=', now()->addDays(30))->count()],
             'ropa.by_risk' => ['breakdown' => self::groupCount(Ropa::query(), 'risk_level')],
             'ropa.by_status' => ['breakdown' => self::groupCount(Ropa::query(), 'status')],
             'ropa.by_division' => ['breakdown' => self::groupCount(Ropa::query(), 'division')],
