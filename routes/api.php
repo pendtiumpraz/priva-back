@@ -83,6 +83,7 @@ use App\Http\Controllers\Api\PolicyReviewCrudController;
 use App\Http\Controllers\Api\PositionController;
 use App\Http\Controllers\Api\PostureController;
 use App\Http\Controllers\Api\PostureFindingController;
+use App\Http\Controllers\Api\PpdpController;
 use App\Http\Controllers\Api\PraAsesmenPublikController;
 use App\Http\Controllers\Api\ProcessingCategoryController;
 use App\Http\Controllers\Api\PublicLandingController;
@@ -94,8 +95,8 @@ use App\Http\Controllers\Api\Root\EmbeddingModelController;
 use App\Http\Controllers\Api\Root\QaCenterController;
 use App\Http\Controllers\Api\RootDashboardController;
 use App\Http\Controllers\Api\RopaApprovalController;
-use App\Http\Controllers\Api\RopaGraphController;
 use App\Http\Controllers\Api\RopaCsvImportController;
+use App\Http\Controllers\Api\RopaGraphController;
 use App\Http\Controllers\Api\RopaLinkController;
 use App\Http\Controllers\Api\RopaTemplateController;
 use App\Http\Controllers\Api\SimulationController;
@@ -538,6 +539,17 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // Terapkan kontrol dari pustaka ke sebuah DPIA sebagai item RTP.
     Route::post('/dpia/{id}/apply-controls', [ControlLibraryController::class, 'applyToDpia'])
         ->middleware('permission:dpia,write')->where('id', '[0-9a-fA-F-]{36}');
+
+    // =============================================
+    // PPDP — Penunjukan Pejabat Pelindungan Data Pribadi (PP 33/2026 Pasal 142-143)
+    // =============================================
+    Route::prefix('ppdp')->group(function () {
+        Route::get('/', [PpdpController::class, 'index'])->middleware('permission:ppdp,read');
+        Route::get('/obligation', [PpdpController::class, 'obligation'])->middleware('permission:ppdp,read');
+        Route::post('/', [PpdpController::class, 'store'])->middleware('permission:ppdp,write');
+        Route::put('/{id}', [PpdpController::class, 'update'])->middleware('permission:ppdp,write')->where('id', '[0-9a-fA-F-]{36}');
+        Route::delete('/{id}', [PpdpController::class, 'destroy'])->middleware('permission:ppdp,write')->where('id', '[0-9a-fA-F-]{36}');
+    });
 
     // =============================================
     // DPIA — Assessment Framework (DPO-customizable categories + risks)

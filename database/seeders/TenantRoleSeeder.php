@@ -2,19 +2,19 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\Organization;
 use App\Models\TenantRole;
 use App\Models\User;
+use Illuminate\Database\Seeder;
 
 class TenantRoleSeeder extends Seeder
 {
     public function run(): void
     {
         $allModules = [
-            'dashboard', 'gap_assessment', 'ropa', 'dpia', 'lia', 'tia', 'maturity',
+            'dashboard', 'gap_assessment', 'ropa', 'dpia', 'lia', 'tia', 'maturity', 'ppdp',
             'data_discovery', 'contract_review', 'dsr', 'consent', 'cookie', 'breach',
-            'security', 'simulation', 'users', 'settings'
+            'security', 'simulation', 'users', 'settings',
         ];
 
         $allWrite = [];
@@ -42,6 +42,7 @@ class TenantRoleSeeder extends Seeder
             'lia:read', 'lia:write',
             'tia:read', 'tia:write',
             'maturity:read', 'maturity:write',
+            'ppdp:read', 'ppdp:write',
             'data_discovery:read', 'data_discovery:write',
             'contract_review:read', 'contract_review:write',
             'dsr:read', 'dsr:write',
@@ -53,7 +54,7 @@ class TenantRoleSeeder extends Seeder
         ];
 
         $organizations = Organization::all();
-        
+
         foreach ($organizations as $org) {
             // -------------------------------------------------------
             // Clean up duplicate roles from old migration/seeder mismatch
@@ -75,7 +76,7 @@ class TenantRoleSeeder extends Seeder
                 ['org_id' => $org->id, 'name' => 'Admin'],
                 ['is_system' => true, 'description' => 'Administrator dengan full akses konfigurasi', 'permissions' => ['*']]
             );
-            
+
             $dpoRole = TenantRole::updateOrCreate(
                 ['org_id' => $org->id, 'name' => 'DPO'],
                 ['is_system' => true, 'description' => 'Data Protection Officer untuk review dan approval', 'permissions' => $dpoPerms]
@@ -90,7 +91,7 @@ class TenantRoleSeeder extends Seeder
                 ['org_id' => $org->id, 'name' => 'Viewer'],
                 ['is_system' => true, 'description' => 'Akses hanya baca (read-only)', 'permissions' => $allRead]
             );
-            
+
             // Re-link users that got orphaned
             User::where('org_id', $org->id)->where('role', 'admin')->whereNull('tenant_role_id')->update(['tenant_role_id' => $adminRole->id]);
             User::where('org_id', $org->id)->where('role', 'dpo')->whereNull('tenant_role_id')->update(['tenant_role_id' => $dpoRole->id]);
@@ -99,4 +100,3 @@ class TenantRoleSeeder extends Seeder
         }
     }
 }
-
