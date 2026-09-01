@@ -63,14 +63,14 @@ class PostureScoreService
     public const PILLAR_LABELS = [
         'discovery_coverage' => 'Cakupan Data Discovery',
         'classification_coverage' => 'Cakupan Klasifikasi PII',
-        'sensitive_protection' => 'Proteksi Data Spesifik (Pasal 4)',
+        'sensitive_protection' => 'Proteksi Data Spesifik (Pasal 4 jo. PP 33/2026 Pasal 5–7)',
         'schema_drift' => 'Schema Drift (Perubahan PII)',
         'ropa_coverage' => 'Cakupan RoPA',
-        'dpia_compliance' => 'Kepatuhan DPIA (Pasal 35)',
+        'dpia_compliance' => 'Kepatuhan DPIA (Pasal 35 jo. PP 33/2026 Pasal 123–129)',
         'rtp_hygiene' => 'Risk Treatment Plan',
         'vendor_risk' => 'Risiko Vendor (TPRM)',
-        'cross_border_basis' => 'Dasar Hukum Transfer (Pasal 56)',
-        'breach_readiness' => 'Kesiapan Breach (Pasal 46)',
+        'cross_border_basis' => 'Dasar Hukum Transfer (Pasal 56 jo. PP 33/2026 Pasal 160–163)',
+        'breach_readiness' => 'Kesiapan Breach (Pasal 46 jo. PP 33/2026 Pasal 114–116)',
         'dsr_compliance' => 'SLA Hak Subjek Data',
         'maturity_self_eval' => 'Maturity Assessment',
     ];
@@ -292,7 +292,7 @@ class PostureScoreService
     }
 
     /**
-     * Subset of classification_coverage focused only on Pasal 4 spesifik
+     * Subset of classification_coverage focused only on Pasal 4 jo. PP 33/2026 Pasal 5–7 spesifik
      * categories (NIK, biometrik, kesehatan, dst). These need higher
      * scrutiny — the score is "% spesifik columns with protection".
      */
@@ -345,7 +345,7 @@ class PostureScoreService
         return [
             'score' => $score,
             'raw' => ['sensitive_columns' => $sensitiveCount, 'protected' => $protectedCount],
-            'reason' => "{$protectedCount} dari {$sensitiveCount} kolom spesifik (Pasal 4) sudah ada kontrol enkripsi/akses.",
+            'reason' => "{$protectedCount} dari {$sensitiveCount} kolom spesifik (Pasal 4 jo. PP 33/2026 Pasal 5–7) sudah ada kontrol enkripsi/akses.",
         ];
     }
 
@@ -406,7 +406,7 @@ class PostureScoreService
     }
 
     /**
-     * For HIGH-risk RoPAs, % that have an approved DPIA. UU PDP Pasal 35
+     * For HIGH-risk RoPAs, % that have an approved DPIA. UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129
      * mandates DPIA for processing aktivitas berisiko tinggi.
      * No HIGH-risk RoPA → 100 (no DPIA owed).
      */
@@ -418,7 +418,7 @@ class PostureScoreService
 
         if ($highRisk === 0) {
             return ['score' => 100, 'raw' => ['high_risk_ropa' => 0],
-                'reason' => 'Tidak ada RoPA HIGH-risk — DPIA tidak wajib (Pasal 35).'];
+                'reason' => 'Tidak ada RoPA HIGH-risk — DPIA tidak wajib (Pasal 35 jo. PP 33/2026 Pasal 123–129).'];
         }
 
         $approved = Ropa::query()->withoutGlobalScope('org')
@@ -525,7 +525,7 @@ class PostureScoreService
 
     /**
      * % of cross-border transfers with a non-'none' legal_basis.
-     * UU PDP Pasal 56 — transfer tanpa dasar hukum eksplisit ilegal.
+     * UU PDP Pasal 56 jo. PP 33/2026 Pasal 160–163 — transfer tanpa dasar hukum eksplisit ilegal.
      */
     private function crossBorderBasis(string $orgId): array
     {
@@ -548,13 +548,13 @@ class PostureScoreService
         return [
             'score' => $score,
             'raw' => ['transfers' => $total, 'with_legal_basis' => $valid],
-            'reason' => "{$valid} dari {$total} transfer punya dasar hukum Pasal 56 yang valid.",
+            'reason' => "{$valid} dari {$total} transfer punya dasar hukum Pasal 56 jo. PP 33/2026 Pasal 160–163 yang valid.",
         ];
     }
 
     /**
      * Active breach count penalty + 72h notification compliance bonus.
-     * Pasal 46: notify Komdigi within 72h.
+     * Pasal 46 jo. PP 33/2026 Pasal 114–116: notify Komdigi within 72h.
      */
     private function breachReadiness(string $orgId): array
     {

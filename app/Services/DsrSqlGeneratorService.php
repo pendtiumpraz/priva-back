@@ -229,7 +229,7 @@ class DsrSqlGeneratorService
 
     private function buildPortabilitySql(DsrRequest $dsr, InformationSystem $is, ?string $shard): string
     {
-        $h = $this->header($dsr, $is, $shard, 'PORTABILITY REQUEST', 'Subject minta data dalam format machine-readable untuk transfer ke service lain (Pasal 7 ayat 3 UU PDP). Output: SELECT yang admin export ke JSON/CSV/XML.');
+        $h = $this->header($dsr, $is, $shard, 'PORTABILITY REQUEST', 'Subject minta data dalam format machine-readable untuk transfer ke service lain (Pasal 7 ayat 3 jo. PP 33/2026 Pasal 20–27 UU PDP). Output: SELECT yang admin export ke JSON/CSV/XML.');
         $w = $this->whereClauseTemplate($dsr);
         $tables = $this->guessPiiTables($is);
         $body = "BEGIN;\n\n"
@@ -247,7 +247,7 @@ class DsrSqlGeneratorService
 
     private function buildWithdrawSql(DsrRequest $dsr, InformationSystem $is, ?string $shard): string
     {
-        $h = $this->header($dsr, $is, $shard, 'WITHDRAW CONSENT', 'Subject withdraw consent yang previously diberikan (Pasal 8 UU PDP). UPDATE flag/status. Cascade ke marketing list.');
+        $h = $this->header($dsr, $is, $shard, 'WITHDRAW CONSENT', 'Subject withdraw consent yang previously diberikan (Pasal 8 jo. PP 33/2026 Pasal 79–82 UU PDP). UPDATE flag/status. Cascade ke marketing list.');
         $w = $this->whereClauseTemplate($dsr);
         $body = "BEGIN;\n\n"
             ."-- Mark consent withdrawn\n"
@@ -261,7 +261,7 @@ class DsrSqlGeneratorService
 
     private function buildObjectionSql(DsrRequest $dsr, InformationSystem $is, ?string $shard): string
     {
-        $h = $this->header($dsr, $is, $shard, 'OBJECTION REQUEST', 'Subject objection ke specific processing — biasanya profiling atau direct marketing (Pasal 9 UU PDP). DPO assess dulu apakah ada legitimate interest yang override.');
+        $h = $this->header($dsr, $is, $shard, 'OBJECTION REQUEST', 'Subject objection ke specific processing — biasanya profiling atau direct marketing (Pasal 9 jo. PP 33/2026 Pasal 20–27 UU PDP). DPO assess dulu apakah ada legitimate interest yang override.');
         $w = $this->whereClauseTemplate($dsr);
         $body = "BEGIN;\n\n"
             ."-- TODO DPO decision: ACCEPT (stop processing) atau REJECT (justify)\n"

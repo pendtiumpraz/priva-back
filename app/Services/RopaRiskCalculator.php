@@ -29,7 +29,7 @@ class RopaRiskCalculator
         'ai_partial',
     ];
 
-    /** HIGH: fully automated decision (Pasal 10 UU PDP). */
+    /** HIGH: fully automated decision (Pasal 10 jo. PP 33/2026 Pasal 93–95 UU PDP). */
     private const AUTO_FULL_VALUES = [
         'Ya, Keputusan Penuh',
         'Ya - Keputusan Penuh',
@@ -77,7 +77,7 @@ class RopaRiskCalculator
         // ─── HIGH triggers ──────────────────────────────────────────────
         if ($this->matches($info['bantuan_ai'] ?? null, self::AI_FULL_DECISION_VALUES)) {
             $triggers[] = 'ai_full_decision';
-            $reasons[] = 'Pemrosesan memakai AI untuk keputusan sepenuhnya (Pasal 10 UU PDP).';
+            $reasons[] = 'Pemrosesan memakai AI untuk keputusan sepenuhnya (Pasal 10 jo. PP 33/2026 Pasal 93–95 UU PDP).';
         }
 
         if ($this->matches($info['otomatis'] ?? null, self::AUTO_FULL_VALUES)) {
@@ -109,7 +109,7 @@ class RopaRiskCalculator
 
         if ($this->isYes($kirim['transfer_luar'] ?? null)) {
             $triggers[] = 'cross_border_transfer';
-            $reasons[] = 'Transfer data ke luar Indonesia (Pasal 56 UU PDP — butuh safeguards).';
+            $reasons[] = 'Transfer data ke luar Indonesia (Pasal 56 jo. PP 33/2026 Pasal 160–163 UU PDP — butuh safeguards).';
         }
 
         if ($this->isYes($ret['pernah_insiden'] ?? null)) {

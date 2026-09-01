@@ -7,7 +7,7 @@ use Illuminate\Database\Seeder;
 
 /**
  * Metadata kepatuhan per AI provider — supaya pemilihan provider AI benar-benar
- * sadar UU PDP (Pasal 51 prosesor + Pasal 56 transfer lintas negara), bukan
+ * sadar UU PDP (Pasal 51 jo. PP 33/2026 Pasal 88 & 139 prosesor + Pasal 56 jo. PP 33/2026 Pasal 160–163 transfer lintas negara), bukan
  * sekadar disclaimer.
  *
  * Sumber: riset publik Juli 2026 (DPA, ZDR, GDPR, yurisdiksi). WAJIB diverifikasi
@@ -127,14 +127,14 @@ class AiProviderComplianceSeeder extends Seeder
                 'compliance_note' => 'AWS GDPR DPA otomatis termasuk di AWS Service Terms (+ SCC). Inference dasar zero-retention. Jika mengaktifkan model invocation logging, data masuk ke bucket S3/CloudWatch milik Anda sendiri. Autentikasi via AWS SigV4 (Access Key/Secret + region), bukan API key bearer. Aman untuk PII dengan DPA + region UE.',
             ],
 
-            // ── Voice / TTS providers (suara = data BIOMETRIK, Pasal 4 UU PDP) ──
+            // ── Voice / TTS providers (suara = data BIOMETRIK, Pasal 4 UU PDP jo. PP 33/2026 Pasal 5–7) ──
             'elevenlabs' => [
                 'jurisdiction' => 'Amerika Serikat (sertifikasi EU-US DPF)', 'gdpr_status' => 'compliant', 'no_training' => true,
                 'zdr_available' => true, 'pdp_risk' => 'safe',
                 'dpa_url' => 'https://elevenlabs.io/dpa',
                 'privacy_url' => 'https://elevenlabs.io/privacy-policy',
                 'zdr_note' => 'Opsi data residency + no-training. Tersertifikasi EU-US Data Privacy Framework (aktif per 2026).',
-                'compliance_note' => 'Suara = data BIOMETRIK (Pasal 4 UU PDP / Art.9 GDPR) → butuh persetujuan EKSPLISIT. DPA + SCC + dukungan DPIA. Aman dengan DPA + consent biometrik.',
+                'compliance_note' => 'Suara = data BIOMETRIK (Pasal 4 UU PDP jo. PP 33/2026 Pasal 5–7 / Art.9 GDPR) → butuh persetujuan EKSPLISIT. DPA + SCC + dukungan DPIA. Aman dengan DPA + consent biometrik.',
             ],
             'openai-tts' => [
                 'jurisdiction' => 'Amerika Serikat', 'gdpr_status' => 'compliant', 'no_training' => true,

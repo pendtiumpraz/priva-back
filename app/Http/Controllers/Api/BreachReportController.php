@@ -4,19 +4,22 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\BreachIncident;
+use App\Models\DocumentTemplate;
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\TenantStorageService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * PDF document generator for breach incidents.
  *
- * 3 document types (Pasal 46 UU PDP compliance artifacts):
+ * 3 document types (Pasal 46 jo. PP 33/2026 Pasal 114–116 UU PDP compliance artifacts):
  *   - komdigi  : Surat Notifikasi ke KOMDIGI (formal, 3x24h notification)
  *   - subject  : Data Subject Notification Letter — pemberitahuan resmi yang
  *                menyebut kasus + langkah penanganan yang telah dilakukan,
- *                dengan bahasa menenangkan (transparansi Pasal 46 UU PDP)
+ *                dengan bahasa menenangkan (transparansi Pasal 46 jo. PP 33/2026 Pasal 114–116 UU PDP)
  *   - report   : Breach Incident Full Report (offline-ready, RACI,
  *                containment timeline, RCA, remediation)
  *
@@ -30,6 +33,7 @@ class BreachReportController extends Controller
     {
         $breach = $this->loadBreach($request, $id);
         $pdf = $this->buildPdf($request, 'reports.breach.komdigi', $breach, 'breach_komdigi');
+
         return $pdf->download("Surat-Notifikasi-KOMDIGI_{$breach->incident_code}.pdf");
     }
 
@@ -37,6 +41,7 @@ class BreachReportController extends Controller
     {
         $breach = $this->loadBreach($request, $id);
         $pdf = $this->buildPdf($request, 'reports.breach.subject', $breach, 'breach_subject');
+
         return $pdf->download("Pemberitahuan-Insiden_{$breach->incident_code}.pdf");
     }
 
@@ -44,6 +49,7 @@ class BreachReportController extends Controller
     {
         $breach = $this->loadBreach($request, $id);
         $pdf = $this->buildPdf($request, 'reports.breach.full-report', $breach, 'breach_report');
+
         return $pdf->download("Breach-Report_{$breach->incident_code}.pdf");
     }
 
@@ -87,7 +93,7 @@ class BreachReportController extends Controller
         $defaultFont = $payload['config']['font_family'] ?? 'DejaVu Sans';
 
         $size = strtolower((string) $request->get('size', $defaultSize));
-        if (!in_array($size, self::PAPER_SIZES, true)) {
+        if (! in_array($size, self::PAPER_SIZES, true)) {
             $size = 'a4';
         }
         $orientation = $request->get('orientation') === 'landscape' ? 'landscape' : 'portrait';
@@ -117,8 +123,8 @@ class BreachReportController extends Controller
         // Pull active document template config (Phase D) — per-kind aware.
         // `$kind` is one of 'breach_report' / 'breach_komdigi' / 'breach_subject'
         // (Phase H1), falling through to map.default → legacy → system default.
-        $template = \App\Models\DocumentTemplate::activeForOrg($org->id, $kind);
-        $config = $template ? $template->mergedConfig() : \App\Models\DocumentTemplate::DEFAULT_CONFIG;
+        $template = DocumentTemplate::activeForOrg($org->id, $kind);
+        $config = $template ? $template->mergedConfig() : DocumentTemplate::DEFAULT_CONFIG;
 
         // Inline asset images as data URIs so dompdf always renders them.
         $config['watermark_image'] = $this->toDataUri($config['watermark_image'] ?? null, $org);
@@ -153,23 +159,25 @@ class BreachReportController extends Controller
      */
     private function toDataUri(?string $urlOrPath, Organization $org): ?string
     {
-        if (!$urlOrPath || str_starts_with($urlOrPath, 'data:')) return $urlOrPath;
+        if (! $urlOrPath || str_starts_with($urlOrPath, 'data:')) {
+            return $urlOrPath;
+        }
         try {
             $parsed = parse_url($urlOrPath);
             $path = $parsed['path'] ?? $urlOrPath;
 
             if (str_contains($path, '/storage/')) {
                 $rel = ltrim(preg_replace('#^.*/storage/#', '', $path), '/');
-                $disk = \Illuminate\Support\Facades\Storage::disk('public');
+                $disk = Storage::disk('public');
                 if ($disk->exists($rel)) {
-                    return 'data:' . ($disk->mimeType($rel) ?: 'image/png') . ';base64,' . base64_encode($disk->get($rel));
+                    return 'data:'.($disk->mimeType($rel) ?: 'image/png').';base64,'.base64_encode($disk->get($rel));
                 }
             }
             if (preg_match('#(tenants/[a-f0-9-]+/[^?#]+)#i', $urlOrPath, $m)) {
                 $rel = $m[1];
-                $disk = app(\App\Services\TenantStorageService::class)->getPublicDisk($org);
+                $disk = app(TenantStorageService::class)->getPublicDisk($org);
                 if ($disk->exists($rel)) {
-                    return 'data:' . ($disk->mimeType($rel) ?: 'image/png') . ';base64,' . base64_encode($disk->get($rel));
+                    return 'data:'.($disk->mimeType($rel) ?: 'image/png').';base64,'.base64_encode($disk->get($rel));
                 }
             }
             if (preg_match('#^https?://#i', $urlOrPath)) {
@@ -177,10 +185,13 @@ class BreachReportController extends Controller
                 $bytes = @file_get_contents($urlOrPath, false, $ctx);
                 if ($bytes !== false) {
                     $ext = strtolower(pathinfo(parse_url($urlOrPath, PHP_URL_PATH) ?? '', PATHINFO_EXTENSION)) ?: 'png';
-                    return 'data:image/' . $ext . ';base64,' . base64_encode($bytes);
+
+                    return 'data:image/'.$ext.';base64,'.base64_encode($bytes);
                 }
             }
-        } catch (\Throwable $e) { /* fall through */ }
+        } catch (\Throwable $e) { /* fall through */
+        }
+
         return $urlOrPath;
     }
 }

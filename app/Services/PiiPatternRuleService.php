@@ -94,7 +94,7 @@ class PiiPatternRuleService
                 'classification' => 'sensitive',
                 'encryption_required' => true,
                 'weight' => 0.95,
-                'reason' => 'NIK 16 digit — data pribadi spesifik, Pasal 4 UU PDP.',
+                'reason' => 'NIK 16 digit — data pribadi spesifik, Pasal 4 jo. PP 33/2026 Pasal 5–7 UU PDP.',
                 'sample_value' => '3174012509900001',
             ],
             [
@@ -221,7 +221,7 @@ class PiiPatternRuleService
                 'classification' => 'sensitive',
                 'encryption_required' => true,
                 'weight' => 0.75,
-                'reason' => 'Nomor peserta BPJS 13 digit — menyiratkan data kesehatan, Pasal 4 UU PDP.',
+                'reason' => 'Nomor peserta BPJS 13 digit — menyiratkan data kesehatan, Pasal 4 jo. PP 33/2026 Pasal 5–7 UU PDP.',
                 'sample_value' => '0001234567890',
             ],
             [

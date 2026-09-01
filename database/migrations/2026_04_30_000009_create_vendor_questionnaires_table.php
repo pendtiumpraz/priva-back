@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Schema;
  * assessment to its original wording.
  *
  * Structure mirrors the SIG-Lite + CAIQ vendor questionnaire models
- * adapted for UU PDP Pasal 51 (controller's duty over processor) +
+ * adapted for UU PDP Pasal 51 jo. PP 33/2026 Pasal 88 & 139 (controller's duty over processor) +
  * POJK 11/2022 (TI risk management for FI).
  *
  * Each row = one question with:
@@ -28,7 +28,8 @@ use Illuminate\Support\Facades\Schema;
  *     contribution = weight(Q) × direction(Q) × answer_normalized(A)
  *   score = clamp(0, 100, base + sum(contributions))
  */
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         Schema::create('vendor_questionnaires', function (Blueprint $table) {
@@ -39,7 +40,7 @@ return new class extends Migration {
             $table->string('section')->nullable();     // 'governance' | 'security' | 'data_handling' | 'compliance' | 'contractual'
             $table->text('question_text');
             $table->text('description')->nullable();   // helper text shown beneath the question
-            $table->string('regulation_ref')->nullable(); // e.g. "UU PDP Pasal 51", "POJK 11/2022"
+            $table->string('regulation_ref')->nullable(); // e.g. "UU PDP Pasal 51 jo. PP 33/2026 Pasal 88 & 139", "POJK 11/2022"
             $table->string('answer_type');             // 'yes_no' | 'multi_choice' | 'scale_1_5'
             $table->jsonb('answer_options')->nullable(); // [{value, label, score_contribution}]
             $table->tinyInteger('weight')->default(5);   // 1-10

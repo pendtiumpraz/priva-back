@@ -62,7 +62,7 @@ class PolicyAutofillService
         $ropa = $this->fromRopa($orgId);
         $set('data_categories', $ropa['data_categories'], 'RoPA', 'direct', count($ropa['data_categories']));
         $set('purposes', $ropa['purposes'], 'RoPA + LIA', 'direct', count($ropa['purposes']));
-        $set('legal_basis', $ropa['legal_basis'], 'RoPA (Pasal 20)', 'direct', count($ropa['legal_basis']));
+        $set('legal_basis', $ropa['legal_basis'], 'RoPA (Pasal 20 jo. PP 33/2026 Pasal 30)', 'direct', count($ropa['legal_basis']));
         $set('retention', $ropa['retention'], 'RoPA (retensi)', 'direct', count($ropa['retention']));
 
         // Purposes enriched by LIA (legitimate-interest activities).
@@ -87,8 +87,8 @@ class PolicyAutofillService
         $crossBorder = array_values(array_unique(array_merge($this->fromTia($orgId), $ropa['cross_border'])));
         $set('cross_border', $crossBorder, 'TIA + RoPA', 'direct', count($crossBorder));
 
-        // --- Element 14: breach notification (static Pasal 46 — not stored as editable text) ---
-        $set('breach_notification', $this->breachStatic(), 'Statik (Pasal 46 UU PDP) — lihat modul Breach', 'static');
+        // --- Element 14: breach notification (static Pasal 46 jo. PP 33/2026 Pasal 114–116 — not stored as editable text) ---
+        $set('breach_notification', $this->breachStatic(), 'Statik (Pasal 46 jo. PP 33/2026 Pasal 114–116 UU PDP) — lihat modul Breach', 'static');
 
         // --- Element 10: security measures (no ISMS module — static template) ---
         $set('security_measures', $this->securityStatic(), 'Statik (template) — sesuaikan kontrol ISMS', 'static');
@@ -241,7 +241,7 @@ class PolicyAutofillService
     private function breachStatic(): string
     {
         return 'Pelanggaran data pribadi akan diberitahukan kepada KOMDIGI dan subjek data terdampak '
-            .'paling lambat 3x24 jam (Pasal 46 UU PDP). Lihat SOP Breach Response organisasi untuk prosedur lengkap.';
+            .'paling lambat 3x24 jam (Pasal 46 jo. PP 33/2026 Pasal 114–116 UU PDP). Lihat SOP Breach Response organisasi untuk prosedur lengkap.';
     }
 
     private function securityStatic(): string
@@ -255,7 +255,7 @@ class PolicyAutofillService
         $subjects = $org?->data_subjects_type;
         $blob = mb_strtolower(is_array($subjects) ? implode(' ', $subjects) : (string) $subjects);
         if ($blob !== '' && (str_contains($blob, 'anak') || str_contains($blob, 'child') || str_contains($blob, 'minor'))) {
-            return 'Organisasi memproses data anak — wajib persetujuan orang tua/wali (Pasal 26 UU PDP + Permenkominfo 20/2016).';
+            return 'Organisasi memproses data anak — wajib persetujuan orang tua/wali (Pasal 26 jo. PP 33/2026 Pasal 39 UU PDP + Permenkominfo 20/2016).';
         }
 
         return null;
@@ -263,17 +263,17 @@ class PolicyAutofillService
 
     // --- helpers ---
 
-    /** Translate a RoPA legal-basis slug into a Pasal 20 label; pass through unknown values. */
+    /** Translate a RoPA legal-basis slug into a Pasal 20 jo. PP 33/2026 Pasal 30 label; pass through unknown values. */
     private function legalBasisLabel(string $slug): string
     {
         return match (strtolower($slug)) {
-            'kontrak' => 'Pelaksanaan kontrak (Pasal 20)',
-            'langkah_pra_kontrak' => 'Langkah pra-kontrak atas permintaan subjek (Pasal 20)',
-            'persetujuan', 'consent' => 'Persetujuan subjek data (Pasal 20)',
-            'kewajiban_hukum' => 'Pemenuhan kewajiban hukum (Pasal 20)',
-            'kepentingan_sah' => 'Kepentingan sah / legitimate interest (Pasal 20)',
-            'vital_interest', 'kepentingan_vital' => 'Pelindungan kepentingan vital (Pasal 20)',
-            'kepentingan_umum' => 'Pelaksanaan tugas kepentingan publik / kewenangan otoritas (Pasal 20)',
+            'kontrak' => 'Pelaksanaan kontrak (Pasal 20 jo. PP 33/2026 Pasal 30)',
+            'langkah_pra_kontrak' => 'Langkah pra-kontrak atas permintaan subjek (Pasal 20 jo. PP 33/2026 Pasal 30)',
+            'persetujuan', 'consent' => 'Persetujuan subjek data (Pasal 20 jo. PP 33/2026 Pasal 30)',
+            'kewajiban_hukum' => 'Pemenuhan kewajiban hukum (Pasal 20 jo. PP 33/2026 Pasal 30)',
+            'kepentingan_sah' => 'Kepentingan sah / legitimate interest (Pasal 20 jo. PP 33/2026 Pasal 30)',
+            'vital_interest', 'kepentingan_vital' => 'Pelindungan kepentingan vital (Pasal 20 jo. PP 33/2026 Pasal 30)',
+            'kepentingan_umum' => 'Pelaksanaan tugas kepentingan publik / kewenangan otoritas (Pasal 20 jo. PP 33/2026 Pasal 30)',
             default => $slug,
         };
     }

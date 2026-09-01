@@ -3,13 +3,13 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToOrg;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class BreachSimulation extends Model
 {
-    use HasUuids, SoftDeletes, BelongsToOrg;
+    use BelongsToOrg, HasUuids, SoftDeletes;
 
     protected $fillable = [
         'org_id', 'incident_id', 'scenario_type', 'scenario_title',
@@ -64,7 +64,7 @@ class BreachSimulation extends Model
                         'id' => 'R3', 'phase' => 'containment', 'time_limit' => 90,
                         'question' => 'Data pribadi termasuk NIK dan data finansial. Apakah insiden ini WAJIB dilaporkan ke KOMDIGI?',
                         'options' => [
-                            ['id' => 'a', 'text' => 'Ya, wajib dilaporkan dalam 3x24 jam', 'score' => 10, 'feedback' => 'BENAR! Sesuai Pasal 46 UU PDP, kebocoran data pribadi wajib dilaporkan 3x24 jam.'],
+                            ['id' => 'a', 'text' => 'Ya, wajib dilaporkan dalam 3x24 jam', 'score' => 10, 'feedback' => 'BENAR! Sesuai Pasal 46 jo. PP 33/2026 Pasal 114–116 UU PDP, kebocoran data pribadi wajib dilaporkan 3x24 jam.'],
                             ['id' => 'b', 'text' => 'Tidak, cukup laporan internal saja', 'score' => -5, 'feedback' => 'SALAH. UU PDP mewajibkan pelaporan ke lembaga pengawas.'],
                             ['id' => 'c', 'text' => 'Tergantung berapa banyak data yang bocor', 'score' => 2, 'feedback' => 'Kurang tepat. Semua kebocoran data pribadi wajib dilaporkan.'],
                             ['id' => 'd', 'text' => 'Hanya jika ada kerugian finansial', 'score' => -3, 'feedback' => 'SALAH. Kewajiban pelaporan tidak bergantung pada kerugian finansial.'],
@@ -75,7 +75,7 @@ class BreachSimulation extends Model
                         'question' => 'Berapa batas waktu MAKSIMAL untuk memberitahu subjek data yang terdampak?',
                         'options' => [
                             ['id' => 'a', 'text' => '24 jam', 'score' => 2, 'feedback' => 'Terlalu singkat. UU PDP memberikan waktu lebih.'],
-                            ['id' => 'b', 'text' => '3 x 24 jam (72 jam)', 'score' => 10, 'feedback' => 'BENAR! Pasal 46 UU PDP: paling lambat 3x24 jam sejak diketahui.'],
+                            ['id' => 'b', 'text' => '3 x 24 jam (72 jam)', 'score' => 10, 'feedback' => 'BENAR! Pasal 46 jo. PP 33/2026 Pasal 114–116 UU PDP: paling lambat 3x24 jam sejak diketahui.'],
                             ['id' => 'c', 'text' => '14 hari', 'score' => 0, 'feedback' => 'Terlalu lama dan melanggar UU PDP.'],
                             ['id' => 'd', 'text' => '30 hari', 'score' => -5, 'feedback' => 'SALAH dan melanggar UU PDP.'],
                         ],
@@ -258,8 +258,7 @@ class BreachSimulation extends Model
                         }
                     }
                     $feedback = 'Multiple selection evaluated.';
-                }
-                else {
+                } else {
                     // Single choice
                     foreach ($q['options'] as $opt) {
                         if ($opt['id'] === $response['answer']) {
@@ -273,10 +272,9 @@ class BreachSimulation extends Model
                 // Time bonus/penalty
                 $timeSpent = $response['time_spent'] ?? $q['time_limit'];
                 if ($timeSpent <= $q['time_limit'] * 0.5) {
-                    $earned = (int)round($earned * 1.1); // 10% bonus for fast response
-                }
-                elseif ($timeSpent > $q['time_limit']) {
-                    $earned = (int)round($earned * 0.8); // 20% penalty for slow
+                    $earned = (int) round($earned * 1.1); // 10% bonus for fast response
+                } elseif ($timeSpent > $q['time_limit']) {
+                    $earned = (int) round($earned * 0.8); // 20% penalty for slow
                 }
             }
 
@@ -303,11 +301,11 @@ class BreachSimulation extends Model
 
     public function organization()
     {
-        return $this->belongsTo(Organization::class , 'org_id');
+        return $this->belongsTo(Organization::class, 'org_id');
     }
 
     public function creator()
     {
-        return $this->belongsTo(User::class , 'created_by');
+        return $this->belongsTo(User::class, 'created_by');
     }
 }

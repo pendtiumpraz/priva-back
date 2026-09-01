@@ -84,7 +84,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 1,
                 'question_text' => 'Apakah pihak ketiga memiliki Peraturan Perusahaan / SOP / Kebijakan PDP?',
                 'description' => 'Perlu disusun seperti Kebijakan Keamanan Informasi.',
-                'regulation_ref' => 'UU PDP Pasal 35',
+                'regulation_ref' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                 'recommendation_if_no' => 'Susun Peraturan Perusahaan, SOP, atau Kebijakan PDP.',
             ],
             [
@@ -93,7 +93,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 2,
                 'question_text' => 'Apakah Privacy Notice sudah dipublikasikan?',
                 'description' => 'Dokumen eksternal yang diumumkan ke publik tentang pemrosesan data dan hak subjek.',
-                'regulation_ref' => 'UU PDP Pasal 16 ayat (2)',
+                'regulation_ref' => 'UU PDP Pasal 16 ayat (2) jo. PP 33/2026 Pasal 30',
                 'recommendation_if_no' => 'Unggah Privacy Notice ke website atau aplikasi.',
             ],
             [
@@ -102,7 +102,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 3,
                 'question_text' => 'Apakah sudah ditetapkan dasar pemrosesan (legal basis)?',
                 'description' => 'Persetujuan, kontrak, kewajiban hukum, kepentingan umum/vital/legitimate interest.',
-                'regulation_ref' => 'UU PDP Pasal 20',
+                'regulation_ref' => 'UU PDP Pasal 20 jo. PP 33/2026 Pasal 30',
                 'recommendation_if_no' => 'Tentukan salah satu dasar pemrosesan.',
             ],
             [
@@ -111,7 +111,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 4,
                 'question_text' => 'Apakah tersedia skema/template/sistem RoPA?',
                 'description' => 'Memuat nama Pengendali, DPO, sumber/tujuan, dasar pemrosesan, jenis data, kategori subjek, akses, alur, retensi, langkah keamanan.',
-                'regulation_ref' => 'UU PDP Pasal 31',
+                'regulation_ref' => 'UU PDP Pasal 31 jo. PP 33/2026 Pasal 74',
                 'recommendation_if_no' => 'Susun template RoPA sesuai kaidah peraturan.',
             ],
             [
@@ -120,7 +120,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 5,
                 'question_text' => 'Apakah tersedia skema/template/sistem DPIA?',
                 'description' => 'Format asesmen pemrosesan berisiko tinggi beserta mitigasi.',
-                'regulation_ref' => 'UU PDP Pasal 34',
+                'regulation_ref' => 'UU PDP Pasal 34 jo. PP 33/2026 Pasal 120–122',
                 'recommendation_if_no' => 'Tetapkan format pemrosesan data berisiko tinggi beserta mitigasi.',
             ],
             [
@@ -129,7 +129,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 6,
                 'question_text' => 'Apakah tersedia peraturan/mekanisme DSAR (Data Subject Access Request)?',
                 'description' => 'Saluran permohonan hak subjek data.',
-                'regulation_ref' => 'UU PDP Pasal 5-14',
+                'regulation_ref' => 'UU PDP Pasal 5-14 jo. PP 33/2026 Pasal 20–27, 79–82, 93–95',
                 'recommendation_if_no' => 'Susun peraturan/mekanisme DSAR.',
             ],
             [
@@ -138,7 +138,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 7,
                 'question_text' => 'Apakah tersedia prosedur hak Subjek Data untuk mendapatkan informasi?',
                 'description' => 'Prosedur pemenuhan hak subjek data untuk memperoleh informasi pemrosesan.',
-                'regulation_ref' => 'UU PDP Pasal 5',
+                'regulation_ref' => 'UU PDP Pasal 5 jo. PP 33/2026 Pasal 20–27',
                 'recommendation_if_no' => 'Buat prosedur hak mendapatkan informasi.',
             ],
             [
@@ -147,7 +147,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 8,
                 'question_text' => 'Apakah tersedia prosedur hak melengkapi/memperbaharui/memperbaiki data?',
                 'description' => 'Prosedur pemenuhan hak perbaikan data pribadi.',
-                'regulation_ref' => 'UU PDP Pasal 6',
+                'regulation_ref' => 'UU PDP Pasal 6 jo. PP 33/2026 Pasal 20–27',
                 'recommendation_if_no' => 'Susun prosedur perbaikan data.',
             ],
             [
@@ -156,7 +156,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 9,
                 'question_text' => 'Apakah tersedia prosedur hak salinan dan akses data?',
                 'description' => 'Prosedur pemenuhan hak akses dan salinan data pribadi.',
-                'regulation_ref' => 'UU PDP Pasal 7',
+                'regulation_ref' => 'UU PDP Pasal 7 jo. PP 33/2026 Pasal 20–27',
                 'recommendation_if_no' => 'Bentuk prosedur akses salinan data.',
             ],
             [
@@ -165,7 +165,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 10,
                 'question_text' => 'Apakah tersedia prosedur hak menghapus/memusnahkan data?',
                 'description' => 'Prosedur pemenuhan hak penghapusan data pribadi.',
-                'regulation_ref' => 'UU PDP Pasal 8',
+                'regulation_ref' => 'UU PDP Pasal 8 jo. PP 33/2026 Pasal 79–82',
                 'recommendation_if_no' => 'Buat prosedur penghapusan data.',
             ],
             [
@@ -174,7 +174,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 11,
                 'question_text' => 'Apakah tersedia prosedur hak menarik kembali persetujuan?',
                 'description' => 'Prosedur pemenuhan hak penarikan persetujuan oleh subjek data.',
-                'regulation_ref' => 'UU PDP Pasal 9',
+                'regulation_ref' => 'UU PDP Pasal 9 jo. PP 33/2026 Pasal 20–27',
                 'recommendation_if_no' => 'Susun prosedur tarik persetujuan.',
             ],
             [
@@ -183,7 +183,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 12,
                 'question_text' => 'Apakah tersedia prosedur hak keberatan atas keputusan otomatis?',
                 'description' => 'Prosedur pemenuhan hak keberatan terhadap pengambilan keputusan otomatis.',
-                'regulation_ref' => 'UU PDP Pasal 10',
+                'regulation_ref' => 'UU PDP Pasal 10 jo. PP 33/2026 Pasal 93–95',
                 'recommendation_if_no' => 'Bentuk prosedur keberatan otomasi.',
             ],
             [
@@ -192,7 +192,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 13,
                 'question_text' => 'Apakah tersedia prosedur hak menunda/membatasi pemrosesan?',
                 'description' => 'Prosedur pemenuhan hak pembatasan pemrosesan data pribadi.',
-                'regulation_ref' => 'UU PDP Pasal 11',
+                'regulation_ref' => 'UU PDP Pasal 11 jo. PP 33/2026 Pasal 20–27',
                 'recommendation_if_no' => 'Buat prosedur pembatasan pemrosesan.',
             ],
             [
@@ -201,7 +201,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 14,
                 'question_text' => 'Apakah tersedia prosedur hak gugat dan ganti rugi?',
                 'description' => 'Prosedur pemenuhan hak gugatan dan ganti rugi oleh subjek data.',
-                'regulation_ref' => 'UU PDP Pasal 12',
+                'regulation_ref' => 'UU PDP Pasal 12 jo. PP 33/2026 Pasal 20–27',
                 'recommendation_if_no' => 'Susun prosedur gugat dan ganti rugi.',
             ],
             [
@@ -210,7 +210,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 15,
                 'question_text' => 'Apakah tersedia prosedur data portability?',
                 'description' => 'Prosedur pemenuhan hak portabilitas data pribadi.',
-                'regulation_ref' => 'UU PDP Pasal 13',
+                'regulation_ref' => 'UU PDP Pasal 13 jo. PP 33/2026 Pasal 20–27',
                 'recommendation_if_no' => 'Buat prosedur data portability.',
             ],
             [
@@ -237,7 +237,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 18,
                 'question_text' => 'Apakah tersedia mekanisme pemusnahan data?',
                 'description' => 'Bagaimana data dihapus di dalam organisasi.',
-                'regulation_ref' => 'UU PDP Pasal 44',
+                'regulation_ref' => 'UU PDP Pasal 44 jo. PP 33/2026 Pasal 80',
                 'recommendation_if_no' => 'Susun mekanisme pemusnahan data.',
             ],
             [
@@ -246,7 +246,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 19,
                 'question_text' => 'Apakah tersedia struktur organisasi PPDP (Pejabat Pelindungan Data Pribadi)?',
                 'description' => 'Kejelasan posisi PPDP di bawah direktorat mana.',
-                'regulation_ref' => 'UU PDP Pasal 53',
+                'regulation_ref' => 'UU PDP Pasal 53 jo. PP 33/2026 Pasal 142',
                 'recommendation_if_no' => 'Tetapkan struktur organisasi PPDP.',
             ],
             [
@@ -255,7 +255,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 20,
                 'question_text' => 'Apakah tersedia pola hubungan PPDP dengan Unit Kerja Lain beserta KPI-nya?',
                 'description' => 'Pola hubungan dan indikator kepatuhan PPDP.',
-                'regulation_ref' => 'UU PDP Pasal 53',
+                'regulation_ref' => 'UU PDP Pasal 53 jo. PP 33/2026 Pasal 142',
                 'recommendation_if_no' => 'Tentukan hubungan dan KPI PPDP.',
             ],
             [
@@ -264,7 +264,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 21,
                 'question_text' => 'Apakah tersedia kebijakan dan mekanisme transfer data ke luar negeri?',
                 'description' => 'Persiapan, mekanisme, dan protokol transfer data ke luar negeri.',
-                'regulation_ref' => 'UU PDP Pasal 56',
+                'regulation_ref' => 'UU PDP Pasal 56 jo. PP 33/2026 Pasal 160–163',
                 'recommendation_if_no' => 'Susun kebijakan transfer data ke luar negeri.',
             ],
             [
@@ -273,7 +273,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 22,
                 'question_text' => 'Apakah tersedia prosedur TIA (Transfer Impact Assessment)?',
                 'description' => 'Asesmen risiko transfer ke negara lain mencakup kecakapan penerima, tujuan, legal basis, dan mitigasi.',
-                'regulation_ref' => 'UU PDP Pasal 56 ayat (2) dan (3)',
+                'regulation_ref' => 'UU PDP Pasal 56 ayat (2) dan (3) jo. PP 33/2026 Pasal 160–163',
                 'recommendation_if_no' => 'Buat prosedur TIA.',
             ],
             [
@@ -282,7 +282,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 23,
                 'question_text' => 'Apakah tersedia kebijakan pemrosesan data Anak?',
                 'description' => 'Persyaratan persetujuan orang tua atau wali untuk pemrosesan data Anak.',
-                'regulation_ref' => 'UU PDP Pasal 25',
+                'regulation_ref' => 'UU PDP Pasal 25 jo. PP 33/2026 Pasal 38',
                 'recommendation_if_no' => 'Buat kebijakan pemrosesan data Anak.',
             ],
             [
@@ -291,7 +291,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 24,
                 'question_text' => 'Apakah tersedia kebijakan pemrosesan data Penyandang Disabilitas?',
                 'description' => 'Fasilitas, asisten virtual, dan teknologi khusus untuk Penyandang Disabilitas.',
-                'regulation_ref' => 'UU PDP Pasal 26',
+                'regulation_ref' => 'UU PDP Pasal 26 jo. PP 33/2026 Pasal 39',
                 'recommendation_if_no' => 'Susun kebijakan pemrosesan data Penyandang Disabilitas.',
             ],
             [
@@ -300,7 +300,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 25,
                 'question_text' => 'Apakah tersedia Kebijakan Keamanan Siber?',
                 'description' => 'Identifikasi aset, manajemen risiko, dan kontrol aset.',
-                'regulation_ref' => 'UU PDP Pasal 35',
+                'regulation_ref' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                 'recommendation_if_no' => 'Tetapkan kebijakan Keamanan Siber.',
             ],
             [
@@ -309,7 +309,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 26,
                 'question_text' => 'Apakah tersedia prosedur Manajemen Kebocoran Data?',
                 'description' => 'Pengumpulan bahan, isolasi, dan analisis insiden.',
-                'regulation_ref' => 'UU PDP Pasal 35',
+                'regulation_ref' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                 'recommendation_if_no' => 'Tetapkan prosedur Manajemen Kebocoran Data.',
             ],
             [
@@ -318,7 +318,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 27,
                 'question_text' => 'Apakah tersedia prosedur hubungan dengan otoritas?',
                 'description' => 'Aktivitas dan cara menyikapi otoritas pemangku kebijakan.',
-                'regulation_ref' => 'UU PDP Pasal 46',
+                'regulation_ref' => 'UU PDP Pasal 46 jo. PP 33/2026 Pasal 114–116',
                 'recommendation_if_no' => 'Tentukan prosedur hubungan dengan otoritas.',
             ],
             [
@@ -327,7 +327,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 28,
                 'question_text' => 'Apakah tersedia template Kontrak Pihak Ketiga PDP?',
                 'description' => 'Pokok yang diatur dalam kontrak pemrosesan dengan pihak ketiga.',
-                'regulation_ref' => 'UU PDP Pasal 23',
+                'regulation_ref' => 'UU PDP Pasal 23 jo. PP 33/2026 Pasal 32–37',
                 'recommendation_if_no' => 'Pastikan ketersediaan template Kontrak Pihak Ketiga PDP.',
             ],
             [
@@ -336,7 +336,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 29,
                 'question_text' => 'Apakah tersedia Kebijakan Manajemen Persetujuan?',
                 'description' => 'Formulasi bahasa untuk persetujuan subjek data.',
-                'regulation_ref' => 'UU PDP Pasal 24',
+                'regulation_ref' => 'UU PDP Pasal 24 jo. PP 33/2026 Pasal 32–37',
                 'recommendation_if_no' => 'Tentukan Kebijakan Manajemen Persetujuan.',
             ],
         ];
@@ -352,7 +352,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 30,
                 'question_text' => 'Apakah RoPA (laporan perekaman aktivitas) sudah dikerjakan sesuai template?',
                 'description' => 'Pelaksanaan pencatatan aktivitas pemrosesan data sesuai template RoPA.',
-                'regulation_ref' => 'UU PDP Pasal 31',
+                'regulation_ref' => 'UU PDP Pasal 31 jo. PP 33/2026 Pasal 74',
                 'recommendation_if_no' => 'Kerjakan laporan RoPA.',
             ],
             [
@@ -361,7 +361,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 31,
                 'question_text' => 'Apakah DPIA (laporan aktivitas berisiko tinggi) sudah disusun?',
                 'description' => 'Pelaksanaan asesmen dampak pemrosesan berisiko tinggi.',
-                'regulation_ref' => 'UU PDP Pasal 34',
+                'regulation_ref' => 'UU PDP Pasal 34 jo. PP 33/2026 Pasal 120–122',
                 'recommendation_if_no' => 'Susun laporan DPIA.',
             ],
             [
@@ -370,7 +370,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 32,
                 'question_text' => 'Apakah Permintaan dan Pemenuhan Hak Subjek Data dipenuhi dalam 3×24 jam?',
                 'description' => 'Dokumentasi dan saluran pemenuhan hak subjek data sesuai tenggat waktu.',
-                'regulation_ref' => 'UU PDP Pasal 5-14',
+                'regulation_ref' => 'UU PDP Pasal 5-14 jo. PP 33/2026 Pasal 20–27, 79–82, 93–95',
                 'recommendation_if_no' => 'Dokumentasikan dan sediakan saluran pemenuhan hak subjek data.',
             ],
             [
@@ -397,7 +397,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 35,
                 'question_text' => 'Apakah drafting dan review Kontrak Pihak Ketiga PDP sudah dilaksanakan?',
                 'description' => 'Pelaksanaan penyusunan dan peninjauan kontrak pihak ketiga.',
-                'regulation_ref' => 'UU PDP Pasal 23',
+                'regulation_ref' => 'UU PDP Pasal 23 jo. PP 33/2026 Pasal 32–37',
                 'recommendation_if_no' => 'Laksanakan drafting dan review kontrak pihak ketiga.',
             ],
             [
@@ -406,7 +406,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 36,
                 'question_text' => 'Apakah implementasi Manajemen Persetujuan sudah dijalankan?',
                 'description' => 'Pelaksanaan pengelolaan persetujuan subjek data.',
-                'regulation_ref' => 'UU PDP Pasal 24',
+                'regulation_ref' => 'UU PDP Pasal 24 jo. PP 33/2026 Pasal 32–37',
                 'recommendation_if_no' => 'Implementasikan Manajemen Persetujuan.',
             ],
             [
@@ -415,7 +415,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 37,
                 'question_text' => 'Apakah penghapusan data dan Berita Acara Pemusnahan sudah dijalankan?',
                 'description' => 'Pelaksanaan penghapusan data dengan dokumentasi Berita Acara Pemusnahan.',
-                'regulation_ref' => 'UU PDP Pasal 44',
+                'regulation_ref' => 'UU PDP Pasal 44 jo. PP 33/2026 Pasal 80',
                 'recommendation_if_no' => 'Jalankan penghapusan data dan Berita Acara Pemusnahan.',
             ],
             [
@@ -433,7 +433,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 39,
                 'question_text' => 'Apakah tersedia sistem untuk pemrosesan data Anak?',
                 'description' => 'Penyediaan sistem khusus untuk pemrosesan data Anak.',
-                'regulation_ref' => 'UU PDP Pasal 25',
+                'regulation_ref' => 'UU PDP Pasal 25 jo. PP 33/2026 Pasal 38',
                 'recommendation_if_no' => 'Pastikan sistem khusus untuk pemrosesan data Anak.',
             ],
             [
@@ -442,7 +442,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 40,
                 'question_text' => 'Apakah tersedia sistem untuk Penyandang Disabilitas?',
                 'description' => 'Penyediaan sistem khusus untuk Penyandang Disabilitas.',
-                'regulation_ref' => 'UU PDP Pasal 26',
+                'regulation_ref' => 'UU PDP Pasal 26 jo. PP 33/2026 Pasal 39',
                 'recommendation_if_no' => 'Pastikan sistem khusus untuk Penyandang Disabilitas.',
             ],
         ];
@@ -458,7 +458,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 41,
                 'question_text' => 'Apakah sudah ada penunjukan PPDP beserta Surat Keputusan?',
                 'description' => 'Penunjukan resmi Pejabat Pelindungan Data Pribadi melalui Surat Keputusan.',
-                'regulation_ref' => 'UU PDP Pasal 53',
+                'regulation_ref' => 'UU PDP Pasal 53 jo. PP 33/2026 Pasal 142',
                 'recommendation_if_no' => 'Lakukan penunjukan PPDP beserta Surat Keputusan.',
             ],
             [
@@ -467,7 +467,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 42,
                 'question_text' => 'Apakah pelatihan PPDP sudah dilaksanakan?',
                 'description' => 'Pelaksanaan pelatihan untuk Pejabat Pelindungan Data Pribadi.',
-                'regulation_ref' => 'UU PDP Pasal 53',
+                'regulation_ref' => 'UU PDP Pasal 53 jo. PP 33/2026 Pasal 142',
                 'recommendation_if_no' => 'Selenggarakan pelatihan PPDP.',
             ],
             [
@@ -476,7 +476,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 43,
                 'question_text' => 'Apakah PPDP sudah memiliki sertifikasi, pendidikan formal, dan kompetensi yang memadai?',
                 'description' => 'Kelengkapan sertifikasi, pendidikan formal, dan kompetensi PPDP.',
-                'regulation_ref' => 'UU PDP Pasal 53',
+                'regulation_ref' => 'UU PDP Pasal 53 jo. PP 33/2026 Pasal 142',
                 'recommendation_if_no' => 'Lengkapi sertifikasi, pendidikan formal, dan kompetensi PPDP.',
             ],
             [
@@ -485,7 +485,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 44,
                 'question_text' => 'Apakah pelatihan untuk Pimpinan Organisasi sudah dilaksanakan?',
                 'description' => 'Pelaksanaan pelatihan PDP untuk pimpinan organisasi.',
-                'regulation_ref' => 'UU PDP Pasal 16, 53, 54',
+                'regulation_ref' => 'UU PDP Pasal 16, 53, 54 jo. PP 33/2026 Pasal 30, 142–143',
                 'recommendation_if_no' => 'Selenggarakan pelatihan untuk Pimpinan Organisasi.',
             ],
             [
@@ -494,7 +494,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 45,
                 'question_text' => 'Apakah pelatihan untuk karyawan (champion PDP) sudah dilaksanakan?',
                 'description' => 'Pelaksanaan pelatihan untuk karyawan sebagai champion PDP.',
-                'regulation_ref' => 'UU PDP Pasal 53, 54',
+                'regulation_ref' => 'UU PDP Pasal 53, 54 jo. PP 33/2026 Pasal 142–143',
                 'recommendation_if_no' => 'Selenggarakan pelatihan karyawan (champion PDP).',
             ],
             [
@@ -503,7 +503,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 46,
                 'question_text' => 'Apakah awareness dan campaign PDP untuk seluruh karyawan sudah dilakukan?',
                 'description' => 'Pelaksanaan awareness dan campaign PDP untuk seluruh karyawan.',
-                'regulation_ref' => 'UU PDP Pasal 53, 54',
+                'regulation_ref' => 'UU PDP Pasal 53, 54 jo. PP 33/2026 Pasal 142–143',
                 'recommendation_if_no' => 'Selenggarakan awareness dan campaign PDP untuk seluruh karyawan.',
             ],
             [
@@ -512,7 +512,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 47,
                 'question_text' => 'Apakah awareness PDP untuk pihak ketiga sudah dilakukan?',
                 'description' => 'Pelaksanaan awareness PDP terhadap pihak ketiga.',
-                'regulation_ref' => 'UU PDP Pasal 53, 54',
+                'regulation_ref' => 'UU PDP Pasal 53, 54 jo. PP 33/2026 Pasal 142–143',
                 'recommendation_if_no' => 'Selenggarakan awareness PDP untuk pihak ketiga.',
             ],
         ];
@@ -537,7 +537,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 49,
                 'question_text' => 'Apakah enkripsi data pribadi sudah diterapkan?',
                 'description' => 'Penerapan enkripsi terhadap data pribadi.',
-                'regulation_ref' => 'UU PDP Pasal 35',
+                'regulation_ref' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                 'recommendation_if_no' => 'Terapkan enkripsi data pribadi.',
             ],
             [
@@ -546,7 +546,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 51,
                 'question_text' => 'Apakah teknologi penghapusan data (data erasure) sudah diterapkan?',
                 'description' => 'Penerapan teknologi penghapusan data secara aman.',
-                'regulation_ref' => 'UU PDP Pasal 35',
+                'regulation_ref' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                 'recommendation_if_no' => 'Terapkan teknologi penghapusan data (data erasure).',
             ],
             [
@@ -555,7 +555,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 52,
                 'question_text' => 'Apakah pencadangan data (immutable back-up) sudah diterapkan?',
                 'description' => 'Penerapan pencadangan data yang bersifat immutable.',
-                'regulation_ref' => 'UU PDP Pasal 35',
+                'regulation_ref' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                 'recommendation_if_no' => 'Terapkan pencadangan data (immutable back-up).',
             ],
             [
@@ -564,7 +564,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 53,
                 'question_text' => 'Apakah pseudonimisasi atau masking data sudah diterapkan?',
                 'description' => 'Penerapan pseudonimisasi atau masking pada data pribadi.',
-                'regulation_ref' => 'UU PDP Pasal 35',
+                'regulation_ref' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                 'recommendation_if_no' => 'Terapkan pseudonimisasi atau masking data.',
             ],
             [
@@ -573,7 +573,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 54,
                 'question_text' => 'Apakah Vulnerability Assessment dan Pentest dilaksanakan secara berkala?',
                 'description' => 'Pelaksanaan Vulnerability Assessment dan Penetration Test secara berkala.',
-                'regulation_ref' => 'UU PDP Pasal 35',
+                'regulation_ref' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                 'recommendation_if_no' => 'Laksanakan Vulnerability Assessment dan Pentest secara berkala.',
             ],
             [
@@ -582,7 +582,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 55,
                 'question_text' => 'Apakah Security Operation Center (SOC) sudah tersedia?',
                 'description' => 'Ketersediaan Security Operation Center untuk pemantauan keamanan.',
-                'regulation_ref' => 'UU PDP Pasal 35',
+                'regulation_ref' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                 'recommendation_if_no' => 'Sediakan Security Operation Center (SOC).',
             ],
             [
@@ -591,7 +591,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 56,
                 'question_text' => 'Apakah teknologi pemrosesan data Anak (verifikasi umur) sudah diterapkan?',
                 'description' => 'Penerapan teknologi verifikasi umur untuk pemrosesan data Anak.',
-                'regulation_ref' => 'UU PDP Pasal 25',
+                'regulation_ref' => 'UU PDP Pasal 25 jo. PP 33/2026 Pasal 38',
                 'recommendation_if_no' => 'Terapkan teknologi pemrosesan data Anak (verifikasi umur).',
             ],
             [
@@ -600,7 +600,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 57,
                 'question_text' => 'Apakah teknologi khusus untuk Penyandang Disabilitas sudah diterapkan?',
                 'description' => 'Penerapan teknologi pendukung khusus bagi Penyandang Disabilitas.',
-                'regulation_ref' => 'UU PDP Pasal 26',
+                'regulation_ref' => 'UU PDP Pasal 26 jo. PP 33/2026 Pasal 39',
                 'recommendation_if_no' => 'Terapkan teknologi khusus untuk Penyandang Disabilitas.',
             ],
         ];

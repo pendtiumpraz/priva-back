@@ -83,7 +83,7 @@ class RopaTemplateSeeder extends Seeder
             [
                 'industry' => 'healthcare', 'activity_code' => 'patient_records',
                 'name' => 'Rekam Medis Pasien',
-                'description' => 'Pencatatan rekam medis elektronik (RME) sesuai PMK 269 dan UU PDP Pasal 4 (data kesehatan = data sensitif).',
+                'description' => 'Pencatatan rekam medis elektronik (RME) sesuai PMK 269 dan UU PDP Pasal 4 jo. PP 33/2026 Pasal 5–7 (data kesehatan = data sensitif).',
                 'wizard_data' => [
                     'detail_pemrosesan' => ['nama_pemrosesan' => 'Electronic Medical Records', 'sistem_terkait' => 'HIS / EMR System', 'risk_level' => 'high'],
                     'informasi_pemrosesan' => ['tujuan' => "1. Pencatatan riwayat medis pasien\n2. Koordinasi perawatan antar dokter/tenaga medis\n3. Klaim BPJS/asuransi\n4. Audit mutu pelayanan", 'legal_basis' => 'vital_interest'],

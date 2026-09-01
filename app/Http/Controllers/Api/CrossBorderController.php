@@ -8,13 +8,14 @@ use App\Models\CrossBorderTransfer;
 use App\Services\AiService;
 use App\Services\ApprovalWorkflowDispatcher;
 use App\Services\AssessmentAutoTriggerService;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class CrossBorderController extends Controller
 {
     /**
-     * Allowed legal bases for cross-border transfer (UU PDP Pasal 56 + GDPR Ch. V).
+     * Allowed legal bases for cross-border transfer (UU PDP Pasal 56 jo. PP 33/2026 Pasal 160–163 + GDPR Ch. V).
      * Used by both store/update validation AND TIA recommender.
      */
     private const LEGAL_BASES = [
@@ -49,7 +50,7 @@ class CrossBorderController extends Controller
             'status' => $data['status'] ?? 'draft',
         ]));
 
-        // Sprint X4 — every cross-border transfer needs a TIA per UU PDP Pasal 56.
+        // Sprint X4 — every cross-border transfer needs a TIA per UU PDP Pasal 56 jo. PP 33/2026 Pasal 160–163.
         // Service wraps in try/catch so failures can't fail the create.
         $autoTiaId = null;
         try {
@@ -61,14 +62,16 @@ class CrossBorderController extends Controller
         }
 
         try {
-            \App\Services\NotificationService::dispatch(
+            NotificationService::dispatch(
                 kind: 'info', severity: 'medium', module: 'cross-border',
                 type: 'cross_border.created', recipient: 'role:dpo,admin', orgId: $transfer->org_id,
                 title: 'Transfer lintas negara baru: '.($transfer->destination_country ?? ''),
-                body: ($transfer->transfer_purpose ?? 'Cross-border transfer').' — wajib TIA (Pasal 56 UU PDP).',
+                body: ($transfer->transfer_purpose ?? 'Cross-border transfer').' — wajib TIA (Pasal 56 jo. PP 33/2026 Pasal 160–163 UU PDP).',
                 actionUrl: '/cross-border', metadata: ['record_id' => $transfer->id],
             );
-        } catch (\Throwable $e) { Log::warning('cross_border.created notif failed: '.$e->getMessage()); }
+        } catch (\Throwable $e) {
+            Log::warning('cross_border.created notif failed: '.$e->getMessage());
+        }
 
         return response()->json([
             'message' => 'Data transfer berhasil didaftarkan',
@@ -102,14 +105,16 @@ class CrossBorderController extends Controller
                 $transfer->org_id, 'cross_border', $transfer->id
             );
             try {
-                \App\Services\NotificationService::dispatch(
+                NotificationService::dispatch(
                     kind: 'warning', severity: 'medium', module: 'cross-border',
                     type: 'cross_border.submitted', recipient: 'role:dpo,admin', orgId: $transfer->org_id,
                     title: 'Transfer lintas negara menunggu approval: '.($transfer->destination_country ?? ''),
                     body: ($transfer->transfer_purpose ?? '').' — perlu sign-off compliance.',
                     actionUrl: '/cross-border', metadata: ['record_id' => $transfer->id],
                 );
-            } catch (\Throwable $e) { Log::warning('cross_border.submitted notif failed: '.$e->getMessage()); }
+            } catch (\Throwable $e) {
+                Log::warning('cross_border.submitted notif failed: '.$e->getMessage());
+            }
         }
 
         return response()->json(['message' => 'Data transfer berhasil diperbarui', 'data' => $transfer->fresh()]);
@@ -152,7 +157,7 @@ class CrossBorderController extends Controller
      *
      * Two modes — both fully functional:
      *  - mode=manual: skor + safeguards + legal_basis dihitung dari jawaban form
-     *    (rubric Pasal 56 UU PDP). Selalu jalan, no AI dependency.
+     *    (rubric Pasal 56 jo. PP 33/2026 Pasal 160–163 UU PDP). Selalu jalan, no AI dependency.
      *  - mode=ai (default if credits available): jawaban dianalisa AI untuk skor
      *    + rekomendasi safeguards + recommended legal basis. Fallback ke manual
      *    rubric kalau AI gagal/error/credits habis — user TIDAK kehilangan TIA.
@@ -256,7 +261,7 @@ class CrossBorderController extends Controller
      * hasilnya konsisten antar pengguna & antar org.
      *
      * Skor turun jika:
-     *  - destination country bukan adequacy-listed (UU PDP Pasal 56 ayat 1)
+     *  - destination country bukan adequacy-listed (UU PDP Pasal 56 ayat 1 jo. PP 33/2026 Pasal 160–163)
      *  - data sensitif / spesifik tanpa SCCs/BCR
      *  - tidak ada DPA / encryption-at-rest
      *
@@ -383,7 +388,7 @@ class CrossBorderController extends Controller
     /**
      * Country adequacy lookup. Used by the FE when user types/selects
      * a destination country — returns the tier classification + default
-     * risk score pre-fills + Pasal 56 safeguard recommendation hint.
+     * risk score pre-fills + Pasal 56 jo. PP 33/2026 Pasal 160–163 safeguard recommendation hint.
      *
      * GET /cross-border/countries           → list all (for autocomplete)
      * GET /cross-border/countries/{code}    → resolve one

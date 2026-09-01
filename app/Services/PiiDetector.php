@@ -17,12 +17,12 @@ class PiiDetector
         $type = strtolower($columnType);
 
         // =============================================
-        // KATEGORI SPESIFIK (Pasal 4 UU PDP — risiko tinggi)
+        // KATEGORI SPESIFIK (Pasal 4 jo. PP 33/2026 Pasal 5–7 UU PDP —risiko tinggi)
         // =============================================
 
         // NIK / KTP
         if (self::match($name, ['nik', 'ktp', 'id_card', 'national_id', 'identity_number', 'no_ktp', 'nomor_ktp'])) {
-            return self::result(true, 'spesifik', 'sensitive', true, 'NIK/KTP (ID nasional) – data spesifik Pasal 4 UU PDP');
+            return self::result(true, 'spesifik', 'sensitive', true, 'NIK/KTP (ID nasional) – data spesifik Pasal 4 jo. PP 33/2026 Pasal 5–7 UU PDP');
         }
 
         // NPWP
@@ -42,7 +42,7 @@ class PiiDetector
 
         // Data Kesehatan / Medis
         if (self::match($name, ['health', 'medical', 'diagnos', 'disease', 'sakit', 'kesehatan', 'rekam_medis', 'bpjs', 'insurance_id'])) {
-            return self::result(true, 'spesifik', 'sensitive', true, 'Data kesehatan/medis – data spesifik Pasal 4 UU PDP');
+            return self::result(true, 'spesifik', 'sensitive', true, 'Data kesehatan/medis – data spesifik Pasal 4 jo. PP 33/2026 Pasal 5–7 UU PDP');
         }
 
         // Biometrik
@@ -71,7 +71,7 @@ class PiiDetector
         }
 
         // =============================================
-        // KATEGORI UMUM (Pasal 4 UU PDP — data pribadi biasa)
+        // KATEGORI UMUM (Pasal 4 jo. PP 33/2026 Pasal 5–7 UU PDP —data pribadi biasa)
         // =============================================
 
         // Nama

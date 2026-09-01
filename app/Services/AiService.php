@@ -486,7 +486,7 @@ class AiService
             ."Berikan analisis AI:\n"
             ."1. Severity assessment (low/medium/high/critical) dengan justifikasi\n"
             ."2. Immediate containment steps (prioritized, 5-7 langkah)\n"
-            ."3. Apakah notifikasi ke KOMDIGI wajib? (3×24 jam sesuai Pasal 46 UU PDP)\n"
+            ."3. Apakah notifikasi ke KOMDIGI wajib? (3×24 jam sesuai Pasal 46 jo. PP 33/2026 Pasal 114–116 UU PDP)\n"
             ."4. Template notifikasi ke subjek data (jika wajib)\n"
             ."5. Rekomendasi root cause investigation\n"
             ."6. Warning tentang deadline dan konsekuensi hukum\n"

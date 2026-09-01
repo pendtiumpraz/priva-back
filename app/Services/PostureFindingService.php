@@ -138,9 +138,9 @@ class PostureFindingService
     // ─── Detectors ───────────────────────────────────────────────────────
 
     /**
-     * PII column dengan kategori spesifik (Pasal 4) tapi tanpa
+     * PII column dengan kategori spesifik (Pasal 4 jo. PP 33/2026 Pasal 5–7) tapi tanpa
      * protection_assessment (encryption / access_control / masking /
-     * tokenization). Critical severity karena Pasal 4 + Pasal 39.
+     * tokenization). Critical severity karena Pasal 4 jo. PP 33/2026 Pasal 5–7 + Pasal 39 jo. PP 33/2026 Pasal 123–129.
      */
     private function detectSensitiveProtection(string $orgId): array
     {
@@ -175,8 +175,8 @@ class PostureFindingService
                             'source_detail' => "{$sys->name} · {$key}",
                             'severity' => 'critical',
                             'title' => "Data spesifik tanpa kontrol: {$key}",
-                            'description' => "Kolom {$key} di sistem {$sys->name} terdeteksi sebagai data spesifik (UU PDP Pasal 4 ayat 2) — ".($c['reason'] ?? 'PII spesifik').'. Belum ada protection assessment (enkripsi, kontrol akses, masking, atau tokenisasi) yang tercatat.',
-                            'regulation_ref' => 'UU PDP Pasal 4 ayat 2 + Pasal 39',
+                            'description' => "Kolom {$key} di sistem {$sys->name} terdeteksi sebagai data spesifik (UU PDP Pasal 4 ayat 2 jo. PP 33/2026 Pasal 5–7) —".($c['reason'] ?? 'PII spesifik').'. Belum ada protection assessment (enkripsi, kontrol akses, masking, atau tokenisasi) yang tercatat.',
+                            'regulation_ref' => 'UU PDP Pasal 4 ayat 2 jo. PP 33/2026 Pasal 5–7 + Pasal 39 jo. PP 33/2026 Pasal 123–129',
                             'metadata' => [
                                 'system_id' => $sys->id,
                                 'table' => $tableName,
@@ -229,7 +229,7 @@ class PostureFindingService
                             'severity' => 'high',
                             'title' => "PII belum di-assess: {$key}",
                             'description' => "Kolom {$key} terdeteksi PII (".($c['reason'] ?? 'PII umum').') tapi belum diisi protection assessment.',
-                            'regulation_ref' => 'UU PDP Pasal 39',
+                            'regulation_ref' => 'UU PDP Pasal 39 jo. PP 33/2026 Pasal 123–129',
                             'metadata' => ['system_id' => $sys->id, 'table' => $tableName, 'column' => $colName],
                         ];
                     }
@@ -265,7 +265,7 @@ class PostureFindingService
                     'severity' => $isCritical ? 'critical' : 'medium',
                     'title' => 'Schema drift: '.substr((string) $alert, 0, 80),
                     'description' => (string) $alert,
-                    'regulation_ref' => 'UU PDP Pasal 39',
+                    'regulation_ref' => 'UU PDP Pasal 39 jo. PP 33/2026 Pasal 123–129',
                     'metadata' => ['system_id' => $sys->id, 'detected_at' => optional($sys->last_scanned_at)->toIso8601String()],
                 ];
             }
@@ -275,7 +275,7 @@ class PostureFindingService
     }
 
     /**
-     * RoPA HIGH-risk tanpa DPIA approved (Pasal 35).
+     * RoPA HIGH-risk tanpa DPIA approved (Pasal 35 jo. PP 33/2026 Pasal 123–129).
      */
     private function detectDpiaCompliance(string $orgId): array
     {
@@ -300,8 +300,8 @@ class PostureFindingService
                     'source_detail' => $r->registration_number,
                     'severity' => 'high',
                     'title' => "DPIA wajib untuk RoPA HIGH-risk: {$r->registration_number}",
-                    'description' => "RoPA HIGH-risk '{$r->processing_activity}' belum punya DPIA approved. UU PDP Pasal 35 mensyaratkan Penilaian Dampak Perlindungan Data untuk pemrosesan berisiko tinggi.",
-                    'regulation_ref' => 'UU PDP Pasal 35',
+                    'description' => "RoPA HIGH-risk '{$r->processing_activity}' belum punya DPIA approved. UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129 mensyaratkan Penilaian Dampak Perlindungan Data untuk pemrosesan berisiko tinggi.",
+                    'regulation_ref' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                     'metadata' => ['ropa_id' => $r->id],
                 ];
             }
@@ -369,7 +369,7 @@ class PostureFindingService
                     'severity' => $sev,
                     'title' => "RTP overdue {$daysOverdue} hari: ".$label,
                     'description' => $detail.' · Due: '.$due->format('d M Y'),
-                    'regulation_ref' => 'UU PDP Pasal 35',
+                    'regulation_ref' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                     'metadata' => ['dpia_id' => $d->id, 'item_index' => $idx, 'days_overdue' => $daysOverdue],
                 ];
             }
@@ -405,8 +405,8 @@ class PostureFindingService
                 'source_detail' => $v->name,
                 'severity' => $sev,
                 'title' => "Vendor overdue re-assess {$daysOverdue} hari: {$v->name}",
-                'description' => "Vendor {$v->name} (risk_level={$v->risk_level}) sudah lewat jadwal re-assessment {$daysOverdue} hari. UU PDP Pasal 51 mensyaratkan kontrol berkelanjutan atas prosesor.",
-                'regulation_ref' => 'UU PDP Pasal 51',
+                'description' => "Vendor {$v->name} (risk_level={$v->risk_level}) sudah lewat jadwal re-assessment {$daysOverdue} hari. UU PDP Pasal 51 jo. PP 33/2026 Pasal 88 & 139 mensyaratkan kontrol berkelanjutan atas prosesor.",
+                'regulation_ref' => 'UU PDP Pasal 51 jo. PP 33/2026 Pasal 88 & 139',
                 'metadata' => ['vendor_id' => $v->id, 'days_overdue' => $daysOverdue],
             ];
         }
@@ -436,8 +436,8 @@ class PostureFindingService
                 'source_detail' => "{$cbt->destination_entity} ({$cbt->destination_country})",
                 'severity' => 'critical',
                 'title' => "Transfer tanpa dasar hukum: {$cbt->destination_entity}",
-                'description' => "Cross-border transfer ke {$cbt->destination_entity} di {$cbt->destination_country} belum punya legal_basis Pasal 56 yang valid. Tanpa adequacy/SCCs/BCR/persetujuan eksplisit, transfer ini berisiko ilegal.",
-                'regulation_ref' => 'UU PDP Pasal 56',
+                'description' => "Cross-border transfer ke {$cbt->destination_entity} di {$cbt->destination_country} belum punya legal_basis Pasal 56 jo. PP 33/2026 Pasal 160–163 yang valid. Tanpa adequacy/SCCs/BCR/persetujuan eksplisit, transfer ini berisiko ilegal.",
+                'regulation_ref' => 'UU PDP Pasal 56 jo. PP 33/2026 Pasal 160–163',
                 'metadata' => ['cross_border_id' => $cbt->id],
             ];
         }
@@ -446,7 +446,7 @@ class PostureFindingService
     }
 
     /**
-     * Active breach yang belum di-notify dalam 72h (Pasal 46).
+     * Active breach yang belum di-notify dalam 72h (Pasal 46 jo. PP 33/2026 Pasal 114–116).
      */
     private function detectBreachReadiness(string $orgId): array
     {
@@ -469,8 +469,8 @@ class PostureFindingService
                 'source_detail' => $b->incident_code,
                 'severity' => $sev,
                 'title' => "Breach aktif {$hoursOpen}h".($notified ? '' : ' (belum notif KOMDIGI)').": {$b->incident_code}",
-                'description' => "Breach {$b->incident_code} ('{$b->title}') terdeteksi {$hoursOpen} jam yang lalu. ".($notified ? 'Sudah notif KOMDIGI.' : 'BELUM notif KOMDIGI — Pasal 46 batas 72h.'),
-                'regulation_ref' => 'UU PDP Pasal 46',
+                'description' => "Breach {$b->incident_code} ('{$b->title}') terdeteksi {$hoursOpen} jam yang lalu. ".($notified ? 'Sudah notif KOMDIGI.' : 'BELUM notif KOMDIGI — Pasal 46 jo. PP 33/2026 Pasal 114–116 batas 72h.'),
+                'regulation_ref' => 'UU PDP Pasal 46 jo. PP 33/2026 Pasal 114–116',
                 'metadata' => ['breach_id' => $b->id, 'hours_open' => $hoursOpen, 'notified_komdigi' => $notified],
             ];
         }
@@ -519,7 +519,7 @@ class PostureFindingService
      * scales with privilege type:
      *   - DELETE / TRUNCATE / DROP on PII table  → critical
      *   - UPDATE / INSERT on PII table           → high
-     *   - SELECT on Pasal 4 spesifik table       → high
+     *   - SELECT on Pasal 4 jo. PP 33/2026 Pasal 5–7 spesifik table       → high
      *   - SELECT on PII umum table               → medium
      */
     private function detectExcessiveAccess(string $orgId): array
@@ -604,8 +604,8 @@ class PostureFindingService
                     'source_detail' => "{$sys->name} · {$entry['grantee']} → {$entry['table']}",
                     'severity' => $severity,
                     'title' => "Akses berlebih: {$entry['grantee']} punya {$privList} pada {$entry['table']}",
-                    'description' => "User '{$entry['grantee']}' punya privilege [{$privList}] pada tabel '{$entry['table']}' yang mengandung ".($isSpesifik ? 'data spesifik (Pasal 4 ayat 2)' : 'PII')." di sistem '{$sys->name}'. Verifikasi kebutuhan akses dan terapkan least-privilege.",
-                    'regulation_ref' => 'UU PDP Pasal 39 + ISO 27001 A.9.4',
+                    'description' => "User '{$entry['grantee']}' punya privilege [{$privList}] pada tabel '{$entry['table']}' yang mengandung ".($isSpesifik ? 'data spesifik (Pasal 4 ayat 2 jo. PP 33/2026 Pasal 5–7)' : 'PII')." di sistem '{$sys->name}'. Verifikasi kebutuhan akses dan terapkan least-privilege.",
+                    'regulation_ref' => 'UU PDP Pasal 39 jo. PP 33/2026 Pasal 123–129 + ISO 27001 A.9.4',
                     'metadata' => [
                         'system_id' => $sys->id,
                         'grantee' => $entry['grantee'],
@@ -681,8 +681,8 @@ class PostureFindingService
                         'source_detail' => "{$sys->name} · {$tableName}",
                         'severity' => 'critical',
                         'title' => "Tabel data spesifik tanpa enkripsi: {$tableName}",
-                        'description' => "Tabel '{$tableName}' di sistem '{$sys->name}' mengandung data spesifik (Pasal 4 ayat 2) tapi tablespace tidak terenkripsi dan tidak ditemukan kolom dengan enkripsi field-level (heuristik *_enc/*_encrypted). Pasal 39 UU PDP mensyaratkan pengamanan teknis.",
-                        'regulation_ref' => 'UU PDP Pasal 4 ayat 2 + Pasal 39',
+                        'description' => "Tabel '{$tableName}' di sistem '{$sys->name}' mengandung data spesifik (Pasal 4 ayat 2 jo. PP 33/2026 Pasal 5–7) tapi tablespace tidak terenkripsi dan tidak ditemukan kolom dengan enkripsi field-level (heuristik *_enc/*_encrypted). Pasal 39 jo. PP 33/2026 Pasal 123–129 UU PDP mensyaratkan pengamanan teknis.",
+                        'regulation_ref' => 'UU PDP Pasal 4 ayat 2 jo. PP 33/2026 Pasal 5–7 + Pasal 39 jo. PP 33/2026 Pasal 123–129',
                         'metadata' => [
                             'system_id' => $sys->id,
                             'table' => $tableName,

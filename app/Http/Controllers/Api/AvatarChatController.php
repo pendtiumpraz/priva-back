@@ -7,8 +7,9 @@ use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\License;
 use App\Services\AiContentSanitizer;
-use Illuminate\Http\Request;
+use App\Services\AiOutputGuard;
 use App\Support\OutboundHttp;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -135,12 +136,15 @@ class AvatarChatController extends Controller
 
             // Aggregate summary dari older messages
             $summaries = array_filter(array_map(function ($m) {
-                if (empty($m['summary'])) return null;
+                if (empty($m['summary'])) {
+                    return null;
+                }
                 $role = ($m['role'] ?? 'user') === 'assistant' ? 'Priva' : 'User';
+
                 return "- {$role}: {$m['summary']}";
             }, $older));
 
-            if (!empty($summaries)) {
+            if (! empty($summaries)) {
                 $safeSummary = AiContentSanitizer::neutralize(implode("\n", $summaries));
                 $olderCount = count($older);
                 $messages[] = [
@@ -182,7 +186,7 @@ class AvatarChatController extends Controller
             // hard cap dari settings (default 4000). 2048 < cap dalam kondisi
             // default, tapi clamp jaga konsistensi kalau admin set cap lebih
             // ketat.
-            $outputGuard = app(\App\Services\AiOutputGuard::class);
+            $outputGuard = app(AiOutputGuard::class);
             $maxTokens = $outputGuard->clampMaxTokens(2048);
 
             $response = OutboundHttp::client($baseUrl)
@@ -486,7 +490,7 @@ OVERVIEW;
             [
                 'title' => 'RoPA (Record of Processing Activities)',
                 'keywords' => ['ropa', 'pemrosesan', 'data pribadi', 'record', 'aktivitas', 'retensi', 'dasar hukum'],
-                'content' => 'Berdasarkan Pasal 31 UU PDP, wajib memiliki rekam jejak pemrosesan. RoPA merekam: divisi, tujuan pemrosesan, jenis data, masa retensi, mekanisme keamanan. Fitur AI Auto-Fill: isi semua field hanya dengan kata kunci singkat (1 credit). Risk Level (Low/Medium/High/Critical) dihitung otomatis. Bisa trigger DPIA otomatis jika risiko tinggi. Export PDF untuk audit.',
+                'content' => 'Berdasarkan Pasal 31 jo. PP 33/2026 Pasal 74 UU PDP, wajib memiliki rekam jejak pemrosesan. RoPA merekam: divisi, tujuan pemrosesan, jenis data, masa retensi, mekanisme keamanan. Fitur AI Auto-Fill: isi semua field hanya dengan kata kunci singkat (1 credit). Risk Level (Low/Medium/High/Critical) dihitung otomatis. Bisa trigger DPIA otomatis jika risiko tinggi. Export PDF untuk audit.',
             ],
 
             // ===== DPIA =====
@@ -542,7 +546,7 @@ OVERVIEW;
             [
                 'title' => 'Data Breach Management',
                 'keywords' => ['breach', 'kebocoran', 'insiden', 'notifikasi', 'komdigi', 'war room', 'telegram', 'siem'],
-                'content' => 'Manajemen insiden kebocoran data. 5-Phase Lifecycle: Detected → Assessing → Containment → Notification → Closed. Countdown 72 jam (UU PDP Pasal 46). Containment checklist 10 item. Integrasi: Telegram War Room, SIEM (Splunk/ELK/Wazuh), SOAR automation. AI Breach Advisor. Template Root Cause Analysis & Remediation.',
+                'content' => 'Manajemen insiden kebocoran data. 5-Phase Lifecycle: Detected → Assessing → Containment → Notification → Closed. Countdown 72 jam (UU PDP Pasal 46 jo. PP 33/2026 Pasal 114–116). Containment checklist 10 item. Integrasi: Telegram War Room, SIEM (Splunk/ELK/Wazuh), SOAR automation. AI Breach Advisor. Template Root Cause Analysis & Remediation.',
             ],
 
             // ===== FIRE DRILL =====

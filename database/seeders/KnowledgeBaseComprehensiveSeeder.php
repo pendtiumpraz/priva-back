@@ -72,13 +72,13 @@ class KnowledgeBaseComprehensiveSeeder extends Seeder
         return [
             [
                 'module_key' => 'uu_pdp_prinsip_umum',
-                'title' => 'UU PDP — Prinsip Pelindungan Data Pribadi (Pasal 16)',
+                'title' => 'UU PDP — Prinsip Pelindungan Data Pribadi (Pasal 16 jo. PP 33/2026 Pasal 30)',
                 'category' => 'regulation',
                 'feature_tags' => 'chat,ropa_autofill,dpia_autofill,policy_review,remediation',
                 'keywords' => 'prinsip,principles,pdp,uu pdp,pasal 16,lawful,transparan,tujuan,minimisasi,akurat,retensi,keamanan,akuntabilitas',
-                'summary' => 'UU PDP Pasal 16 atur 6 prinsip inti: (1) terbatas & spesifik, (2) sah & transparan, (3) akurat & mutakhir, (4) tujuan sesuai, (5) aman & rahasia, (6) akuntabel. Wajib dipenuhi semua aktivitas pemrosesan.',
+                'summary' => 'UU PDP Pasal 16 jo. PP 33/2026 Pasal 30 atur 6 prinsip inti: (1) terbatas & spesifik, (2) sah & transparan, (3) akurat & mutakhir, (4) tujuan sesuai, (5) aman & rahasia, (6) akuntabel. Wajib dipenuhi semua aktivitas pemrosesan.',
                 'content' => <<<'KB'
-# Prinsip Pelindungan Data Pribadi (UU PDP Pasal 16)
+# Prinsip Pelindungan Data Pribadi (UU PDP Pasal 16 jo. PP 33/2026 Pasal 30)
 
 Setiap pemrosesan data pribadi WAJIB memenuhi 6 prinsip berikut:
 
@@ -88,10 +88,10 @@ Data dikumpulkan hanya untuk tujuan yang sah, jelas, dan secara spesifik diberit
 **Contoh pelanggaran**: Data nasabah diambil untuk KYC, tapi dipakai untuk marketing tanpa consent tambahan.
 
 ## 2. Sah dan Transparan (Lawfulness & Transparency)
-Harus berdasarkan salah satu dari 6 dasar hukum (Pasal 20). Subjek data diberitahu secara terbuka tentang siapa, mengapa, dan bagaimana datanya diproses.
+Harus berdasarkan salah satu dari 6 dasar hukum (Pasal 20 jo. PP 33/2026 Pasal 30). Subjek data diberitahu secara terbuka tentang siapa, mengapa, dan bagaimana datanya diproses.
 
 ## 3. Akurat dan Mutakhir (Accuracy)
-Data harus benar, up-to-date, dan ada mekanisme koreksi untuk subjek data (hak koreksi — Pasal 6).
+Data harus benar, up-to-date, dan ada mekanisme koreksi untuk subjek data (hak koreksi — Pasal 6 jo. PP 33/2026 Pasal 20–27).
 
 ## 4. Tujuan Sesuai (Data Minimization)
 Hanya data yang benar-benar diperlukan yang boleh dikumpulkan. Over-collection = pelanggaran.
@@ -127,37 +127,37 @@ KB,
                 'content' => <<<'KB'
 # Hak-hak Subjek Data (UU PDP Pasal 5-10)
 
-## Pasal 5 — Hak Akses (Access)
+## Pasal 5 jo. PP 33/2026 Pasal 20–27 — Hak Akses (Access)
 Subjek data berhak mengetahui dan memperoleh salinan data pribadi miliknya yang sedang diproses.
 
-## Pasal 6 — Hak Koreksi (Rectification)
+## Pasal 6 jo. PP 33/2026 Pasal 20–27 — Hak Koreksi (Rectification)
 Subjek berhak melengkapi, memperbarui, dan/atau memperbaiki kesalahan data pribadinya.
 
-## Pasal 7 — Hak Penghapusan (Erasure / Right to be Forgotten)
+## Pasal 7 jo. PP 33/2026 Pasal 20–27 — Hak Penghapusan (Erasure / Right to be Forgotten)
 Subjek berhak mengakhiri pemrosesan, menghapus, dan/atau memusnahkan data pribadi miliknya sesuai ketentuan peraturan perundang-undangan.
 
 **Catatan**: Hak hapus tidak absolut — bisa ditolak kalau ada kewajiban hukum lain (mis. Pasal 65 UU 13/2003 tentang retensi data kepegawaian 5 tahun).
 
-## Pasal 8 — Hak Penarikan Persetujuan (Withdraw Consent)
+## Pasal 8 jo. PP 33/2026 Pasal 79–82 — Hak Penarikan Persetujuan (Withdraw Consent)
 Subjek berhak menarik persetujuan yang telah diberikan kapan saja. Penarikan **tidak retroaktif** — pemrosesan sebelum penarikan tetap sah.
 
-## Pasal 9 — Hak Mengajukan Keberatan (Object)
+## Pasal 9 jo. PP 33/2026 Pasal 20–27 — Hak Mengajukan Keberatan (Object)
 Subjek berhak mengajukan keberatan atas tindakan pengambilan keputusan yang semata-mata didasarkan pada pemrosesan otomatis (mis. profiling kredit AI, automated hiring).
 
-## Pasal 10 — Hak Atas Informasi (Right to Information)
+## Pasal 10 jo. PP 33/2026 Pasal 93–95 — Hak Atas Informasi (Right to Information)
 Subjek berhak memperoleh informasi tentang kejelasan identitas, tujuan, kategori, rentang waktu, dan sumber data.
 
 ## Deadline Response — 3x24 jam (72 jam)
 Pasal 32 UU PDP mengatur: permintaan hak harus ditindaklanjuti dalam **3x24 jam (72 jam kerja)**.
 
 ## Tipe Request di Privasimu DSR Module
-1. **Access** — berdasar Pasal 5
-2. **Correction** — Pasal 6
-3. **Deletion** — Pasal 7
-4. **Portability** — Pasal 7 ayat (3)
-5. **Withdraw Consent** — Pasal 8
-6. **Objection** — Pasal 9
-7. **Information Request** — Pasal 10
+1. **Access** — berdasar Pasal 5 jo. PP 33/2026 Pasal 20–27
+2. **Correction** — Pasal 6 jo. PP 33/2026 Pasal 20–27
+3. **Deletion** — Pasal 7 jo. PP 33/2026 Pasal 20–27
+4. **Portability** — Pasal 7 ayat (3) jo. PP 33/2026 Pasal 20–27
+5. **Withdraw Consent** — Pasal 8 jo. PP 33/2026 Pasal 79–82
+6. **Objection** — Pasal 9 jo. PP 33/2026 Pasal 20–27
+7. **Information Request** — Pasal 10 jo. PP 33/2026 Pasal 93–95
 
 ## Privasimu DSR Workflow
 1. Subjek submit request via embed form / email / portal
@@ -174,17 +174,17 @@ KB,
 
             [
                 'module_key' => 'uu_pdp_pasal_20_dasar_pemrosesan',
-                'title' => 'UU PDP — Dasar Pemrosesan Data (Pasal 20)',
+                'title' => 'UU PDP — Dasar Pemrosesan Data (Pasal 20 jo. PP 33/2026 Pasal 30)',
                 'category' => 'regulation',
                 'feature_tags' => 'ropa_autofill,policy_review,chat,vendor_screening',
                 'keywords' => 'dasar hukum,legal basis,pasal 20,persetujuan,kontrak,kewajiban hukum,kepentingan vital,tugas publik,kepentingan sah,legitimate interest,lawful basis',
-                'summary' => 'Pasal 20 UU PDP: 6 dasar hukum pemrosesan data. (1) Persetujuan, (2) Pemenuhan kontrak, (3) Kewajiban hukum, (4) Kepentingan vital subjek, (5) Tugas publik, (6) Kepentingan sah (legitimate interest). Wajib pilih 1 untuk setiap aktivitas RoPA.',
+                'summary' => 'Pasal 20 UU PDP jo. PP 33/2026 Pasal 30: 6 dasar hukum pemrosesan data. (1) Persetujuan, (2) Pemenuhan kontrak, (3) Kewajiban hukum, (4) Kepentingan vital subjek, (5) Tugas publik, (6) Kepentingan sah (legitimate interest). Wajib pilih 1 untuk setiap aktivitas RoPA.',
                 'content' => <<<'KB'
-# Dasar Pemrosesan Data (UU PDP Pasal 20)
+# Dasar Pemrosesan Data (UU PDP Pasal 20 jo. PP 33/2026 Pasal 30)
 
 Setiap aktivitas pemrosesan WAJIB punya SATU dari 6 dasar hukum berikut:
 
-## 1. Persetujuan Subjek Data (Consent) — Pasal 20(1)(a)
+## 1. Persetujuan Subjek Data (Consent) — Pasal 20(1)(a) jo. PP 33/2026 Pasal 30
 Subjek memberikan persetujuan eksplisit untuk pemrosesan dengan tujuan spesifik.
 
 **Kapan dipakai:**
@@ -201,7 +201,7 @@ Subjek memberikan persetujuan eksplisit untuk pemrosesan dengan tujuan spesifik.
 
 **Contoh pelanggaran**: Pre-checked consent box, bundling consent dengan syarat layanan.
 
-## 2. Pemenuhan Kontrak — Pasal 20(1)(b)
+## 2. Pemenuhan Kontrak — Pasal 20(1)(b) jo. PP 33/2026 Pasal 30
 Pemrosesan diperlukan untuk melaksanakan kontrak dengan subjek, atau mengambil tindakan pra-kontraktual atas permintaan subjek.
 
 **Kapan dipakai:**
@@ -212,7 +212,7 @@ Pemrosesan diperlukan untuk melaksanakan kontrak dengan subjek, atau mengambil t
 
 **Catatan**: Batasi ke data yang benar-benar needed untuk kontrak — sisanya butuh basis lain.
 
-## 3. Pemenuhan Kewajiban Hukum — Pasal 20(1)(c)
+## 3. Pemenuhan Kewajiban Hukum — Pasal 20(1)(c) jo. PP 33/2026 Pasal 30
 Pemrosesan diperlukan untuk memenuhi kewajiban hukum Pengendali Data.
 
 **Kapan dipakai:**
@@ -221,7 +221,7 @@ Pemrosesan diperlukan untuk memenuhi kewajiban hukum Pengendali Data.
 - Retensi rekam medis (UU 29/2004 Praktik Kedokteran)
 - Compliance lapor transaksi mencurigakan (PPATK)
 
-## 4. Pelindungan Kepentingan Vital — Pasal 20(1)(d)
+## 4. Pelindungan Kepentingan Vital — Pasal 20(1)(d) jo. PP 33/2026 Pasal 30
 Pemrosesan diperlukan untuk melindungi kepentingan vital subjek atau orang lain (hidup/mati).
 
 **Kapan dipakai:**
@@ -231,7 +231,7 @@ Pemrosesan diperlukan untuk melindungi kepentingan vital subjek atau orang lain 
 
 **Jarang dipakai di bisnis normal** — mostly medis/darurat.
 
-## 5. Pelaksanaan Tugas Publik — Pasal 20(1)(e)
+## 5. Pelaksanaan Tugas Publik — Pasal 20(1)(e) jo. PP 33/2026 Pasal 30
 Untuk instansi pemerintah atau entitas menjalankan tugas publik berdasarkan UU.
 
 **Kapan dipakai:**
@@ -239,7 +239,7 @@ Untuk instansi pemerintah atau entitas menjalankan tugas publik berdasarkan UU.
 - BUMN olah data customer berdasarkan kewenangan
 - Lembaga penegakan hukum
 
-## 6. Kepentingan Sah (Legitimate Interest) — Pasal 20(1)(f)
+## 6. Kepentingan Sah (Legitimate Interest) — Pasal 20(1)(f) jo. PP 33/2026 Pasal 30
 Pemrosesan diperlukan untuk kepentingan sah Pengendali atau pihak lain, asal tidak mengalahkan hak subjek data.
 
 **Kapan dipakai:**
@@ -270,23 +270,23 @@ KB,
 
             [
                 'module_key' => 'uu_pdp_pasal_31_ropa',
-                'title' => 'UU PDP — Kewajiban RoPA (Pasal 31)',
+                'title' => 'UU PDP — Kewajiban RoPA (Pasal 31 jo. PP 33/2026 Pasal 74)',
                 'category' => 'regulation',
                 'feature_tags' => 'ropa_autofill,chat,remediation,policy_review',
                 'keywords' => 'pasal 31,ropa,record processing,catatan pemrosesan,registry,wajib,accountability,kewajiban pengendali',
-                'summary' => 'Pasal 31 UU PDP mewajibkan Pengendali Data menyelenggarakan catatan (RoPA) atas setiap aktivitas pemrosesan data pribadi. Wajib berisi: nama+kontak pengendali, tujuan, kategori subjek+data, penerima, transfer, retensi, keamanan.',
+                'summary' => 'Pasal 31 UU PDP jo. PP 33/2026 Pasal 74 mewajibkan Pengendali Data menyelenggarakan catatan (RoPA) atas setiap aktivitas pemrosesan data pribadi. Wajib berisi: nama+kontak pengendali, tujuan, kategori subjek+data, penerima, transfer, retensi, keamanan.',
                 'content' => <<<'KB'
-# Kewajiban RoPA — UU PDP Pasal 31
+# Kewajiban RoPA — UU PDP Pasal 31 jo. PP 33/2026 Pasal 74
 
 ## Teks Pasal
 > "Pengendali Data Pribadi wajib menyelenggarakan catatan Pemrosesan Data Pribadi."
 
 ## Kenapa Wajib?
-Bukti akuntabilitas (Prinsip 6, Pasal 16). Tanpa RoPA, pengendali tidak bisa buktikan kepatuhan saat audit/pemeriksaan KOMDIGI.
+Bukti akuntabilitas (Prinsip 6, Pasal 16 jo. PP 33/2026 Pasal 30). Tanpa RoPA, pengendali tidak bisa buktikan kepatuhan saat audit/pemeriksaan KOMDIGI.
 
-## Isi Minimal RoPA (Penjelasan Pasal 31)
+## Isi Minimal RoPA (Penjelasan Pasal 31 jo. PP 33/2026 Pasal 74)
 1. Nama dan kontak Pengendali Data Pribadi
-2. Nama dan kontak Data Protection Officer (jika wajib — Pasal 53)
+2. Nama dan kontak Data Protection Officer (jika wajib — Pasal 53 jo. PP 33/2026 Pasal 142)
 3. Tujuan pemrosesan
 4. Kategori subjek data (e.g. karyawan, nasabah, pelamar)
 5. Kategori data pribadi (e.g. identitas, kontak, finansial, biometrik)
@@ -401,19 +401,19 @@ KB,
 
             [
                 'module_key' => 'uu_pdp_pasal_34_dpia',
-                'title' => 'UU PDP — Kewajiban DPIA (Pasal 34)',
+                'title' => 'UU PDP — Kewajiban DPIA (Pasal 34 jo. PP 33/2026 Pasal 120–122)',
                 'category' => 'regulation',
                 'feature_tags' => 'dpia_autofill,ropa_autofill,chat',
                 'keywords' => 'pasal 34,dpia,data protection impact assessment,penilaian dampak,risk,tinggi,high risk,profiling,biometrik,skala besar,sensitif',
-                'summary' => 'Pasal 34 UU PDP: DPIA WAJIB dilakukan sebelum pemrosesan berisiko tinggi — data sensitif, otomatisasi pengambilan keputusan, pemantauan sistematis skala besar, atau teknologi baru. RoPA risk=HIGH auto-trigger DPIA di Privasimu.',
+                'summary' => 'Pasal 34 UU PDP jo. PP 33/2026 Pasal 120–122: DPIA WAJIB dilakukan sebelum pemrosesan berisiko tinggi — data sensitif, otomatisasi pengambilan keputusan, pemantauan sistematis skala besar, atau teknologi baru. RoPA risk=HIGH auto-trigger DPIA di Privasimu.',
                 'content' => <<<'KB'
-# Kewajiban DPIA — UU PDP Pasal 34
+# Kewajiban DPIA — UU PDP Pasal 34 jo. PP 33/2026 Pasal 120–122
 
 ## Teks Pasal
 > "Pengendali Data Pribadi wajib melakukan penilaian dampak Pelindungan Data Pribadi dalam hal Pemrosesan Data Pribadi memiliki potensi risiko tinggi terhadap Subjek Data Pribadi."
 
 ## Kapan DPIA WAJIB?
-Pasal 34(2) menyebut kriteria "risiko tinggi" meliputi:
+Pasal 34(2) jo. PP 33/2026 Pasal 120–122 menyebut kriteria "risiko tinggi" meliputi:
 1. **Pengambilan keputusan otomatis** yang memberikan akibat hukum atau dampak signifikan (mis. AI scoring kredit, automated hiring)
 2. **Pemrosesan data pribadi spesifik (sensitif)**:
    - Data kesehatan
@@ -424,7 +424,7 @@ Pasal 34(2) menyebut kriteria "risiko tinggi" meliputi:
    - Data keuangan pribadi detail
 3. **Pemantauan sistematis skala besar**: CCTV + analytics, tracking karyawan
 4. **Teknologi baru** yang belum matang: facial recognition, voice cloning
-5. **Transfer data ke negara tanpa adequacy** (kombinasi dengan Pasal 56)
+5. **Transfer data ke negara tanpa adequacy** (kombinasi dengan Pasal 56 jo. PP 33/2026 Pasal 160–163)
 6. **Big data subjek (>1.000)** dengan kombinasi faktor lain
 
 ## Format DPIA Privasimu — 21 Kategori Risiko
@@ -481,24 +481,24 @@ KB,
 
             [
                 'module_key' => 'uu_pdp_pasal_46_breach',
-                'title' => 'UU PDP — Notifikasi Kebocoran Data (Pasal 46)',
+                'title' => 'UU PDP — Notifikasi Kebocoran Data (Pasal 46 jo. PP 33/2026 Pasal 114–116)',
                 'category' => 'regulation',
                 'feature_tags' => 'breach_response,chat,remediation',
                 'keywords' => 'pasal 46,breach,kebocoran,notifikasi,72 jam,komdigi,lembaga,subjek,pelanggaran,insiden,ransomware,phishing',
-                'summary' => 'Pasal 46 UU PDP: kebocoran data WAJIB diberitahukan ke Lembaga PDP (KOMDIGI) + subjek terdampak paling lama 3x24 jam sejak diketahui. Notifikasi ke subjek bisa collective kalau >100 orang.',
+                'summary' => 'Pasal 46 UU PDP jo. PP 33/2026 Pasal 114–116: kebocoran data WAJIB diberitahukan ke Lembaga PDP (KOMDIGI) + subjek terdampak paling lama 3x24 jam sejak diketahui. Notifikasi ke subjek bisa collective kalau >100 orang.',
                 'content' => <<<'KB'
-# Notifikasi Kebocoran Data — UU PDP Pasal 46
+# Notifikasi Kebocoran Data — UU PDP Pasal 46 jo. PP 33/2026 Pasal 114–116
 
 ## Teks Pasal
 > "Pengendali Data Pribadi wajib memberitahukan secara tertulis paling lambat 3 x 24 jam kepada Subjek Data Pribadi dan Lembaga pelaksana UU PDP, terjadinya kegagalan pelindungan Data Pribadi."
 
-## Yang Dianggap "Kebocoran" (Pasal 46(2))
+## Yang Dianggap "Kebocoran" (Pasal 46(2) jo. PP 33/2026 Pasal 114–116)
 1. Data diakses pihak tidak berwenang
 2. Data hilang
 3. Data rusak / tidak dapat digunakan
 4. Data diungkap tanpa wewenang
 
-## Isi Minimum Notifikasi (Pasal 46(3))
+## Isi Minimum Notifikasi (Pasal 46(3) jo. PP 33/2026 Pasal 114–116)
 1. Data Pribadi yang terungkap
 2. Kapan dan bagaimana Data Pribadi terungkap
 3. Upaya penanggulangan dan pemulihan oleh Pengendali
@@ -551,13 +551,13 @@ KB,
 
             [
                 'module_key' => 'uu_pdp_pasal_53_dpo',
-                'title' => 'UU PDP — Kewajiban DPO (Pasal 53)',
+                'title' => 'UU PDP — Kewajiban DPO (Pasal 53 jo. PP 33/2026 Pasal 142)',
                 'category' => 'regulation',
                 'feature_tags' => 'chat,remediation,policy_review',
                 'keywords' => 'pasal 53,dpo,data protection officer,pejabat,penunjukan,wajib,kriteria,tugas,independen',
-                'summary' => 'Pasal 53 UU PDP: DPO wajib ditunjuk kalau pengendali (a) instansi publik, (b) pemrosesan skala besar, atau (c) data sensitif. DPO bertugas advisory, monitor kepatuhan, POC ke KOMDIGI + subjek data.',
+                'summary' => 'Pasal 53 UU PDP jo. PP 33/2026 Pasal 142: DPO wajib ditunjuk kalau pengendali (a) instansi publik, (b) pemrosesan skala besar, atau (c) data sensitif. DPO bertugas advisory, monitor kepatuhan, POC ke KOMDIGI + subjek data.',
                 'content' => <<<'KB'
-# Data Protection Officer — UU PDP Pasal 53
+# Data Protection Officer — UU PDP Pasal 53 jo. PP 33/2026 Pasal 142
 
 ## Kapan DPO WAJIB?
 Pengendali Data WAJIB tunjuk DPO jika:
@@ -565,7 +565,7 @@ Pengendali Data WAJIB tunjuk DPO jika:
 2. Pemrosesan data dalam **skala besar** (benchmark: >10.000 subjek data atau kontinyu)
 3. Pemrosesan data **spesifik (sensitif)** sebagai core activity
 
-## Tugas DPO (Pasal 53(3))
+## Tugas DPO (Pasal 53(3) jo. PP 33/2026 Pasal 142)
 1. Memberikan saran (advisory) tentang kepatuhan UU PDP
 2. Memantau + memastikan kepatuhan pemrosesan
 3. Menjadi **point-of-contact (POC)** untuk:
@@ -608,13 +608,13 @@ KB,
 
             [
                 'module_key' => 'uu_pdp_pasal_56_cross_border',
-                'title' => 'UU PDP — Transfer Data Lintas Batas (Pasal 56)',
+                'title' => 'UU PDP — Transfer Data Lintas Batas (Pasal 56 jo. PP 33/2026 Pasal 160–163)',
                 'category' => 'regulation',
                 'feature_tags' => 'ropa_autofill,chat,policy_review,vendor_screening',
                 'keywords' => 'pasal 56,transfer lintas batas,cross border,luar negeri,scc,bcr,adequacy,negara,konsen,pelindungan,overseas',
-                'summary' => 'Pasal 56 UU PDP: transfer data keluar Indonesia butuh (a) adequacy dari KOMDIGI, (b) safeguards (SCC/BCR), atau (c) consent eksplisit subjek. Wajib ada perjanjian + dokumentasi.',
+                'summary' => 'Pasal 56 UU PDP jo. PP 33/2026 Pasal 160–163: transfer data keluar Indonesia butuh (a) adequacy dari KOMDIGI, (b) safeguards (SCC/BCR), atau (c) consent eksplisit subjek. Wajib ada perjanjian + dokumentasi.',
                 'content' => <<<'KB'
-# Transfer Data Lintas Batas — UU PDP Pasal 56
+# Transfer Data Lintas Batas — UU PDP Pasal 56 jo. PP 33/2026 Pasal 160–163
 
 ## Ketentuan Dasar
 Pengendali dapat transfer data Pribadi ke luar wilayah hukum Indonesia dengan syarat (salah satu):
@@ -644,7 +644,7 @@ Belum ada daftar resmi adequacy KOMDIGI per April 2026. Best practice: asumsikan
 
 ### D. Explicit Consent (Last Resort)
 - Subjek eksplisit setuju setelah diberitahu risiko
-- **Hati-hati**: consent bisa ditarik (Pasal 8), jadi fallback basis-nya rapuh
+- **Hati-hati**: consent bisa ditarik (Pasal 8 jo. PP 33/2026 Pasal 79–82), jadi fallback basis-nya rapuh
 
 ## Contoh Transfer Scenarios
 | Skenario | Basis Recommended |
@@ -670,7 +670,7 @@ Privasimu built-in scoring berdasarkan:
 - Government access regime (US CLOUD Act, China cyber law, dll)
 
 ## Common Mistakes
-- Asumsikan "subsidiary = 1 entity" → salah, transfer antar country masih bound Pasal 56
+- Asumsikan "subsidiary = 1 entity" → salah, transfer antar country masih bound Pasal 56 jo. PP 33/2026 Pasal 160–163
 - Anggap SCC cukup untuk semua use case → beberapa negara restrictions lebih tinggi
 - Transfer ke US via cloud tanpa SCC → pelanggaran
 - Transfer ke vendor kecil tanpa DPA → pelanggaran
@@ -702,7 +702,7 @@ KB,
 **Tujuan**: tentukan penanggung jawab. Multi-DPO + multi-PIC bisa per 1 RoPA. Data: nama, email, jabatan, phone.
 
 ## Section 3: Informasi Pemrosesan
-**Tujuan**: tujuan + dasar hukum. Pilih dari 6 legal basis Pasal 20. Kategori subjek: karyawan, nasabah, pelamar, customer, dll.
+**Tujuan**: tujuan + dasar hukum. Pilih dari 6 legal basis Pasal 20 jo. PP 33/2026 Pasal 30. Kategori subjek: karyawan, nasabah, pelamar, customer, dll.
 
 ## Section 4: Pengumpulan Data
 **Tujuan**: data apa, dari mana, berapa banyak. **Section paling sensitif** — trigger auto risk HIGH kalau data sensitif terdeteksi (biometrik, kesehatan, anak, dll). Kategori data: 15 jenis Indonesian PII.
@@ -711,7 +711,7 @@ KB,
 **Tujuan**: sistem apa yang simpan, lokasi server, akses. Multi-system support — 1 RoPA bisa refer banyak Information System.
 
 ## Section 6: Pengiriman Data
-**Tujuan**: siapa penerima. Internal (divisi lain), eksternal (vendor, 3rd party), transfer lintas batas (Pasal 56).
+**Tujuan**: siapa penerima. Internal (divisi lain), eksternal (vendor, 3rd party), transfer lintas batas (Pasal 56 jo. PP 33/2026 Pasal 160–163).
 
 ## Section 7: Retensi & Keamanan
 **Tujuan**: berapa lama simpan + langkah keamanan. Retensi bisa pakai Master Retention Policy (reusable). Security measures: encryption, access control, backup, audit log.
@@ -732,7 +732,7 @@ Score HIGH → auto-generate draft DPIA inherited wizard_data.
 - **Jangan** isi "dasar hukum" dengan narasi panjang — wajib pilih dari 6 enum
 - **Jangan** campur kategori data sensitif dengan umum di 1 field — separate list
 - **Jangan** skip DPO/PIC — walau wizard optional, compliance mandatory
-- **Jangan** isi retensi "permanent" tanpa legal basis — Pasal 35 atur pembatasan retensi
+- **Jangan** isi retensi "permanent" tanpa legal basis — Pasal 35 jo. PP 33/2026 Pasal 123–129 atur pembatasan retensi
 KB,
             ],
 
@@ -742,46 +742,46 @@ KB,
                 'category' => 'library',
                 'feature_tags' => 'ropa_autofill,chat,remediation',
                 'keywords' => 'legal basis,dasar hukum,consent,persetujuan,kontrak,contract,kewajiban hukum,legal obligation,kepentingan vital,tugas publik,legitimate interest,kepentingan sah,industri contoh',
-                'summary' => 'Library 6 dasar hukum Pasal 20 UU PDP dengan contoh aktivitas industri banking, healthcare, fintech, e-commerce, HR. Dipakai AI Auto-Fill untuk pilih basis yang tepat.',
+                'summary' => 'Library 6 dasar hukum Pasal 20 UU PDP jo. PP 33/2026 Pasal 30 dengan contoh aktivitas industri banking, healthcare, fintech, e-commerce, HR. Dipakai AI Auto-Fill untuk pilih basis yang tepat.',
                 'content' => <<<'KB'
 # RoPA Legal Basis Library
 
-## 1. Persetujuan (Consent) — Pasal 20(1)(a)
+## 1. Persetujuan (Consent) — Pasal 20(1)(a) jo. PP 33/2026 Pasal 30
 **Banking**: Consent untuk marketing produk investasi via email newsletter.
 **Healthcare**: Consent untuk berbagi hasil lab ke peneliti (non-treatment).
 **Fintech**: Consent untuk sharing credit score ke partner asuransi.
 **E-commerce**: Cookie non-essential tracking untuk analytics.
 **HR**: Consent untuk publikasi foto karyawan di website perusahaan.
 
-## 2. Pemenuhan Kontrak — Pasal 20(1)(b)
+## 2. Pemenuhan Kontrak — Pasal 20(1)(b) jo. PP 33/2026 Pasal 30
 **Banking**: Pembukaan rekening giro (kontrak bank-nasabah).
 **Healthcare**: Pendaftaran pasien rawat inap (kontrak layanan kesehatan).
 **Fintech**: Pinjaman online — data KTP, slip gaji untuk kontrak kredit.
 **E-commerce**: Pengiriman order — alamat, kontak buat fulfillment.
 **HR**: Penggajian karyawan — rekening, NPWP untuk kontrak kerja.
 
-## 3. Kewajiban Hukum — Pasal 20(1)(c)
+## 3. Kewajiban Hukum — Pasal 20(1)(c) jo. PP 33/2026 Pasal 30
 **Banking**: KYC — UU Perbankan + POJK 12/2018. Data identitas wajib.
 **Healthcare**: Rekam medis 30 tahun — UU 29/2004 Praktik Kedokteran.
 **Fintech**: Pelaporan transaksi mencurigakan ke PPATK — UU TPPU.
 **E-commerce**: Pajak penghasilan penjual — UU PPh.
 **HR**: Pelaporan pajak karyawan ke DJP + BPJS — UU PPh + UU BPJS.
 
-## 4. Kepentingan Vital — Pasal 20(1)(d)
+## 4. Kepentingan Vital — Pasal 20(1)(d) jo. PP 33/2026 Pasal 30
 **Banking**: Contact emergency keluarga nasabah saat deteksi transaksi penipuan besar.
 **Healthcare**: Treatment emergency pasien tidak sadarkan diri.
 **Fintech**: Jarang — bisa untuk fraud alert sangat ekstrem.
 **E-commerce**: Recall produk food yang berbahaya (kontak buyer terkait).
 **HR**: Kontak darurat saat karyawan kecelakaan kerja.
 
-## 5. Tugas Publik — Pasal 20(1)(e)
+## 5. Tugas Publik — Pasal 20(1)(e) jo. PP 33/2026 Pasal 30
 **Banking**: BUMN Perbankan menjalankan kebijakan inklusi keuangan (KUR).
 **Healthcare**: RSUD memproses data pasien sesuai tupoksi pelayanan publik.
 **Fintech**: (Jarang — fintech umumnya private).
 **E-commerce**: BUMN e-commerce distribusi sembako program pemerintah.
 **HR**: Kementerian proses data ASN.
 
-## 6. Kepentingan Sah (Legitimate Interest) — Pasal 20(1)(f)
+## 6. Kepentingan Sah (Legitimate Interest) — Pasal 20(1)(f) jo. PP 33/2026 Pasal 30
 **Banking**: Fraud detection pattern analysis customer transactions.
 **Healthcare**: Audit internal quality of care (anonymized analytics).
 **Fintech**: AI credit scoring berdasarkan perilaku transaksi existing customer.
@@ -810,7 +810,7 @@ KB,
                 'content' => <<<'KB'
 # Kategori Data Pribadi Indonesia — Library
 
-## Data Pribadi Umum (Pasal 4 ayat 2)
+## Data Pribadi Umum (Pasal 4 ayat 2) jo. PP 33/2026 Pasal 5–7
 1. **NIK (Nomor Induk Kependudukan)** — 16 digit. UU 24/2013 Adminduk. Highest identifier.
 2. **Nama lengkap + panggilan** — dari akta atau KTP
 3. **Jenis kelamin** — Pria/Wanita (per UU Indonesia)
@@ -821,7 +821,7 @@ KB,
 8. **NPWP** — 15/16 digit format Direktorat Jenderal Pajak
 9. **Nomor rekening bank** — 10-16 digit, prefix kode bank
 
-## Data Pribadi Spesifik / Sensitif (Pasal 4 ayat 1)
+## Data Pribadi Spesifik / Sensitif (Pasal 4 ayat 1) jo. PP 33/2026 Pasal 5–7
 10. **Data kesehatan** — diagnosa, obat, rekam medis, BPJS
 11. **Data biometrik** — sidik jari, iris, foto wajah, suara
 12. **Data genetik** — DNA, hasil pemeriksaan genetik
@@ -906,7 +906,7 @@ KB,
   "keamanan": ["Model explainability log", "No single-decision automation (human-in-loop)"],
   "risk_level": "HIGH",
   "trigger_high_risk": ["AI penuh", "otomatisasi keputusan", "profiling"],
-  "catatan": "Wajib provide explainability ke subjek (Pasal 9 Hak Objection)"
+  "catatan": "Wajib provide explainability ke subjek (Pasal 9 jo. PP 33/2026 Pasal 20–27 Hak Objection)"
 }
 ```
 
@@ -1001,7 +1001,7 @@ KB,
 ## Key Patterns
 - **Retensi panjang** (10-30 tahun) karena UU spesifik kesehatan
 - **Break-the-glass access** untuk emergency → wajib di-log terpisah
-- **Data kesehatan = sensitif** (Pasal 4 UU PDP) → auto HIGH risk
+- **Data kesehatan = sensitif** (Pasal 4 UU PDP jo. PP 33/2026 Pasal 5–7) → auto HIGH risk
 - Integrasi BPJS hampir selalu ada → listed sebagai penerima
 KB,
             ],
@@ -1492,7 +1492,7 @@ KB,
                 'content' => <<<'KB'
 # DSR 7 Tipe Request — Workflow
 
-## 1. Access (Akses) — Pasal 5
+## 1. Access (Akses) — Pasal 5 jo. PP 33/2026 Pasal 20–27
 **Workflow**:
 1. Identity verification via OTP
 2. Scope: tentukan system mana yang query
@@ -1502,7 +1502,7 @@ KB,
 6. Privasimu package hasil dalam PDF (signed DPO) + kirim ke subjek
 **Deadline**: 72 jam
 
-## 2. Correction (Koreksi) — Pasal 6
+## 2. Correction (Koreksi) — Pasal 6 jo. PP 33/2026 Pasal 20–27
 **Workflow**:
 1. Identity verification
 2. Subjek specify field + new value
@@ -1513,7 +1513,7 @@ KB,
 7. Confirm ke subjek
 **Deadline**: 72 jam
 
-## 3. Deletion (Penghapusan) — Pasal 7
+## 3. Deletion (Penghapusan) — Pasal 7 jo. PP 33/2026 Pasal 20–27
 **Workflow**:
 1. Identity verification
 2. Check legal obligation to retain (mis. UU TPPU 10 tahun)
@@ -1526,7 +1526,7 @@ KB,
 6. Certificate of Deletion signed by DPO
 **Deadline**: 72 jam (atau justifikasi tolak dengan legal basis)
 
-## 4. Portability (Portabilitas) — Pasal 7(3)
+## 4. Portability (Portabilitas) — Pasal 7(3) jo. PP 33/2026 Pasal 20–27
 **Workflow**:
 1. Similar ke Access
 2. Output format: machine-readable (JSON, CSV, XML) — bukan PDF
@@ -1534,7 +1534,7 @@ KB,
 4. Include metadata: source, timestamp, data types
 **Deadline**: 72 jam
 
-## 5. Withdraw Consent — Pasal 8
+## 5. Withdraw Consent — Pasal 8 jo. PP 33/2026 Pasal 79–82
 **Workflow**:
 1. Subject portal Preference Center / embed widget
 2. Find consent record
@@ -1544,7 +1544,7 @@ KB,
 **Deadline**: Immediate (not 72h — harus cepat)
 **Catatan**: Withdraw tidak retroaktif — pemrosesan sebelum withdraw tetap sah
 
-## 6. Objection (Keberatan) — Pasal 9
+## 6. Objection (Keberatan) — Pasal 9 jo. PP 33/2026 Pasal 20–27
 **Workflow**:
 1. Subjek objectt spesifik activity (mis. profiling credit)
 2. DPO review case-by-case
@@ -1553,7 +1553,7 @@ KB,
 5. Provide human review alternative (for automated decisions)
 **Deadline**: 72 jam
 
-## 7. Information Request — Pasal 10
+## 7. Information Request — Pasal 10 jo. PP 33/2026 Pasal 93–95
 **Workflow**:
 1. Subjek tanya: siapa data saya, untuk apa, berapa lama
 2. Privasimu generate report dari RoPA + consent log
@@ -1613,7 +1613,7 @@ KB,
 - Implicit consent: "Dengan menggunakan situs ini, Anda setuju..."
 - Dark pattern: tombol "No" di-hide / kecil / color-blend
 
-## Withdraw Mechanism (Pasal 8)
+## Withdraw Mechanism (Pasal 8 jo. PP 33/2026 Pasal 79–82)
 Wajib sediakan:
 - **Preference Center publik** — `/preference-center?token=...`
 - **Unsubscribe link** di setiap email marketing
@@ -1621,7 +1621,7 @@ Wajib sediakan:
 - **Cookie Editor** iframe embed di website
 - **Contact DPO** untuk subjek yang tidak melek tech
 
-Withdraw harus **sama mudahnya** dengan consent initially (Pasal 8).
+Withdraw harus **sama mudahnya** dengan consent initially (Pasal 8 jo. PP 33/2026 Pasal 79–82).
 
 ## Version Tracking
 Setiap perubahan T&C / Privacy Notice = version baru. Subjek lama:
@@ -1805,36 +1805,36 @@ KB,
 
 ## Required Elements in Privacy Policy
 
-### 1. Identitas Pengendali Data (Pasal 31)
+### 1. Identitas Pengendali Data (Pasal 31 jo. PP 33/2026 Pasal 74)
 - Nama resmi perusahaan
 - Alamat kantor
 - Email + telepon
 - Legal entity type (PT, CV, Yayasan)
 
-### 2. Data Protection Officer (Pasal 53)
+### 2. Data Protection Officer (Pasal 53 jo. PP 33/2026 Pasal 142)
 - Nama DPO (kalau wajib appoint)
 - Email DPO dedicated (dpo@company.com)
 - Kalau DPaaS, nama konsultan + kontrak reference
 
-### 3. Kategori Data yang Dikumpulkan (Pasal 16 — transparency)
+### 3. Kategori Data yang Dikumpulkan (Pasal 16 jo. PP 33/2026 Pasal 30 — transparency)
 - List per kategori (identitas, kontak, finansial, dll)
 - Link ke definisi yang jelas
 - Sumber data (subjek direct, scraped, partner)
 
-### 4. Tujuan Pemrosesan (Pasal 16 — purpose limitation)
+### 4. Tujuan Pemrosesan (Pasal 16 jo. PP 33/2026 Pasal 30 — purpose limitation)
 - Per kategori data, sebutkan tujuan
 - Jangan generic "untuk meningkatkan layanan"
 
-### 5. Dasar Hukum per Tujuan (Pasal 20)
+### 5. Dasar Hukum per Tujuan (Pasal 20 jo. PP 33/2026 Pasal 30)
 - Pilih dari 6 enum
 - Kalau Legitimate Interest, sebutkan interest-nya
 
-### 6. Retensi Data (Pasal 16 — storage limitation)
+### 6. Retensi Data (Pasal 16 jo. PP 33/2026 Pasal 30 — storage limitation)
 - Durasi per kategori
 - Trigger pemusnahan
 - Legal basis retention (UU mana yang mewajibkan retain)
 
-### 7. Penerima Data / 3rd Party (Pasal 31)
+### 7. Penerima Data / 3rd Party (Pasal 31 jo. PP 33/2026 Pasal 74)
 - List pihak ke-3 + kategori (vendor cloud, analytics, marketing)
 - Transfer lintas batas + safeguard
 
@@ -1843,18 +1843,18 @@ KB,
 - Cara exercise (email DPO, portal, form)
 - Expected response time (72 jam)
 
-### 9. Withdraw Consent Mechanism (Pasal 8)
+### 9. Withdraw Consent Mechanism (Pasal 8 jo. PP 33/2026 Pasal 79–82)
 - URL Preference Center
 - Unsubscribe link di email
 - Cookie editor
 - Cara cabut consent via email DPO
 
-### 10. Security Measures (Pasal 35-39)
+### 10. Security Measures (Pasal 35-39 jo. PP 33/2026 Pasal 123–129)
 - Technical: encryption, access control, backup
 - Organizational: training, audit, policy
 - High-level tidak perlu detail bikin roadmap attacker
 
-### 11. Cookie Policy (Pasal 16 — transparency)
+### 11. Cookie Policy (Pasal 16 jo. PP 33/2026 Pasal 30 — transparency)
 - Kategori cookie (essential, analytics, marketing)
 - Cara opt-out
 - 3rd party cookies listed
@@ -1863,12 +1863,12 @@ KB,
 - Kalau layanan bisa diakses minor, butuh age-gate + parental consent
 - Kalau TIDAK melayani minor, state it
 
-### 13. Cross-Border Transfer (Pasal 56)
+### 13. Cross-Border Transfer (Pasal 56 jo. PP 33/2026 Pasal 160–163)
 - List negara tujuan
 - Safeguard mechanism
 - Cara subjek object
 
-### 14. Breach Notification (Pasal 46)
+### 14. Breach Notification (Pasal 46 jo. PP 33/2026 Pasal 114–116)
 - Commitment notify subjek dalam 72h
 - Channel notifikasi (email, SMS, web banner)
 
@@ -1892,9 +1892,9 @@ KB,
 Policy text: [INPUT]
 
 Cek compliance terhadap UU PDP per-Pasal:
-1. Pasal 31 identitas pengendali — present? complete?
-2. Pasal 53 DPO — disebutkan? kontak dedicated?
-3. Pasal 20 dasar hukum — per aktivitas? specific enum?
+1. Pasal 31 jo. PP 33/2026 Pasal 74 identitas pengendali — present? complete?
+2. Pasal 53 jo. PP 33/2026 Pasal 142 DPO — disebutkan? kontak dedicated?
+3. Pasal 20 jo. PP 33/2026 Pasal 30 dasar hukum — per aktivitas? specific enum?
 ... (15 checks)
 
 Return JSON:
@@ -2220,7 +2220,7 @@ Untuk setiap gap, AI generate:
 
 ### Gap: "Belum ada DPO"
 - P0 Critical
-- Action: (1) Assess apakah DPO wajib (Pasal 53), (2) Kalau ya, appoint internal atau hire DPaaS, (3) Public notice DPO contact, (4) Register ke KOMDIGI
+- Action: (1) Assess apakah DPO wajib (Pasal 53 jo. PP 33/2026 Pasal 142), (2) Kalau ya, appoint internal atau hire DPaaS, (3) Public notice DPO contact, (4) Register ke KOMDIGI
 - PIC: Direksi + HR
 - Effort: 2-4 minggu hire + onboard
 - Evidence: SK Direksi, email DPO aktif, website privacy page updated
@@ -2420,7 +2420,7 @@ Kompetitor semua **butuh live connection** ke DB klien. Bank top-tier Indonesia 
 
 ### 3. AI Classification Konteks UU PDP
 Kompetitor generic (GDPR-focused). Privasimu trained ke:
-- UU PDP Pasal 4 kategori data spesifik (agama, orientasi, dll — Indonesian-specific)
+- UU PDP Pasal 4 jo. PP 33/2026 Pasal 5–7 kategori data spesifik (agama, orientasi, dll — Indonesian-specific)
 - PII Indonesia patterns (NIK 16 digit, NPWP format, BPJS, rekening per-bank)
 - Industry-specific patterns (banking CIF, healthcare BPJS, fintech loan ID)
 
@@ -3372,7 +3372,7 @@ Structured output JSON
 ```
 
 System prompt inject KB sections:
-- `uu_pdp_prinsip_umum` (Pasal 16)
+- `uu_pdp_prinsip_umum` (Pasal 16 jo. PP 33/2026 Pasal 30)
 - `uu_pdp_hak_subjek` (Pasal 5-10)
 - `uu_pdp_pasal_31_ropa`
 - `uu_pdp_pasal_32_dsr_sla`
@@ -3395,7 +3395,7 @@ AI assess dokumen per-section + compare vs 15 required elements.
       "score": 100,
       "gap_description": "Lengkap + email DPO tersedia",
       "recommendation": "Pertahankan struktur saat ini",
-      "uu_pdp_reference": "Pasal 31"
+      "uu_pdp_reference": "Pasal 31 jo. PP 33/2026 Pasal 74"
     },
     {
       "section_title": "Hak Subjek Data",
@@ -3447,20 +3447,20 @@ AI assess dokumen per-section + compare vs 15 required elements.
 ## Per-Section Status
 
 Setiap dokumen di-check terhadap 15 required elements (lihat `policy_review_uu_pdp_mapping`):
-1. Identitas Pengendali Data (Pasal 31)
-2. Data Protection Officer (Pasal 53)
-3. Kategori Data Dikumpulkan (Pasal 16)
-4. Tujuan Pemrosesan (Pasal 16)
-5. Dasar Hukum per Tujuan (Pasal 20)
-6. Retensi Data (Pasal 16)
-7. Penerima Data / 3rd Party (Pasal 31)
+1. Identitas Pengendali Data (Pasal 31 jo. PP 33/2026 Pasal 74)
+2. Data Protection Officer (Pasal 53 jo. PP 33/2026 Pasal 142)
+3. Kategori Data Dikumpulkan (Pasal 16 jo. PP 33/2026 Pasal 30)
+4. Tujuan Pemrosesan (Pasal 16 jo. PP 33/2026 Pasal 30)
+5. Dasar Hukum per Tujuan (Pasal 20 jo. PP 33/2026 Pasal 30)
+6. Retensi Data (Pasal 16 jo. PP 33/2026 Pasal 30)
+7. Penerima Data / 3rd Party (Pasal 31 jo. PP 33/2026 Pasal 74)
 8. Hak Subjek Data (Pasal 5-10)
-9. Withdraw Consent Mechanism (Pasal 8)
-10. Security Measures (Pasal 35-39)
-11. Cookie Policy (Pasal 16)
+9. Withdraw Consent Mechanism (Pasal 8 jo. PP 33/2026 Pasal 79–82)
+10. Security Measures (Pasal 35-39 jo. PP 33/2026 Pasal 123–129)
+11. Cookie Policy (Pasal 16 jo. PP 33/2026 Pasal 30)
 12. Children's Data (Permenkominfo 20/2016)
-13. Cross-Border Transfer (Pasal 56)
-14. Breach Notification (Pasal 46)
+13. Cross-Border Transfer (Pasal 56 jo. PP 33/2026 Pasal 160–163)
+14. Breach Notification (Pasal 46 jo. PP 33/2026 Pasal 114–116)
 15. Policy Update Mechanism
 
 Status per section:

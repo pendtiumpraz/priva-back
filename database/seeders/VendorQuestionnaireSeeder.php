@@ -60,11 +60,11 @@ class VendorQuestionnaireSeeder extends Seeder
             // ─── Section: Data Handling ──────────────────────────────────
             $this->multiChoice('CLD-03', 'cloud_infrastructure', 'data_handling',
                 'Di region mana data utama Anda akan di-host?',
-                'UU PDP Pasal 56 mensyaratkan transfer ke negara dengan tingkat perlindungan setara, atau menggunakan SCCs/BCR.',
-                'UU PDP Pasal 56', weight: 9, direction: 1, options: [
+                'UU PDP Pasal 56 jo. PP 33/2026 Pasal 160–163 mensyaratkan transfer ke negara dengan tingkat perlindungan setara, atau menggunakan SCCs/BCR.',
+                'UU PDP Pasal 56 jo. PP 33/2026 Pasal 160–163', weight: 9, direction: 1, options: [
                     ['value' => 'indonesia',    'label' => 'Indonesia (data center lokal)',     'score_contribution' => 1.0],
                     ['value' => 'asean',        'label' => 'ASEAN (Singapore, Malaysia, dll)',  'score_contribution' => 0.6],
-                    ['value' => 'gdpr_adequate','label' => 'GDPR adequate (EU, UK, Japan, KR, dll)', 'score_contribution' => 0.4],
+                    ['value' => 'gdpr_adequate', 'label' => 'GDPR adequate (EU, UK, Japan, KR, dll)', 'score_contribution' => 0.4],
                     ['value' => 'usa',          'label' => 'United States',                      'score_contribution' => 0.0],
                     ['value' => 'china_russia', 'label' => 'China / Russia / Iran',              'score_contribution' => -1.0],
                     ['value' => 'other',        'label' => 'Lainnya / belum tahu',               'score_contribution' => -0.4],
@@ -93,7 +93,7 @@ class VendorQuestionnaireSeeder extends Seeder
             $this->yesNo('CLD-08', 'cloud_infrastructure', 'contractual',
                 'Apakah ada komitmen data residency tertulis di MSA/DPA?',
                 'Tanpa komitmen tertulis, vendor bisa pindahkan data ke region lain tanpa pemberitahuan.',
-                'UU PDP Pasal 51', weight: 8, direction: 1, yesScore: 1.0, noScore: -0.7),
+                'UU PDP Pasal 51 jo. PP 33/2026 Pasal 88 & 139', weight: 8, direction: 1, yesScore: 1.0, noScore: -0.7),
 
             $this->yesNo('CLD-09', 'cloud_infrastructure', 'data_handling',
                 'Apakah ada data deletion guarantee (≤ 90 hari) saat kontrak berakhir?',
@@ -102,8 +102,8 @@ class VendorQuestionnaireSeeder extends Seeder
 
             $this->multiChoice('CLD-10', 'cloud_infrastructure', 'security',
                 'SLA notifikasi vendor saat ada insiden security yang memengaruhi data Anda?',
-                'UU PDP Pasal 46 mengharuskan pengendali notifikasi ke Komdigi dalam 72 jam — jika vendor lambat, pengendali tidak bisa comply.',
-                'UU PDP Pasal 46', weight: 8, direction: 1, options: [
+                'UU PDP Pasal 46 jo. PP 33/2026 Pasal 114–116 mengharuskan pengendali notifikasi ke Komdigi dalam 72 jam — jika vendor lambat, pengendali tidak bisa comply.',
+                'UU PDP Pasal 46 jo. PP 33/2026 Pasal 114–116', weight: 8, direction: 1, options: [
                     ['value' => 'le_24h',  'label' => '≤ 24 jam',                 'score_contribution' => 1.0],
                     ['value' => 'le_72h',  'label' => '≤ 72 jam',                 'score_contribution' => 0.4],
                     ['value' => 'gt_72h',  'label' => '> 72 jam atau best-effort', 'score_contribution' => -0.8],
@@ -112,13 +112,13 @@ class VendorQuestionnaireSeeder extends Seeder
 
             $this->yesNo('CLD-11', 'cloud_infrastructure', 'governance',
                 'Apakah daftar sub-processor di-disclose dan klien punya hak veto?',
-                'Sub-processor adalah pihak ke-4 — risiko cascade. UU PDP Pasal 51 mensyaratkan kontrol pengendali.',
-                'UU PDP Pasal 51', weight: 6, direction: 1, yesScore: 1.0, noScore: -0.5),
+                'Sub-processor adalah pihak ke-4 — risiko cascade. UU PDP Pasal 51 jo. PP 33/2026 Pasal 88 & 139 mensyaratkan kontrol pengendali.',
+                'UU PDP Pasal 51 jo. PP 33/2026 Pasal 88 & 139', weight: 6, direction: 1, yesScore: 1.0, noScore: -0.5),
 
             $this->yesNo('CLD-12', 'cloud_infrastructure', 'contractual',
-                'Apakah vendor menyediakan DPA (Data Processing Agreement) yang memenuhi UU PDP Pasal 51?',
+                'Apakah vendor menyediakan DPA (Data Processing Agreement) yang memenuhi UU PDP Pasal 51 jo. PP 33/2026 Pasal 88 & 139?',
                 'Pasal 51 mensyaratkan kontrol pengendali atas prosesor melalui kontrak tertulis. DPA = bukti pemenuhan kewajiban ini.',
-                'UU PDP Pasal 51', weight: 9, direction: 1, yesScore: 1.0, noScore: -1.0),
+                'UU PDP Pasal 51 jo. PP 33/2026 Pasal 88 & 139', weight: 9, direction: 1, yesScore: 1.0, noScore: -1.0),
 
             $this->multiChoice('CLD-13', 'cloud_infrastructure', 'security',
                 'Cadence penetration test independen?',
@@ -153,10 +153,10 @@ class VendorQuestionnaireSeeder extends Seeder
 
             $this->multiChoice('SAAS-02', 'saas', 'data_handling',
                 'Region hosting data SaaS ini?',
-                null, 'UU PDP Pasal 56', weight: 9, direction: 1, options: [
+                null, 'UU PDP Pasal 56 jo. PP 33/2026 Pasal 160–163', weight: 9, direction: 1, options: [
                     ['value' => 'indonesia',    'label' => 'Indonesia',                          'score_contribution' => 1.0],
                     ['value' => 'asean',        'label' => 'ASEAN',                              'score_contribution' => 0.6],
-                    ['value' => 'gdpr_adequate','label' => 'GDPR adequate',                      'score_contribution' => 0.4],
+                    ['value' => 'gdpr_adequate', 'label' => 'GDPR adequate',                      'score_contribution' => 0.4],
                     ['value' => 'usa',          'label' => 'United States',                      'score_contribution' => 0.0],
                     ['value' => 'china_russia', 'label' => 'China / Russia / Iran',              'score_contribution' => -1.0],
                     ['value' => 'multi_region', 'label' => 'Multi-region (auto, tidak terkunci)', 'score_contribution' => -0.5],
@@ -176,17 +176,17 @@ class VendorQuestionnaireSeeder extends Seeder
                 null, weight: 6, direction: 1, yesScore: 1.0, noScore: -0.7),
 
             $this->yesNo('SAAS-06', 'saas', 'contractual',
-                'Apakah vendor menyediakan DPA yang memenuhi UU PDP Pasal 51?',
-                null, 'UU PDP Pasal 51', weight: 9, direction: 1, yesScore: 1.0, noScore: -1.0),
+                'Apakah vendor menyediakan DPA yang memenuhi UU PDP Pasal 51 jo. PP 33/2026 Pasal 88 & 139?',
+                null, 'UU PDP Pasal 51 jo. PP 33/2026 Pasal 88 & 139', weight: 9, direction: 1, yesScore: 1.0, noScore: -1.0),
 
             $this->yesNo('SAAS-07', 'saas', 'governance',
                 'Apakah daftar sub-processor di-disclose?',
-                null, 'UU PDP Pasal 51', weight: 5, direction: 1, yesScore: 1.0, noScore: -0.4),
+                null, 'UU PDP Pasal 51 jo. PP 33/2026 Pasal 88 & 139', weight: 5, direction: 1, yesScore: 1.0, noScore: -0.4),
 
             $this->yesNo('SAAS-08', 'saas', 'data_handling',
                 'Apakah tersedia data export / portability untuk pemenuhan hak subjek (DSR Right to Portability)?',
-                'UU PDP Pasal 8 — subjek berhak meminta data dalam format terstruktur. SaaS tanpa export merepotkan kepatuhan.',
-                'UU PDP Pasal 8', weight: 6, direction: 1, yesScore: 1.0, noScore: -0.5),
+                'UU PDP Pasal 8 jo. PP 33/2026 Pasal 79–82 — subjek berhak meminta data dalam format terstruktur. SaaS tanpa export merepotkan kepatuhan.',
+                'UU PDP Pasal 8 jo. PP 33/2026 Pasal 79–82', weight: 6, direction: 1, yesScore: 1.0, noScore: -0.5),
 
             $this->yesNo('SAAS-09', 'saas', 'data_handling',
                 'Apakah retention policy clear & tenant bisa configure?',
@@ -194,7 +194,7 @@ class VendorQuestionnaireSeeder extends Seeder
 
             $this->multiChoice('SAAS-10', 'saas', 'security',
                 'SLA breach notification?',
-                null, 'UU PDP Pasal 46', weight: 7, direction: 1, options: [
+                null, 'UU PDP Pasal 46 jo. PP 33/2026 Pasal 114–116', weight: 7, direction: 1, options: [
                     ['value' => 'le_24h',  'label' => '≤ 24 jam',                 'score_contribution' => 1.0],
                     ['value' => 'le_72h',  'label' => '≤ 72 jam',                 'score_contribution' => 0.4],
                     ['value' => 'gt_72h',  'label' => '> 72 jam atau best-effort', 'score_contribution' => -0.7],
@@ -218,7 +218,7 @@ class VendorQuestionnaireSeeder extends Seeder
             $this->yesNo('PROC-01', 'data_processor', 'governance',
                 'Apakah office utama vendor di Indonesia?',
                 'Domestic processor mengurangi risiko cross-border + akses regulator lebih mudah.',
-                'UU PDP Pasal 51', weight: 5, direction: 1, yesScore: 1.0, noScore: -0.3),
+                'UU PDP Pasal 51 jo. PP 33/2026 Pasal 88 & 139', weight: 5, direction: 1, yesScore: 1.0, noScore: -0.3),
 
             $this->yesNo('PROC-02', 'data_processor', 'security',
                 'Apakah karyawan yang akses data PDP menjalani background check?',
@@ -228,12 +228,12 @@ class VendorQuestionnaireSeeder extends Seeder
             $this->yesNo('PROC-03', 'data_processor', 'security',
                 'Apakah akses data PDP dibatasi need-to-know dengan role-based access control?',
                 'Tanpa RBAC, semua karyawan bisa lihat semua data — risiko exposure massif.',
-                'UU PDP Pasal 39', weight: 8, direction: 1, yesScore: 1.0, noScore: -0.8),
+                'UU PDP Pasal 39 jo. PP 33/2026 Pasal 123–129', weight: 8, direction: 1, yesScore: 1.0, noScore: -0.8),
 
             $this->multiChoice('PROC-04', 'data_processor', 'governance',
                 'Cadence training PDP untuk karyawan operasional?',
                 'Training rutin memastikan karyawan paham UU PDP yang terus berkembang.',
-                'UU PDP Pasal 35', weight: 6, direction: 1, options: [
+                'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129', weight: 6, direction: 1, options: [
                     ['value' => 'quarterly', 'label' => 'Per kuartal',  'score_contribution' => 1.0],
                     ['value' => 'biannual',  'label' => 'Per 6 bulan',  'score_contribution' => 0.7],
                     ['value' => 'annual',    'label' => 'Per tahun',    'score_contribution' => 0.4],
@@ -244,16 +244,16 @@ class VendorQuestionnaireSeeder extends Seeder
             $this->yesNo('PROC-05', 'data_processor', 'contractual',
                 'Apakah DPA UU-PDP-compliant sudah ditandatangani?',
                 'Pasal 51 — pengendali wajib pastikan prosesor patuh via kontrak tertulis. DPA = bukti.',
-                'UU PDP Pasal 51', weight: 10, direction: 1, yesScore: 1.0, noScore: -1.0),
+                'UU PDP Pasal 51 jo. PP 33/2026 Pasal 88 & 139', weight: 10, direction: 1, yesScore: 1.0, noScore: -1.0),
 
             $this->yesNo('PROC-06', 'data_processor', 'governance',
                 'Apakah daftar sub-processor di-disclose dan butuh persetujuan klien tertulis sebelum penambahan?',
-                null, 'UU PDP Pasal 51', weight: 6, direction: 1, yesScore: 1.0, noScore: -0.5),
+                null, 'UU PDP Pasal 51 jo. PP 33/2026 Pasal 88 & 139', weight: 6, direction: 1, yesScore: 1.0, noScore: -0.5),
 
             $this->yesNo('PROC-07', 'data_processor', 'contractual',
                 'Apakah hak audit klien (audit right) tertulis di kontrak?',
                 'Tanpa audit right, klien tidak bisa verifikasi klaim vendor — Pasal 51 mensyaratkan kontrol nyata.',
-                'UU PDP Pasal 51', weight: 7, direction: 1, yesScore: 1.0, noScore: -0.6),
+                'UU PDP Pasal 51 jo. PP 33/2026 Pasal 88 & 139', weight: 7, direction: 1, yesScore: 1.0, noScore: -0.6),
 
             $this->yesNo('PROC-08', 'data_processor', 'compliance',
                 'Apakah vendor memiliki cyber liability insurance ≥ USD 1 juta?',
@@ -262,8 +262,8 @@ class VendorQuestionnaireSeeder extends Seeder
 
             $this->yesNo('PROC-09', 'data_processor', 'governance',
                 'Apakah ada DPO atau Privacy PIC yang named di kontrak dengan kontak yang valid?',
-                'UU PDP Pasal 53 — pengendali wajib mengenal PIC privasi di prosesor.',
-                'UU PDP Pasal 53', weight: 5, direction: 1, yesScore: 1.0, noScore: -0.4),
+                'UU PDP Pasal 53 jo. PP 33/2026 Pasal 142 — pengendali wajib mengenal PIC privasi di prosesor.',
+                'UU PDP Pasal 53 jo. PP 33/2026 Pasal 142', weight: 5, direction: 1, yesScore: 1.0, noScore: -0.4),
 
             $this->yesNo('PROC-10', 'data_processor', 'compliance',
                 'Apakah vendor pernah dijatuhi sanksi regulator (Komdigi / OJK / BSSN) dalam 24 bulan terakhir?',

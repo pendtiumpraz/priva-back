@@ -92,11 +92,11 @@
       "demo_steps": [
         "Menu Cross-Border -> Buat Baru, hubungkan ke salah satu record ROPA yang ada.",
         "Pilih negara tujuan (mis. Amerika Serikat) -> jalankan adequacy check -> tunjukkan tier 'limited'. Coba Jerman -> 'adequate'. Coba negara tak dikenal -> 'none'.",
-        "Jelaskan sumber adequacy: tabel internal country_adequacy (62 negara) berbasis GDPR Art.45 + UU PDP Pasal 56 — bukan hardcoded frontend, bukan API eksternal, dapat diaudit.",
+        "Jelaskan sumber adequacy: tabel internal country_adequacy (62 negara) berbasis GDPR Art.45 + UU PDP Pasal 56 jo. PP 33/2026 Pasal 160–163 — bukan hardcoded frontend, bukan API eksternal, dapat diaudit.",
         "Lampirkan contoh SCC/BCR (template dokumen).",
         "Bukti DB: row cross_border_transfers + linked_ropa_id."
       ],
-      "documentation": "Antisipasi: 'adequacy dari mana?' -> tabel internal country_adequacy (62 negara, basis GDPR Art.45 + UU PDP Ps.56). 'auto-TIA?' -> jujur: wiring TIA masih roadmap.",
+      "documentation": "Antisipasi: 'adequacy dari mana?' -> tabel internal country_adequacy (62 negara, basis GDPR Art.45 + UU PDP Ps.56 jo. PP 33/2026 Pasal 160–163). 'auto-TIA?' -> jujur: wiring TIA masih roadmap.",
       "doc_ref": null,
       "status": "siap",
       "sort_order": 60

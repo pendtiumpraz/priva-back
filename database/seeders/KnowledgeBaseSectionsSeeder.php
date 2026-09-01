@@ -125,7 +125,7 @@ KB
 # RoPA (Record of Processing Activities)
 
 ## Fungsi
-Mencatat seluruh aktivitas pemrosesan data pribadi di organisasi, sesuai kewajiban UU PDP Pasal 31.
+Mencatat seluruh aktivitas pemrosesan data pribadi di organisasi, sesuai kewajiban UU PDP Pasal 31 jo. PP 33/2026 Pasal 74.
 
 ## Wizard 6 Langkah
 1. **Identifikasi** — Nama aktivitas, divisi, penanggung jawab
@@ -204,7 +204,7 @@ KB
 # Data Breach Management
 
 ## Fungsi
-Menangani insiden kebocoran data pribadi sesuai kewajiban UU PDP Pasal 46.
+Menangani insiden kebocoran data pribadi sesuai kewajiban UU PDP Pasal 46 jo. PP 33/2026 Pasal 114–116.
 
 ## 5 Fase Penanganan Breach
 ### Fase 1: Terdeteksi
@@ -457,15 +457,15 @@ KB
 UU PDP adalah undang-undang yang mengatur pelindungan data pribadi di Indonesia, berlaku sejak 2022.
 
 ## Pasal-Pasal Penting
-- **Pasal 4**: Jenis data pribadi (umum & spesifik/sensitif)
+- **Pasal 4 jo. PP 33/2026 Pasal 5–7**: Jenis data pribadi (umum & spesifik/sensitif)
 - **Pasal 6-13**: Hak-hak subjek data
-- **Pasal 16-19**: Kewajiban pengendali data
-- **Pasal 20**: Record of Processing Activities (RoPA) wajib
-- **Pasal 34**: DPIA untuk pemrosesan berisiko tinggi
-- **Pasal 46**: Notifikasi breach dalam 3×24 jam
+- **Pasal 16-19 jo. PP 33/2026 Pasal 30**: Kewajiban pengendali data
+- **Pasal 20 jo. PP 33/2026 Pasal 30**: Record of Processing Activities (RoPA) wajib
+- **Pasal 34 jo. PP 33/2026 Pasal 120–122**: DPIA untuk pemrosesan berisiko tinggi
+- **Pasal 46 jo. PP 33/2026 Pasal 114–116**: Notifikasi breach dalam 3×24 jam
 - **Pasal 57**: Lembaga pengawas (KOMDIGI)
 
-## Data Sensitif (Pasal 4 ayat 2)
+## Data Sensitif (Pasal 4 ayat 2) jo. PP 33/2026 Pasal 5–7
 - Kesehatan
 - Biometrik
 - Genetik
@@ -596,8 +596,8 @@ Setelah consent_logs terkumpul, admin bisa:
 5. Audit trail di **Run History** tab
 
 ## Referensi
-- UU PDP Pasal 20: Consent harus bebas, spesifik, informatif, eksplisit
-- UU PDP Pasal 22: Subjek dapat tarik consent kapan saja
+- UU PDP Pasal 20 jo. PP 33/2026 Pasal 30: Consent harus bebas, spesifik, informatif, eksplisit
+- UU PDP Pasal 22 jo. PP 33/2026 Pasal 32–37: Subjek dapat tarik consent kapan saja
 - UU PDP Pasal 21–28: Hak subjek data (lihat juga DSR Flow)
 KB
             ],

@@ -15,10 +15,10 @@ use Illuminate\Database\Seeder;
  * version pair — see maturity_question_responses).
  *
  * Domains map to UU PDP chapters:
- *   - governance              → Pasal 53 (Tata Kelola & DPO)
+ *   - governance              → Pasal 53 jo. PP 33/2026 Pasal 142 (Tata Kelola & DPO)
  *   - processing_basis        → Pasal 20 & 5-13 (Dasar pemrosesan & hak)
- *   - controller_obligations  → Pasal 35-39 (Kewajiban pengendali)
- *   - security                → Pasal 46-48 (Keamanan & kegagalan)
+ *   - controller_obligations  → Pasal 35-39 jo. PP 33/2026 Pasal 123–129 (Kewajiban pengendali)
+ *   - security                → Pasal 46-48 jo. PP 33/2026 Pasal 114–116 (Keamanan & kegagalan)
  */
 class MaturityQuestionsSeeder extends Seeder
 {
@@ -47,18 +47,18 @@ class MaturityQuestionsSeeder extends Seeder
     private function questions(): array
     {
         $defaultGuide = [
-            '1-3'  => 'Ad-hoc — proses informal, tidak konsisten.',
-            '4-6'  => 'Defined — kebijakan tertulis ada, implementasi bervariasi.',
-            '7-8'  => 'Managed — terintegrasi, dipantau berkala, ada metrik.',
+            '1-3' => 'Ad-hoc — proses informal, tidak konsisten.',
+            '4-6' => 'Defined — kebijakan tertulis ada, implementasi bervariasi.',
+            '7-8' => 'Managed — terintegrasi, dipantau berkala, ada metrik.',
             '9-10' => 'Optimized — otomatisasi + perbaikan berkelanjutan.',
         ];
 
         return [
-            // ─── Domain A: Tata Kelola & Penunjukan DPO (Pasal 53) ───
+            // ─── Domain A: Tata Kelola & Penunjukan DPO (Pasal 53 jo. PP 33/2026 Pasal 142) ───
             [
                 'question_code' => 'A1',
                 'domain' => MaturityQuestion::DOMAIN_GOVERNANCE,
-                'regulation_ref' => 'UU PDP Pasal 53',
+                'regulation_ref' => 'UU PDP Pasal 53 jo. PP 33/2026 Pasal 142',
                 'question_text' => 'Bagaimana organisasi telah menunjuk Pejabat/Petugas Pelindungan Data Pribadi (DPO) yang memiliki kompetensi di bidang PDP?',
                 'description' => 'Penunjukan DPO formal dengan kompetensi PDP yang teruji dan terdokumentasi.',
                 'scoring_guide' => $defaultGuide,
@@ -66,7 +66,7 @@ class MaturityQuestionsSeeder extends Seeder
             [
                 'question_code' => 'A2',
                 'domain' => MaturityQuestion::DOMAIN_GOVERNANCE,
-                'regulation_ref' => 'UU PDP Pasal 53',
+                'regulation_ref' => 'UU PDP Pasal 53 jo. PP 33/2026 Pasal 142',
                 'question_text' => 'Bagaimana sudah ada struktur organisasi dan program kerja PDP yang jelas mengenai tanggung jawab pengelolaan data di setiap unit kerja?',
                 'description' => 'Struktur organisasi PDP dengan RACI yang jelas + program kerja terdokumentasi.',
                 'scoring_guide' => $defaultGuide,
@@ -76,7 +76,7 @@ class MaturityQuestionsSeeder extends Seeder
             [
                 'question_code' => 'B3',
                 'domain' => MaturityQuestion::DOMAIN_PROCESSING_BASIS,
-                'regulation_ref' => 'UU PDP Pasal 20',
+                'regulation_ref' => 'UU PDP Pasal 20 jo. PP 33/2026 Pasal 30',
                 'question_text' => 'Bagaimana setiap pemrosesan data memiliki dasar hukum yang sah (misal: persetujuan/consent, kewajiban kontrak, atau kepentingan yang sah)?',
                 'description' => 'Setiap aktivitas pemrosesan terdokumentasi dengan dasar hukum di RoPA + LIA untuk kepentingan sah.',
                 'scoring_guide' => $defaultGuide,
@@ -90,11 +90,11 @@ class MaturityQuestionsSeeder extends Seeder
                 'scoring_guide' => $defaultGuide,
             ],
 
-            // ─── Domain C: Kewajiban Pengendali & Prosesor (Pasal 35-39) ───
+            // ─── Domain C: Kewajiban Pengendali & Prosesor (Pasal 35-39 jo. PP 33/2026 Pasal 123–129) ───
             [
                 'question_code' => 'C5',
                 'domain' => MaturityQuestion::DOMAIN_CONTROLLER_OBLIGATIONS,
-                'regulation_ref' => 'UU PDP Pasal 35-39',
+                'regulation_ref' => 'UU PDP Pasal 35-39 jo. PP 33/2026 Pasal 123–129',
                 'question_text' => 'Bagaimana kualitas Rekam Kegiatan Pemrosesan Data (RoPA) organisasi miliki yang mendokumentasikan jenis data, tujuan, dan jangka waktu retensi?',
                 'description' => 'Kelengkapan + akurasi RoPA — semua aktivitas pemrosesan terdaftar dengan field wajib lengkap.',
                 'scoring_guide' => $defaultGuide,
@@ -102,7 +102,7 @@ class MaturityQuestionsSeeder extends Seeder
             [
                 'question_code' => 'C6',
                 'domain' => MaturityQuestion::DOMAIN_CONTROLLER_OBLIGATIONS,
-                'regulation_ref' => 'UU PDP Pasal 34',
+                'regulation_ref' => 'UU PDP Pasal 34 jo. PP 33/2026 Pasal 120–122',
                 'question_text' => 'Bagaimana kualitas Penilaian Dampak Pelindungan Data (DPIA) untuk pemrosesan data yang berisiko tinggi?',
                 'description' => 'DPIA dilakukan untuk setiap RoPA dengan risk_level tinggi.',
                 'scoring_guide' => $defaultGuide,
@@ -110,7 +110,7 @@ class MaturityQuestionsSeeder extends Seeder
             [
                 'question_code' => 'C7',
                 'domain' => MaturityQuestion::DOMAIN_CONTROLLER_OBLIGATIONS,
-                'regulation_ref' => 'UU PDP Pasal 35',
+                'regulation_ref' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                 'question_text' => 'Bagaimana organisasi menjaga peta aliran data (data flow) atau inventarisasi data (data mapping) yang jelas dari mana data berasal, ke mana data mengalir, dan siapa saja pihak ketiga yang terlibat?',
                 'description' => 'Data mapping komprehensif via Information Systems / Data Discovery.',
                 'scoring_guide' => $defaultGuide,
@@ -118,8 +118,8 @@ class MaturityQuestionsSeeder extends Seeder
             [
                 'question_code' => 'C8',
                 'domain' => MaturityQuestion::DOMAIN_CONTROLLER_OBLIGATIONS,
-                'regulation_ref' => 'UU PDP Pasal 39',
-                'question_text' => 'Bagaimana kontrak tertulis (data processing agreement) dan kontrol yang secara spesifik mengatur kewajiban pelindungan data sesuai Pasal 39?',
+                'regulation_ref' => 'UU PDP Pasal 39 jo. PP 33/2026 Pasal 123–129',
+                'question_text' => 'Bagaimana kontrak tertulis (data processing agreement) dan kontrol yang secara spesifik mengatur kewajiban pelindungan data sesuai Pasal 39 jo. PP 33/2026 Pasal 123–129?',
                 'description' => 'DPA dengan semua data processor, klausul PDP standar masuk kontrak vendor.',
                 'scoring_guide' => $defaultGuide,
             ],
@@ -134,7 +134,7 @@ class MaturityQuestionsSeeder extends Seeder
             [
                 'question_code' => 'C10',
                 'domain' => MaturityQuestion::DOMAIN_CONTROLLER_OBLIGATIONS,
-                'regulation_ref' => 'UU PDP Pasal 16',
+                'regulation_ref' => 'UU PDP Pasal 16 jo. PP 33/2026 Pasal 30',
                 'question_text' => 'Bagaimana organisasi memastikan bahwa data pribadi yang dikumpulkan hanya digunakan untuk tujuan yang telah dinyatakan sejak awal dan tidak diproses lebih lanjut untuk tujuan yang tidak relevan?',
                 'description' => 'Purpose limitation enforcement — kontrol akses berbasis purpose.',
                 'scoring_guide' => $defaultGuide,
@@ -150,7 +150,7 @@ class MaturityQuestionsSeeder extends Seeder
             [
                 'question_code' => 'C12',
                 'domain' => MaturityQuestion::DOMAIN_CONTROLLER_OBLIGATIONS,
-                'regulation_ref' => 'UU PDP Pasal 35',
+                'regulation_ref' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                 'question_text' => 'Bagaimana organisasi telah menerapkan teknik enkripsi untuk data yang sedang dikirim (in-transit) maupun yang disimpan (at-rest), atau melakukan anonimisasi untuk data statistik?',
                 'description' => 'TLS 1.2+ in-transit, AES-256 at-rest, anonymization untuk analytics.',
                 'scoring_guide' => $defaultGuide,
@@ -158,7 +158,7 @@ class MaturityQuestionsSeeder extends Seeder
             [
                 'question_code' => 'C13',
                 'domain' => MaturityQuestion::DOMAIN_CONTROLLER_OBLIGATIONS,
-                'regulation_ref' => 'UU PDP Pasal 35',
+                'regulation_ref' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                 'question_text' => 'Bagaimana tata kelola dan implementasi saat organisasi menyusun buku log (internal breach log) yang mencatat setiap upaya akses tidak sah, meskipun upaya tersebut berhasil digagalkan?',
                 'description' => 'Centralized logging + breach attempt detection + retention.',
                 'scoring_guide' => $defaultGuide,
@@ -166,7 +166,7 @@ class MaturityQuestionsSeeder extends Seeder
             [
                 'question_code' => 'C14',
                 'domain' => MaturityQuestion::DOMAIN_CONTROLLER_OBLIGATIONS,
-                'regulation_ref' => 'UU PDP Pasal 39',
+                'regulation_ref' => 'UU PDP Pasal 39 jo. PP 33/2026 Pasal 123–129',
                 'question_text' => 'Bagaimana organisasi melakukan audit/inspeksi secara berkala terhadap fasilitas keamanan yang dimiliki oleh Prosesor Data?',
                 'description' => 'Vendor audit recurrence + assessment quality.',
                 'scoring_guide' => $defaultGuide,
@@ -174,7 +174,7 @@ class MaturityQuestionsSeeder extends Seeder
             [
                 'question_code' => 'C15',
                 'domain' => MaturityQuestion::DOMAIN_CONTROLLER_OBLIGATIONS,
-                'regulation_ref' => 'UU PDP Pasal 35',
+                'regulation_ref' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                 'question_text' => 'Bagaimana pengembangan sistem IT atau aplikasi baru, aspek privasi sudah dipertimbangkan sejak tahap perancangan awal (bukan sebagai fitur tambahan di akhir)?',
                 'description' => 'Privacy by Design dalam SDLC — privacy review di setiap fase.',
                 'scoring_guide' => $defaultGuide,
@@ -182,13 +182,13 @@ class MaturityQuestionsSeeder extends Seeder
             [
                 'question_code' => 'C16',
                 'domain' => MaturityQuestion::DOMAIN_CONTROLLER_OBLIGATIONS,
-                'regulation_ref' => 'UU PDP Pasal 35',
+                'regulation_ref' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                 'question_text' => 'Bagaimana program untuk seluruh staf yang menyentuh data pribadi telah menandatangani pakta kerahasiaan dan mendapatkan pelatihan berkala mengenai cara menangani data sesuai standar UU PDP?',
                 'description' => 'Pakta kerahasiaan + training % completion + periodicity.',
                 'scoring_guide' => $defaultGuide,
             ],
 
-            // ─── Domain D: Keamanan & Penanganan Kegagalan (Pasal 46-48) ───
+            // ─── Domain D: Keamanan & Penanganan Kegagalan (Pasal 46-48 jo. PP 33/2026 Pasal 114–116) ───
             [
                 'question_code' => 'D17',
                 'domain' => MaturityQuestion::DOMAIN_SECURITY,
@@ -200,7 +200,7 @@ class MaturityQuestionsSeeder extends Seeder
             [
                 'question_code' => 'D18',
                 'domain' => MaturityQuestion::DOMAIN_SECURITY,
-                'regulation_ref' => 'UU PDP Pasal 46',
+                'regulation_ref' => 'UU PDP Pasal 46 jo. PP 33/2026 Pasal 114–116',
                 'question_text' => 'Bagaimana tata kelola dan implementasi SOP mitigasi dan notifikasi dalam hal terjadi kegagalan pelindungan data pribadi (maksimal 3 x 24 jam)?',
                 'description' => 'Breach response SOP + < 72h notification consistently met.',
                 'scoring_guide' => $defaultGuide,
