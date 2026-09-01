@@ -69,7 +69,7 @@ class ControlLibraryService
                 'description' => 'Data pribadi, terutama data pribadi spesifik, disimpan dalam bentuk terenkripsi sehingga tidak terbaca bila media penyimpanan diakses tanpa hak.',
                 'control_type' => 'preventif',
                 'implementation_guidance' => 'Terapkan enkripsi pada tingkat kolom untuk NIK, data biometrik, data kesehatan, dan data keuangan. Kunci disimpan terpisah dari basis datanya.',
-                'reference' => 'UU PDP Pasal 35',
+                'reference' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                 'default_effectiveness' => 3,
             ],
             [
@@ -79,7 +79,7 @@ class ControlLibraryService
                 'description' => 'Seluruh pengiriman data pribadi antar sistem memakai kanal terenkripsi.',
                 'control_type' => 'preventif',
                 'implementation_guidance' => 'TLS 1.2 ke atas untuk seluruh antarmuka, termasuk lalu lintas antar layanan di dalam jaringan internal.',
-                'reference' => 'UU PDP Pasal 35',
+                'reference' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                 'default_effectiveness' => 3,
             ],
             [
@@ -89,7 +89,7 @@ class ControlLibraryService
                 'description' => 'Akses ke data pribadi dibatasi menurut peran dan kebutuhan tugas, bukan diberikan secara menyeluruh.',
                 'control_type' => 'preventif',
                 'implementation_guidance' => 'Tetapkan matriks hak akses per peran, tinjau ulang berkala, dan cabut akses segera saat pegawai berpindah tugas.',
-                'reference' => 'UU PDP Pasal 39',
+                'reference' => 'UU PDP Pasal 39 jo. PP 33/2026 Pasal 123–129',
                 'default_effectiveness' => 3,
             ],
             [
@@ -99,7 +99,7 @@ class ControlLibraryService
                 'description' => 'Setiap akses, perubahan, dan penghapusan data pribadi tercatat beserta identitas pelakunya.',
                 'control_type' => 'detektif',
                 'implementation_guidance' => 'Simpan jejak audit pada media yang tidak dapat diubah pelakunya sendiri, dengan masa simpan sesuai kewajiban kearsipan.',
-                'reference' => 'UU PDP Pasal 39',
+                'reference' => 'UU PDP Pasal 39 jo. PP 33/2026 Pasal 123–129',
                 'default_effectiveness' => 2,
             ],
             [
@@ -109,7 +109,7 @@ class ControlLibraryService
                 'description' => 'Data pribadi nyata tidak dipakai di lingkungan pengembangan dan pengujian.',
                 'control_type' => 'preventif',
                 'implementation_guidance' => 'Terapkan penyamaran atau data sintetis pada seluruh salinan basis data untuk pengembangan dan pengujian.',
-                'reference' => 'UU PDP Pasal 35',
+                'reference' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                 'default_effectiveness' => 3,
             ],
             [
@@ -119,7 +119,7 @@ class ControlLibraryService
                 'description' => 'Data pribadi dimusnahkan setelah masa retensinya berakhir, tanpa bergantung pada tindakan manual.',
                 'control_type' => 'korektif',
                 'implementation_guidance' => 'Tetapkan masa retensi per kategori data, jalankan proses pemusnahan terjadwal, dan simpan bukti pemusnahannya.',
-                'reference' => 'UU PDP Pasal 43',
+                'reference' => 'UU PDP Pasal 43 jo. PP 33/2026 Pasal 75 & 80',
                 'default_effectiveness' => 2,
             ],
             [
@@ -129,7 +129,7 @@ class ControlLibraryService
                 'description' => 'Pola akses tidak wajar terhadap data pribadi terdeteksi dan ditindaklanjuti.',
                 'control_type' => 'detektif',
                 'implementation_guidance' => 'Tetapkan ambang kewajaran per peran, mis. unduhan massal di luar jam kerja, dan alirkan peringatannya ke tim keamanan.',
-                'reference' => 'UU PDP Pasal 39',
+                'reference' => 'UU PDP Pasal 39 jo. PP 33/2026 Pasal 123–129',
                 'default_effectiveness' => 2,
             ],
             [
@@ -139,7 +139,7 @@ class ControlLibraryService
                 'description' => 'Data pribadi dicadangkan berkala dan prosedur pemulihannya diuji, bukan hanya didokumentasikan.',
                 'control_type' => 'korektif',
                 'implementation_guidance' => 'Cadangan disimpan terenkripsi di lokasi terpisah, dan uji pemulihan dijalankan minimal setahun sekali dengan bukti hasilnya.',
-                'reference' => 'UU PDP Pasal 35',
+                'reference' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                 'default_effectiveness' => 2,
             ],
 
@@ -151,7 +151,7 @@ class ControlLibraryService
                 'description' => 'Organisasi menunjuk pejabat yang bertanggung jawab atas pelindungan data pribadi.',
                 'control_type' => 'preventif',
                 'implementation_guidance' => 'Tetapkan penunjukan secara tertulis beserta kewenangan, jalur pelaporan, dan sumber daya yang memadai.',
-                'reference' => 'UU PDP Pasal 53-54',
+                'reference' => 'UU PDP Pasal 53-54 jo. PP 33/2026 Pasal 142–143',
                 'default_effectiveness' => 3,
             ],
             [
@@ -161,7 +161,7 @@ class ControlLibraryService
                 'description' => 'Pegawai yang menangani data pribadi memperoleh pelatihan berkala.',
                 'control_type' => 'preventif',
                 'implementation_guidance' => 'Selenggarakan pelatihan minimal setahun sekali, dengan materi berbeda untuk peran yang berbeda, dan simpan bukti kehadirannya.',
-                'reference' => 'UU PDP Pasal 39',
+                'reference' => 'UU PDP Pasal 39 jo. PP 33/2026 Pasal 123–129',
                 'default_effectiveness' => 2,
             ],
             [
@@ -171,7 +171,7 @@ class ControlLibraryService
                 'description' => 'Tersedia prosedur baku penanganan kebocoran data pribadi beserta batas waktu pemberitahuannya.',
                 'control_type' => 'korektif',
                 'implementation_guidance' => 'Prosedur memuat peran, jalur eskalasi, dan pemberitahuan kepada subjek data serta lembaga berwenang dalam 3x24 jam.',
-                'reference' => 'UU PDP Pasal 46',
+                'reference' => 'UU PDP Pasal 46 jo. PP 33/2026 Pasal 114–116',
                 'default_effectiveness' => 3,
             ],
             [
@@ -181,7 +181,7 @@ class ControlLibraryService
                 'description' => 'Prosedur penanganan insiden diuji secara berkala, tidak hanya disusun.',
                 'control_type' => 'detektif',
                 'implementation_guidance' => 'Selenggarakan simulasi minimal setahun sekali dan catat temuan beserta perbaikannya.',
-                'reference' => 'UU PDP Pasal 46',
+                'reference' => 'UU PDP Pasal 46 jo. PP 33/2026 Pasal 114–116',
                 'default_effectiveness' => 2,
             ],
             [
@@ -191,7 +191,7 @@ class ControlLibraryService
                 'description' => 'Seluruh kegiatan pemrosesan data pribadi terdokumentasi dan dimutakhirkan.',
                 'control_type' => 'preventif',
                 'implementation_guidance' => 'Tinjau ulang RoPA berkala dan setiap kali terjadi perubahan tujuan, sumber, penerima, atau masa retensi.',
-                'reference' => 'UU PDP Pasal 31',
+                'reference' => 'UU PDP Pasal 31 jo. PP 33/2026 Pasal 74',
                 'default_effectiveness' => 3,
             ],
             [
@@ -201,7 +201,7 @@ class ControlLibraryService
                 'description' => 'Pemrosesan berisiko tinggi dinilai dampaknya sebelum dijalankan.',
                 'control_type' => 'preventif',
                 'implementation_guidance' => 'Tetapkan pemicu wajib DPIA, mis. data pribadi spesifik, pemantauan sistematis, atau pengambilan keputusan otomatis.',
-                'reference' => 'UU PDP Pasal 34',
+                'reference' => 'UU PDP Pasal 34 jo. PP 33/2026 Pasal 120–122',
                 'default_effectiveness' => 3,
             ],
             [
@@ -211,7 +211,7 @@ class ControlLibraryService
                 'description' => 'Permohonan hak subjek data ditangani melalui alur baku dengan batas waktu yang terpantau.',
                 'control_type' => 'preventif',
                 'implementation_guidance' => 'Sediakan kanal penerimaan, mekanisme verifikasi identitas pemohon, dan pemantauan tenggat 3x24 jam.',
-                'reference' => 'UU PDP Pasal 5-13',
+                'reference' => 'UU PDP Pasal 5-13 jo. PP 33/2026 Pasal 20–27',
                 'default_effectiveness' => 3,
             ],
 
@@ -223,7 +223,7 @@ class ControlLibraryService
                 'description' => 'Setiap pihak ketiga yang memproses data pribadi terikat perjanjian tertulis.',
                 'control_type' => 'preventif',
                 'implementation_guidance' => 'Perjanjian memuat ruang lingkup, kewajiban keamanan, larangan subkontrak tanpa izin, dan kewajiban pemusnahan saat berakhir.',
-                'reference' => 'UU PDP Pasal 51',
+                'reference' => 'UU PDP Pasal 51 jo. PP 33/2026 Pasal 88 & 139',
                 'default_effectiveness' => 3,
             ],
             [
@@ -233,7 +233,7 @@ class ControlLibraryService
                 'description' => 'Transfer data pribadi ke luar negeri disertai pengamanan yang memadai.',
                 'control_type' => 'preventif',
                 'implementation_guidance' => 'Pastikan negara tujuan memiliki tingkat pelindungan setara, atau gunakan klausul kontraktual baku, dan dokumentasikan dasar transfernya.',
-                'reference' => 'UU PDP Pasal 56',
+                'reference' => 'UU PDP Pasal 56 jo. PP 33/2026 Pasal 160–163',
                 'default_effectiveness' => 3,
             ],
             [
@@ -243,7 +243,7 @@ class ControlLibraryService
                 'description' => 'Setiap kegiatan pemrosesan memiliki dasar hukum yang tercatat dan dapat dipertanggungjawabkan.',
                 'control_type' => 'preventif',
                 'implementation_guidance' => 'Tetapkan dasar hukum per kegiatan pada RoPA, dan tinjau ulang bila tujuan pemrosesannya berubah.',
-                'reference' => 'UU PDP Pasal 20',
+                'reference' => 'UU PDP Pasal 20 jo. PP 33/2026 Pasal 30',
                 'default_effectiveness' => 3,
             ],
             [
@@ -253,7 +253,7 @@ class ControlLibraryService
                 'description' => 'Persetujuan subjek data terekam beserta waktu, cakupan, dan cara pemberiannya.',
                 'control_type' => 'preventif',
                 'implementation_guidance' => 'Simpan bukti persetujuan beserta versi naskah yang berlaku saat itu, dan sediakan mekanisme penarikan yang semudah pemberiannya.',
-                'reference' => 'UU PDP Pasal 21-24',
+                'reference' => 'UU PDP Pasal 21-24 jo. PP 33/2026 Pasal 32–37',
                 'default_effectiveness' => 3,
             ],
             [
@@ -263,7 +263,7 @@ class ControlLibraryService
                 'description' => 'Subjek data memperoleh informasi tujuan, dasar hukum, dan haknya sebelum datanya diproses.',
                 'control_type' => 'preventif',
                 'implementation_guidance' => 'Sediakan pemberitahuan privasi yang mudah diakses, dikelola terpusat, dan berversi agar dapat dibuktikan naskah mana yang berlaku pada suatu waktu.',
-                'reference' => 'UU PDP Pasal 21',
+                'reference' => 'UU PDP Pasal 21 jo. PP 33/2026 Pasal 62',
                 'default_effectiveness' => 3,
             ],
 
@@ -275,7 +275,7 @@ class ControlLibraryService
                 'description' => 'Akses fisik ke tempat penyimpanan data pribadi dibatasi dan tercatat.',
                 'control_type' => 'preventif',
                 'implementation_guidance' => 'Terapkan kendali akses fisik beserta pencatatan keluar-masuk, dan tinjau ulang daftar pemegang akses berkala.',
-                'reference' => 'UU PDP Pasal 35',
+                'reference' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                 'default_effectiveness' => 2,
             ],
             [
@@ -285,7 +285,7 @@ class ControlLibraryService
                 'description' => 'Dokumen fisik berisi data pribadi dimusnahkan sehingga tidak dapat direkonstruksi.',
                 'control_type' => 'korektif',
                 'implementation_guidance' => 'Gunakan pencacah silang atau jasa pemusnahan bersertifikat, dan simpan berita acara pemusnahannya.',
-                'reference' => 'UU PDP Pasal 43',
+                'reference' => 'UU PDP Pasal 43 jo. PP 33/2026 Pasal 75 & 80',
                 'default_effectiveness' => 2,
             ],
             [
@@ -295,7 +295,7 @@ class ControlLibraryService
                 'description' => 'Data pribadi tidak dibiarkan terlihat pada meja kerja maupun layar yang ditinggalkan.',
                 'control_type' => 'preventif',
                 'implementation_guidance' => 'Tetapkan penguncian layar otomatis dan kewajiban menyimpan dokumen fisik saat meja ditinggalkan.',
-                'reference' => 'UU PDP Pasal 35',
+                'reference' => 'UU PDP Pasal 35 jo. PP 33/2026 Pasal 123–129',
                 'default_effectiveness' => 1,
             ],
         ];

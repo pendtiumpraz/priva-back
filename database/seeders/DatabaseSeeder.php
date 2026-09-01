@@ -403,6 +403,7 @@ class DatabaseSeeder extends Seeder
         $this->call(KnowledgeBaseSectionsSeeder::class);
         $this->call(KnowledgeBaseComprehensiveSeeder::class);
         $this->call(UuPdpPasalSeeder::class); // full UU PDP per-pasal (skeleton until verbatim text supplied)
+        $this->call(PpPdpPasalSeeder::class); // full PP 33/2026 per-pasal (aturan pelaksana UU PDP)
         $this->call(AiProviderSeeder::class);
         $this->call(AiProviderComplianceSeeder::class);
         $this->call(VoiceTtsProviderSeeder::class);

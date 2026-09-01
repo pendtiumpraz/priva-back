@@ -41,7 +41,8 @@
 
 <p style="text-align: justify;">
     Sebagai bentuk transparansi dan tanggung jawab kami dalam melindungi data pribadi Anda — sesuai
-    amanat Undang-Undang Nomor 27 Tahun 2022 tentang Pelindungan Data Pribadi — melalui surat ini
+    amanat Undang-Undang Nomor 27 Tahun 2022 tentang Pelindungan Data Pribadi jo. Pasal 114 PP Nomor 33
+    Tahun 2026 — melalui surat ini
     {{ $orgName }} menyampaikan pemberitahuan mengenai sebuah insiden keamanan data yang baru-baru ini
     kami tangani. Kami memahami informasi ini mungkin menimbulkan kekhawatiran. Perlu kami sampaikan
     bahwa <strong>situasi telah kami kendalikan</strong> dan kami telah mengambil langkah-langkah yang

@@ -6,7 +6,7 @@
 
 <div style="text-align: center; margin-bottom: 20px;">
     <h1 style="text-transform: uppercase;">Surat Notifikasi Pelanggaran Data Pribadi</h1>
-    <p class="muted">Pasal 46 UU No. 27 Tahun 2022 tentang Pelindungan Data Pribadi</p>
+    <p class="muted">Pasal 46 UU No. 27 Tahun 2022 jo. Pasal 114–116 PP No. 33 Tahun 2026 tentang Pelindungan Data Pribadi</p>
 </div>
 
 <div style="margin-bottom: 20px;">
@@ -19,6 +19,7 @@
 <div style="margin-bottom: 16px;">
     <p>Kepada Yth.</p>
     <p><strong>Kementerian Komunikasi dan Digital (KOMDIGI)</strong><br>
+    selaku Lembaga Pelindungan Data Pribadi<br>
     Direktorat Jenderal Aplikasi Informatika<br>
     Jakarta</p>
 </div>
@@ -26,7 +27,7 @@
 <p>Dengan hormat,</p>
 
 <p>Menindaklanjuti kewajiban notifikasi dalam Pasal 46 UU No. 27 Tahun 2022 tentang
-Pelindungan Data Pribadi, dengan ini <strong>{{ $orgName }}</strong>@if($orgAddress) yang berkedudukan di {{ $orgAddress }}@endif
+Pelindungan Data Pribadi jo. Pasal 114 PP No. 33 Tahun 2026, dengan ini <strong>{{ $orgName }}</strong>@if($orgAddress) yang berkedudukan di {{ $orgAddress }}@endif
 menyampaikan notifikasi mengenai insiden pelanggaran data pribadi dengan detail sebagai berikut:</p>
 
 <table class="meta">
@@ -81,9 +82,9 @@ menyampaikan notifikasi mengenai insiden pelanggaran data pribadi dengan detail 
 <p style="text-align: justify;">{{ $breach->remediation_plan ?? 'Rencana remediasi sedang disusun dan akan disampaikan pada laporan lanjutan.' }}</p>
 
 <div class="callout info">
-    Notifikasi ini disampaikan dalam kurun waktu 3×24 jam sejak insiden terdeteksi, sesuai dengan
-    ketentuan Pasal 46 UU No. 27 Tahun 2022. Kami bertanggung jawab atas insiden ini dan bersedia
-    dikoordinasikan lebih lanjut oleh KOMDIGI.
+    Notifikasi ini disampaikan dalam kurun waktu 3×24 jam sejak Kegagalan Pelindungan Data Pribadi
+    diketahui, sesuai dengan ketentuan Pasal 46 UU No. 27 Tahun 2022 jo. Pasal 114 PP No. 33 Tahun 2026.
+    Kami bertanggung jawab atas insiden ini dan bersedia dikoordinasikan lebih lanjut oleh Lembaga.
 </div>
 
 <h2>Narahubung</h2>

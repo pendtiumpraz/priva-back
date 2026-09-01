@@ -640,7 +640,12 @@ class ModuleCrudController extends Controller
                     $data['incident_code'] = $data['incident_code'] ?? $this->nextCode('BRC', $model, $data['org_id']);
                     $data['detected_at'] = $data['detected_at'] ?? now();
                     if ($data['notification_required']) {
-                        $data['notification_deadline'] = $data['notification_deadline'] ?? now()->addHours(72);
+                        // PP 33/2026 Pasal 114(2): batas 3×24 jam dihitung sejak Kegagalan
+                        // Pelindungan Data Pribadi DIKETAHUI (detected_at), bukan sejak record
+                        // dibuat — insiden yang baru dicatat setelah deteksi tidak boleh dapat
+                        // tenggat lebih longgar.
+                        $data['notification_deadline'] = $data['notification_deadline']
+                            ?? \Illuminate\Support\Carbon::parse($data['detected_at'])->addHours(72);
                     }
                     // Auto-apply case-type containment template if case_type provided.
                     // Falls back to "other" generic template if case_type not set.
