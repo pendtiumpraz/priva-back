@@ -18,6 +18,22 @@ class RegulationService
     private const CACHE_TTL = 300;
 
     /**
+     * Peta kode framework GAP (regulation_frameworks.code) → kode regulasi
+     * registry. Framework tanpa entri di sini dianggap netral (selalu tampil).
+     */
+    public const FRAMEWORK_MAP = [
+        'uupdp' => 'uu_pdp',
+        'gdpr' => 'gdpr',
+        'pdpa' => 'pdpa_sg',
+    ];
+
+    /** Apakah satu kode regulasi aktif untuk org. */
+    public function isEnabled(?string $orgId, string $regCode): bool
+    {
+        return in_array($regCode, $this->enabledCodesFor($orgId), true);
+    }
+
+    /**
      * Kode regulasi aktif untuk org: core + add-on yang di-enable.
      * orgId null (superadmin/CLI) → core saja (fail-closed untuk add-on).
      *

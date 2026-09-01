@@ -47,6 +47,7 @@ class QuestionLibrary extends Model
         'slug',
         'description',
         'category',
+        'regulation_code',
         'version',
         'source',
         'is_active',

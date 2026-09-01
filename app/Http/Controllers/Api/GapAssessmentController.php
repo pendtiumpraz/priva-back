@@ -4,15 +4,19 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
-use App\Models\GapAssessment;
 use App\Models\CustomGapQuestion;
+use App\Models\GapAssessment;
 use App\Models\GapQuestionOverride;
 use App\Models\Organization;
+use App\Models\RegulationFramework;
 use App\Services\AiDocumentAnalyzer;
 use App\Services\CreditService;
 use App\Services\FileUploadValidator;
+use App\Services\NotificationService;
+use App\Services\RegulationService;
 use App\Services\TenantStorageService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
 class GapAssessmentController extends Controller
@@ -31,7 +35,7 @@ class GapAssessmentController extends Controller
             $reg = $request->get('regulation');
             if ($reg === 'uupdp') {
                 // Include legacy records with NULL regulation_code
-                $query->where(function($q) use ($reg) {
+                $query->where(function ($q) use ($reg) {
                     $q->where('regulation_code', $reg)->orWhereNull('regulation_code');
                 });
             } else {
@@ -43,18 +47,30 @@ class GapAssessmentController extends Controller
 
         return response()->json([
             'data' => $assessments,
-            'regulations' => \App\Models\RegulationFramework::where('is_active', true)->get()
+            'regulations' => RegulationFramework::where('is_active', true)->get(),
         ]);
     }
 
     /**
      * Get list of active regulations
      */
-    public function getRegulations()
+    public function getRegulations(Request $request)
     {
-        return response()->json([
-            'data' => \App\Models\RegulationFramework::where('is_active', true)->get()
-        ]);
+        // Gating regulasi add-on: framework yang terpetakan ke regulasi
+        // (uupdp/gdpr/pdpa) hanya tampil bila regulasinya core atau di-enable
+        // tenant. Framework tanpa mapping (custom) selalu tampil. UU PDP = core.
+        $enabled = app(RegulationService::class)->enabledCodesFor($request->user()?->org_id);
+        $map = RegulationService::FRAMEWORK_MAP;
+
+        $frameworks = RegulationFramework::where('is_active', true)->get()
+            ->filter(function ($f) use ($enabled, $map) {
+                $regCode = $map[$f->code] ?? null;
+
+                return $regCode === null || in_array($regCode, $enabled, true);
+            })
+            ->values();
+
+        return response()->json(['data' => $frameworks]);
     }
 
     /**
@@ -65,7 +81,7 @@ class GapAssessmentController extends Controller
         $regCode = $request->query('regulation', 'uupdp');
         $ids = $request->query('ids');
 
-        if (!$ids) {
+        if (! $ids) {
             return response()->json(['error' => 'ids required'], 400);
         }
 
@@ -91,7 +107,7 @@ class GapAssessmentController extends Controller
 
         return response()->json([
             'versions' => $assessments->pluck('version'),
-            'data' => $results
+            'data' => $results,
         ]);
     }
 
@@ -141,7 +157,7 @@ class GapAssessmentController extends Controller
             ->first();
         if ($unfinished) {
             return response()->json([
-                'message' => 'Assessment "' . ($unfinished->version ?? 'sebelumnya') . '" belum selesai (progress ' . (int) ($unfinished->progress ?? 0) . '%). Selesaikan atau hapus sebelum membuat assessment baru.',
+                'message' => 'Assessment "'.($unfinished->version ?? 'sebelumnya').'" belum selesai (progress '.(int) ($unfinished->progress ?? 0).'%). Selesaikan atau hapus sebelum membuat assessment baru.',
                 'unfinished' => [
                     'id' => $unfinished->id,
                     'version' => $unfinished->version,
@@ -175,7 +191,7 @@ class GapAssessmentController extends Controller
         $assessment = GapAssessment::create([
             'org_id' => $request->user()->org_id,
             'regulation_code' => $code,
-            'version' => 'GAP_v3.0_' . strtoupper($code) . '_#' . ($lastVersion + 1),
+            'version' => 'GAP_v3.0_'.strtoupper($code).'_#'.($lastVersion + 1),
             'overall_score' => 0,
             'compliance_level' => 'low',
             'progress' => 0,
@@ -208,7 +224,7 @@ class GapAssessmentController extends Controller
             ->first();
         if ($unfinished) {
             return response()->json([
-                'message' => 'Assessment "' . ($unfinished->version ?? 'sebelumnya') . '" belum selesai (progress ' . (int) ($unfinished->progress ?? 0) . '%). Selesaikan atau hapus dulu sebelum duplikasi.',
+                'message' => 'Assessment "'.($unfinished->version ?? 'sebelumnya').'" belum selesai (progress '.(int) ($unfinished->progress ?? 0).'%). Selesaikan atau hapus dulu sebelum duplikasi.',
                 'unfinished' => [
                     'id' => $unfinished->id,
                     'version' => $unfinished->version,
@@ -240,7 +256,7 @@ class GapAssessmentController extends Controller
         $assessment = GapAssessment::create([
             'org_id' => $orgId,
             'regulation_code' => $code,
-            'version' => 'GAP_v3.0_' . strtoupper($code) . '_#' . ($lastVersion + 1) . ' (dup)',
+            'version' => 'GAP_v3.0_'.strtoupper($code).'_#'.($lastVersion + 1).' (dup)',
             'overall_score' => 0,
             'compliance_level' => 'low',
             // Force progress=0 supaya frontend treat sebagai editable
@@ -255,7 +271,7 @@ class GapAssessmentController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Assessment berhasil diduplikasi dari ' . $source->version,
+            'message' => 'Assessment berhasil diduplikasi dari '.$source->version,
             'data' => $assessment,
             'source_id' => $source->id,
             'source_version' => $source->version,
@@ -311,7 +327,7 @@ class GapAssessmentController extends Controller
         );
 
         $totalQuestions = count(GapAssessment::effectiveQuestions($assessment->org_id, $assessment->regulation_code ?? 'uupdp'));
-        $answeredCount = count(array_filter($answers, fn($a) => $a !== null && $a !== ''));
+        $answeredCount = count(array_filter($answers, fn ($a) => $a !== null && $a !== ''));
         $progress = $totalQuestions > 0 ? round(($answeredCount / $totalQuestions) * 100) : 0;
 
         $update = [
@@ -338,7 +354,7 @@ class GapAssessmentController extends Controller
         }
         // Guard hasColumn: aman kalau migrasi answer_notes belum dijalankan di
         // environment tertentu — cukup skip, tidak error.
-        if ($request->has('answer_notes') && \Illuminate\Support\Facades\Schema::hasColumn('gap_assessments', 'answer_notes')) {
+        if ($request->has('answer_notes') && Schema::hasColumn('gap_assessments', 'answer_notes')) {
             $update['answer_notes'] = $request->input('answer_notes') ?: [];
         }
 
@@ -354,16 +370,18 @@ class GapAssessmentController extends Controller
         // Notif ke DPO + admin tenant saat assessment diselesaikan.
         if ($finalize) {
             try {
-                \App\Services\NotificationService::dispatch(
+                NotificationService::dispatch(
                     kind: 'info', severity: 'medium', module: 'gap-assessment',
                     type: 'gap.finalized', recipient: 'role:dpo,admin',
                     orgId: $assessment->org_id,
                     title: "GAP Assessment selesai: {$assessment->version}",
                     body: 'Skor '.round((float) $assessment->overall_score).'% — tingkat '.($assessment->compliance_level ?? '-').'.',
-                    actionUrl: "/gap-assessment",
+                    actionUrl: '/gap-assessment',
                     metadata: ['record_id' => $assessment->id],
                 );
-            } catch (\Throwable $e) { \Log::warning('gap.finalized notif failed: '.$e->getMessage()); }
+            } catch (\Throwable $e) {
+                \Log::warning('gap.finalized notif failed: '.$e->getMessage());
+            }
         }
 
         return response()->json([
@@ -406,11 +424,16 @@ class GapAssessmentController extends Controller
         if ($assessment->attachments && $org) {
             $disk = $storage->getPublicDisk($org);
             foreach ($assessment->attachments as $questionPaths) {
-                if (!is_array($questionPaths)) continue;
+                if (! is_array($questionPaths)) {
+                    continue;
+                }
                 foreach ($questionPaths as $att) {
                     $path = is_array($att) ? ($att['path'] ?? null) : $att;
                     if ($path) {
-                        try { $disk->delete($path); } catch (\Throwable $e) { /* best-effort */ }
+                        try {
+                            $disk->delete($path);
+                        } catch (\Throwable $e) { /* best-effort */
+                        }
                     }
                 }
             }
@@ -476,8 +499,9 @@ class GapAssessmentController extends Controller
             );
         } catch (\Throwable $e) {
             report($e);
+
             return response()->json([
-                'message' => 'Gagal menyimpan file ke storage: ' . $e->getMessage(),
+                'message' => 'Gagal menyimpan file ke storage: '.$e->getMessage(),
             ], 500);
         }
 
@@ -490,7 +514,7 @@ class GapAssessmentController extends Controller
         $attachments = $assessment->attachments ?? [];
         $qId = $request->question_id;
 
-        if (!isset($attachments[$qId]) || !is_array($attachments[$qId])) {
+        if (! isset($attachments[$qId]) || ! is_array($attachments[$qId])) {
             $attachments[$qId] = [];
         }
 
@@ -554,6 +578,7 @@ class GapAssessmentController extends Controller
         $questionAttachments = $attachments[$request->question_id] ?? [];
         $matched = collect($questionAttachments)->first(function ($att) use ($request) {
             $path = is_array($att) ? ($att['path'] ?? null) : $att;
+
             return $path === $request->attachment_path;
         });
 
@@ -580,6 +605,7 @@ class GapAssessmentController extends Controller
             CreditService::resetIfNeeded($orgId);
             if (! CreditService::hasCredit($orgId, 'ai_doc_analyze')) {
                 $cost = CreditService::getCost('ai_doc_analyze');
+
                 return response()->json([
                     'message' => "Kredit AI Anda habis. Dibutuhkan {$cost} kredit untuk analisis ini. Silakan top up kredit melalui menu Konfigurasi Platform.",
                     'credits_exhausted' => true,
@@ -649,6 +675,7 @@ class GapAssessmentController extends Controller
         if (isset($value['status'])) {
             return [$value];
         }
+
         // Sudah berupa list (numeric indexed).
         return array_values($value);
     }
@@ -692,6 +719,7 @@ class GapAssessmentController extends Controller
             $question = $questionMap->get($qId);
             if (! $question) {
                 $stats['skipped'] += is_array($files) ? count($files) : 1;
+
                 continue;
             }
 
@@ -711,6 +739,7 @@ class GapAssessmentController extends Controller
                 $attachmentPath = is_array($att) ? ($att['path'] ?? null) : $att;
                 if (! $attachmentPath) {
                     $stats['skipped']++;
+
                     continue;
                 }
 
@@ -719,6 +748,7 @@ class GapAssessmentController extends Controller
                 if ($prev && ! empty($prev['status'])) {
                     $newListForQ[] = $prev;
                     $stats['cached']++;
+
                     continue;
                 }
 
@@ -734,6 +764,7 @@ class GapAssessmentController extends Controller
                         'attachment_path' => $attachmentPath,
                     ];
                     $stats['skipped']++;
+
                     continue;
                 }
 
@@ -757,6 +788,7 @@ class GapAssessmentController extends Controller
                         'attachment_path' => $attachmentPath,
                     ];
                     $stats['failed']++;
+
                     continue;
                 }
 
@@ -831,9 +863,12 @@ class GapAssessmentController extends Controller
     private function bytesFromIni(string $val): int
     {
         $val = trim($val);
-        if ($val === '') return 0;
+        if ($val === '') {
+            return 0;
+        }
         $unit = strtolower(substr($val, -1));
         $num = (int) $val;
+
         return match ($unit) {
             'g' => $num * 1024 * 1024 * 1024,
             'm' => $num * 1024 * 1024,
@@ -845,9 +880,14 @@ class GapAssessmentController extends Controller
     /** Format byte ke MB/KB human-readable. */
     private function humanBytes(int $bytes): string
     {
-        if ($bytes >= 1048576) return number_format($bytes / 1048576, 1) . 'MB';
-        if ($bytes >= 1024) return number_format($bytes / 1024, 1) . 'KB';
-        return $bytes . 'B';
+        if ($bytes >= 1048576) {
+            return number_format($bytes / 1048576, 1).'MB';
+        }
+        if ($bytes >= 1024) {
+            return number_format($bytes / 1024, 1).'KB';
+        }
+
+        return $bytes.'B';
     }
 
     private function resolveAttachmentPath(GapAssessment $assessment, string $relativePath): ?string
@@ -891,6 +931,7 @@ class GapAssessmentController extends Controller
             if (file_put_contents($tmpPath, $contents) === false) {
                 return null;
             }
+
             return $tmpPath;
         } catch (\Throwable $e) {
             \Log::warning('[GAP resolveAttachmentPath] tenant disk fetch failed', [
@@ -898,6 +939,7 @@ class GapAssessmentController extends Controller
                 'path' => $rel,
                 'error' => $e->getMessage(),
             ]);
+
             return null;
         }
     }

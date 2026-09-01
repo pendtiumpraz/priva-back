@@ -7,6 +7,7 @@ use App\Models\QuestionLibrary;
 use App\Models\QuestionLibrarySegment;
 use App\Models\VendorAssessment;
 use App\Models\VendorQuestionnaire;
+use App\Services\RegulationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -49,6 +50,14 @@ class TprmLibraryController extends Controller
         if (! $request->boolean('include_inactive')) {
             $query->where('is_active', true);
         }
+
+        // Gating regulasi add-on: library ber-regulation_code hanya tampil bila
+        // regulasinya core atau di-enable tenant. Library tanpa kode (netral)
+        // selalu tampil. UU PDP = core → bank pertanyaan PDP selalu tersedia.
+        $enabledRegs = app(RegulationService::class)->enabledCodesFor($orgId);
+        $query->where(function ($sub) use ($enabledRegs) {
+            $sub->whereNull('regulation_code')->orWhereIn('regulation_code', $enabledRegs);
+        });
 
         $libraries = $query
             ->orderByDesc('is_locked')           // template global di atas
