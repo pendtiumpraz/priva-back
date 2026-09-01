@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class RetentionPolicy extends Model
@@ -15,6 +15,9 @@ class RetentionPolicy extends Model
         'duration_value', 'duration_unit',
         'trigger_event', 'disposal_method',
         'legal_basis', 'created_by',
+        // PP 33/2026 Pasal 75(2) — isi dokumen kebijakan retensi
+        'subjects_covered', 'data_components', 'archival_provision',
+        'deidentification_note', 'destruction_electronic', 'destruction_nonelectronic',
     ];
 
     protected $casts = [
@@ -22,6 +25,7 @@ class RetentionPolicy extends Model
     ];
 
     public const UNITS = ['day', 'month', 'year', 'indefinite'];
+
     public const DISPOSAL_METHODS = ['delete', 'anonymize', 'archive'];
 
     /**
@@ -31,7 +35,7 @@ class RetentionPolicy extends Model
     {
         $duration = $this->duration_unit === 'indefinite'
             ? 'Tidak terbatas'
-            : (($this->duration_value ?? 0) . ' ' . $this->unitLabel());
+            : (($this->duration_value ?? 0).' '.$this->unitLabel());
         $disposal = match ($this->disposal_method) {
             'delete' => 'dihapus',
             'anonymize' => 'dianonimisasi',
@@ -39,6 +43,7 @@ class RetentionPolicy extends Model
             default => $this->disposal_method,
         };
         $trigger = $this->trigger_event ? " setelah {$this->trigger_event}" : '';
+
         return "{$this->name} — {$duration}, {$disposal}{$trigger}";
     }
 
@@ -73,7 +78,7 @@ class RetentionPolicy extends Model
             ->whereNull('deleted_at')
             ->where(function ($q) {
                 $q->whereJsonContains('wizard_data->retensi_keamanan->retensi_list', ['policy_id' => $this->id])
-                  ->orWhere('wizard_data->retensi_keamanan->policy_id', $this->id);
+                    ->orWhere('wizard_data->retensi_keamanan->policy_id', $this->id);
             })
             ->count();
     }

@@ -67,6 +67,13 @@ class RetentionPolicyController extends Controller
             'trigger_event' => 'nullable|string|max:255',
             'disposal_method' => 'nullable|in:delete,anonymize,archive',
             'legal_basis' => 'nullable|string|max:255',
+            // PP 33/2026 Pasal 75(2)
+            'subjects_covered' => 'nullable|string|max:2000',
+            'data_components' => 'nullable|string|max:2000',
+            'archival_provision' => 'nullable|string|max:2000',
+            'deidentification_note' => 'nullable|string|max:2000',
+            'destruction_electronic' => 'nullable|string|max:2000',
+            'destruction_nonelectronic' => 'nullable|string|max:2000',
         ]);
 
         $data['org_id'] = $user->org_id;
@@ -96,6 +103,13 @@ class RetentionPolicyController extends Controller
             'trigger_event' => 'nullable|string|max:255',
             'disposal_method' => 'sometimes|in:delete,anonymize,archive',
             'legal_basis' => 'nullable|string|max:255',
+            // PP 33/2026 Pasal 75(2)
+            'subjects_covered' => 'nullable|string|max:2000',
+            'data_components' => 'nullable|string|max:2000',
+            'archival_provision' => 'nullable|string|max:2000',
+            'deidentification_note' => 'nullable|string|max:2000',
+            'destruction_electronic' => 'nullable|string|max:2000',
+            'destruction_nonelectronic' => 'nullable|string|max:2000',
         ]);
 
         $policy->update($data);
