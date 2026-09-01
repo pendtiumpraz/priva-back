@@ -544,6 +544,9 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // =============================================
     // Regulasi — add-on opsional per tenant (UU PDP + PP 33 core, selalu aktif)
     // =============================================
+    // Paparan sanksi administratif (PP 33/2026 Pasal 184-186)
+    Route::get('/sanctions', [\App\Http\Controllers\Api\SanctionController::class, 'index'])->middleware('permission:gap_assessment,read');
+
     Route::get('/regulation-addons', [RegulationController::class, 'index'])->middleware('permission:settings,read');
     Route::put('/regulation-addons/{code}', [RegulationController::class, 'update'])
         ->middleware('permission:settings,write')->where('code', '[a-z0-9_]+');
