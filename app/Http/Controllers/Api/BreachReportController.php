@@ -54,6 +54,19 @@ class BreachReportController extends Controller
     }
 
     /**
+     * Pengumuman publik kepada masyarakat — PP 33/2026 Pasal 115.
+     * Dipakai bila kegagalan mengganggu pelayanan publik dan/atau berdampak
+     * serius terhadap kepentingan masyarakat; disampaikan via media umum.
+     */
+    public function publicNotice(Request $request, string $id)
+    {
+        $breach = $this->loadBreach($request, $id);
+        $pdf = $this->buildPdf($request, 'reports.breach.public', $breach, 'breach_public');
+
+        return $pdf->download("Pengumuman-Publik-Insiden_{$breach->incident_code}.pdf");
+    }
+
+    /**
      * PUT /breach/{id}/notification-templates
      * Simpan template pemberitahuan custom PER BREACH (KOMDIGI / internal /
      * subjek). Disimpan ke kolom notification_template (JSON, keyed per jenis).

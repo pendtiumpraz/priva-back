@@ -19,6 +19,7 @@ class BreachIncident extends Model
         'root_cause', 'containment_actions', 'containment_checklist', 'remediation_plan',
         'notification_required', 'notification_deadline', 'notified_komdigi_at',
         'notified_subjects_at', 'notification_template', 'detected_by',
+        'public_notification_required', 'public_notification_grounds', 'notified_public_at',
         'incident_commander', 'dpo_id', 'pic_id', 'pic_name', 'detected_at', 'assessed_at',
         'contained_at', 'closed_at', 'timeline_log', 'created_by',
         'custom_raci', 'containment_steps',
@@ -33,6 +34,8 @@ class BreachIncident extends Model
         'notification_deadline' => 'datetime', 'detected_at' => 'datetime',
         'assessed_at' => 'datetime', 'contained_at' => 'datetime', 'closed_at' => 'datetime',
         'notified_komdigi_at' => 'datetime', 'notified_subjects_at' => 'datetime',
+        'public_notification_required' => 'boolean', 'public_notification_grounds' => 'array',
+        'notified_public_at' => 'datetime',
         // PII Encryption — AES-256-CBC
         'pic_name' => EncryptedString::class,
         'description' => EncryptedString::class,

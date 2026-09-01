@@ -660,6 +660,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     Route::get('/breach/{id}/pdf/komdigi', [BreachReportController::class, 'komdigi'])->middleware('permission:breach,read');
     Route::get('/breach/{id}/pdf/subject-letter', [BreachReportController::class, 'subjectLetter'])->middleware('permission:breach,read');
     Route::get('/breach/{id}/pdf/full-report', [BreachReportController::class, 'fullReport'])->middleware('permission:breach,read');
+    Route::get('/breach/{id}/pdf/public-notice', [BreachReportController::class, 'publicNotice'])->middleware('permission:breach,read');
     Route::put('/breach/{id}/notification-templates', [BreachReportController::class, 'saveNotificationTemplates'])->middleware('permission:breach,write');
 
     // Document Templates — per-tenant picker + customization
