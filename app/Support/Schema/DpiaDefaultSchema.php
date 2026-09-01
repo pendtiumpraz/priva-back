@@ -66,6 +66,20 @@ class DpiaDefaultSchema
         'Pengendali Data Pribadi Bersama',
     ];
 
+    /** Waktu pelaksanaan DPIA — PP 33/2026 Pasal 121(1) mensyaratkan SEBELUM pemrosesan. */
+    private const ASSESSMENT_TIMING = [
+        'Sebelum pemrosesan dimulai',
+        'Saat pemrosesan sedang berlangsung',
+        'Setelah pemrosesan berlangsung',
+    ];
+
+    /** Status konsultasi ke Lembaga — PP 33/2026 Pasal 122. */
+    private const AUTHORITY_CONSULTATION = [
+        'Tidak diperlukan',
+        'Dipertimbangkan',
+        'Telah dilakukan konsultasi',
+    ];
+
     /**
      * @return array<int, array{section_key:string, section_label:string, fields:array<int,array<string,mixed>>}>
      */
@@ -80,6 +94,17 @@ class DpiaDefaultSchema
                     self::f('entitas', 'Entitas', 'text', widget: 'readonly_org'),
                     self::f('kategori', 'Kategori', 'select', widget: 'category_picker', options: self::KATEGORI_PENGENDALI),
                     self::f('description', 'Deskripsi Pemrosesan', 'textarea', required: true),
+                    // PP 33/2026 Pasal 121(2) huruf b — penilaian kebutuhan &
+                    // proporsionalitas (sebelumnya tidak ada; PDF memalsukannya
+                    // dari tujuan/aktivitas). Kini field asli & wajib.
+                    self::f('necessity_justification', 'Justifikasi Kebutuhan (Necessity)', 'textarea', required: true),
+                    self::f('proportionality_justification', 'Justifikasi Proporsionalitas', 'textarea', required: true),
+                    // Pasal 121(1) — DPIA dilaksanakan SEBELUM pemrosesan.
+                    self::f('assessment_timing', 'Waktu Pelaksanaan DPIA', 'select', required: true, options: self::ASSESSMENT_TIMING),
+                    // Pasal 122 — konsultasi kepada Lembaga bila berpotensi
+                    // menimbulkan kerugian/tidak tersedia langkah teknis operasional.
+                    self::f('authority_consultation', 'Konsultasi ke Lembaga (Pasal 122)', 'select', options: self::AUTHORITY_CONSULTATION),
+                    self::f('authority_consultation_reason', 'Dasar Konsultasi ke Lembaga', 'textarea'),
                     self::f('dpo_name', 'Pejabat Pelindungan Data (DPO)', 'text', required: true),
                     self::f('pic_name', 'Penanggung Jawab (PIC) Pemrosesan', 'text'),
                     self::f('risk_level', 'Risk Level', 'special', widget: 'risk_level_auto', required: true),
