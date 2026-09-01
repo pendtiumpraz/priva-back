@@ -77,6 +77,20 @@ class RopaDefaultSchema
 
     private const YA_TIDAK = ['Ya', 'Tidak'];
 
+    /** Kategori subjek data — PP 33/2026 Pasal 74(2) huruf g. */
+    private const KATEGORI_SUBJEK = [
+        'Karyawan/Pegawai', 'Calon Karyawan', 'Pelanggan/Nasabah', 'Calon Pelanggan',
+        'Pengguna Aplikasi/Website', 'Mitra/Vendor/Pihak Ketiga', 'Anak',
+        'Penyandang Disabilitas', 'Masyarakat Umum', 'Lainnya',
+    ];
+
+    /** Hak Subjek Data yang difasilitasi — PP 33/2026 Pasal 74(2) huruf i. */
+    private const HAK_SUBJEK = [
+        'Akses & salinan', 'Pembetulan/koreksi', 'Penghapusan/pemusnahan',
+        'Pembatasan/penundaan pemrosesan', 'Portabilitas data',
+        'Keberatan atas keputusan otomatis', 'Penarikan persetujuan',
+    ];
+
     /**
      * @return array<int, array{section_key:string, section_label:string, fields:array<int,array<string,mixed>>}>
      */
@@ -102,6 +116,11 @@ class RopaDefaultSchema
                     self::f('kategori_pemrosesan', 'Kategori Pemrosesan', 'select', required: true, options: [
                         'Pengendali Data Pribadi', 'Pemroses Data Pribadi', 'Pengendali Data Pribadi Bersama',
                     ]),
+                    // PP 33/2026 Pasal 63 — Pengendali Data Pribadi Bersama: identitas
+                    // pengendali bersama + pembagian tanggung jawab, dan informasi
+                    // tambahan yang disampaikan ke Subjek Data.
+                    self::f('pengendali_bersama_detail', 'Pengendali Bersama — Identitas & Pembagian Tanggung Jawab', 'textarea'),
+                    self::f('pengendali_bersama_info_subjek', 'Pengendali Bersama — Informasi ke Subjek Data', 'textarea'),
                     self::f('dpo_list', 'Pejabat PDP (DPO)', 'special', widget: 'person_repeater_dpo', required: true),
                     self::f('pic_list', 'Process Owner / PIC', 'special', widget: 'person_repeater_pic'),
                 ],
@@ -127,6 +146,9 @@ class RopaDefaultSchema
                         'Personalisasi Konten', 'Lainnya', 'Not Applicable',
                     ]),
                     self::f('teknologi_baru', 'Apakah menggunakan teknologi baru (emerging tech)?', 'boolean', widget: 'risk_indicator', options: self::YA_TIDAK),
+                    // PP 33/2026 Pasal 74(2) huruf i — pemenuhan hak Subjek Data.
+                    self::f('pemenuhan_hak_subjek', 'Hak Subjek Data yang Difasilitasi', 'multiselect', options: self::HAK_SUBJEK),
+                    self::f('pemenuhan_hak_detail', 'Mekanisme Pemenuhan Hak Subjek Data', 'textarea'),
                 ],
             ],
             [
@@ -134,6 +156,7 @@ class RopaDefaultSchema
                 'section_label' => 'Pengumpulan Data',
                 'fields' => [
                     self::f('sumber_data_list', 'Sumber Pengumpulan Data Pribadi', 'special', widget: 'source_collection_group', options: self::DATA_SOURCE_OPTIONS),
+                    self::f('kategori_subjek', 'Kategori Subjek Data Pribadi', 'multiselect', required: true, options: self::KATEGORI_SUBJEK),
                     self::f('jumlah_subjek', 'Jumlah Subjek Data Pribadi', 'select', required: true, options: ['≤ 1.000 subjek', '> 1.000 subjek']),
                     self::f('jenis_data_spesifik', 'Data Pribadi Spesifik (dikumpulkan)', 'multiselect', widget: 'data_types_sensitive', required: true, options: self::DATA_TYPES_SPECIFIC),
                     self::f('jenis_data_umum', 'Data Pribadi Umum (dikumpulkan)', 'multiselect', options: self::DATA_TYPES_GENERAL),
