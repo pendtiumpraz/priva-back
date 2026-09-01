@@ -502,8 +502,8 @@ class PostureFindingService
                 'source_detail' => $d->request_id,
                 'severity' => $hoursLate > 72 ? 'high' : 'medium',
                 'title' => "DSR telat {$hoursLate}h: {$d->request_id}",
-                'description' => "DSR {$d->request_id} (type={$d->request_type}) ditutup {$hoursLate} jam setelah deadline. UU PDP Pasal 8-10 mensyaratkan respons hak subjek dalam waktu yang reasonable.",
-                'regulation_ref' => 'UU PDP Pasal 8-10',
+                'description' => "DSR {$d->request_id} (type={$d->request_type}) ditutup {$hoursLate} jam setelah deadline. UU PDP Pasal 8-10 jo. PP 33/2026 Pasal 79–95 mensyaratkan respons hak subjek dalam waktu yang reasonable.",
+                'regulation_ref' => 'UU PDP Pasal 8-10 jo. PP 33/2026 Pasal 79–95',
                 'metadata' => ['dsr_id' => $d->id, 'hours_late' => $hoursLate],
             ];
         }

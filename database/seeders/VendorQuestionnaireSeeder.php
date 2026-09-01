@@ -98,7 +98,7 @@ class VendorQuestionnaireSeeder extends Seeder
             $this->yesNo('CLD-09', 'cloud_infrastructure', 'data_handling',
                 'Apakah ada data deletion guarantee (≤ 90 hari) saat kontrak berakhir?',
                 'Tanpa ini, data bisa tetap di backup vendor selamanya — risiko kebocoran kontinu.',
-                'UU PDP Pasal 30', weight: 7, direction: 1, yesScore: 1.0, noScore: -0.7),
+                'UU PDP Pasal 30 jo. PP 33/2026 Pasal 123–129', weight: 7, direction: 1, yesScore: 1.0, noScore: -0.7),
 
             $this->multiChoice('CLD-10', 'cloud_infrastructure', 'security',
                 'SLA notifikasi vendor saat ada insiden security yang memengaruhi data Anda?',
@@ -190,7 +190,7 @@ class VendorQuestionnaireSeeder extends Seeder
 
             $this->yesNo('SAAS-09', 'saas', 'data_handling',
                 'Apakah retention policy clear & tenant bisa configure?',
-                null, 'UU PDP Pasal 30', weight: 5, direction: 1, yesScore: 1.0, noScore: -0.4),
+                null, 'UU PDP Pasal 30 jo. PP 33/2026 Pasal 123–129', weight: 5, direction: 1, yesScore: 1.0, noScore: -0.4),
 
             $this->multiChoice('SAAS-10', 'saas', 'security',
                 'SLA breach notification?',

@@ -267,7 +267,7 @@ KB
 # DSR (Data Subject Request)
 
 ## Fungsi
-Mengelola permintaan hak subjek data sesuai UU PDP Pasal 6-13.
+Mengelola permintaan hak subjek data sesuai UU PDP Pasal 6-13 jo. PP 33/2026 Pasal 20–27.
 
 ## Jenis Hak Subjek Data
 1. **Hak Akses** — Subjek berhak tahu data apa yang diproses
@@ -458,12 +458,12 @@ UU PDP adalah undang-undang yang mengatur pelindungan data pribadi di Indonesia,
 
 ## Pasal-Pasal Penting
 - **Pasal 4 jo. PP 33/2026 Pasal 5–7**: Jenis data pribadi (umum & spesifik/sensitif)
-- **Pasal 6-13**: Hak-hak subjek data
+- **Pasal 6-13 jo. PP 33/2026 Pasal 20–27**: Hak-hak subjek data
 - **Pasal 16-19 jo. PP 33/2026 Pasal 30**: Kewajiban pengendali data
 - **Pasal 20 jo. PP 33/2026 Pasal 30**: Record of Processing Activities (RoPA) wajib
 - **Pasal 34 jo. PP 33/2026 Pasal 120–122**: DPIA untuk pemrosesan berisiko tinggi
 - **Pasal 46 jo. PP 33/2026 Pasal 114–116**: Notifikasi breach dalam 3×24 jam
-- **Pasal 57**: Lembaga pengawas (KOMDIGI)
+- **Pasal 57 jo. PP 33/2026 Pasal 184–199**: Lembaga pengawas (KOMDIGI)
 
 ## Data Sensitif (Pasal 4 ayat 2) jo. PP 33/2026 Pasal 5–7
 - Kesehatan
@@ -609,7 +609,7 @@ KB
                 'content' => <<<'KB'
 # DSR Flow — End-to-End (UU PDP Pasal 21–28)
 
-DSR (Data Subject Request) adalah permintaan subjek data untuk meng-eksekusi haknya per UU PDP Pasal 5–10. Privasimu wajibkan respons dalam **72 jam (3 hari kerja)** per Pasal 21–28.
+DSR (Data Subject Request) adalah permintaan subjek data untuk meng-eksekusi haknya per UU PDP Pasal 5–10 jo. PP 33/2026 Pasal 20–27. Privasimu wajibkan respons dalam **72 jam (3 hari kerja)** per Pasal 21–28.
 
 ## A. Submission Channels
 
@@ -690,7 +690,7 @@ Widget buka modal dengan: jenis hak (radio), deskripsi (textarea), upload identi
 
 ## F. Sanksi Non-Compliance
 
-UU PDP Pasal 57:
+UU PDP Pasal 57 jo. PP 33/2026 Pasal 184–199:
 - Sanksi administratif: teguran, denda 2% omzet, penghentian pemrosesan, hapus data
 - Pidana Pasal 67–68: penjara maks 6 tahun / denda Rp 6 miliar
 - Perdata: ganti rugi unlimited ke subjek

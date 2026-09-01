@@ -247,7 +247,7 @@ class PolicyAutofillService
     private function securityStatic(): string
     {
         return 'Langkah keamanan teknis & organisasional: enkripsi data at-rest/in-transit, kontrol akses berbasis peran, '
-            .'audit log, pelatihan personel, dan evaluasi keamanan berkala (Pasal 35-39 UU PDP). [Sesuaikan dengan kontrol ISMS organisasi].';
+            .'audit log, pelatihan personel, dan evaluasi keamanan berkala (Pasal 35-39 jo. PP 33/2026 Pasal 123–129 UU PDP). [Sesuaikan dengan kontrol ISMS organisasi].';
     }
 
     private function childDataHint(?Organization $org): ?string

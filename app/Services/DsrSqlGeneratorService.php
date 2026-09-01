@@ -424,7 +424,7 @@ class DsrSqlGeneratorService
         $md .= "- **Request Type**: `{$dsr->request_type}`\n";
         $md .= '- **Subject** (hashed): `'.substr(hash('sha256', $dsr->requester_email ?? ''), 0, 16)."`\n";
         $md .= "- **Deadline**: `{$deadline}` ({$hoursLeft} hours remaining)\n";
-        $md .= "- **SLA**: 72 hours (UU PDP Pasal 32)\n\n";
+        $md .= "- **SLA**: 72 hours (UU PDP Pasal 32 jo. PP 33/2026 Pasal 123–129)\n\n";
 
         $md .= "## ⚠️ Critical Safety Rules\n\n";
         $md .= "1. **Privasimu TIDAK execute SQL** di DB Anda — Anda yang execute manual.\n";

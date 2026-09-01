@@ -219,7 +219,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 16,
                 'question_text' => 'Apakah tersedia mekanisme manajemen risiko pihak ketiga?',
                 'description' => 'Deteksi tinggi rendahnya risiko kerjasama dengan pihak ketiga.',
-                'regulation_ref' => 'UU PDP Pasal 37',
+                'regulation_ref' => 'UU PDP Pasal 37 jo. PP 33/2026 Pasal 92',
                 'recommendation_if_no' => 'Kembangkan peraturan manajemen risiko pihak ketiga.',
             ],
             [
@@ -228,7 +228,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 17,
                 'question_text' => 'Apakah tersedia Kebijakan Retensi Data?',
                 'description' => 'Pengaturan seberapa lama data disimpan.',
-                'regulation_ref' => 'UU PDP Pasal 42',
+                'regulation_ref' => 'UU PDP Pasal 42 jo. PP 33/2026 Pasal 26',
                 'recommendation_if_no' => 'Tetapkan Kebijakan Retensi Data.',
             ],
             [
@@ -379,7 +379,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 33,
                 'question_text' => 'Apakah implementasi manajemen risiko pihak ketiga sudah dijalankan?',
                 'description' => 'Pelaksanaan manajemen risiko terhadap pihak ketiga.',
-                'regulation_ref' => 'UU PDP Pasal 37',
+                'regulation_ref' => 'UU PDP Pasal 37 jo. PP 33/2026 Pasal 92',
                 'recommendation_if_no' => 'Laksanakan implementasi manajemen risiko pihak ketiga.',
             ],
             [
@@ -388,7 +388,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 34,
                 'question_text' => 'Apakah validasi akurasi, kelengkapan, dan konsistensi data sudah dilakukan?',
                 'description' => 'Pelaksanaan validasi kualitas data pribadi.',
-                'regulation_ref' => 'UU PDP Pasal 29',
+                'regulation_ref' => 'UU PDP Pasal 29 jo. PP 33/2026 Pasal 88',
                 'recommendation_if_no' => 'Jalankan validasi data.',
             ],
             [
@@ -424,7 +424,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 38,
                 'question_text' => 'Apakah informasi pemrosesan data pada CCTV sudah dipasang?',
                 'description' => 'Pemberitahuan dan checklist pemrosesan data pada CCTV.',
-                'regulation_ref' => 'UU PDP Pasal 17',
+                'regulation_ref' => 'UU PDP Pasal 17 jo. PP 33/2026 Pasal 9',
                 'recommendation_if_no' => 'Pasang informasi PDP pada CCTV.',
             ],
             [
@@ -528,7 +528,7 @@ class ThirdPartyQuestionnaireSeeder extends Seeder
                 'sort_order' => 48,
                 'question_text' => 'Apakah sudah diterapkan teknologi PDP (RoPA / DPIA / Consent Management)?',
                 'description' => 'Penerapan teknologi pendukung pemrosesan data pribadi.',
-                'regulation_ref' => 'UU PDP Pasal 27, 28, 29',
+                'regulation_ref' => 'UU PDP Pasal 27, 28, 29 jo. PP 33/2026 Pasal 67, 123–129, 88',
                 'recommendation_if_no' => 'Terapkan teknologi PDP (RoPA / DPIA / Consent Management).',
             ],
             [

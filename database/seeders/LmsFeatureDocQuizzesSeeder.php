@@ -20,9 +20,9 @@ class LmsFeatureDocQuizzesSeeder extends Seeder
                 QuizQuestion::updateOrCreate(
                     ['quiz_id' => $quiz->id, 'order' => $i + 1],
                     [
-                        'type'           => $q['type'],
-                        'prompt'         => $q['body'],
-                        'options'        => $q['options'],
+                        'type' => $q['type'],
+                        'prompt' => $q['body'],
+                        'options' => $q['options'],
                         'correct_answer' => $q['correct_answer'],
                     ],
                 );
@@ -37,12 +37,12 @@ class LmsFeatureDocQuizzesSeeder extends Seeder
             // ─── 1. DASHBOARD ──────────────────────────────────────────────
             [
                 'owner_key' => 'dashboard',
-                'title'     => 'Kuis: Privasimu Nexus Dashboard',
+                'title' => 'Kuis: Privasimu Nexus Dashboard',
                 'questions' => [
                     [
-                        'type'           => 'mcq',
-                        'body'           => 'Widget mana yang menampilkan status kepatuhan keseluruhan organisasi Anda di dashboard Privasimu Nexus?',
-                        'options'        => [
+                        'type' => 'mcq',
+                        'body' => 'Widget mana yang menampilkan status kepatuhan keseluruhan organisasi Anda di dashboard Privasimu Nexus?',
+                        'options' => [
                             ['id' => 'a', 'text' => 'Activity Log'],
                             ['id' => 'b', 'text' => 'Compliance Score'],
                             ['id' => 'c', 'text' => 'User Management'],
@@ -51,18 +51,18 @@ class LmsFeatureDocQuizzesSeeder extends Seeder
                         'correct_answer' => 'b',
                     ],
                     [
-                        'type'           => 'true_false',
-                        'body'           => 'Dashboard Privasimu Nexus hanya dapat diakses oleh pengguna dengan peran DPO atau Administrator.',
-                        'options'        => [
+                        'type' => 'true_false',
+                        'body' => 'Dashboard Privasimu Nexus hanya dapat diakses oleh pengguna dengan peran DPO atau Administrator.',
+                        'options' => [
                             ['id' => 't', 'text' => 'Benar'],
                             ['id' => 'f', 'text' => 'Salah'],
                         ],
                         'correct_answer' => 'f',
                     ],
                     [
-                        'type'           => 'mcq',
-                        'body'           => 'Apa fungsi tombol "Quick Action" yang muncul di pojok kanan atas dashboard?',
-                        'options'        => [
+                        'type' => 'mcq',
+                        'body' => 'Apa fungsi tombol "Quick Action" yang muncul di pojok kanan atas dashboard?',
+                        'options' => [
                             ['id' => 'a', 'text' => 'Mengekspor laporan PDF langsung'],
                             ['id' => 'b', 'text' => 'Membuka shortcut ke modul yang paling sering digunakan'],
                             ['id' => 'c', 'text' => 'Mengirim notifikasi ke seluruh tim'],
@@ -76,12 +76,12 @@ class LmsFeatureDocQuizzesSeeder extends Seeder
             // ─── 2. ROPA ───────────────────────────────────────────────────
             [
                 'owner_key' => 'ropa',
-                'title'     => 'Kuis: Modul ROPA',
+                'title' => 'Kuis: Modul ROPA',
                 'questions' => [
                     [
-                        'type'           => 'mcq',
-                        'body'           => 'Kepanjangan ROPA dalam konteks UU PDP adalah …',
-                        'options'        => [
+                        'type' => 'mcq',
+                        'body' => 'Kepanjangan ROPA dalam konteks UU PDP adalah …',
+                        'options' => [
                             ['id' => 'a', 'text' => 'Record of Processing Activities'],
                             ['id' => 'b', 'text' => 'Register of Privacy Arrangements'],
                             ['id' => 'c', 'text' => 'Report on Personal Audits'],
@@ -90,18 +90,18 @@ class LmsFeatureDocQuizzesSeeder extends Seeder
                         'correct_answer' => 'a',
                     ],
                     [
-                        'type'           => 'true_false',
-                        'body'           => 'Menurut UU PDP Pasal 32, setiap Pengendali Data wajib memelihara catatan aktivitas pemrosesan data pribadi.',
-                        'options'        => [
+                        'type' => 'true_false',
+                        'body' => 'Menurut UU PDP Pasal 32 jo. PP 33/2026 Pasal 123–129, setiap Pengendali Data wajib memelihara catatan aktivitas pemrosesan data pribadi.',
+                        'options' => [
                             ['id' => 't', 'text' => 'Benar'],
                             ['id' => 'f', 'text' => 'Salah'],
                         ],
                         'correct_answer' => 't',
                     ],
                     [
-                        'type'           => 'mcq',
-                        'body'           => 'Bidang mana yang wajib diisi ketika menambahkan entri baru di modul ROPA Privasimu?',
-                        'options'        => [
+                        'type' => 'mcq',
+                        'body' => 'Bidang mana yang wajib diisi ketika menambahkan entri baru di modul ROPA Privasimu?',
+                        'options' => [
                             ['id' => 'a', 'text' => 'Nama prosesor & tujuan pemrosesan'],
                             ['id' => 'b', 'text' => 'Tanggal lahir subjek data'],
                             ['id' => 'c', 'text' => 'Nomor KTP subjek data'],
@@ -115,12 +115,12 @@ class LmsFeatureDocQuizzesSeeder extends Seeder
             // ─── 3. DPIA ───────────────────────────────────────────────────
             [
                 'owner_key' => 'dpia',
-                'title'     => 'Kuis: Modul DPIA',
+                'title' => 'Kuis: Modul DPIA',
                 'questions' => [
                     [
-                        'type'           => 'mcq',
-                        'body'           => 'Kapan organisasi WAJIB melaksanakan DPIA menurut panduan Privasimu?',
-                        'options'        => [
+                        'type' => 'mcq',
+                        'body' => 'Kapan organisasi WAJIB melaksanakan DPIA menurut panduan Privasimu?',
+                        'options' => [
                             ['id' => 'a', 'text' => 'Setiap tahun kalender secara rutin'],
                             ['id' => 'b', 'text' => 'Saat memperkenalkan pemrosesan baru yang berisiko tinggi terhadap hak subjek data'],
                             ['id' => 'c', 'text' => 'Hanya jika diminta oleh regulator'],
@@ -129,18 +129,18 @@ class LmsFeatureDocQuizzesSeeder extends Seeder
                         'correct_answer' => 'b',
                     ],
                     [
-                        'type'           => 'true_false',
-                        'body'           => 'DPIA yang sudah disetujui tidak perlu ditinjau ulang meskipun terjadi perubahan signifikan pada proses pemrosesan data.',
-                        'options'        => [
+                        'type' => 'true_false',
+                        'body' => 'DPIA yang sudah disetujui tidak perlu ditinjau ulang meskipun terjadi perubahan signifikan pada proses pemrosesan data.',
+                        'options' => [
                             ['id' => 't', 'text' => 'Benar'],
                             ['id' => 'f', 'text' => 'Salah'],
                         ],
                         'correct_answer' => 'f',
                     ],
                     [
-                        'type'           => 'mcq',
-                        'body'           => 'Dalam modul DPIA Privasimu, "Residual Risk" merujuk pada …',
-                        'options'        => [
+                        'type' => 'mcq',
+                        'body' => 'Dalam modul DPIA Privasimu, "Residual Risk" merujuk pada …',
+                        'options' => [
                             ['id' => 'a', 'text' => 'Risiko yang tersisa setelah kontrol mitigasi diterapkan'],
                             ['id' => 'b', 'text' => 'Total risiko sebelum analisis dilakukan'],
                             ['id' => 'c', 'text' => 'Risiko yang dialihkan ke pihak ketiga'],
@@ -154,12 +154,12 @@ class LmsFeatureDocQuizzesSeeder extends Seeder
             // ─── 4. BREACH ─────────────────────────────────────────────────
             [
                 'owner_key' => 'breach',
-                'title'     => 'Kuis: Modul Insiden Pelanggaran Data',
+                'title' => 'Kuis: Modul Insiden Pelanggaran Data',
                 'questions' => [
                     [
-                        'type'           => 'mcq',
-                        'body'           => 'UU PDP mewajibkan notifikasi insiden kepada Otoritas Perlindungan Data dalam jangka waktu …',
-                        'options'        => [
+                        'type' => 'mcq',
+                        'body' => 'UU PDP mewajibkan notifikasi insiden kepada Otoritas Perlindungan Data dalam jangka waktu …',
+                        'options' => [
                             ['id' => 'a', 'text' => '14 hari kerja sejak insiden terdeteksi'],
                             ['id' => 'b', 'text' => '3 × 24 jam sejak insiden terdeteksi'],
                             ['id' => 'c', 'text' => '30 hari kalender sejak akhir bulan'],
@@ -168,18 +168,18 @@ class LmsFeatureDocQuizzesSeeder extends Seeder
                         'correct_answer' => 'b',
                     ],
                     [
-                        'type'           => 'true_false',
-                        'body'           => 'Modul Breach di Privasimu memungkinkan pengguna untuk melampirkan bukti forensik digital langsung ke laporan insiden.',
-                        'options'        => [
+                        'type' => 'true_false',
+                        'body' => 'Modul Breach di Privasimu memungkinkan pengguna untuk melampirkan bukti forensik digital langsung ke laporan insiden.',
+                        'options' => [
                             ['id' => 't', 'text' => 'Benar'],
                             ['id' => 'f', 'text' => 'Salah'],
                         ],
                         'correct_answer' => 't',
                     ],
                     [
-                        'type'           => 'mcq',
-                        'body'           => 'Mana dari berikut ini yang BUKAN merupakan status tiket insiden yang tersedia di modul Breach Privasimu?',
-                        'options'        => [
+                        'type' => 'mcq',
+                        'body' => 'Mana dari berikut ini yang BUKAN merupakan status tiket insiden yang tersedia di modul Breach Privasimu?',
+                        'options' => [
                             ['id' => 'a', 'text' => 'Terdeteksi'],
                             ['id' => 'b', 'text' => 'Sedang Diinvestigasi'],
                             ['id' => 'c', 'text' => 'Ditangguhkan'],
@@ -193,12 +193,12 @@ class LmsFeatureDocQuizzesSeeder extends Seeder
             // ─── 5. CONSENT ────────────────────────────────────────────────
             [
                 'owner_key' => 'consent',
-                'title'     => 'Kuis: Modul Manajemen Persetujuan',
+                'title' => 'Kuis: Modul Manajemen Persetujuan',
                 'questions' => [
                     [
-                        'type'           => 'mcq',
-                        'body'           => 'Menurut UU PDP, persetujuan (consent) yang sah harus memenuhi syarat …',
-                        'options'        => [
+                        'type' => 'mcq',
+                        'body' => 'Menurut UU PDP, persetujuan (consent) yang sah harus memenuhi syarat …',
+                        'options' => [
                             ['id' => 'a', 'text' => 'Diberikan secara eksplisit, bebas, spesifik, dan berdasarkan informasi yang cukup'],
                             ['id' => 'b', 'text' => 'Tercatat dalam formulir kertas dan ditandatangani di atas materai'],
                             ['id' => 'c', 'text' => 'Diberikan sekali dan berlaku seumur hidup tanpa harus dapat ditarik kembali'],
@@ -207,18 +207,18 @@ class LmsFeatureDocQuizzesSeeder extends Seeder
                         'correct_answer' => 'a',
                     ],
                     [
-                        'type'           => 'true_false',
-                        'body'           => 'Di modul Consent Privasimu, subjek data dapat menarik persetujuannya kapan saja dan sistem akan mencatat timestamp penarikan tersebut.',
-                        'options'        => [
+                        'type' => 'true_false',
+                        'body' => 'Di modul Consent Privasimu, subjek data dapat menarik persetujuannya kapan saja dan sistem akan mencatat timestamp penarikan tersebut.',
+                        'options' => [
                             ['id' => 't', 'text' => 'Benar'],
                             ['id' => 'f', 'text' => 'Salah'],
                         ],
                         'correct_answer' => 't',
                     ],
                     [
-                        'type'           => 'mcq',
-                        'body'           => 'Fitur "Consent Versioning" di Privasimu bertujuan untuk …',
-                        'options'        => [
+                        'type' => 'mcq',
+                        'body' => 'Fitur "Consent Versioning" di Privasimu bertujuan untuk …',
+                        'options' => [
                             ['id' => 'a', 'text' => 'Menyimpan riwayat setiap versi formulir persetujuan agar dapat diaudit'],
                             ['id' => 'b', 'text' => 'Membuat salinan cadangan database secara otomatis'],
                             ['id' => 'c', 'text' => 'Mengelompokkan persetujuan berdasarkan kelompok usia subjek data'],

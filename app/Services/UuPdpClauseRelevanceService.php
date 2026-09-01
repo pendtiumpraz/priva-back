@@ -11,10 +11,10 @@ namespace App\Services;
  *
  * Kanonik 8 klausul UU PDP (UU 27/2022):
  *   - klausul_tujuan_pemrosesan      (Pasal 16 jo. PP 33/2026 Pasal 30)
- *   - hak_subjek_data                (Pasal 5–13)
- *   - kewajiban_pengendali           (Pasal 20–35)
+ *   - hak_subjek_data                (Pasal 5–13 jo. PP 33/2026 Pasal 20–27)
+ *   - kewajiban_pengendali           (Pasal 20–35 jo. PP 33/2026 Pasal 30 & 123–129)
  *   - transfer_lintas_negara         (Pasal 56 jo. PP 33/2026 Pasal 160–163)
- *   - masa_retensi                   (Pasal 27)
+ *   - masa_retensi                   (Pasal 27 jo. PP 33/2026 Pasal 67)
  *   - mekanisme_pemusnahan           (Pasal 27, 43 jo. PP 33/2026 Pasal 75 & 80)
  *   - klausul_kerahasiaan            (Pasal 36 jo. PP 33/2026 Pasal 123–129)
  *   - klausul_pelanggaran_data       (Pasal 46 jo. PP 33/2026 Pasal 114–116)
@@ -150,11 +150,11 @@ class UuPdpClauseRelevanceService
                 'must_include' => 'Tujuan pemrosesan data spesifik & terbatas, dasar hukum (consent/kontrak/kewajiban hukum/kepentingan vital/kepentingan sah), kategori data yang diproses.',
             ],
             'hak_subjek_data' => [
-                'pasal' => 'Pasal 5–13 UU PDP',
+                'pasal' => 'Pasal 5–13 jo. PP 33/2026 Pasal 20–27 UU PDP',
                 'must_include' => 'Hak akses, koreksi, penghapusan, portabilitas, pembatasan pemrosesan, penolakan profiling otomatis. Mekanisme & timeline (mis. 72 jam) untuk respon permintaan.',
             ],
             'kewajiban_pengendali' => [
-                'pasal' => 'Pasal 20–35 UU PDP',
+                'pasal' => 'Pasal 20–35 jo. PP 33/2026 Pasal 30 & 123–129 UU PDP',
                 'must_include' => 'Kewajiban pengendali memastikan akurasi data, keamanan teknis-organisasional (enkripsi, access control, audit log), penunjukan DPO bila wajib, dokumentasi pemrosesan.',
             ],
             'transfer_lintas_negara' => [
@@ -162,7 +162,7 @@ class UuPdpClauseRelevanceService
                 'must_include' => 'Larangan transfer keluar Indonesia tanpa safeguard. Bila ada transfer: sebut negara tujuan + safeguard (SCC, BCR, adequacy decision, atau persetujuan eksplisit subjek data).',
             ],
             'masa_retensi' => [
-                'pasal' => 'Pasal 27 UU PDP',
+                'pasal' => 'Pasal 27 jo. PP 33/2026 Pasal 67 UU PDP',
                 'must_include' => 'Durasi retensi spesifik per kategori data, dikaitkan dengan tujuan pemrosesan. Hindari "sesuai kebutuhan" tanpa angka konkret.',
             ],
             'mekanisme_pemusnahan' => [
@@ -294,11 +294,11 @@ class UuPdpClauseRelevanceService
     public static function getPolicyScopeHints(): array
     {
         return [
-            'kebijakan_privasi' => 'fokus dimensi: tujuan pemrosesan (Pasal 16 jo. PP 33/2026 Pasal 30), dasar hukum (Pasal 20 jo. PP 33/2026 Pasal 30), hak subjek data (Pasal 5–13), masa retensi (Pasal 27), transfer lintas negara (Pasal 56 jo. PP 33/2026 Pasal 160–163), kontak DPO (Pasal 53 jo. PP 33/2026 Pasal 142), persetujuan (Pasal 22 jo. PP 33/2026 Pasal 32–37), kategori data dikumpulkan, mekanisme keamanan (Pasal 35 jo. PP 33/2026 Pasal 123–129).',
+            'kebijakan_privasi' => 'fokus dimensi: tujuan pemrosesan (Pasal 16 jo. PP 33/2026 Pasal 30), dasar hukum (Pasal 20 jo. PP 33/2026 Pasal 30), hak subjek data (Pasal 5–13 jo. PP 33/2026 Pasal 20–27), masa retensi (Pasal 27 jo. PP 33/2026 Pasal 67), transfer lintas negara (Pasal 56 jo. PP 33/2026 Pasal 160–163), kontak DPO (Pasal 53 jo. PP 33/2026 Pasal 142), persetujuan (Pasal 22 jo. PP 33/2026 Pasal 32–37), kategori data dikumpulkan, mekanisme keamanan (Pasal 35 jo. PP 33/2026 Pasal 123–129).',
             'sop_data_handling' => 'fokus dimensi: prosedur pemrosesan, klasifikasi data, akses kontrol & RBAC, enkripsi at-rest/in-transit (Pasal 35 jo. PP 33/2026 Pasal 123–129), audit log, pelatihan personel, prinsip data minimization (Pasal 16 jo. PP 33/2026 Pasal 30).',
             'sop_breach_response' => 'fokus dimensi: deteksi & klasifikasi insiden, eskalasi, notifikasi pelanggaran ≤ 3×24 jam (Pasal 46 jo. PP 33/2026 Pasal 114–116), notifikasi subjek data, containment, root cause analysis, post-mortem & dokumentasi.',
             'peraturan_perusahaan' => 'fokus dimensi: kewajiban karyawan, kerahasiaan data (Pasal 36 jo. PP 33/2026 Pasal 123–129), sanksi internal, pelatihan PDP wajib, larangan disclosure — TIDAK perlu hak subjek data eksternal atau dasar hukum konsumen.',
-            'sop_dsr' => 'fokus dimensi: penerimaan permintaan, verifikasi identitas, deadline 72 jam (Pasal 5–13), dokumentasi keputusan, eskalasi penolakan, jejak audit.',
+            'sop_dsr' => 'fokus dimensi: penerimaan permintaan, verifikasi identitas, deadline 72 jam (Pasal 5–13 jo. PP 33/2026 Pasal 20–27), dokumentasi keputusan, eskalasi penolakan, jejak audit.',
             'sop_retensi' => 'fokus dimensi: jadwal retensi per kategori data, prosedur pemusnahan (Pasal 27, 43 jo. PP 33/2026 Pasal 75 & 80), metode (overwrite, shredding, certified destruction), sertifikat pemusnahan, review berkala.',
             'other' => 'fokus dimensi UU PDP yang RELEVAN dengan konten dokumen — JANGAN paksa dimensi yang tidak applicable.',
         ];

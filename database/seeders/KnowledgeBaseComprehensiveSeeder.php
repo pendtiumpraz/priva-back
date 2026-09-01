@@ -119,13 +119,13 @@ KB,
 
             [
                 'module_key' => 'uu_pdp_hak_subjek',
-                'title' => 'UU PDP — Hak Subjek Data (Pasal 5–10)',
+                'title' => 'UU PDP — Hak Subjek Data (Pasal 5–10 jo. PP 33/2026 Pasal 20–27)',
                 'category' => 'regulation',
                 'feature_tags' => 'chat,dsr,policy_review,remediation',
                 'keywords' => 'hak subjek,data subject rights,pasal 5,pasal 6,pasal 7,pasal 8,pasal 9,pasal 10,akses,koreksi,hapus,portabilitas,objection,withdraw,menolak,penarikan,persetujuan',
-                'summary' => 'Pasal 5-10 UU PDP: subjek data berhak (1) akses data, (2) koreksi/perbaikan, (3) penghapusan, (4) penarikan consent, (5) keberatan (objection), (6) portabilitas, (7) info processing. Pengendali WAJIB respons dalam 72 jam.',
+                'summary' => 'Pasal 5-10 jo. PP 33/2026 Pasal 20–27 UU PDP: subjek data berhak (1) akses data, (2) koreksi/perbaikan, (3) penghapusan, (4) penarikan consent, (5) keberatan (objection), (6) portabilitas, (7) info processing. Pengendali WAJIB respons dalam 72 jam.',
                 'content' => <<<'KB'
-# Hak-hak Subjek Data (UU PDP Pasal 5-10)
+# Hak-hak Subjek Data (UU PDP Pasal 5-10 jo. PP 33/2026 Pasal 20–27)
 
 ## Pasal 5 jo. PP 33/2026 Pasal 20–27 — Hak Akses (Access)
 Subjek data berhak mengetahui dan memperoleh salinan data pribadi miliknya yang sedang diproses.
@@ -148,7 +148,7 @@ Subjek berhak mengajukan keberatan atas tindakan pengambilan keputusan yang sema
 Subjek berhak memperoleh informasi tentang kejelasan identitas, tujuan, kategori, rentang waktu, dan sumber data.
 
 ## Deadline Response — 3x24 jam (72 jam)
-Pasal 32 UU PDP mengatur: permintaan hak harus ditindaklanjuti dalam **3x24 jam (72 jam kerja)**.
+Pasal 32 UU PDP jo. PP 33/2026 Pasal 123–129 mengatur: permintaan hak harus ditindaklanjuti dalam **3x24 jam (72 jam kerja)**.
 
 ## Tipe Request di Privasimu DSR Module
 1. **Access** — berdasar Pasal 5 jo. PP 33/2026 Pasal 20–27
@@ -316,7 +316,7 @@ Semua **Pengendali Data** yang memproses data pribadi WNI. Tidak ada pengecualia
 - Setelah breach → review apakah RoPA miss something
 
 ## Sanksi Tidak Punya RoPA
-- Administratif: peringatan tertulis, denda hingga 2% omzet (Pasal 57)
+- Administratif: peringatan tertulis, denda hingga 2% omzet (Pasal 57 jo. PP 33/2026 Pasal 184–199)
 - Reputasional: fail audit ISO 27701, POJK, KOMDIGI
 - Operational: susah response DSR karena tidak tahu data tersimpan dimana
 
@@ -332,13 +332,13 @@ KB,
 
             [
                 'module_key' => 'uu_pdp_pasal_32_dsr_sla',
-                'title' => 'UU PDP — Kewajiban Respons DSR 72 Jam (Pasal 32)',
+                'title' => 'UU PDP — Kewajiban Respons DSR 72 Jam (Pasal 32 jo. PP 33/2026 Pasal 123–129)',
                 'category' => 'regulation',
                 'feature_tags' => 'dsr,chat,remediation',
                 'keywords' => 'pasal 32,72 jam,dsr deadline,sla,response time,3x24 jam,batas waktu,hak subjek,permintaan,data subject request',
-                'summary' => 'Pasal 32 UU PDP: Pengendali WAJIB menindaklanjuti permintaan hak subjek dalam 3x24 jam (72 jam kerja). Tidak respons = pelanggaran + sanksi. Privasimu DSR module auto-countdown + alert DPO.',
+                'summary' => 'Pasal 32 UU PDP jo. PP 33/2026 Pasal 123–129: Pengendali WAJIB menindaklanjuti permintaan hak subjek dalam 3x24 jam (72 jam kerja). Tidak respons = pelanggaran + sanksi. Privasimu DSR module auto-countdown + alert DPO.',
                 'content' => <<<'KB'
-# SLA 72 Jam Hak Subjek Data — UU PDP Pasal 32
+# SLA 72 Jam Hak Subjek Data — UU PDP Pasal 32 jo. PP 33/2026 Pasal 123–129
 
 ## Teks Pasal
 > "Pengendali Data Pribadi wajib menindaklanjuti permintaan Subjek Data Pribadi paling lambat 3 x 24 jam (tiga kali dua puluh empat jam) sejak permintaan Subjek Data Pribadi diterima."
@@ -348,7 +348,7 @@ KB,
 - "Ditindaklanjuti" = at minimum acknowledge + set SLA expectation, bukan wajib selesai
 - Kalau proses > 72 jam, MUST kirim interim response jelaskan alasan + ETA
 
-## Tipe Permintaan (lihat Pasal 5-10)
+## Tipe Permintaan (lihat Pasal 5-10 jo. PP 33/2026 Pasal 20–27)
 1. Access — copy data
 2. Correction
 3. Deletion
@@ -373,7 +373,7 @@ T+72h    DEADLINE — pelanggaran kalau belum respons
 UU PDP tidak eksplisit apakah "72 jam" = kalender atau kerja. **Best practice konservatif: kalender 72 jam** — respons subjek data tidak boleh terhambat hari libur.
 
 ## Apa yang Bisa Di-Ekskalasi (>72h)?
-Pasal 32(2): jangka waktu dapat diperpanjang paling lama 14 hari kerja jika:
+Pasal 32(2) jo. PP 33/2026 Pasal 123–129: jangka waktu dapat diperpanjang paling lama 14 hari kerja jika:
 - Permintaan kompleks (multi-sistem, data discovery butuh waktu)
 - Permintaan banyak sekaligus dari 1 subjek
 
@@ -387,7 +387,7 @@ Pasal 32(2): jangka waktu dapat diperpanjang paling lama 14 hari kerja jika:
 - **Completion Certificate**: auto-sign PDF + timestamp saat selesai — bukti SLA
 
 ## Sanksi Tidak Respons SLA
-- Teguran tertulis (Pasal 57)
+- Teguran tertulis (Pasal 57 jo. PP 33/2026 Pasal 184–199)
 - Denda administratif sampai 2% omzet tahunan
 - Pidana Pasal 67 (bocor data karena lalai): 4-6 tahun + denda
 
@@ -544,8 +544,8 @@ Komunikasi ke subjek harus:
 
 ## Sanksi Tidak Notify
 - Pasal 67: 4-6 tahun penjara + denda miliar
-- Denda administratif 2% omzet (Pasal 57)
-- Potensi class action subjek (Pasal 65 hak gugat)
+- Denda administratif 2% omzet (Pasal 57 jo. PP 33/2026 Pasal 184–199)
+- Potensi class action subjek (Pasal 65 jo. PP 33/2026 Pasal 175–178 hak gugat)
 KB,
             ],
 
@@ -1596,7 +1596,7 @@ KB,
                 'content' => <<<'KB'
 # Consent Collection — Valid Patterns
 
-## 4 Syarat Consent Valid (Pasal 22-25)
+## 4 Syarat Consent Valid (Pasal 22-25 jo. PP 33/2026 Pasal 32–38)
 1. **Bebas** — subjek bisa decline tanpa konsekuensi layanan utama
 2. **Spesifik** — per tujuan, bukan bundling "setuju semua"
 3. **Informed** — subjek tahu data apa, untuk apa, berapa lama, siapa pihak 3
@@ -1838,7 +1838,7 @@ KB,
 - List pihak ke-3 + kategori (vendor cloud, analytics, marketing)
 - Transfer lintas batas + safeguard
 
-### 8. Hak Subjek Data (Pasal 5-10)
+### 8. Hak Subjek Data (Pasal 5-10 jo. PP 33/2026 Pasal 20–27)
 - List 7 hak
 - Cara exercise (email DPO, portal, form)
 - Expected response time (72 jam)
@@ -2590,7 +2590,7 @@ Subjek submit request via:
 - Portal langsung Privasimu
 - Email ke inbox DPO
 
-Sistem auto-create DSR record dengan deadline T+72h (Pasal 32 UU PDP).
+Sistem auto-create DSR record dengan deadline T+72h (Pasal 32 UU PDP jo. PP 33/2026 Pasal 123–129).
 
 ### Step 2: Identity Verification
 OTP email ke subjek. Kalau verify → lanjut. Kalau tidak verify dalam 24 jam → auto-reject.
@@ -3373,7 +3373,7 @@ Structured output JSON
 
 System prompt inject KB sections:
 - `uu_pdp_prinsip_umum` (Pasal 16 jo. PP 33/2026 Pasal 30)
-- `uu_pdp_hak_subjek` (Pasal 5-10)
+- `uu_pdp_hak_subjek` (Pasal 5-10 jo. PP 33/2026 Pasal 20–27)
 - `uu_pdp_pasal_31_ropa`
 - `uu_pdp_pasal_32_dsr_sla`
 - `uu_pdp_pasal_46_breach`
@@ -3402,8 +3402,8 @@ AI assess dokumen per-section + compare vs 15 required elements.
       "status": "partial",
       "score": 60,
       "gap_description": "Hanya disebut hak akses dan koreksi. Tidak sebut hak portabilitas, hak objection, hak withdraw consent.",
-      "recommendation": "Tambahkan section tentang 7 hak subjek (Pasal 5-10) dengan cara exercise-nya (email DPO, portal, form).",
-      "uu_pdp_reference": "Pasal 5-10"
+      "recommendation": "Tambahkan section tentang 7 hak subjek (Pasal 5-10 jo. PP 33/2026 Pasal 20–27) dengan cara exercise-nya (email DPO, portal, form).",
+      "uu_pdp_reference": "Pasal 5-10 jo. PP 33/2026 Pasal 20–27"
     },
     ...
   ],
@@ -3454,7 +3454,7 @@ Setiap dokumen di-check terhadap 15 required elements (lihat `policy_review_uu_p
 5. Dasar Hukum per Tujuan (Pasal 20 jo. PP 33/2026 Pasal 30)
 6. Retensi Data (Pasal 16 jo. PP 33/2026 Pasal 30)
 7. Penerima Data / 3rd Party (Pasal 31 jo. PP 33/2026 Pasal 74)
-8. Hak Subjek Data (Pasal 5-10)
+8. Hak Subjek Data (Pasal 5-10 jo. PP 33/2026 Pasal 20–27)
 9. Withdraw Consent Mechanism (Pasal 8 jo. PP 33/2026 Pasal 79–82)
 10. Security Measures (Pasal 35-39 jo. PP 33/2026 Pasal 123–129)
 11. Cookie Policy (Pasal 16 jo. PP 33/2026 Pasal 30)

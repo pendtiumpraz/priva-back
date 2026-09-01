@@ -84,7 +84,7 @@ class MaturityQuestionsSeeder extends Seeder
             [
                 'question_code' => 'B4',
                 'domain' => MaturityQuestion::DOMAIN_PROCESSING_BASIS,
-                'regulation_ref' => 'UU PDP Pasal 5-13',
+                'regulation_ref' => 'UU PDP Pasal 5-13 jo. PP 33/2026 Pasal 20–27',
                 'question_text' => 'Bagaimana tersedia mekanisme bagi subjek data untuk melaksanakan haknya (seperti hak akses, pemutakhiran, penghapusan, atau penarikan persetujuan)?',
                 'description' => 'Mekanisme DSR yang dapat diakses subjek data — biasanya via portal, email, atau form.',
                 'scoring_guide' => $defaultGuide,
@@ -126,8 +126,8 @@ class MaturityQuestionsSeeder extends Seeder
             [
                 'question_code' => 'C9',
                 'domain' => MaturityQuestion::DOMAIN_CONTROLLER_OBLIGATIONS,
-                'regulation_ref' => 'UU PDP Pasal 29',
-                'question_text' => 'Bagaimana prosedur rutin untuk memverifikasi akurasi dan memperbarui data pribadi agar tetap akurat, lengkap, dan tidak menyesatkan sesuai Pasal 29?',
+                'regulation_ref' => 'UU PDP Pasal 29 jo. PP 33/2026 Pasal 88',
+                'question_text' => 'Bagaimana prosedur rutin untuk memverifikasi akurasi dan memperbarui data pribadi agar tetap akurat, lengkap, dan tidak menyesatkan sesuai Pasal 29 jo. PP 33/2026 Pasal 88?',
                 'description' => 'SOP verifikasi + DSR rectification yang efektif.',
                 'scoring_guide' => $defaultGuide,
             ],
@@ -142,7 +142,7 @@ class MaturityQuestionsSeeder extends Seeder
             [
                 'question_code' => 'C11',
                 'domain' => MaturityQuestion::DOMAIN_CONTROLLER_OBLIGATIONS,
-                'regulation_ref' => 'UU PDP Pasal 17',
+                'regulation_ref' => 'UU PDP Pasal 17 jo. PP 33/2026 Pasal 9',
                 'question_text' => 'Bagaimana kebijakan tertulis dan implementasi mengenai masa retensi data dan prosedur pemusnahan data otomatis atau manual setelah masa retensi berakhir atau tujuan pemrosesan tercapai?',
                 'description' => 'Retention policy + automated purge yang berfungsi.',
                 'scoring_guide' => $defaultGuide,
