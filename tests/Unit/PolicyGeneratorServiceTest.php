@@ -36,6 +36,7 @@ class PolicyGeneratorServiceTest extends TestCase
                 ['type' => 'paragraph', 'text' => 'Tujuan pemrosesan adalah penyediaan layanan.'],
                 ['type' => 'paragraph', 'text' => 'Dasar hukum pemrosesan mengacu Pasal 20 UU PDP.'],
                 ['type' => 'paragraph', 'text' => 'Masa retensi data disimpan selama 5 tahun.'],
+                ['type' => 'paragraph', 'text' => 'Jangka waktu pemrosesan berlangsung selama layanan aktif.'],
                 ['type' => 'paragraph', 'text' => 'Kami berbagi data dengan pihak ketiga penyedia pembayaran.'],
                 ['type' => 'paragraph', 'text' => 'Hak subjek data: hak akses, koreksi, penghapusan.'],
                 ['type' => 'paragraph', 'text' => 'Anda dapat melakukan penarikan persetujuan kapan saja.'],
@@ -110,8 +111,8 @@ class PolicyGeneratorServiceTest extends TestCase
 
         $coverage = $policy->ai_metadata['coverage'] ?? null;
         $this->assertIsArray($coverage);
-        $this->assertSame(15, $coverage['total']);
-        $this->assertSame(15, $coverage['covered_count'], 'Uncovered: '.implode(', ', $coverage['missing'] ?? []));
+        $this->assertSame(16, $coverage['total']);
+        $this->assertSame(16, $coverage['covered_count'], 'Uncovered: '.implode(', ', $coverage['missing'] ?? []));
         $this->assertTrue($coverage['all_covered']);
     }
 
@@ -177,7 +178,7 @@ class PolicyGeneratorServiceTest extends TestCase
 
         $this->assertSame('employee', $policy->audience);
         $coverage = $policy->ai_metadata['coverage'];
-        $this->assertSame(13, $coverage['total']);
+        $this->assertSame(14, $coverage['total']);
         $this->assertContains('cookie', $coverage['not_applicable']);
         $this->assertContains('data_anak', $coverage['not_applicable']);
         // The fixture covers everything → all 13 applicable elements covered.

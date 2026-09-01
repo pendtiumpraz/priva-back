@@ -22,6 +22,7 @@ class PolicyElementValidatorTest extends TestCase
             ['type' => 'paragraph', 'text' => 'Tujuan pemrosesan data adalah penyediaan layanan dan dukungan pelanggan.'],
             ['type' => 'paragraph', 'text' => 'Dasar hukum pemrosesan mengacu pada Pasal 20 UU PDP yaitu persetujuan dan pelaksanaan kontrak.'],
             ['type' => 'paragraph', 'text' => 'Masa retensi data: kami menyimpan data selama 5 tahun.'],
+            ['type' => 'paragraph', 'text' => 'Jangka waktu pemrosesan data berlangsung selama hubungan layanan aktif.'],
             ['type' => 'paragraph', 'text' => 'Kami dapat berbagi data dengan pihak ketiga seperti penyedia pembayaran.'],
             ['type' => 'paragraph', 'text' => 'Hak subjek data Anda mencakup hak akses, koreksi, dan penghapusan.'],
             ['type' => 'paragraph', 'text' => 'Anda dapat melakukan penarikan persetujuan kapan saja melalui pusat preferensi.'],
@@ -38,8 +39,8 @@ class PolicyElementValidatorTest extends TestCase
     {
         $result = PolicyElementValidator::validate($this->fullSections());
 
-        $this->assertSame(15, $result['total']);
-        $this->assertSame(15, $result['covered_count'], 'Uncovered: '.implode(', ', $result['missing']));
+        $this->assertSame(16, $result['total']);
+        $this->assertSame(16, $result['covered_count'], 'Uncovered: '.implode(', ', $result['missing']));
         $this->assertTrue($result['all_covered']);
         $this->assertSame([], $result['missing']);
     }
@@ -56,7 +57,7 @@ class PolicyElementValidatorTest extends TestCase
         $this->assertContains('kontak_dpo', $result['missing']);
         $this->assertContains('data_anak', $result['missing']);
         $this->assertContains('cross_border', $result['missing']);
-        $this->assertLessThan(15, $result['covered_count']);
+        $this->assertLessThan(16, $result['covered_count']);
     }
 
     public function test_reports_label_and_pasal_per_element(): void
@@ -64,7 +65,7 @@ class PolicyElementValidatorTest extends TestCase
         $result = PolicyElementValidator::validate($this->fullSections());
         $byKey = collect($result['elements'])->keyBy('key');
 
-        $this->assertCount(15, $result['elements']);
+        $this->assertCount(16, $result['elements']);
         $this->assertSame('Pasal 53', $byKey['kontak_dpo']['pasal']);
         $this->assertSame('Pasal 56', $byKey['cross_border']['pasal']);
         $this->assertSame('Pasal 46', $byKey['breach_notification']['pasal']);
@@ -77,14 +78,14 @@ class PolicyElementValidatorTest extends TestCase
 
         $this->assertSame(0, $result['covered_count']);
         $this->assertFalse($result['all_covered']);
-        $this->assertCount(15, $result['missing']);
+        $this->assertCount(16, $result['missing']);
     }
 
     public function test_customer_audience_applies_all_fifteen_elements(): void
     {
         $result = PolicyElementValidator::validate([], 'customer');
 
-        $this->assertSame(15, $result['total']);
+        $this->assertSame(16, $result['total']);
         $this->assertSame([], $result['not_applicable']);
     }
 
@@ -92,7 +93,7 @@ class PolicyElementValidatorTest extends TestCase
     {
         $result = PolicyElementValidator::validate($this->fullSections(), 'employee');
 
-        $this->assertSame(13, $result['total']);
+        $this->assertSame(14, $result['total']);
         $this->assertContains('cookie', $result['not_applicable']);
         $this->assertContains('data_anak', $result['not_applicable']);
         // N/A elements must NOT be flagged missing even if absent.
@@ -108,7 +109,7 @@ class PolicyElementValidatorTest extends TestCase
     {
         $result = PolicyElementValidator::validate([], 'job_applicant');
 
-        $this->assertSame(13, $result['total']);
+        $this->assertSame(14, $result['total']);
         $this->assertContains('cookie', $result['not_applicable']);
         $this->assertContains('data_anak', $result['not_applicable']);
     }
@@ -124,7 +125,7 @@ class PolicyElementValidatorTest extends TestCase
         $result = PolicyElementValidator::validate($sections, 'employee');
 
         $this->assertTrue($result['all_covered'], 'Uncovered: '.implode(', ', $result['missing']));
-        $this->assertSame(13, $result['covered_count']);
+        $this->assertSame(14, $result['covered_count']);
     }
 
     public function test_english_policy_is_recognized(): void
@@ -136,6 +137,7 @@ class PolicyElementValidatorTest extends TestCase
             ['type' => 'paragraph', 'text' => 'The purpose of processing is service delivery and customer support.'],
             ['type' => 'paragraph', 'text' => 'Our legal basis is performance of a contract.'],
             ['type' => 'paragraph', 'text' => 'Data retention: we keep your data for five years.'],
+            ['type' => 'paragraph', 'text' => 'Processing duration: we process your data for as long as your account is active.'],
             ['type' => 'paragraph', 'text' => 'We share data with third parties such as payment providers.'],
             ['type' => 'paragraph', 'text' => 'Your rights include the right to access, rectify and erase your data.'],
             ['type' => 'paragraph', 'text' => 'You may withdraw consent at any time.'],
@@ -149,7 +151,7 @@ class PolicyElementValidatorTest extends TestCase
 
         $result = PolicyElementValidator::validate($sections, 'customer');
 
-        $this->assertSame(15, $result['covered_count'], 'Uncovered (EN): '.implode(', ', $result['missing']));
+        $this->assertSame(16, $result['covered_count'], 'Uncovered (EN): '.implode(', ', $result['missing']));
         $this->assertTrue($result['all_covered']);
     }
 
