@@ -1245,6 +1245,8 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         // Verification helpers — DPO actions saat subject tidak bisa verify via email
         Route::post('/resend-verification', [DsrVerificationController::class, 'resend'])->middleware('permission:dsr,write');
         Route::post('/manual-verify', [DsrVerificationController::class, 'manualVerify'])->middleware('permission:dsr,write');
+        // Keberatan keputusan otomatis — campur tangan manusia / penolakan (PP 33 Pasal 94-95).
+        Route::post('/automated-decision-review', [\App\Http\Controllers\Api\DsrAutomatedDecisionController::class, 'review'])->middleware('permission:dsr,write');
 
         // Scope picker
         Route::get('/scopes', [DsrRequestScopeController::class, 'index'])->middleware('permission:dsr,read');

@@ -1,15 +1,16 @@
 <?php
+
 namespace App\Models;
 
 use App\Casts\EncryptedString;
 use App\Models\Concerns\BelongsToOrg;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class DsrRequest extends Model
 {
-    use HasUuids, SoftDeletes, BelongsToOrg;
+    use BelongsToOrg, HasUuids, SoftDeletes;
 
     protected $fillable = [
         'org_id', 'app_id', 'request_id', 'request_type', 'requester_name', 'requester_email',
@@ -66,17 +67,17 @@ class DsrRequest extends Model
 
     public function ndaSignedDoc()
     {
-        return $this->belongsTo(\App\Models\Document::class, 'nda_signed_doc_id');
+        return $this->belongsTo(Document::class, 'nda_signed_doc_id');
     }
 
     public function subjectCertificate()
     {
-        return $this->belongsTo(\App\Models\Document::class, 'subject_certificate_doc_id');
+        return $this->belongsTo(Document::class, 'subject_certificate_doc_id');
     }
 
     public function internalCertificate()
     {
-        return $this->belongsTo(\App\Models\Document::class, 'internal_certificate_doc_id');
+        return $this->belongsTo(Document::class, 'internal_certificate_doc_id');
     }
 
     /**
@@ -86,8 +87,11 @@ class DsrRequest extends Model
     public function allExecutionsComplete(): bool
     {
         $executions = $this->executions()->get();
-        if ($executions->isEmpty()) return false;
-        return $executions->every(fn($e) => $e->countsAsComplete());
+        if ($executions->isEmpty()) {
+            return false;
+        }
+
+        return $executions->every(fn ($e) => $e->countsAsComplete());
     }
 
     /**
@@ -106,5 +110,11 @@ class DsrRequest extends Model
     public const REQUEST_TYPES = [
         'access', 'correction', 'rectification', 'deletion', 'erasure',
         'portability', 'restriction', 'objection', 'withdraw_consent', 'info',
+        // Keberatan atas keputusan yang HANYA didasarkan pemrosesan otomatis /
+        // pemrofilan (PP 33/2026 Pasal 93). Ditangani via alur tinjauan khusus
+        // (DsrAutomatedDecisionController) untuk memenuhi Pasal 94(3) & 95.
+        'automated_decision_objection',
     ];
+
+    public const TYPE_AUTOMATED_DECISION = 'automated_decision_objection';
 }
