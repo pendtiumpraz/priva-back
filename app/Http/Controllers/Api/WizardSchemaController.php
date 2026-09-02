@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
+use App\Services\PermissionService;
 use App\Services\WizardSchemaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -82,7 +84,7 @@ class WizardSchemaController extends Controller
 
         $this->schema->resetToDefault($orgId, $module);
 
-        \App\Models\AuditLog::log('wizard_schema', $module, 'schema.reset', ['module' => $module]);
+        AuditLog::log('wizard_schema', $module, 'schema.reset', ['module' => $module]);
 
         return response()->json([
             'message' => 'Schema dikembalikan ke default.',
@@ -95,16 +97,7 @@ class WizardSchemaController extends Controller
         if (! $user) {
             return false;
         }
-        if (in_array($user->role, ['root', 'superadmin', 'admin', 'dpo'], true)) {
-            return true;
-        }
-        $perms = $user->tenantRole?->permissions;
-        if (is_array($perms)) {
-            return in_array('*', $perms, true)
-                || in_array('wizard_schema:write', $perms, true)
-                || in_array('settings:write', $perms, true);
-        }
 
-        return false;
+        return app(PermissionService::class)->canManageWizardSchema($user);
     }
 }

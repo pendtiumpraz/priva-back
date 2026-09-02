@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\ModuleCustomField;
 use App\Models\ModuleCustomSection;
 use App\Models\ModuleTemplate;
+use App\Services\PermissionService;
 use App\Services\WizardSchemaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -41,20 +42,8 @@ class CustomFieldController extends Controller
         if (! $user) {
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
-        if (in_array($user->role, ['root', 'superadmin', 'admin', 'dpo'], true)) {
+        if (app(PermissionService::class)->canManageWizardSchema($user)) {
             return null;
-        }
-
-        if (! $user->relationLoaded('tenantRole')) {
-            $user->load('tenantRole');
-        }
-        $perms = $user->tenantRole?->permissions ?? null;
-        if (is_array($perms)) {
-            if (in_array('*', $perms, true) ||
-                in_array('wizard_schema:write', $perms, true) ||
-                in_array('settings:write', $perms, true)) {
-                return null;
-            }
         }
 
         return response()->json([

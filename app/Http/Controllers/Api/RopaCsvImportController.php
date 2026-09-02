@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Ropa;
+use App\Services\RegistrationCodeService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -334,14 +335,7 @@ class RopaCsvImportController extends Controller
 
     private function nextCode(): string
     {
-        $year = date('Y');
-        $prefix = 'ROPA-'.$year.'-';
-        $max = 0;
-        foreach (Ropa::withTrashed()->where('registration_number', 'like', $prefix.'%')->pluck('registration_number') as $code) {
-            $num = (int) substr((string) $code, strrpos((string) $code, '-') + 1);
-            $max = max($max, $num);
-        }
-
-        return $prefix.str_pad((string) ($max + 1), 3, '0', STR_PAD_LEFT);
+        // Shared, globally-counted generator (see RegistrationCodeService).
+        return app(RegistrationCodeService::class)->nextGlobal('ROPA', Ropa::class);
     }
 }

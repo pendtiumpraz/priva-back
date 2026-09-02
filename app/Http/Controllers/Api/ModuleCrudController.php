@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\BreachIncident;
 use App\Models\ConsentCollectionPoint;
 use App\Models\ContainmentTemplate;
+use App\Models\Department;
 use App\Models\Dpia;
 use App\Models\DsrApp;
 use App\Models\DsrRequest;
@@ -18,9 +19,14 @@ use App\Models\ProcessingCategory;
 use App\Models\Ropa;
 use App\Services\ApprovalWorkflowDispatcher;
 use App\Services\AssessmentAutoTriggerService;
+use App\Services\EntitlementService;
 use App\Services\NotificationService;
+use App\Services\PermissionService;
+use App\Services\RegistrationCodeService;
 use App\Services\RopaRiskCalculator;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
 
 class ModuleCrudController extends Controller
@@ -53,7 +59,7 @@ class ModuleCrudController extends Controller
         // Route universal ini tidak melewati middleware itu, jadi tanpa
         // penjagaan di sini modul yang dicabut tetap dapat diakses lewat
         // /api/m/{module}.
-        if (! app(\App\Services\EntitlementService::class)->allowsModule($user, $moduleId)) {
+        if (! app(EntitlementService::class)->allowsModule($user, $moduleId)) {
             return response()->json([
                 'message' => 'Modul ini tidak aktif untuk organisasi Anda. Hubungi administrator platform.',
             ], 403);
@@ -61,7 +67,7 @@ class ModuleCrudController extends Controller
 
         // Decision logic centralized in PermissionService (shared with the
         // CheckPermission middleware so the two can't drift out of sync).
-        if (app(\App\Services\PermissionService::class)->allows($user, $moduleId, $action)) {
+        if (app(PermissionService::class)->allows($user, $moduleId, $action)) {
             return null;
         }
 
@@ -107,7 +113,9 @@ class ModuleCrudController extends Controller
      */
     private function resolveDivisionCodeForRopa(array $data, ?string $orgId): ?string
     {
-        if (! $orgId) return null;
+        if (! $orgId) {
+            return null;
+        }
         $wiz = $data['wizard_data'] ?? null;
         $wiz = is_array($wiz) ? $wiz : (is_string($wiz) ? (json_decode($wiz, true) ?: []) : []);
         $detail = $wiz['detail_pemrosesan'] ?? [];
@@ -117,14 +125,17 @@ class ModuleCrudController extends Controller
             $data['division'] ?? null,
         ];
         foreach ($candidates as $name) {
-            if (! is_string($name) || trim($name) === '') continue;
-            $dept = \App\Models\Department::where('org_id', $orgId)
+            if (! is_string($name) || trim($name) === '') {
+                continue;
+            }
+            $dept = Department::where('org_id', $orgId)
                 ->where('name', $name)
                 ->first();
             if ($dept && ! empty($dept->code)) {
                 return (string) $dept->code;
             }
         }
+
         return null;
     }
 
@@ -169,7 +180,9 @@ class ModuleCrudController extends Controller
             $maxNum = 0;
             foreach ($codes as $code) {
                 $num = (int) substr($code, strrpos($code, '-') + 1);
-                if ($num > $maxNum) $maxNum = $num;
+                if ($num > $maxNum) {
+                    $maxNum = $num;
+                }
             }
             $next = $maxNum + 1;
             $segments = [$prefix, $cleanDiv, $year];
@@ -177,34 +190,13 @@ class ModuleCrudController extends Controller
                 $segments[] = preg_replace('/[^A-Za-z0-9]/', '', strtoupper($customNumber));
             }
             $segments[] = str_pad((string) $next, 3, '0', STR_PAD_LEFT);
+
             return implode('-', array_filter($segments, fn ($s) => $s !== ''));
         }
 
-        // Legacy fallback — no category, no division code
-        $pattern = $prefix.'-'.$year.'-%';
-
-        $codeColumn = match ($prefix) {
-            'ROPA', 'DPIA' => 'registration_number',
-            'DSR' => 'request_id',
-            'CNT' => 'collection_id',
-            'BRC' => 'incident_code',
-            default => 'registration_number',
-        };
-
-        $codes = $model->withTrashed()
-            ->where($codeColumn, 'like', $pattern)
-            ->pluck($codeColumn)
-            ->toArray();
-
-        $maxNum = 0;
-        foreach ($codes as $code) {
-            $num = (int) substr($code, strrpos($code, '-') + 1);
-            if ($num > $maxNum) {
-                $maxNum = $num;
-            }
-        }
-
-        return $prefix.'-'.$year.'-'.str_pad($maxNum + 1, 3, '0', STR_PAD_LEFT);
+        // Legacy fallback — no category, no division code. Counted globally
+        // (matching the global-unique constraint) via the shared service.
+        return app(RegistrationCodeService::class)->nextGlobal($prefix, get_class($model));
     }
 
     /**
@@ -219,20 +211,7 @@ class ModuleCrudController extends Controller
      */
     private function createWithCodeRetry($model, array $data, string $codeField, callable $regen)
     {
-        for ($attempt = 0; $attempt < 3; $attempt++) {
-            try {
-                return $model->create($data);
-            } catch (\Illuminate\Database\QueryException $qe) {
-                $isDup = $qe->getCode() === '23000'
-                    || str_contains($qe->getMessage(), 'Duplicate entry')
-                    || str_contains($qe->getMessage(), 'UNIQUE constraint');
-                if ($isDup && $attempt < 2) {
-                    $data[$codeField] = $regen();
-                    continue;
-                }
-                throw $qe;
-            }
-        }
+        return app(RegistrationCodeService::class)->createWithRetry($model, $data, $codeField, $regen);
     }
 
     /**
@@ -257,9 +236,13 @@ class ModuleCrudController extends Controller
         // Visibilitas berbasis assignment berlaku utk RoPA & DPIA. Logikanya
         // sekarang tinggal di trait AssignmentVisibility (scopeVisibleTo) supaya
         // SATU sumber kebenaran dipakai juga oleh AI Agent + @mention.
-        if (! in_array($module, ['ropa', 'dpia'], true)) return;
+        if (! in_array($module, ['ropa', 'dpia'], true)) {
+            return;
+        }
         $user = $request->user();
-        if (! $user) return;
+        if (! $user) {
+            return;
+        }
 
         $query->visibleTo($user);
     }
@@ -290,9 +273,9 @@ class ModuleCrudController extends Controller
         $d = self::ASSIGN_DIV_DELIM;
         $esc = addcslashes($deptName, '%_\\');
         $w->orWhere('assign_group', $deptName)
-          ->orWhere('assign_group', 'like', $esc.$d.'%')
-          ->orWhere('assign_group', 'like', '%'.$d.$esc)
-          ->orWhere('assign_group', 'like', '%'.$d.$esc.$d.'%');
+            ->orWhere('assign_group', 'like', $esc.$d.'%')
+            ->orWhere('assign_group', 'like', '%'.$d.$esc)
+            ->orWhere('assign_group', 'like', '%'.$d.$esc.$d.'%');
     }
 
     private function getQuery(Request $request, string $module)
@@ -645,7 +628,7 @@ class ModuleCrudController extends Controller
                         // dibuat — insiden yang baru dicatat setelah deteksi tidak boleh dapat
                         // tenggat lebih longgar.
                         $data['notification_deadline'] = $data['notification_deadline']
-                            ?? \Illuminate\Support\Carbon::parse($data['detected_at'])->addHours(72);
+                            ?? Carbon::parse($data['detected_at'])->addHours(72);
                     }
                     // Auto-apply case-type containment template if case_type provided.
                     // Falls back to "other" generic template if case_type not set.
@@ -693,7 +676,7 @@ class ModuleCrudController extends Controller
                 try {
                     $record = $model->create($data);
                     break;
-                } catch (\Illuminate\Database\QueryException $qe) {
+                } catch (QueryException $qe) {
                     // 23000 = integrity constraint violation (incl. duplicate entry).
                     $isDup = $qe->getCode() === '23000'
                         || str_contains($qe->getMessage(), 'Duplicate entry')
@@ -701,6 +684,7 @@ class ModuleCrudController extends Controller
                     if ($isDup && $codeField && $codePrefix && $attempt < 2) {
                         // Regenerate hanya untuk modul yang pakai legacy prefix-year code.
                         $data[$codeField] = $this->nextCode($codePrefix, $model, $data['org_id']);
+
                         continue;
                     }
                     throw $qe;

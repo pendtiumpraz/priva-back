@@ -66,7 +66,7 @@ class DsrIntakeService
         $dsr = DsrRequest::create([
             'org_id' => $channel->org_id,
             'app_id' => $app?->id,
-            'request_id' => $this->nextRequestId($channel->org_id),
+            'request_id' => $this->nextRequestId(),
             'request_type' => $this->detectType($subject.' '.$body),
             'requester_name' => trim((string) ($message['from_name'] ?? '')) ?: $this->nameFromEmail($from),
             'requester_email' => $from,
@@ -126,29 +126,15 @@ class DsrIntakeService
     }
 
     /**
-     * Nomor permohonan berikutnya, dengan pengulangan saat bentrok.
+     * Nomor permohonan berikutnya.
      *
-     * Sama seperti modul lain, penghitungnya per-org sementara batasan uniknya
-     * global — jalur ini pun harus mengulang alih-alih memanggil create()
-     * begitu saja (dataroom F-03).
+     * request_id unik secara GLOBAL, jadi penghitungnya pun harus global. Versi
+     * lama memfilter ->where('org_id', $orgId) sehingga dua org sama-sama
+     * menghasilkan DSR-YYYY-001 dan retry regenerasi nilai yang sama (F-03).
+     * Sekarang lewat RegistrationCodeService yang menghitung lintas-tenant.
      */
-    private function nextRequestId(string $orgId): string
+    private function nextRequestId(): string
     {
-        $year = date('Y');
-        $prefix = 'DSR-'.$year.'-';
-        $max = 0;
-
-        $codes = DsrRequest::withoutGlobalScope('org')
-            ->withTrashed()
-            ->where('org_id', $orgId)
-            ->where('request_id', 'like', $prefix.'%')
-            ->pluck('request_id');
-
-        foreach ($codes as $code) {
-            $num = (int) substr((string) $code, strrpos((string) $code, '-') + 1);
-            $max = max($max, $num);
-        }
-
-        return $prefix.str_pad((string) ($max + 1), 3, '0', STR_PAD_LEFT);
+        return app(RegistrationCodeService::class)->nextGlobal('DSR', DsrRequest::class);
     }
 }

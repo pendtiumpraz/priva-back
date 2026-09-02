@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\ModuleCustomSection;
+use App\Services\PermissionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -36,21 +37,8 @@ class CustomSectionController extends Controller
         if (! $user) {
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
-        if (in_array($user->role, ['root', 'superadmin', 'admin', 'dpo'], true)) {
+        if (app(PermissionService::class)->canManageWizardSchema($user)) {
             return null;
-        }
-
-        // Check tenant_role wildcard / explicit grants.
-        if (! $user->relationLoaded('tenantRole')) {
-            $user->load('tenantRole');
-        }
-        $perms = $user->tenantRole?->permissions ?? null;
-        if (is_array($perms)) {
-            if (in_array('*', $perms, true) ||
-                in_array('wizard_schema:write', $perms, true) ||
-                in_array('settings:write', $perms, true)) {
-                return null;
-            }
         }
 
         return response()->json([

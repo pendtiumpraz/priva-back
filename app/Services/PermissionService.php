@@ -104,4 +104,22 @@ class PermissionService
         return in_array("{$moduleId}:{$ability}", $permissions, true)
             || in_array("{$moduleId}:write", $permissions, true);
     }
+
+    /**
+     * May $user manage wizard schema (custom fields / sections / schema)?
+     *
+     * Shared by CustomFieldController, CustomSectionController, and
+     * WizardSchemaController, which previously each inlined this exact rule.
+     * admin & dpo may always; anyone else needs a `wizard_schema` or `settings`
+     * write grant. root/superadmin bypass via allows().
+     */
+    public function canManageWizardSchema(User $user): bool
+    {
+        if (in_array($user->role, ['admin', 'dpo'], true)) {
+            return true;
+        }
+
+        return $this->allows($user, 'wizard_schema', 'write')
+            || $this->allows($user, 'settings', 'write');
+    }
 }

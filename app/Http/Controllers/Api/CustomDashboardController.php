@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\CustomDashboard;
 use App\Services\DashboardWidgetRegistry;
+use App\Services\PermissionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -181,32 +182,11 @@ class CustomDashboardController extends Controller
         if (! $module) {
             return false;
         }
-        if (in_array($user->role, ['root', 'superadmin'], true)) {
-            return true;
-        }
 
-        $perms = $user->tenantRole?->permissions;
-        if (! is_array($perms)) {
-            // Selaras dengan CheckPermission: ketika permissions bukan array,
-            // akses baca terbuka lewat jalur legacy.
-            return true;
-        }
-        if (in_array('*', $perms, true)) {
-            return true;
-        }
-
-        foreach ($perms as $perm) {
-            $parts = explode(':', (string) $perm);
-            $mod = str_replace('-', '_', $parts[0]);
-            if ($mod !== str_replace('-', '_', $module)) {
-                continue;
-            }
-            if (! isset($parts[1]) || in_array($parts[1], ['read', 'write'], true)) {
-                return true;
-            }
-        }
-
-        return false;
+        // Read access mirrors CheckPermission exactly — delegate to the single
+        // source of truth (handles root/superadmin, legacy fallback, '*',
+        // module | module:read | module:write, and hyphen/underscore normalize).
+        return app(PermissionService::class)->allows($user, $module, 'read');
     }
 
     /** @return array<int, array<string, string>> */
