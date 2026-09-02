@@ -156,6 +156,51 @@ class PpdpAppointmentTest extends TestCase
     }
 
     #[Test]
+    public function menautkan_user_menyalin_kontak_dari_user(): void
+    {
+        Sanctum::actingAs($this->user);
+
+        // user_id valid → nama/email/telepon/jabatan disalin dari user, internal dipaksa true.
+        $created = $this->postJson('/api/ppdp', [
+            'user_id' => $this->user->id,
+            'appointee_name' => 'Nama Palsu Diabaikan',
+            'is_internal' => false,
+            'status' => 'active',
+        ])->assertStatus(201)->json('data');
+
+        $this->assertSame($this->user->id, $created['user_id']);
+        $this->assertSame('DPO Uji', $created['appointee_name']);
+        $this->assertSame($this->user->email, $created['appointee_email']);
+        $this->assertTrue($created['is_internal']);
+    }
+
+    #[Test]
+    public function user_id_lintas_org_diabaikan(): void
+    {
+        $otherOrg = Organization::create(['name' => 'Org Lain', 'slug' => 'olain-'.uniqid()]);
+        $foreign = User::create([
+            'org_id' => $otherOrg->id,
+            'name' => 'Orang Luar',
+            'email' => 'luar'.uniqid().'@uji.id',
+            'password' => bcrypt('secret123'),
+            'role' => 'dpo',
+        ]);
+
+        Sanctum::actingAs($this->user);
+
+        // user_id milik org lain → ditolak sebagai tautan (null), tidak membocorkan nama luar.
+        $created = $this->postJson('/api/ppdp', [
+            'user_id' => $foreign->id,
+            'appointee_name' => 'PPDP Manual',
+            'is_internal' => false,
+            'status' => 'active',
+        ])->assertStatus(201)->json('data');
+
+        $this->assertNull($created['user_id']);
+        $this->assertSame('PPDP Manual', $created['appointee_name']);
+    }
+
+    #[Test]
     public function update_dan_hapus_penunjukan(): void
     {
         Sanctum::actingAs($this->user);

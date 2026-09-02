@@ -28,7 +28,7 @@ class PpdpAppointment extends Model
     ];
 
     protected $fillable = [
-        'org_id', 'appointee_name', 'appointee_email', 'appointee_phone',
+        'org_id', 'user_id', 'appointee_name', 'appointee_email', 'appointee_phone',
         'appointee_position', 'is_internal', 'sk_number', 'sk_date',
         'appointment_basis', 'scope', 'reporting_line', 'term_start', 'term_end',
         'status', 'trigger_public_service', 'trigger_large_scale_monitoring',
@@ -52,6 +52,12 @@ class PpdpAppointment extends Model
     ];
 
     protected $appends = ['is_mandatory', 'mandatory_reasons', 'competency_complete'];
+
+    /** User platform yang ditunjuk (untuk PPDP internal). Null untuk pihak ketiga. */
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
 
     /** Wajib menunjuk PPDP bila salah satu pemicu Pasal 142(1) terpenuhi. */
     public function getIsMandatoryAttribute(): bool

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\PpdpAppointment;
+use App\Models\User;
 use App\Services\PpdpObligationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -52,6 +53,7 @@ class PpdpController extends Controller
     {
         $data = $this->validateData($request);
         $orgId = $request->user()->org_id;
+        $data = $this->applyLinkedUser($orgId, $data);
 
         $item = PpdpAppointment::create(array_merge($data, [
             'org_id' => $orgId,
@@ -73,6 +75,7 @@ class PpdpController extends Controller
         $item = PpdpAppointment::where('org_id', $orgId)->findOrFail($id);
 
         $data = $this->validateData($request, true);
+        $data = $this->applyLinkedUser($orgId, $data);
         $before = $item->only(array_keys($data));
         $item->update($data);
 
@@ -98,6 +101,37 @@ class PpdpController extends Controller
     }
 
     /**
+     * Bila `user_id` menunjuk user platform di org yang sama, salin
+     * nama/email/telepon/jabatan dari user tsb (server-authoritative) dan
+     * tandai internal. Cegah duplikasi manual dengan role `dpo` / dpo_list RoPA.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function applyLinkedUser(string $orgId, array $data): array
+    {
+        if (empty($data['user_id'])) {
+            return $data;
+        }
+
+        $user = User::where('org_id', $orgId)->find($data['user_id']);
+        if (! $user) {
+            // user_id tidak valid untuk org ini → abaikan tautan, jangan bocorkan lintas-org.
+            $data['user_id'] = null;
+
+            return $data;
+        }
+
+        $data['appointee_name'] = $user->name;
+        $data['appointee_email'] = $user->email;
+        $data['appointee_phone'] = $user->phone;
+        $data['appointee_position'] = $user->position ?: ($data['appointee_position'] ?? null);
+        $data['is_internal'] = true;
+
+        return $data;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function validateData(Request $request, bool $partial = false): array
@@ -105,7 +139,9 @@ class PpdpController extends Controller
         $req = $partial ? 'sometimes' : 'required';
 
         return $request->validate([
-            'appointee_name' => "{$req}|string|max:200",
+            'user_id' => 'nullable|uuid',
+            // Nama boleh kosong bila user_id di-set (disalin dari user pada applyLinkedUser).
+            'appointee_name' => $request->filled('user_id') ? 'nullable|string|max:200' : "{$req}|string|max:200",
             'appointee_email' => 'nullable|email|max:200',
             'appointee_phone' => 'nullable|string|max:60',
             'appointee_position' => 'nullable|string|max:200',
