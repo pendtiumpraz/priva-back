@@ -8,11 +8,11 @@ use App\Models\Document;
 use App\Models\DsrExecution;
 use App\Models\DsrRequest;
 use App\Models\Organization;
+use App\Models\User;
 use App\Services\DsrCertificateService;
 use App\Services\DsrEventBroadcaster;
 use App\Services\TenantStorageService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -39,8 +39,8 @@ class DsrExecutionController extends Controller
         $user = $request->user();
         $dsr = DsrRequest::where('org_id', $user->org_id)->findOrFail($id);
 
-        $executions = $dsr->executions()->with('informationSystem')->orderBy('created_at')->get()
-            ->map(fn($e) => [
+        $executions = $dsr->executions()->with(['informationSystem', 'executedBy'])->orderBy('created_at')->get()
+            ->map(fn ($e) => [
                 'id' => $e->id,
                 'information_system_id' => $e->information_system_id,
                 'system_name' => optional($e->informationSystem)->name,
@@ -49,6 +49,8 @@ class DsrExecutionController extends Controller
                 'status' => $e->status,
                 'rows_affected' => $e->rows_affected,
                 'executed_at' => $e->executed_at,
+                'executed_by_user_id' => $e->executed_by_user_id,
+                'executed_by_name' => optional($e->executedBy)->name,
                 'executed_by_email' => $e->executed_by_email,
                 'has_evidence' => (bool) $e->evidence_file_id,
                 'evidence_file_id' => $e->evidence_file_id,
@@ -78,16 +80,28 @@ class DsrExecutionController extends Controller
         $data = $request->validate([
             'status' => 'required|in:pending,executed,failed,skipped',
             'rows_affected' => 'nullable|integer|min:0',
+            'executed_by_user_id' => 'nullable|uuid',
             'executed_by_email' => 'nullable|email',
             'notes' => 'nullable|string|max:2000',
             'failure_reason' => 'nullable|string|max:2000',
         ]);
 
+        // Pelaksana tertaut ke user platform; email disimpan sebagai salinan
+        // denormalisasi (mirror alur verifikasi manual). user_id lintas-org
+        // diabaikan. Default ke aktor bila tidak ada yang dipilih.
+        $executor = null;
+        if (! empty($data['executed_by_user_id'])) {
+            $executor = User::where('org_id', $user->org_id)->find($data['executed_by_user_id']);
+        }
+        unset($data['executed_by_user_id']);
+
         $previous = $exec->status;
         $exec->fill($data);
         if (in_array($data['status'], ['executed', 'skipped', 'failed'], true)) {
             $exec->executed_at = $exec->executed_at ?: now();
-            $exec->executed_by_email = $data['executed_by_email'] ?: ($exec->executed_by_email ?: $user->email);
+            $exec->executed_by_user_id = $executor?->id ?: ($exec->executed_by_user_id ?: $user->id);
+            $exec->executed_by_email = $executor?->email
+                ?: (($data['executed_by_email'] ?? null) ?: ($exec->executed_by_email ?: $user->email));
         }
         $exec->save();
 
@@ -102,6 +116,8 @@ class DsrExecutionController extends Controller
                 'from' => $previous,
                 'to' => $exec->status,
                 'rows_affected' => $exec->rows_affected,
+                'executed_by_user_id' => $exec->executed_by_user_id,
+                'executed_by_email' => $exec->executed_by_email,
             ],
         ]);
 
@@ -181,12 +197,16 @@ class DsrExecutionController extends Controller
         $user = $request->user();
         $dsr = DsrRequest::where('org_id', $user->org_id)->findOrFail($id);
         $exec = DsrExecution::where('dsr_request_id', $dsr->id)->findOrFail($execId);
-        if (!$exec->evidence_file_id) abort(404, 'No evidence uploaded yet.');
+        if (! $exec->evidence_file_id) {
+            abort(404, 'No evidence uploaded yet.');
+        }
 
         $doc = Document::where('org_id', $user->org_id)->findOrFail($exec->evidence_file_id);
         $org = Organization::findOrFail($user->org_id);
         $disk = $this->storage->getDisk($org);
-        if (!$disk->exists($doc->storage_path)) abort(404, 'File missing from storage.');
+        if (! $disk->exists($doc->storage_path)) {
+            abort(404, 'File missing from storage.');
+        }
 
         return $disk->download($doc->storage_path, $doc->name);
     }
@@ -196,7 +216,7 @@ class DsrExecutionController extends Controller
         $user = $request->user();
         $dsr = DsrRequest::where('org_id', $user->org_id)->findOrFail($id);
 
-        if (!$dsr->allExecutionsComplete()) {
+        if (! $dsr->allExecutionsComplete()) {
             return response()->json([
                 'error' => 'Belum semua execution complete. Tidak bisa generate certificate.',
             ], 422);
@@ -221,12 +241,16 @@ class DsrExecutionController extends Controller
             'internal' => $dsr->internal_certificate_doc_id,
             default => abort(404, 'Unknown certificate kind.'),
         };
-        if (!$docId) abort(404, 'Certificate belum di-generate. Trigger regenerate dulu.');
+        if (! $docId) {
+            abort(404, 'Certificate belum di-generate. Trigger regenerate dulu.');
+        }
 
         $doc = Document::where('org_id', $user->org_id)->findOrFail($docId);
         $org = Organization::findOrFail($user->org_id);
         $disk = $this->storage->getDisk($org);
-        if (!$disk->exists($doc->storage_path)) abort(404, 'File missing from storage.');
+        if (! $disk->exists($doc->storage_path)) {
+            abort(404, 'File missing from storage.');
+        }
 
         return $disk->download($doc->storage_path, $doc->name, [
             'Content-Type' => 'application/pdf',
@@ -239,8 +263,12 @@ class DsrExecutionController extends Controller
      */
     private function maybeCompleteDsr(DsrRequest $dsr): bool
     {
-        if (!$dsr->allExecutionsComplete()) return false;
-        if ($dsr->status === 'completed') return true;
+        if (! $dsr->allExecutionsComplete()) {
+            return false;
+        }
+        if ($dsr->status === 'completed') {
+            return true;
+        }
 
         $dsr->update([
             'status' => 'completed',
@@ -252,7 +280,7 @@ class DsrExecutionController extends Controller
             $this->certService->generateBoth($dsr->fresh());
         } catch (\Throwable $e) {
             // Don't block status transition on cert failure — DPO can retry via /certificates/regenerate
-            \Log::warning("DSR cert generation failed for {$dsr->id}: " . $e->getMessage());
+            \Log::warning("DSR cert generation failed for {$dsr->id}: ".$e->getMessage());
         }
 
         AuditLog::create([

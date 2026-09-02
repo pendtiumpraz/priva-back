@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -17,7 +17,7 @@ class DsrExecution extends Model
     protected $fillable = [
         'dsr_request_id', 'information_system_id', 'shard_name',
         'request_type', 'sql_executed', 'rows_affected', 'status',
-        'executed_at', 'executed_by_email', 'evidence_file_id',
+        'executed_at', 'executed_by_email', 'executed_by_user_id', 'evidence_file_id',
         'notes', 'failure_reason',
     ];
 
@@ -38,7 +38,13 @@ class DsrExecution extends Model
 
     public function evidenceFile()
     {
-        return $this->belongsTo(\App\Models\Document::class, 'evidence_file_id');
+        return $this->belongsTo(Document::class, 'evidence_file_id');
+    }
+
+    /** User platform yang menandai eksekusi shard ini. Null untuk entri lama. */
+    public function executedBy()
+    {
+        return $this->belongsTo(User::class, 'executed_by_user_id');
     }
 
     /**
