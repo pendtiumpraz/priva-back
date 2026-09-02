@@ -54,6 +54,7 @@ class CrossBorderTransfer extends Model
 
     protected $fillable = [
         'org_id',
+        'vendor_id',
         'destination_country',
         'destination_entity',
         'transfer_purpose',
@@ -101,6 +102,12 @@ class CrossBorderTransfer extends Model
     public function ropa()
     {
         return $this->belongsTo(Ropa::class, 'linked_ropa_id');
+    }
+
+    /** Pihak ketiga penerima (registri Vendor/TPRM). Null untuk entitas ad-hoc. */
+    public function vendor()
+    {
+        return $this->belongsTo(Vendor::class, 'vendor_id');
     }
 
     /**

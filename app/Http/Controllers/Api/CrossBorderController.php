@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CountryAdequacy;
 use App\Models\CrossBorderTransfer;
+use App\Models\Vendor;
 use App\Services\AiService;
 use App\Services\ApprovalWorkflowDispatcher;
 use App\Services\AssessmentAutoTriggerService;
@@ -44,6 +45,7 @@ class CrossBorderController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate($this->writeRules(false));
+        $data = $this->applyLinkedVendor($request->user()->org_id, $data);
 
         $transfer = CrossBorderTransfer::create(array_merge($data, [
             'org_id' => $request->user()->org_id,
@@ -92,6 +94,7 @@ class CrossBorderController extends Controller
         $transfer = CrossBorderTransfer::where('org_id', $request->user()->org_id)->findOrFail($id);
         $oldStatus = $transfer->status;
         $data = $request->validate($this->writeRules(true));
+        $data = $this->applyLinkedVendor($request->user()->org_id, $data);
         $transfer->update($data);
 
         // Trigger Approval Workflow saat status → 'pending' (submit for approval).
@@ -349,14 +352,45 @@ class CrossBorderController extends Controller
      * Validation rules shared by store + update.
      * `$forUpdate=true` → all fields become `sometimes`.
      */
+    /**
+     * Bila `vendor_id` menunjuk vendor di org yang sama, salin nama entitas &
+     * kontak DPO penerima dari registri pihak ketiga (server-authoritative),
+     * menghapus pengetikan ulang. vendor_id lintas-org diabaikan (anti bocor).
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function applyLinkedVendor(string $orgId, array $data): array
+    {
+        if (empty($data['vendor_id'])) {
+            return $data;
+        }
+
+        $vendor = Vendor::where('org_id', $orgId)->find($data['vendor_id']);
+        if (! $vendor) {
+            $data['vendor_id'] = null;
+
+            return $data;
+        }
+
+        $data['destination_entity'] = $vendor->name;
+        // Kontak DPO penerima diambil dari vendor jika tidak diisi manual.
+        $data['recipient_dpo_name'] = $data['recipient_dpo_name'] ?? $vendor->contact_name;
+        $data['recipient_dpo_email'] = $data['recipient_dpo_email'] ?? $vendor->contact_email;
+
+        return $data;
+    }
+
     private function writeRules(bool $forUpdate): array
     {
         $req = $forUpdate ? 'sometimes' : 'required';
         $opt = $forUpdate ? 'sometimes|nullable' : 'nullable';
 
         return [
+            'vendor_id' => "{$opt}|uuid",
             'destination_country' => "{$req}|string|max:100",
-            'destination_entity' => "{$req}|string|max:255",
+            // Nama entitas boleh kosong bila vendor_id di-set (disalin dari vendor).
+            'destination_entity' => request()->filled('vendor_id') ? 'nullable|string|max:255' : "{$req}|string|max:255",
             'transfer_purpose' => "{$req}|string|max:2000",
             'legal_basis' => "{$req}|in:".implode(',', self::LEGAL_BASES),
             'data_categories' => "{$opt}|array",
