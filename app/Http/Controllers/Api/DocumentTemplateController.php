@@ -518,7 +518,20 @@ class DocumentTemplateController extends Controller
         $assignmentKind = $request->kind === 'gap' ? 'gap_report' : $request->kind;
         $autoAssigned = false;
         try {
-            $theme = TenantTheme::firstOrCreate(['org_id' => $user->org_id]);
+            // name/palette are NOT NULL without a DB default — a tenant with no
+            // theme row yet needs the same defaults the other assignment paths
+            // (activate / updateActiveMap / setActiveSlug) supply, otherwise the
+            // INSERT fails and the auto-assign silently no-ops.
+            $theme = TenantTheme::firstOrCreate(
+                ['org_id' => $user->org_id],
+                [
+                    'name' => 'Default',
+                    'palette' => TenantTheme::defaultPalette(),
+                    'layout_preset' => 'classic',
+                    'font_family' => 'Inter',
+                    'is_active' => false,
+                ]
+            );
             $activeMap = is_array($theme->active_template_map) ? $theme->active_template_map : [];
             if (($activeMap[$assignmentKind] ?? null) !== $tpl->id) {
                 $activeMap[$assignmentKind] = $tpl->id;
