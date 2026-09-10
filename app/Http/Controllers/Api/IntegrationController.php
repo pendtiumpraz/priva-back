@@ -227,6 +227,70 @@ class IntegrationController extends Controller
         return response()->json(['message' => self::PROVIDERS[$provider]['name'] . ' dihapus.']);
     }
 
+    // ==================== Legacy tenant settings (Breach screen) ====================
+
+    /**
+     * Kunci legacy yang dibaca/ditulis getSettings()/updateSettings(), urut sesuai
+     * kontrak yang sudah dipakai frontend (breach/page.tsx integrationForm).
+     */
+    private const LEGACY_SETTING_KEYS = [
+        'telegram_bot_token',
+        'telegram_chat_id',
+        'siem_webhook_url',
+        'soar_webhook_url',
+    ];
+
+    /**
+     * GET /api/integrations/settings
+     *
+     * Dipulihkan: routes/api.php:1088-1089 tetap menunjuk ke sini, tetapi method-nya
+     * ikut terhapus di 16f1c68 (rewrite ke skema per-provider integration_config)
+     * tanpa mencabut grup route lama -> BadMethodCallException 500 di HEAD.
+     * decryptConfig() masih menyimpan fallback BACA ke key legacy ini, jadi
+     * penghapusannya memang kelalaian, bukan pencabutan yang disengaja.
+     *
+     * Nilai dikembalikan APA ADANYA (tanpa mask/enkripsi): frontend melakukan
+     * round-trip GET -> PUT verbatim, dan decryptConfig() membacanya sebagai
+     * plaintext. Meng-mask di sini akan merusak store pada penyimpanan berikutnya.
+     */
+    public function getSettings(Request $request)
+    {
+        $org = Organization::findOrFail($request->user()->org_id);
+        $settings = $org->settings ?? [];
+
+        $data = [];
+        foreach (self::LEGACY_SETTING_KEYS as $key) {
+            $data[$key] = $settings[$key] ?? '';
+        }
+
+        return response()->json(['data' => $data]);
+    }
+
+    /**
+     * PUT /api/integrations/settings
+     *
+     * Merge per-key pada seluruh map organizations.settings supaya key non-integrasi
+     * (mis. crm_connections) tidak ikut terhapus. Key yang tidak dikirim tidak diubah.
+     */
+    public function updateSettings(Request $request)
+    {
+        $org = Organization::findOrFail($request->user()->org_id);
+        $settings = $org->settings ?? [];
+
+        foreach (self::LEGACY_SETTING_KEYS as $key) {
+            if ($request->has($key)) {
+                $settings[$key] = $request->input($key);
+            }
+        }
+
+        $org->update(['settings' => $settings]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Integration settings saved.',
+        ]);
+    }
+
     // ==================== Breach Sync (existing functionality) ====================
 
     /**
