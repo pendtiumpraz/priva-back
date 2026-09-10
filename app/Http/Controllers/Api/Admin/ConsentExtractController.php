@@ -4,9 +4,9 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\PushExtractToCrmJob;
+use App\Models\ConsentItem;
 use App\Models\ConsentLog;
 use App\Models\ExtractRun;
-use App\Services\TenantContextService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -19,15 +19,13 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class ConsentExtractController extends Controller
 {
-    public function __construct(private TenantContextService $tenant) {}
-
     /**
      * Preview count + sample without committing — used by the wizard
      * "matching records: 1,234" indicator.
      */
     public function preview(Request $request)
     {
-        $orgId = $this->tenant->currentOrgId();
+        $orgId = $request->user()->org_id;
         if (! $orgId) {
             return response()->json(['error' => 'No org context'], 403);
         }
@@ -42,7 +40,7 @@ class ConsentExtractController extends Controller
 
         // Attach resolved purpose titles (purpose_keys holds item UUIDs) so the
         // wizard sample shows item names, not IDs.
-        $titleById = \App\Models\ConsentItem::titleMap($sample->pluck('collection_id')->unique()->all());
+        $titleById = ConsentItem::titleMap($sample->pluck('collection_id')->unique()->all());
         $sample->each(function ($r) use ($titleById) {
             $r->setAttribute('purpose_titles', array_map(
                 fn ($k) => $titleById[$k] ?? $k,
@@ -65,7 +63,7 @@ class ConsentExtractController extends Controller
      */
     public function run(Request $request)
     {
-        $orgId = $this->tenant->currentOrgId();
+        $orgId = $request->user()->org_id;
         if (! $orgId) {
             return response()->json(['error' => 'No org context'], 403);
         }
@@ -116,7 +114,7 @@ class ConsentExtractController extends Controller
      */
     public function index(Request $request)
     {
-        $orgId = $this->tenant->currentOrgId();
+        $orgId = $request->user()->org_id;
         $perPage = min(50, max(10, (int) $request->input('per_page', 20)));
 
         $page = ExtractRun::query()
@@ -180,7 +178,7 @@ class ConsentExtractController extends Controller
 
         // Resolve item UUIDs → titles once (purpose_keys holds item UUIDs).
         $collectionIds = (clone $query)->distinct()->pluck('collection_id')->all();
-        $titleById = \App\Models\ConsentItem::titleMap($collectionIds);
+        $titleById = ConsentItem::titleMap($collectionIds);
 
         return response()->streamDownload(function () use ($query, $titleById) {
             $out = fopen('php://output', 'w');

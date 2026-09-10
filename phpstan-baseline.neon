@@ -61,28 +61,10 @@ parameters:
 			path: app/Console/Commands/TestEncryption.php
 
 		-
-			message: '#^Call to an undefined method App\\Services\\TenantContextService\:\:currentOrgId\(\)\.$#'
-			identifier: method.notFound
-			count: 3
-			path: app/Http/Controllers/Api/Admin/ConsentExtractController.php
-
-		-
 			message: '#^Relation ''initiator'' is not found in App\\Models\\ExtractRun model\.$#'
 			identifier: larastan.relationExistence
 			count: 1
 			path: app/Http/Controllers/Api/Admin/ConsentExtractController.php
-
-		-
-			message: '#^Call to an undefined method App\\Services\\TenantContextService\:\:currentOrgId\(\)\.$#'
-			identifier: method.notFound
-			count: 4
-			path: app/Http/Controllers/Api/Admin/CookieLogAdminController.php
-
-		-
-			message: '#^Call to an undefined method App\\Services\\TenantContextService\:\:currentOrgId\(\)\.$#'
-			identifier: method.notFound
-			count: 5
-			path: app/Http/Controllers/Api/Admin/CrmCredentialController.php
 
 		-
 			message: '#^Relation ''messages'' is not found in App\\Models\\ChatConversation model\.$#'

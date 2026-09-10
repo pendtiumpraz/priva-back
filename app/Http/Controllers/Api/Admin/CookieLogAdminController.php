@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\ConsentItem;
 use App\Models\CookieLog;
-use App\Services\TenantContextService;
 use Illuminate\Http\Request;
 
 /**
@@ -13,11 +13,9 @@ use Illuminate\Http\Request;
  */
 class CookieLogAdminController extends Controller
 {
-    public function __construct(private TenantContextService $tenant) {}
-
     public function index(Request $request)
     {
-        $orgId = $this->tenant->currentOrgId();
+        $orgId = $request->user()->org_id;
         if (! $orgId) {
             return response()->json(['error' => 'No org context'], 403);
         }
@@ -56,7 +54,7 @@ class CookieLogAdminController extends Controller
 
         // Attach human-readable choice labels (legacy rows may key choices by
         // item UUID instead of category name). Batch-resolve once per page.
-        $titleById = \App\Models\ConsentItem::titleMap(
+        $titleById = ConsentItem::titleMap(
             collect($page->items())->pluck('collection_id')->unique()->all()
         );
         $page->getCollection()->transform(function (CookieLog $log) use ($titleById) {
@@ -70,7 +68,7 @@ class CookieLogAdminController extends Controller
 
     public function show(Request $request, string $id)
     {
-        $orgId = $this->tenant->currentOrgId();
+        $orgId = $request->user()->org_id;
         $log = CookieLog::query()
             ->where('org_id', $orgId)
             ->where('id', $id)
@@ -83,19 +81,20 @@ class CookieLogAdminController extends Controller
 
     public function destroy(Request $request, string $id)
     {
-        $orgId = $this->tenant->currentOrgId();
+        $orgId = $request->user()->org_id;
         $log = CookieLog::query()
             ->where('org_id', $orgId)
             ->where('id', $id)
             ->firstOrFail();
 
         $log->delete();
+
         return response()->json(['ok' => true]);
     }
 
     public function stats(Request $request)
     {
-        $orgId = $this->tenant->currentOrgId();
+        $orgId = $request->user()->org_id;
         $base = CookieLog::query()->where('org_id', $orgId);
 
         $total = (clone $base)->count();
