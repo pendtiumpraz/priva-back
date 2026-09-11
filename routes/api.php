@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AutomationController;
 use App\Http\Controllers\Api\AvatarChatController;
 use App\Http\Controllers\Api\BreachReportController;
+use App\Http\Controllers\Api\ConnectionMapController;
 use App\Http\Controllers\Api\ConsentCollectionController;
 use App\Http\Controllers\Api\ConsentItemController;
 use App\Http\Controllers\Api\ConsentLogController;
@@ -1441,6 +1442,14 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::get('/findings/{id}', [PostureFindingController::class, 'show']);
         Route::post('/findings/{id}/assign', [PostureFindingController::class, 'assign']);
         Route::post('/findings/{id}/status', [PostureFindingController::class, 'changeStatus']);
+
+        // Peta Koneksi seluruh modul — scanner lintas modul; hasil disimpan ke
+        // storage tenant bila terpasang, bila tidak di backend. Lihat ConnectionMapController.
+        Route::get('/connection-map', [ConnectionMapController::class, 'latest'])->middleware('permission:security,read');
+        Route::get('/connection-map/scans', [ConnectionMapController::class, 'history'])->middleware('permission:security,read');
+        Route::get('/connection-map/scans/{id}', [ConnectionMapController::class, 'show'])->middleware('permission:security,read');
+        Route::post('/connection-map/scan', [ConnectionMapController::class, 'scan'])
+            ->middleware(['permission:security,write', 'throttle:10,1,connection-map-scan']);
 
         // Alert Engine / Notifications
         Route::get('/alerts', [AlertController::class, 'index']);

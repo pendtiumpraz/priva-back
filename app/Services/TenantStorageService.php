@@ -229,6 +229,20 @@ class TenantStorageService
     }
 
     /**
+     * Cloud driver this tenant's files resolve to after the 4-layer fallback
+     * (s3/minio/do_spaces/gcs), or null when no external storage is configured
+     * at any layer and files land on the server's own disk. For features that
+     * store their output "in storage when one is configured, otherwise in the
+     * backend" (e.g. the DSPM connection map).
+     */
+    public function externalDriver(Organization $org): ?string
+    {
+        $driver = $this->resolvedDriver($org);
+
+        return $this->isCloudDriver($driver) ? $driver : null;
+    }
+
+    /**
      * Store a file using the tenant's configured storage.
      */
     public function storeTenantFile(Organization $org, UploadedFile $file, ?string $directory = null): string
