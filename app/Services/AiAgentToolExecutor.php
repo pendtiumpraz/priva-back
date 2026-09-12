@@ -388,13 +388,21 @@ class AiAgentToolExecutor
         $forbidden = ['org_id', 'id'];
         $data = array_diff_key($args, array_flip($forbidden));
         $data['org_id'] = $this->orgId;
-        $data['registration_number'] = $data['registration_number'] ?? 'ROPA-AI-'.date('Y').'-'.rand(100, 999);
+        // Nomor DIHITUNG GLOBAL (F-03). Sebelumnya `rand(100, 999)`: batasan
+        // unik pada registration_number berlaku LINTAS TENANT, jadi tabrakan
+        // hanya soal waktu — dan tidak ada percobaan ulang sama sekali.
+        // Penanda "-AI-" sengaja dipertahankan: namespace ROPA-AI-YYYY-%
+        // dihitung tersendiri dan tidak pernah bertabrakan dengan ROPA-YYYY-%,
+        // sehingga asal-usul catatan tetap terbaca dari kodenya.
+        $codes = app(RegistrationCodeService::class);
+        $regen = fn () => $codes->nextGlobal('ROPA-AI', Ropa::class, 'registration_number');
+        $data['registration_number'] = $data['registration_number'] ?? $regen();
 
         // Extract wizard_data before creating (it's a JSON column)
         $wizardData = $data['wizard_data'] ?? null;
         unset($data['wizard_data']);
 
-        $r = Ropa::create($data);
+        $r = $codes->createWithRetry(new Ropa, $data, 'registration_number', $regen);
 
         // If agent provided wizard_data, write it directly
         if ($wizardData && is_array($wizardData)) {
@@ -529,13 +537,16 @@ class AiAgentToolExecutor
     {
         $data = array_diff_key($args, array_flip(['org_id', 'id']));
         $data['org_id'] = $this->orgId;
-        $data['registration_number'] = $data['registration_number'] ?? 'DPIA-AI-'.date('Y').'-'.rand(100, 999);
+        // Dihitung global, penanda "-AI-" dipertahankan — lihat createRopa().
+        $codes = app(RegistrationCodeService::class);
+        $regen = fn () => $codes->nextGlobal('DPIA-AI', Dpia::class, 'registration_number');
+        $data['registration_number'] = $data['registration_number'] ?? $regen();
 
         // Extract wizard_data before creating
         $wizardData = $data['wizard_data'] ?? null;
         unset($data['wizard_data']);
 
-        $r = Dpia::create($data);
+        $r = $codes->createWithRetry(new Dpia, $data, 'registration_number', $regen);
 
         // If agent provided wizard_data (with potensi_risiko), write directly
         if ($wizardData && is_array($wizardData)) {
@@ -720,8 +731,14 @@ class AiAgentToolExecutor
     {
         $data = array_diff_key($args, array_flip(['org_id', 'id']));
         $data['org_id'] = $this->orgId;
-        $data['incident_code'] = $data['incident_code'] ?? 'BRC-AI-'.date('Y').'-'.rand(100, 999);
-        $r = BreachIncident::create($data);
+        // Dihitung global, penanda "-AI-" dipertahankan — lihat createRopa().
+        // Kolomnya WAJIB disebut eksplisit: peta prefix di RegistrationCodeService
+        // tidak mengenal 'BRC-AI', dan nilai bawaannya 'registration_number'
+        // salah untuk BreachIncident.
+        $codes = app(RegistrationCodeService::class);
+        $regen = fn () => $codes->nextGlobal('BRC-AI', BreachIncident::class, 'incident_code');
+        $data['incident_code'] = $data['incident_code'] ?? $regen();
+        $r = $codes->createWithRetry(new BreachIncident, $data, 'incident_code', $regen);
 
         try {
             AuditLog::create($this->auditPayload('breach', $r->id, 'created', 'Automated AI Creation'));

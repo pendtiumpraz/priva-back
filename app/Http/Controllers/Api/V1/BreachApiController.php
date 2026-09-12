@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\BreachIncident;
+use App\Services\RegistrationCodeService;
 use Illuminate\Http\Request;
 
 /**
@@ -85,13 +86,17 @@ class BreachApiController extends Controller
 
         $orgId = $this->orgId($request);
 
-        // Generate incident code
-        $count = BreachIncident::where('org_id', $orgId)->count() + 1;
-        $code = 'BRC-' . date('Y') . '-' . str_pad($count, 4, '0', STR_PAD_LEFT);
+        // Nomor insiden DIHITUNG GLOBAL (F-03). Versi sebelumnya memakai
+        // `count()` yang disaring per-org, padahal batasan unik pada
+        // `incident_code` berlaku lintas tenant: dua tenant yang mencatat
+        // insiden ke-N menghasilkan kode yang sama, dan karena hitungannya
+        // tetap per-org, mengulang tidak pernah menghasilkan nilai berbeda.
+        $codes = app(RegistrationCodeService::class);
+        $regen = fn () => $codes->nextGlobal('BRC', BreachIncident::class);
 
-        $breach = BreachIncident::create(array_merge($validated, [
+        $breach = $codes->createWithRetry(new BreachIncident, array_merge($validated, [
             'org_id' => $orgId,
-            'incident_code' => $code,
+            'incident_code' => $regen(),
             'status' => 'open',
             'is_simulation' => false,
             'notification_required' => in_array($validated['severity'], ['high', 'critical']),
@@ -99,7 +104,7 @@ class BreachApiController extends Controller
             'timeline_log' => [
                 ['event' => 'Breach dilaporkan via API', 'at' => now()->toISOString(), 'by' => 'API Partner'],
             ],
-        ]));
+        ]), 'incident_code', $regen);
 
         // TODO: trigger webhook 'breach.created'
 

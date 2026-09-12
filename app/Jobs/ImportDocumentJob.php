@@ -8,6 +8,7 @@ use App\Models\Organization;
 use App\Models\Ropa;
 use App\Services\AiFieldMappingService;
 use App\Services\DocumentParserService;
+use App\Services\RegistrationCodeService;
 use App\Services\TenantStorageService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -143,9 +144,14 @@ class ImportDocumentJob implements ShouldQueue
             // Extract top-level RoPA fields from wizard data
             $ropa = Ropa::create([
                 'org_id' => $org->id,
-                'registration_number' => 'ROPA-'.date('Y').'-'.str_pad(
-                    Ropa::where('org_id', $org->id)->count() + 1, 4, '0', STR_PAD_LEFT
-                ),
+                // DIHITUNG GLOBAL (F-03): batasan unik registration_number
+                // berlaku lintas tenant, sedangkan count() di sini disaring
+                // per-org — dua tenant yang mengimpor dokumen ke-N menghasilkan
+                // nomor yang sama, dan mengulang tidak pernah mengubahnya.
+                // Tabrakan serentak ditangani oleh retry job ($tries = 3):
+                // percobaan berikutnya menghitung ulang nomornya.
+                'registration_number' => app(RegistrationCodeService::class)
+                    ->nextGlobal('ROPA', Ropa::class, 'registration_number'),
                 'processing_activity' => $wizardData['detail_pemrosesan']['processing_activity'] ?? 'Imported from document',
                 'entity' => $wizardData['detail_pemrosesan']['entity'] ?? $org->name,
                 'division' => $wizardData['detail_pemrosesan']['division'] ?? null,
