@@ -42,6 +42,31 @@ class RecordGraphBuilder
     /** @var array<string, bool> cache Schema::hasTable */
     private array $cacheTabel = [];
 
+    /**
+     * Jenis simpul yang boleh muncul, atau null bila tidak dibatasi.
+     *
+     * Disetel pemanggil dari gerbang entitlement. Penyaringannya dilakukan di
+     * SATU tempat — saat simpul diambil — sehingga tepi yang menyentuh modul
+     * tercabut ikut hilang dengan sendirinya lewat penjaga "kedua ujung harus
+     * simpul yang dikenal". Menyaring di sisi tepi akan menyisakan simpul
+     * yatim yang tetap membocorkan keberadaannya.
+     *
+     * @var array<string, true>|null
+     */
+    private ?array $jenisDiizinkan = null;
+
+    /**
+     * Batasi jenis simpul yang boleh muncul (gerbang entitlement).
+     *
+     * @param  array<int, string>|null  $types  null = tanpa batas
+     */
+    public function hanyaJenis(?array $types): self
+    {
+        $this->jenisDiizinkan = $types === null ? null : array_fill_keys($types, true);
+
+        return $this;
+    }
+
     /** @return array<string, mixed> */
     public function forRecord(string $orgId, string $type, string $id): array
     {
@@ -289,6 +314,13 @@ class RecordGraphBuilder
     {
         $sumber = RelationCatalog::nodeSources()[$type] ?? null;
         if (! $sumber || ! $ids || ! $this->tabelAda($sumber['table'])) {
+            return [];
+        }
+        // Modul yang entitlement-nya dicabut tidak menghasilkan simpul sama
+        // sekali. Jumlahnya sengaja TIDAK dilaporkan: "3 simpul disembunyikan"
+        // sudah membocorkan berapa banyak record yang tenant tidak lagi berhak
+        // lihat.
+        if ($this->jenisDiizinkan !== null && ! isset($this->jenisDiizinkan[$type])) {
             return [];
         }
 

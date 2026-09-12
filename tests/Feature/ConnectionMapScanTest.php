@@ -10,8 +10,10 @@ use App\Models\Dpia;
 use App\Models\DsrRequest;
 use App\Models\DsrRequestScope;
 use App\Models\InformationSystem;
+use App\Models\MenuItem;
 use App\Models\Organization;
 use App\Models\Ropa;
+use App\Models\TenantModuleEntitlement;
 use App\Models\TenantRole;
 use App\Models\TiaAssessment;
 use App\Models\User;
@@ -321,6 +323,47 @@ class ConnectionMapScanTest extends TestCase
 
         $this->assertContains('ropa:'.$risky->id, $insights['high_risk_ropa_without_dpia']['node_ids']);
         $this->assertContains('system:'.$orphan->id, $insights['system_without_ropa']['node_ids']);
+    }
+
+    public function test_modul_yang_dicabut_tidak_ikut_dipetakan(): void
+    {
+        $ropa = $this->ropa($this->org, 'ROPA-2026-001', 'Payroll');
+        $dpia = Dpia::create([
+            'org_id' => $this->org->id, 'ropa_id' => $ropa->id,
+            'registration_number' => 'DPIA-2026-001', 'status' => 'draft',
+            'mitigation_tracking' => [['action' => 'Enkripsi', 'status' => 'completed']],
+        ]);
+
+        // Sebelum dicabut: DPIA dan ringkasan RTP-nya terpetakan.
+        $sebelum = collect($this->scan()['graph']['nodes'])->pluck('id')->all();
+        $this->assertContains('dpia:'.$dpia->id, $sebelum);
+        $this->assertContains('rtp:'.$dpia->id, $sebelum);
+
+        $menu = MenuItem::create([
+            'menu_key' => 'dpia', 'label' => 'DPIA', 'href' => '/dpia',
+            'icon' => 'Shield', 'section' => 'PDP Modules', 'sort_order' => 100,
+        ]);
+        TenantModuleEntitlement::create([
+            'org_id' => $this->org->id, 'menu_id' => $menu->id, 'is_entitled' => false,
+        ]);
+        $this->app->forgetScopedInstances();
+
+        $g = $this->scan()['graph'];
+        $ids = collect($g['nodes'])->pluck('id')->all();
+
+        $this->assertNotContains('dpia:'.$dpia->id, $ids, 'modul tercabut tidak boleh dipetakan');
+        $this->assertNotContains('rtp:'.$dpia->id, $ids,
+            'RTP hidup di dalam DPIA — mencabut DPIA tidak boleh menyisakan simpulnya');
+
+        // Tidak ada tepi yatim yang tetap memperlihatkan keberadaannya.
+        foreach ($g['edges'] as $e) {
+            $this->assertStringNotContainsString('dpia:', $e['from'].$e['to']);
+        }
+
+        // Jumlahnya pun tidak dilaporkan — angka itu sendiri membocorkan berapa
+        // record yang tenant tidak lagi berhak lihat.
+        $modul = collect($g['modules'])->keyBy('type');
+        $this->assertSame(0, $modul['dpia']['total']);
     }
 
     public function test_izin_modul_security_menjaga_baca_dan_scan(): void

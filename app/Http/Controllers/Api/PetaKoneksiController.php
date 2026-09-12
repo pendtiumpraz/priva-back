@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Middleware\CheckPermission;
 use App\Services\ConnectionMap\RecordGraphBuilder;
 use App\Services\ConnectionMap\RelationCatalog;
+use App\Services\EntitlementService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -74,6 +75,32 @@ class PetaKoneksiController extends Controller
         ]);
     }
 
+    /**
+     * Jenis simpul yang modulnya masih dimiliki organisasi ini.
+     *
+     * Memakai `allowsModule($user, …)` yang sudah publik — termasuk bypass
+     * platform staff, yang memang harus melihat seluruh tenant. Menyalin aturan
+     * entitlement ke sini akan menjadi salinan lain yang harus dijaga sinkron.
+     *
+     * @return array<int, string>
+     */
+    private function jenisYangDimiliki(Request $request): array
+    {
+        $ent = app(EntitlementService::class);
+        $user = $request->user();
+
+        $izin = [];
+        foreach (array_keys(RelationCatalog::nodeSources()) as $jenis) {
+            $moduleId = RelationCatalog::MODULE_ID[$jenis] ?? null;
+            // Jenis tanpa konsep entitlement tidak bisa dicabut, jadi selalu boleh.
+            if ($moduleId === null || $ent->allowsModule($user, $moduleId)) {
+                $izin[] = $jenis;
+            }
+        }
+
+        return $izin;
+    }
+
     private function gate(Request $request, string $module, \Closure $build): Response
     {
         $peta = self::MODULES[$module] ?? null;
@@ -91,7 +118,15 @@ class PetaKoneksiController extends Controller
 
         return app(CheckPermission::class)->handle(
             $request,
-            fn () => $build($type, $orgId),
+            function () use ($build, $type, $orgId, $request) {
+                // CheckPermission hanya menggerbangi modul yang DIPUSATKAN.
+                // Simpul tetangganya berasal dari modul lain dan harus
+                // digerbangi sendiri — tanpa ini, tenant yang modul DPIA-nya
+                // dicabut tetap melihat simpul DPIA di peta RoPA-nya.
+                $this->builder->hanyaJenis($this->jenisYangDimiliki($request));
+
+                return $build($type, $orgId);
+            },
             $permissionModule,
             'read',
         );

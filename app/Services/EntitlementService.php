@@ -73,6 +73,24 @@ class EntitlementService
     }
 
     /**
+     * Boleh-kah ORGANISASI mengakses modul — tanpa konteks user.
+     *
+     * Dipakai pemindai peta koneksi yang berjalan di konteks job/CLI: di sana
+     * tidak ada user untuk di-bypass, dan petanya memang milik organisasi, bukan
+     * milik seseorang. Jalur berbasis request tetap memakai `allowsModule()`
+     * karena platform staff justru harus melihat seluruh tenant.
+     */
+    public function allowsModuleForOrg(?string $orgId, string $moduleId): bool
+    {
+        $menuKey = $this->menuKeyForModule($moduleId);
+        if ($menuKey === null) {
+            return true;
+        }
+
+        return $this->allowsMenuKey($orgId, $menuKey);
+    }
+
+    /**
      * Boleh-kah org mengakses sebuah menu (dari sisi entitlement saja)?
      *
      * Dipakai langsung oleh middleware `entitlement:<menu_key>` pada route yang

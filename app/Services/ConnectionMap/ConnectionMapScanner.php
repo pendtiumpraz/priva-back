@@ -13,6 +13,7 @@ use App\Models\Organization;
 use App\Models\Ropa;
 use App\Models\TiaAssessment;
 use App\Models\Vendor;
+use App\Services\EntitlementService;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -301,6 +302,33 @@ class ConnectionMapScanner
         foreach ($dsrPairs as $p) {
             $links[] = ['dsr:'.$p->dsr_id, 'system:'.$p->system_id, 'targets'];
         }
+
+        // ---- Gerbang entitlement. Modul yang DICABUT dari organisasi ini tidak
+        // dipetakan sama sekali: petanya ikut dipakai sebagai bukti dan dapat
+        // berakhir sebagai berkas JSON di storage, jadi memperlihatkan record
+        // dari modul yang sudah bukan milik tenant sama saja membocorkannya.
+        //
+        // Disaring pada SIMPUL, bukan pada tepi — penjaga "kedua ujung harus
+        // simpul yang dikenal" di bawah lalu membuang tepinya dengan sendirinya.
+        // Menyaring di sisi tepi akan menyisakan simpul yatim yang tetap
+        // memperlihatkan keberadaannya.
+        //
+        // `total` per modul ikut dinolkan: angka itu sendiri memberi tahu berapa
+        // banyak record yang tenant tidak lagi berhak lihat.
+        $entitlements = app(EntitlementService::class);
+        // Tanpa nilai bawaan: RelationCatalog::MODULE_ID memang mencakup seluruh
+        // MODULE_ORDER, dan analisis statis yang menegakkannya — begitu kedua
+        // daftar itu menyimpang, PHPStan langsung menandai offset-nya. Itu lebih
+        // baik daripada fallback diam-diam yang membuat modul baru lolos gerbang
+        // entitlement tanpa ada yang menyadarinya.
+        $dimiliki = [];
+        foreach (self::MODULE_ORDER as $type) {
+            $dimiliki[$type] = $entitlements->allowsModuleForOrg($orgId, RelationCatalog::MODULE_ID[$type]);
+            if (! $dimiliki[$type]) {
+                $totals[$type] = 0;
+            }
+        }
+        $nodes = array_filter($nodes, fn ($n) => $dimiliki[$n['type']] ?? true);
 
         // ---- Tepi. Kedua ujung WAJIB simpul org ini — penjaga isolasi tenant
         // terakhir. Kunci dedup (from|to|relasi) melebur tautan ganda, mis. DPIA

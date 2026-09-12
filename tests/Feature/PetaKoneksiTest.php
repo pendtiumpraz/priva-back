@@ -8,8 +8,10 @@ use App\Models\CrossBorderTransfer;
 use App\Models\Dpia;
 use App\Models\DsrRequest;
 use App\Models\InformationSystem;
+use App\Models\MenuItem;
 use App\Models\Organization;
 use App\Models\Ropa;
+use App\Models\TenantModuleEntitlement;
 use App\Models\TenantRole;
 use App\Models\User;
 use App\Models\Vendor;
@@ -227,6 +229,68 @@ class PetaKoneksiTest extends TestCase
         $tersedia = $this->getJson('/api/peta-koneksi/modul-tersedia')->assertOk()->json();
         $this->assertContains('ropa', $tersedia['data']);
         $this->assertNotContains('gap', $tersedia['data']);
+    }
+
+    /** Cabut entitlement satu modul untuk org ini. */
+    private function cabut(string $menuKey): void
+    {
+        $menu = MenuItem::create([
+            'menu_key' => $menuKey,
+            'label' => strtoupper($menuKey),
+            'href' => '/'.$menuKey,
+            'icon' => 'Shield',
+            'section' => 'PDP Modules',
+            'sort_order' => 100,
+        ]);
+        TenantModuleEntitlement::create([
+            'org_id' => $this->org->id,
+            'menu_id' => $menu->id,
+            'is_entitled' => false,
+        ]);
+
+        // EntitlementService diikat `scoped` dan menyimpan cache menu tercabut.
+        // Di produksi batas request membuang instansnya; harness uji tidak
+        // menyediakan batas itu, jadi ditiru di sini. Ini BUKAN melonggarkan uji
+        // — fase "terlihat sebelum dicabut" justru yang membuktikan pencabutan
+        // benar-benar mengubah keadaan.
+        $this->app->forgetScopedInstances();
+    }
+
+    public function test_modul_yang_dicabut_tidak_muncul_sebagai_tetangga(): void
+    {
+        $ropa = $this->ropa('ROPA-2026-010', 'Punya DPIA');
+        $dpia = Dpia::create([
+            'org_id' => $this->org->id, 'ropa_id' => $ropa->id,
+            'registration_number' => 'DPIA-2026-010', 'status' => 'draft',
+        ]);
+
+        // Sebelum dicabut: DPIA terlihat sebagai tetangga.
+        $sebelum = $this->getJson("/api/peta-koneksi/ropa/{$ropa->id}")->assertOk()->json('data');
+        $this->assertContains('dpia:'.$dpia->id, $this->ids($sebelum));
+
+        $this->cabut('dpia');
+
+        $sesudah = $this->getJson("/api/peta-koneksi/ropa/{$ropa->id}")->assertOk()->json('data');
+
+        $this->assertNotContains('dpia:'.$dpia->id, $this->ids($sesudah),
+            'modul yang dicabut tidak boleh muncul walau sebagai tetangga');
+
+        // Tidak boleh ada tepi yatim yang tetap membocorkan keberadaannya.
+        foreach ($sesudah['edges'] as $e) {
+            $this->assertStringNotContainsString('dpia:', $e['from'].$e['to']);
+        }
+
+        // Jumlah yang disembunyikan sengaja TIDAK dilaporkan — itu sendiri
+        // membocorkan berapa record yang tenant tidak lagi berhak lihat.
+        $this->assertStringNotContainsString('disembunyikan', json_encode($sesudah));
+    }
+
+    public function test_modul_yang_dicabut_tidak_bisa_dibuka_petanya_sendiri(): void
+    {
+        $this->cabut('dpia');
+
+        // Gerbang lama (CheckPermission) tetap berlaku untuk modul yang dipusatkan.
+        $this->getJson('/api/peta-koneksi/dpia')->assertStatus(403);
     }
 
     public function test_label_dsr_tidak_membawa_data_pribadi_pemohon(): void

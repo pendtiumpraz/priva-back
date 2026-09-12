@@ -47,6 +47,40 @@ final class RelationCatalog
     public const WITHOUT_RELATIONS = ['gap', 'maturity', 'policy_review'];
 
     /**
+     * Jenis simpul → module_id izin (seperti yang ditulis di `permission:` rute).
+     *
+     * Dipakai gerbang ENTITLEMENT peta. Sebelumnya hanya modul yang DIPUSATKAN
+     * yang digerbangi, sedangkan simpul tetangganya tidak — sehingga tenant yang
+     * modul DPIA-nya dicabut tetap melihat simpul DPIA di peta RoPA-nya. Itu
+     * memperlihatkan data dari modul yang sudah bukan miliknya.
+     *
+     * Jenis yang tidak ada di sini tidak punya konsep entitlement tersendiri
+     * (mis. `rtp` yang diturunkan dari DPIA, dan `contract`/`vendor_incident`
+     * yang hidup di dalam TPRM).
+     */
+    public const MODULE_ID = [
+        'ropa' => 'ropa',
+        'dpia' => 'dpia',
+        // Item penanganan risiko hidup DI DALAM baris DPIA (mitigation_tracking),
+        // bukan modul tersendiri. Ia harus ikut nasib DPIA: kalau tidak,
+        // mencabut DPIA menyisakan simpul RTP yatim yang tetap memberi tahu
+        // "ada sekian item penanganan risiko".
+        'rtp' => 'dpia',
+        'dsr' => 'dsr',
+        'consent' => 'consent',
+        'breach' => 'breach',
+        'data_discovery' => 'data_discovery',
+        'third_party' => 'vendor_risk',
+        'cross_border' => 'cross_border',
+        'lia' => 'lia',
+        'tia' => 'tia',
+        'contract_review' => 'contract_review',
+        'contract' => 'vendor_risk',
+        'vendor_incident' => 'vendor_risk',
+        'vendor_ropa' => 'vendor_risk',
+    ];
+
+    /**
      * Mekanisme yang dipakai tiap relasi:
      *
      *   fk          — kolom foreign key pada tabel `table`, menunjuk record `points_to`.
