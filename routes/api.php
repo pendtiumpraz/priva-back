@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AutomationController;
 use App\Http\Controllers\Api\AvatarChatController;
 use App\Http\Controllers\Api\BerbagiPublikController;
+use App\Http\Controllers\Api\BreachDataDiscoveryController;
 use App\Http\Controllers\Api\BreachReportController;
 use App\Http\Controllers\Api\BreachThirdPartyController;
 use App\Http\Controllers\Api\ConnectionMapController;
@@ -720,6 +721,14 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     Route::post('/breach/{breachId}/containment', [ContainmentController::class, 'addStep'])->middleware('permission:breach,write');
     Route::put('/breach/{breachId}/containment/{stepKey}', [ContainmentController::class, 'updateStep'])->middleware('permission:breach,write');
     Route::delete('/breach/{breachId}/containment/{stepKey}', [ContainmentController::class, 'removeStep'])->middleware('permission:breach,write');
+
+    // Data Discovery → insiden. Sumbernya `information_systems.scan_results`
+    // (katalog tabel & kolom), BUKAN `data_discovery_scan_plans` yang mencari
+    // data satu orang untuk keperluan DSR. Rute statis didaftarkan sebelum
+    // '/breach/{id}/...' supaya 'sistem-terpindai' tidak terbaca sebagai id.
+    Route::get('/breach/sistem-terpindai', [BreachDataDiscoveryController::class, 'scannedSystems'])->middleware('permission:breach,read');
+    Route::get('/breach/sistem/{systemId}/tabel', [BreachDataDiscoveryController::class, 'systemTables'])->middleware('permission:breach,read');
+    Route::put('/breach/{id}/sistem-terdampak', [BreachDataDiscoveryController::class, 'saveAffected'])->middleware('permission:breach,write');
 
     // Pihak ketiga pada sebuah insiden: yang dipastikan terlibat + dugaan yang
     // ditelusuri dari RoPA terdampak (Fase 2).

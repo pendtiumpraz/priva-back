@@ -72,6 +72,64 @@ class BreachThirdPartyController extends Controller
             }
         }
 
+        // ── Jalur 3 & 4 — ditelusuri dari SISTEM terdampak (Data Discovery).
+        //
+        // Menjawab yang tidak bisa dijawab jalur RoPA: kalau yang bocor sebuah
+        // sistem, siapa pihak ketiga yang menyentuh datanya? Dua arah ditempuh
+        // sekaligus karena keduanya bisa sama-sama benar — satu sistem bisa
+        // dipegang SaaS tertentu DAN dipakai kegiatan pemrosesan yang
+        // melibatkan pihak ketiga lain.
+        $systemIds = array_values(array_filter(
+            array_column((array) ($breach->affected_systems ?? []), 'information_system_id'),
+            'is_string'
+        ));
+
+        if ($systemIds) {
+            $namaSistem = DB::table('information_systems')
+                ->where('org_id', $orgId)
+                ->whereIn('id', $systemIds)
+                ->pluck('name', 'id');
+
+            // Jalur 3 — sistem terdampak → RoPA yang memakainya → pihak ketiga.
+            $lewatRopa = DB::table('information_system_ropa')
+                ->join('ropa_vendor', 'ropa_vendor.ropa_id', '=', 'information_system_ropa.ropa_id')
+                ->where('ropa_vendor.org_id', $orgId)
+                ->whereIn('information_system_ropa.information_system_id', $systemIds)
+                ->get([
+                    'ropa_vendor.vendor_id',
+                    'ropa_vendor.role',
+                    'information_system_ropa.information_system_id',
+                ]);
+
+            foreach ($lewatRopa as $row) {
+                $sistem = $namaSistem[$row->information_system_id] ?? 'sistem terdampak';
+                $alasanPer[$row->vendor_id][] = [
+                    'jenis' => 'sistem_ropa',
+                    'information_system_id' => $row->information_system_id,
+                    'peran' => Vendor::roleLabel($row->role),
+                    'teks' => 'Terlibat pada kegiatan yang memakai sistem "'.$sistem.'" sebagai '.Vendor::roleLabel($row->role).'.',
+                ];
+            }
+
+            // Jalur 4 — sistem terdampak → pihak ketiga yang memegangnya.
+            // Ini satu-satunya jalur yang tetap bekerja untuk sistem yang belum
+            // pernah ditautkan ke RoPA mana pun.
+            $langsung = DB::table('information_system_vendor')
+                ->where('org_id', $orgId)
+                ->whereIn('information_system_id', $systemIds)
+                ->get(['vendor_id', 'information_system_id', 'role']);
+
+            foreach ($langsung as $row) {
+                $sistem = $namaSistem[$row->information_system_id] ?? 'sistem terdampak';
+                $alasanPer[$row->vendor_id][] = [
+                    'jenis' => 'sistem_langsung',
+                    'information_system_id' => $row->information_system_id,
+                    'peran' => Vendor::roleLabel($row->role),
+                    'teks' => 'Memegang sistem "'.$sistem.'" yang terdampak, sebagai '.Vendor::roleLabel($row->role).'.',
+                ];
+            }
+        }
+
         $vendors = Vendor::whereIn('id', array_keys($alasanPer))
             ->where('org_id', $orgId)
             ->get(['id', 'name', 'country', 'risk_level'])
@@ -98,6 +156,7 @@ class BreachThirdPartyController extends Controller
                 'dipastikan' => $breach->linked_third_parties,
                 'dugaan' => $suggested,
                 'ropa_terdampak' => count($ropaIds),
+                'sistem_terdampak' => count($systemIds),
             ],
         ]);
     }

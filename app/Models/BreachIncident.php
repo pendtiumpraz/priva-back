@@ -23,6 +23,7 @@ class BreachIncident extends Model
         'incident_commander', 'dpo_id', 'pic_id', 'pic_name', 'detected_at', 'assessed_at',
         'contained_at', 'closed_at', 'timeline_log', 'created_by',
         'custom_raci', 'containment_steps',
+        'affected_systems', 'affected_data_categories',
     ];
 
     protected $casts = [
@@ -32,6 +33,9 @@ class BreachIncident extends Model
         'custom_raci' => 'array', 'containment_steps' => 'array',
         'linked_ropa_ids' => 'array',
         'linked_vendor_ids' => 'array',
+        // Pilihan terstruktur dari Data Discovery: sistem → tabel → kolom PII.
+        'affected_systems' => 'array',
+        'affected_data_categories' => 'array',
         'notification_deadline' => 'datetime', 'detected_at' => 'datetime',
         'assessed_at' => 'datetime', 'contained_at' => 'datetime', 'closed_at' => 'datetime',
         'notified_komdigi_at' => 'datetime', 'notified_subjects_at' => 'datetime',

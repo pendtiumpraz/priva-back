@@ -42,4 +42,23 @@ class InformationSystem extends Model
             ->withPivot('notes', 'org_id')
             ->withTimestamps();
     }
+
+    /**
+     * Pihak ketiga yang memegang/mengoperasikan sistem ini — mis. SaaS tempat
+     * datanya benar-benar tersimpan.
+     *
+     * Sebelum pivot ini ada, pertanyaan "siapa pihak ketiga yang menyentuh data
+     * di sistem ini" hanya bisa dijawab lewat RoPA. Sistem yang belum pernah
+     * ditautkan ke RoPA — dan itu banyak — tidak menghasilkan jawaban apa pun.
+     * `owner_id` tidak bisa dipakai: itu foreign key ke `users`, pemilik
+     * internal, bukan pihak ketiga.
+     *
+     * Perannya memakai Vendor::ROLES yang sama dengan pivot ropa_vendor.
+     */
+    public function vendors()
+    {
+        return $this->belongsToMany(Vendor::class, 'information_system_vendor', 'information_system_id', 'vendor_id')
+            ->withPivot('role', 'notes', 'org_id')
+            ->withTimestamps();
+    }
 }
