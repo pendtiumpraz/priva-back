@@ -108,6 +108,7 @@ use App\Http\Controllers\Api\RopaCsvImportController;
 use App\Http\Controllers\Api\RopaGraphController;
 use App\Http\Controllers\Api\RopaLinkController;
 use App\Http\Controllers\Api\RopaPihakKetigaPublikController;
+use App\Http\Controllers\Api\RopaRetentionController;
 use App\Http\Controllers\Api\RopaTemplateController;
 use App\Http\Controllers\Api\SanctionController;
 use App\Http\Controllers\Api\SimulationController;
@@ -661,6 +662,18 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // =============================================
     // RoPA — DPO Approval Workflow
     // =============================================
+    // Tinjauan & pemusnahan masa retensi (UU PDP Pasal 40–42, PP 33 Pasal 80).
+    // Didaftarkan SEBELUM grup 'ropa/{id}' supaya '/retensi/jatuh-tempo' tidak
+    // tertangkap sebagai id.
+    Route::get('/ropa/retensi/jatuh-tempo', [RopaRetentionController::class, 'due'])
+        ->middleware('permission:ropa,read');
+
+    Route::prefix('ropa/{id}/retensi')->middleware('permission:ropa,write')->group(function () {
+        Route::post('/perpanjang', [RopaRetentionController::class, 'extend']);
+        Route::post('/setujui-pemusnahan', [RopaRetentionController::class, 'approveDestruction']);
+        Route::post('/musnahkan', [RopaRetentionController::class, 'destroyData']);
+    });
+
     Route::prefix('ropa/{id}')->group(function () {
         // Peta koneksi RoPA ke seluruh modul terkait (read-only, gaya blueprint).
         Route::get('/graph', [RopaGraphController::class, 'show'])->middleware('permission:ropa,read');

@@ -92,6 +92,14 @@ class Ropa extends Model
         'approved_at' => 'datetime',
         'submitted_at' => 'datetime',
         'progress' => 'float',
+        // Kolom tinjauan retensi. `retention_due_date` SENGAJA tidak ikut
+        // di-cast: seluruh pemakainya memperlakukannya sebagai string
+        // (ExportController memakai `(string) $r->retention_due_date`), dan
+        // cast 'date' akan mengubah keluarannya menjadi "Y-m-d H:i:s" —
+        // diam-diam mengubah isi ekspor CSV/XLSX.
+        'retention_reviewed_at' => 'datetime',
+        'retention_destroyed_at' => 'datetime',
+        'retention_due_date_at_destruction' => 'date',
     ];
 
     /**
