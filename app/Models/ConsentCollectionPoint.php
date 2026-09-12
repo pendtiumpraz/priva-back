@@ -37,6 +37,22 @@ class ConsentCollectionPoint extends Model
         'server_key' => EncryptedString::class,
     ];
 
+    /**
+     * Secrets: encrypted at rest, and never serialised.
+     *
+     * Without this, every path that serialises a collection point shipped both
+     * values DECRYPTED: `ConsentLogController::index` eager-loads the relation
+     * onto each row (so any `permission:consent,read` caller saw them), and the
+     * universal-CRUD `consent` module (`ModuleCrudController:91`) returns the
+     * model itself on list and show.
+     *
+     * `$hidden` only affects toArray()/toJson(). Property reads still work, so
+     * `CaptchaVerifier::verifyForCollection` and `AuthenticateConsentApiKey`
+     * are unaffected, and `regenerateApiKeys` still reveals the plaintext key
+     * once because it returns an explicit array key, not the model.
+     */
+    protected $hidden = ['server_key', 'captcha_secret'];
+
     protected static function booted(): void
     {
         // Auto-generate embed_token on create (one-time, never rotates unless explicit regenerate)
