@@ -197,6 +197,32 @@ class Vendor extends Model
         return self::ROLE_LABELS[$role] ?? self::ROLE_LABELS[self::ROLE_PROCESSOR];
     }
 
+    /**
+     * Peran TENANT sebagai lawan dari peran pihak ketiga pada kegiatan yang sama.
+     *
+     * Kewajiban UU PDP mengikuti peran, dan peran itu berpasangan: kalau pihak
+     * ketiga memproses atas perintah kita, kitalah pengendalinya; sebaliknya
+     * kalau pihak ketiga yang menentukan tujuan dan cara pemrosesan, justru
+     * KITA yang jadi prosesor — dan kewajiban kita berbeda sama sekali. Pasangan
+     * ini ditaruh di sini supaya backend dan antarmuka tidak menyimpulkannya
+     * sendiri-sendiri.
+     *
+     * Subprosesor dipasangkan ke prosesor: bila pihak ketiga adalah subprosesor,
+     * kita berada di posisi prosesor yang mengalihdayakan sebagian pemrosesan.
+     */
+    public const ROLE_TENANT_COUNTERPART = [
+        self::ROLE_PROCESSOR => self::ROLE_CONTROLLER,
+        self::ROLE_CONTROLLER => self::ROLE_PROCESSOR,
+        self::ROLE_JOINT_CONTROLLER => self::ROLE_JOINT_CONTROLLER,
+        self::ROLE_SUB_PROCESSOR => self::ROLE_PROCESSOR,
+    ];
+
+    /** Peran tenant bila pihak ketiga berperan `$vendorRole`; null bila tak dikenali. */
+    public static function tenantRoleFor(?string $vendorRole): ?string
+    {
+        return self::ROLE_TENANT_COUNTERPART[$vendorRole] ?? null;
+    }
+
     public function organization()
     {
         return $this->belongsTo(Organization::class, 'org_id');

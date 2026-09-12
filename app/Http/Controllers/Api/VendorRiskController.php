@@ -79,9 +79,22 @@ class VendorRiskController extends Controller
                 },
             ])
             ->orderBy('created_at', 'desc')
-            ->get()
-            ->map(function ($vendor) {
+            ->get();
+
+        // Peran menurut UU PDP diambil dari pivot `ropa_vendor` — satu query
+        // agregat untuk seluruh baris, bukan per baris.
+        $peranPerVendor = $this->aggregateVendorRoles($orgId, $vendors->pluck('id')->all());
+
+        $vendors = $vendors
+            ->map(function ($vendor) use ($peranPerVendor) {
                 $pre = $vendor->preAssessments->first();
+                $peran = $peranPerVendor[$vendor->id] ?? [];
+                // Belum tertaut ke satu RoPA pun → pakai peran bawaan di baris
+                // pihak ketiganya, supaya tetap terkategori dan bukan "tidak
+                // diketahui" hanya karena pemetaan RoPA-nya belum dikerjakan.
+                $peranUtama = $peran
+                    ? (string) array_key_first(array_slice($peran, 0, 1, true))
+                    : Vendor::normalizeRole($vendor->type);
 
                 return [
                     'id' => $vendor->id,
@@ -109,10 +122,67 @@ class VendorRiskController extends Controller
                         'suggested_scope' => $pre->suggested_scope,
                         'final_scope' => $pre->final_scope,
                     ] : null,
+                    // Peran menurut UU PDP. `roles` memuat SELURUH peran beserta
+                    // jumlah kegiatannya, karena satu perusahaan bisa jadi
+                    // prosesor di satu kegiatan dan pengendali bersama di kegiatan
+                    // lain — memampatkannya jadi satu nilai akan menyesatkan.
+                    'roles' => $peran,
+                    'peran_utama' => $peranUtama,
+                    'peran_utama_label' => $peranUtama ? Vendor::roleLabel($peranUtama) : null,
+                    // Lawan perannya: inilah posisi KITA pada kegiatan itu.
+                    'peran_tenant' => Vendor::tenantRoleFor($peranUtama),
+                    'peran_tenant_label' => Vendor::tenantRoleFor($peranUtama)
+                        ? Vendor::roleLabel(Vendor::tenantRoleFor($peranUtama))
+                        : null,
+                    'terpetakan_di_ropa' => array_sum($peran),
                 ];
             });
 
-        return response()->json(['data' => $vendors]);
+        // Hitungan per peran untuk tab/penyaring di antarmuka.
+        $perPeran = [];
+        foreach (Vendor::ROLES as $r) {
+            $perPeran[$r] = $vendors->where('peran_utama', $r)->count();
+        }
+        $perPeran['belum_diketahui'] = $vendors->whereNull('peran_utama')->count();
+
+        return response()->json([
+            'data' => $vendors,
+            'meta' => ['per_peran' => $perPeran],
+        ]);
+    }
+
+    /**
+     * Peran tiap pihak ketiga menurut pivot `ropa_vendor`, satu query agregat.
+     *
+     * Diurutkan menurun berdasarkan jumlah kegiatan, sehingga peran yang paling
+     * sering dijalankan berada di depan dan bisa dipakai sebagai peran utama.
+     *
+     * @param  array<int, string>  $vendorIds
+     * @return array<string, array<string, int>> vendor_id => [peran => jumlah kegiatan]
+     */
+    private function aggregateVendorRoles(string $orgId, array $vendorIds): array
+    {
+        if (empty($vendorIds)) {
+            return [];
+        }
+
+        $rows = DB::table('ropa_vendor')
+            ->where('org_id', $orgId)
+            ->whereIn('vendor_id', $vendorIds)
+            ->selectRaw('vendor_id, role, count(*) as jumlah')
+            ->groupBy('vendor_id', 'role')
+            ->get();
+
+        $out = [];
+        foreach ($rows as $r) {
+            $out[$r->vendor_id][$r->role] = (int) $r->jumlah;
+        }
+        foreach ($out as $vendorId => $peran) {
+            arsort($peran);
+            $out[$vendorId] = $peran;
+        }
+
+        return $out;
     }
 
     private const RISK_LEVELS = ['low', 'medium', 'high', 'critical'];
