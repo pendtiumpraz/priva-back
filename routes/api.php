@@ -1302,6 +1302,13 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::post('/{id}/columns/apply-bulk', [DataDiscoveryController::class, 'applyColumnBulk'])->middleware('permission:data_discovery,write');
         Route::get('/{id}/ropa-links', [DataDiscoveryController::class, 'ropaLinks'])->middleware('permission:data_discovery,read');
 
+        // Pihak ketiga yang memegang sistem ini. Mengisi pivot yang dipakai
+        // modul Breach untuk menduga keterlibatan begitu sistem ditandai
+        // terdampak — jalur yang tetap bekerja walau sistemnya belum pernah
+        // ditautkan ke RoPA mana pun.
+        Route::get('/{id}/pihak-ketiga', [DataDiscoveryController::class, 'pihakKetiga'])->middleware('permission:data_discovery,read');
+        Route::put('/{id}/pihak-ketiga', [DataDiscoveryController::class, 'simpanPihakKetiga'])->middleware('permission:data_discovery,write');
+
         // Many-to-many RoPA pivot management
         Route::get('/{id}/ropas', [RopaLinkController::class, 'indexForInformationSystem'])->middleware('permission:data_discovery,read');
         Route::put('/{id}/ropas', [RopaLinkController::class, 'syncForInformationSystem'])->middleware('permission:data_discovery,write');

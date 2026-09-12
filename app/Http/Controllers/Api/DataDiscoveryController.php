@@ -10,6 +10,7 @@ use App\Models\LeakDetection;
 use App\Models\Organization;
 use App\Models\OrganizationApp;
 use App\Models\Ropa;
+use App\Models\Vendor;
 use App\Services\AiService;
 use App\Services\AiSpecificSearchService;
 use App\Services\ColumnAutoAssigner;
@@ -658,6 +659,135 @@ class DataDiscoveryController extends Controller
             'pivot_count' => $pivotRopas->count(),
             'inferred_count' => $inferredRopas->count(),
         ]]);
+    }
+
+    /**
+     * Pihak ketiga yang memegang / mengoperasikan sistem ini.
+     *
+     * Kaitan ini sebelumnya TIDAK ADA di skema: `information_systems.owner_id`
+     * adalah foreign key ke `users` (pemilik internal) dan `owner` sekadar teks
+     * bebas. Akibatnya "SaaS mana yang sebenarnya memegang data di sistem ini"
+     * tidak pernah bisa dijawab, kecuali sistemnya kebetulan sudah ditautkan ke
+     * sebuah RoPA.
+     *
+     * Dipakai modul Breach: begitu sistem ditandai terdampak pada sebuah
+     * insiden, daftar ini langsung menjadi dugaan keterlibatan pihak ketiga —
+     * satu-satunya jalur yang tetap bekerja untuk sistem yang belum pernah
+     * masuk RoPA mana pun.
+     */
+    public function pihakKetiga(Request $request, string $id)
+    {
+        $system = InformationSystem::where('org_id', $request->user()->org_id)->findOrFail($id);
+
+        return response()->json(['data' => [
+            'sistem' => ['id' => $system->id, 'name' => $system->name],
+            'pihak_ketiga' => $this->daftarPihakKetiga($system),
+        ]]);
+    }
+
+    /**
+     * Simpan daftar pihak ketiga pemegang sistem (kirim utuh, bukan selisih).
+     */
+    public function simpanPihakKetiga(Request $request, string $id)
+    {
+        $orgId = $request->user()->org_id;
+        $system = InformationSystem::where('org_id', $orgId)->findOrFail($id);
+
+        $data = $request->validate([
+            'pihak_ketiga' => 'present|array',
+            'pihak_ketiga.*.vendor_id' => 'required|uuid',
+            'pihak_ketiga.*.role' => 'nullable|string|max:32',
+            'pihak_ketiga.*.notes' => 'nullable|string|max:1000',
+        ]);
+
+        // Disaring ulang dengan org: id pihak ketiga dari badan permintaan tidak
+        // pernah dipercaya apa adanya.
+        $sah = Vendor::where('org_id', $orgId)
+            ->whereIn('id', collect($data['pihak_ketiga'])->pluck('vendor_id')->all())
+            ->pluck('id')->all();
+
+        $baris = [];
+        foreach ($data['pihak_ketiga'] as $p) {
+            if (! in_array($p['vendor_id'], $sah, true)) {
+                continue;
+            }
+            // Dikunci per vendor_id: pivotnya unik per (sistem, pihak ketiga),
+            // jadi kiriman ganda harus runtuh jadi satu — bukan menabrak
+            // batasan unik dan menggagalkan seluruh penyimpanan.
+            $baris[$p['vendor_id']] = [
+                'id' => (string) Str::uuid(),
+                'org_id' => $orgId,
+                'information_system_id' => $system->id,
+                'vendor_id' => $p['vendor_id'],
+                'role' => Vendor::normalizeRole($p['role'] ?? null) ?? Vendor::ROLE_PROCESSOR,
+                'notes' => $p['notes'] ?? null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+
+        // Diganti seluruhnya dalam satu transaksi. UI mengirim daftar utuh, jadi
+        // selisihnya tidak perlu dihitung; yang penting tidak ada keadaan
+        // setengah jadi bila penyisipannya gagal di tengah.
+        DB::transaction(function () use ($orgId, $system, $baris) {
+            DB::table('information_system_vendor')
+                ->where('org_id', $orgId)
+                ->where('information_system_id', $system->id)
+                ->delete();
+
+            if ($baris) {
+                DB::table('information_system_vendor')->insert(array_values($baris));
+            }
+        });
+
+        try {
+            AuditLog::create([
+                'module' => 'data_discovery',
+                'record_id' => $system->id,
+                'action' => 'third_parties_updated',
+                'user_name' => $request->user()->name ?? 'Unknown',
+                'user_role' => $request->user()->role ?? 'user',
+                'section' => 'pihak_ketiga_sistem',
+                'changes' => [
+                    'system_name' => $system->name,
+                    'jumlah' => count($baris),
+                    'vendor_ids' => array_keys($baris),
+                ],
+                'ip_address' => $request->ip(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Audit log pihak ketiga sistem gagal: '.$e->getMessage());
+        }
+
+        return response()->json([
+            'message' => 'Pihak ketiga pemegang sistem disimpan.',
+            'data' => [
+                'sistem' => ['id' => $system->id, 'name' => $system->name],
+                'pihak_ketiga' => $this->daftarPihakKetiga($system),
+            ],
+        ]);
+    }
+
+    /**
+     * Dibaca lewat relasi, bukan join mentah, supaya pihak ketiga yang sudah
+     * dihapus (soft delete) dan penyaring org ikut berlaku dengan sendirinya.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function daftarPihakKetiga(InformationSystem $system): array
+    {
+        return $system->vendors()
+            ->orderBy('vendors.name')
+            ->get(['vendors.id', 'vendors.name', 'vendors.country', 'vendors.risk_level'])
+            ->map(fn ($v) => [
+                'id' => $v->id,
+                'name' => $v->name,
+                'country' => $v->country,
+                'risk_level' => $v->risk_level,
+                'role' => $v->getRelationValue('pivot')->role,
+                'role_label' => Vendor::roleLabel($v->getRelationValue('pivot')->role),
+                'notes' => $v->getRelationValue('pivot')->notes,
+            ])->values()->all();
     }
 
     /**
