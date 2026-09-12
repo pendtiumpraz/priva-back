@@ -254,6 +254,68 @@ class ModuleCrudWriteCharacterizationTest extends TestCase
         $this->assertEqualsCanonicalizing([$r1['data']['id'], $r2['data']['id']], $tertaut);
     }
 
+    // ---------- Sinkronisasi pivot saat PEMBARUAN ----------
+    //
+    // Sisi update dikunci terpisah dari sisi create: sinkronisasinya memakai
+    // sync() yang MENGGANTI, bukan menambah, sehingga menghapus tautan dari
+    // wizard harus ikut melepas barisnya di pivot. Perilaku itu gampang hilang
+    // tanpa terasa kalau logikanya berpindah tempat.
+
+    public function test_sistem_terkait_tersinkron_ulang_saat_pembaruan(): void
+    {
+        $lama = InformationSystem::create(['org_id' => $this->org->id, 'name' => 'Core Banking', 'code' => 'CBS']);
+        $baru = InformationSystem::create(['org_id' => $this->org->id, 'name' => 'CRM', 'code' => 'CRM']);
+
+        $ropa = $this->buatRopa([
+            'wizard_data' => ['detail_pemrosesan' => ['sistem_terkait' => [$lama->id]]],
+        ]);
+
+        $this->putJson('/api/m/ropa/'.$ropa['data']['id'], [
+            'wizard_data' => ['detail_pemrosesan' => ['sistem_terkait' => [$baru->id]]],
+        ])->assertOk();
+
+        $this->assertSame(
+            [$baru->id],
+            DB::table('information_system_ropa')->where('ropa_id', $ropa['data']['id'])->pluck('information_system_id')->all(),
+            'sistem yang dihapus dari wizard harus ikut lepas dari pivot',
+        );
+    }
+
+    public function test_dpia_menautkan_ulang_ropa_saat_pembaruan(): void
+    {
+        $r1 = $this->buatRopa(['processing_activity' => 'Kegiatan Satu']);
+        $r2 = $this->buatRopa(['processing_activity' => 'Kegiatan Dua']);
+
+        $dpia = $this->postJson('/api/m/dpia', [
+            'description' => 'DPIA Marketing Stack',
+            'wizard_data' => ['koneksi_ropa' => ['connected_ropas' => [$r1['data']['id']]]],
+        ])->assertSuccessful()->json();
+
+        $this->putJson('/api/m/dpia/'.$dpia['data']['id'], [
+            'wizard_data' => ['koneksi_ropa' => ['connected_ropas' => [$r2['data']['id']]]],
+        ])->assertOk();
+
+        $this->assertSame(
+            [$r2['data']['id']],
+            DB::table('dpia_ropa')->where('dpia_id', $dpia['data']['id'])->pluck('ropa_id')->all(),
+        );
+    }
+
+    public function test_risiko_dihitung_ulang_saat_pembaruan(): void
+    {
+        // Dibuat terkunci pada 'low', lalu kuncinya dibuka saat pembaruan —
+        // kalkulator berhak menentukan lagi, dan jejaknya harus ikut diperbarui.
+        $ropa = $this->buatRopa(['risk_level' => 'low', 'risk_level_locked' => true]);
+
+        $this->putJson('/api/m/ropa/'.$ropa['data']['id'], [
+            'risk_level_locked' => false,
+            'wizard_data' => ['detail_pemrosesan' => ['entitas' => 'PT Baru']],
+        ])->assertOk();
+
+        $wizard = Ropa::find($ropa['data']['id'])->wizard_data ?? [];
+        $this->assertArrayHasKey('risk_triggers', $wizard, 'pembaruan ikut menuliskan ulang jejak perhitungan risiko');
+    }
+
     // ---------- Kunci penyuntingan ----------
 
     public function test_assign_group_terkunci_saat_status_bukan_in_progress(): void

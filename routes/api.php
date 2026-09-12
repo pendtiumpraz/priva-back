@@ -2314,7 +2314,11 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
 // =============================================
 // Public Partner API v1 (authenticated via X-Api-Key)
 // =============================================
-Route::prefix('v1')->middleware(AuthenticatePartnerApi::class)->group(function () {
+// 'api.tenant-db' menyusul SESUDAH auth kunci API — middleware grup dijalankan
+// sesuai urutan ditulis, dan ia membaca `api_org_id` yang baru ada setelah
+// kuncinya lolos. Tanpa ini, permintaan atas nama tenant BYODB yang sudah
+// terisolasi akan dilayani dari basis data platform.
+Route::prefix('v1')->middleware([AuthenticatePartnerApi::class, 'api.tenant-db'])->group(function () {
     // Breach Management
     Route::get('/breach/stats', [BreachApiController::class, 'stats']);
     Route::get('/breach', [BreachApiController::class, 'index']);
