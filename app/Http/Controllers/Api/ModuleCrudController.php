@@ -21,6 +21,8 @@ use App\Models\Vendor;
 use App\Services\ApprovalWorkflowDispatcher;
 use App\Services\AssessmentAutoTriggerService;
 use App\Services\EntitlementService;
+use App\Services\ModuleWrite\ModuleWriteContext;
+use App\Services\ModuleWrite\RopaDpiaWriter;
 use App\Services\NotificationService;
 use App\Services\PermissionService;
 use App\Services\RegistrationCodeService;
@@ -635,6 +637,46 @@ class ModuleCrudController extends Controller
         if ($denied = $this->checkPermission($request, $module, 'write')) {
             return $denied;
         }
+
+        // RoPA & DPIA: jalur tulisnya kini tinggal di RopaDpiaWriter, supaya
+        // penulis non-HTTP (kunci API mitra, impor massal, agen AI) memakai
+        // logika yang sama persis — bukan salinan yang cepat atau lambat
+        // menyimpang, sebagaimana sudah terjadi pada temuan F-03.
+        //
+        // Cabang ropa/dpia di dalam blok besar di bawah menjadi tidak terjangkau.
+        // Pembersihannya sengaja dipisah ke commit tersendiri, supaya commit ini
+        // bisa dibuktikan setara oleh uji karakterisasi yang tidak disentuh.
+        if (in_array($module, ['ropa', 'dpia'], true)) {
+            $ctx = ModuleWriteContext::fromRequest($request);
+            if (empty($ctx->orgId)) {
+                return response()->json(['message' => 'Organization ID is required'], 422);
+            }
+
+            try {
+                $hasil = app(RopaDpiaWriter::class)->create($module, $request->all(), $ctx);
+
+                return response()->json([
+                    'message' => 'Created',
+                    'data' => $hasil['record'],
+                    'auto_dpia_id' => $hasil['auto_dpia_id'],
+                    'auto_lia_id' => $hasil['auto_lia_id'],
+                    // Khusus DSR; untuk RoPA/DPIA memang selalu 0, sama seperti dulu.
+                    'auto_scope_count' => 0,
+                ], 201);
+            } catch (\Throwable $e) {
+                // \Throwable, bukan \Exception: \Error pun jangan sampai membuat
+                // Laravel merender pesan mentah ke klien saat APP_DEBUG=true.
+                \Log::error('ModuleCrud store error: '.$e->getMessage(), [
+                    'module' => $module,
+                    'trace' => $e->getTraceAsString(),
+                ]);
+
+                return response()->json([
+                    'message' => 'Gagal menyimpan data. Silakan coba lagi atau hubungi admin bila berlanjut.',
+                ], 500);
+            }
+        }
+
         try {
             $model = $this->getModel($module);
             $data = $request->all();

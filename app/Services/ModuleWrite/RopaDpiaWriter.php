@@ -1,0 +1,499 @@
+<?php
+
+namespace App\Services\ModuleWrite;
+
+use App\Models\AuditLog;
+use App\Models\Dpia;
+use App\Models\InformationSystem;
+use App\Models\Ropa;
+use App\Models\Vendor;
+use App\Services\AssessmentAutoTriggerService;
+use App\Services\NotificationService;
+use App\Services\RegistrationCodeService;
+use App\Services\RopaRiskCalculator;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+
+/**
+ * Jalur tulis RoPA & DPIA, lepas dari HTTP.
+ *
+ * Membuat RoPA bukan sekadar INSERT. Sekali tulis membawa sebelas akibat:
+ * penomoran (berbasis kategori, kode divisi, atau tahunan lintas tenant),
+ * perhitungan ulang risiko, percobaan ulang saat kode bentrok, tiga sinkronisasi
+ * pivot, jejak audit, notifikasi ke DPO dan penerima tugas, DPIA draf otomatis
+ * saat risiko tinggi, dan LIA draf otomatis untuk dasar hukum kepentingan sah.
+ *
+ * Selama ini semuanya tinggal di dalam ModuleCrudController dan bersandar pada
+ * `$request->user()`, sehingga penulis non-HTTP — kunci API mitra, impor massal,
+ * agen AI — tidak punya cara memakainya tanpa menyalin. Menyalinnya berarti dua
+ * salinan yang pasti menyimpang; temuan F-03 sudah menunjukkan bagaimana itu
+ * berakhir. Karena itu logikanya pindah ke sini utuh, dengan pelaku dibawa
+ * sebagai ModuleWriteContext.
+ *
+ * Kaidah yang dipertahankan apa adanya dari perilaku lama, dan sengaja tidak
+ * "dirapikan" sambil jalan:
+ *   - efek samping non-inti dibungkus try/catch dan hanya dicatat ke log.
+ *     Notifikasi gagal, DPIA otomatis gagal, atau LIA otomatis gagal TIDAK boleh
+ *     membatalkan penyimpanan record utamanya — bagi penggunanya itu tampak
+ *     seperti "simpan gagal" padahal datanya sudah benar;
+ *   - `applyRopaAutoRisk` berjalan SEBELUM pemeriksaan DPIA otomatis, dan
+ *     menimpa risk_level kiriman pemanggil kecuali risk_level_locked bernilai
+ *     benar. Urutan ini menentukan hasil, jadi tidak boleh ditukar.
+ */
+class RopaDpiaWriter
+{
+    public function __construct(
+        private ModuleCodeGenerator $codeGenerator,
+        private RegistrationCodeService $codes,
+    ) {}
+
+    /**
+     * @param  array<string, mixed>  $data  payload mentah (belum ber-org_id/created_by)
+     * @return array{record: Model, auto_dpia_id: ?string, auto_lia_id: ?string}
+     */
+    public function create(string $module, array $data, ModuleWriteContext $ctx): array
+    {
+        $model = $this->modelFor($module);
+
+        $data['org_id'] = $ctx->orgId;
+        $data['created_by'] = $ctx->actorUserId;
+
+        $data = $this->prepare($module, $data, $model, $ctx);
+        $record = $this->insertWithCodeRetry($module, $model, $data, $ctx);
+
+        $this->syncPivots($module, $record);
+        $this->writeCreateAudit($module, $record);
+        $this->notifyCreated($module, $record, $data);
+
+        $autoDpiaId = $this->spawnAutoDpia($module, $record, $data, $ctx);
+        $autoLiaId = $this->spawnAutoLia($module, $record, $ctx);
+
+        return [
+            'record' => $record,
+            'auto_dpia_id' => $autoDpiaId,
+            'auto_lia_id' => $autoLiaId,
+        ];
+    }
+
+    public function modelFor(string $module)
+    {
+        return $module === 'dpia' ? new Dpia : new Ropa;
+    }
+
+    // ---------- penyiapan data ----------
+
+    /** @param array<string, mixed> $data */
+    private function prepare(string $module, array $data, $model, ModuleWriteContext $ctx): array
+    {
+        if ($module === 'ropa') {
+            $divCode = $this->codeGenerator->divisionCodeForRopa($data, $ctx->orgId);
+            $data['registration_number'] = $data['registration_number'] ?? $this->codeGenerator->next(
+                'ROPA', $model, $ctx->orgId,
+                $data['category_id'] ?? null,
+                $data['custom_number'] ?? null,
+                $divCode,
+            );
+            // Harus sebelum pemeriksaan DPIA otomatis — hasilnya yang dibaca.
+            $data = $this->applyRopaAutoRisk($data);
+
+            return $data;
+        }
+
+        $data['registration_number'] = $data['registration_number'] ?? $this->codeGenerator->next(
+            'DPIA', $model, $ctx->orgId,
+            $data['category_id'] ?? null,
+            $data['custom_number'] ?? null,
+        );
+
+        return $data;
+    }
+
+    /**
+     * Hitung ulang tingkat risiko RoPA dari isian wizard, lalu simpan jejaknya.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public function applyRopaAutoRisk(array $data): array
+    {
+        try {
+            $wizard = $data['wizard_data'] ?? [];
+            if (! is_array($wizard)) {
+                $wizard = [];
+            }
+
+            $result = app(RopaRiskCalculator::class)->calculate($wizard);
+
+            $wizard['risk_triggers'] = [
+                'level' => $result['level'],
+                'triggers' => $result['triggers'],
+                'reasons' => $result['reasons'],
+                'computed_at' => now()->toIso8601String(),
+            ];
+            $data['wizard_data'] = $wizard;
+
+            $locked = filter_var($data['risk_level_locked'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            if (! $locked) {
+                $data['risk_level'] = $result['level'];
+            }
+        } catch (\Throwable $e) {
+            // Kegagalan kalkulator tidak boleh menghalangi penyimpanan — biarkan
+            // risk_level apa adanya dari pemanggil.
+            Log::warning('applyRopaAutoRisk failed, leaving risk_level untouched: '.$e->getMessage());
+        }
+
+        // Basis data yang belum menjalankan migrasi risk_level_locked akan
+        // melempar galat SQL yang muncul ke pengguna sebagai "simpan gagal".
+        if (array_key_exists('risk_level_locked', $data)) {
+            try {
+                if (! Schema::hasColumn('ropas', 'risk_level_locked')) {
+                    unset($data['risk_level_locked']);
+                }
+            } catch (\Throwable $e) {
+                unset($data['risk_level_locked']);
+            }
+        }
+
+        return $data;
+    }
+
+    // ---------- penyimpanan ----------
+
+    /**
+     * Dua create hampir bersamaan bisa menghitung nomor yang sama dari max+1.
+     * Saat bentrok, nomornya dihitung ulang lalu dicoba lagi (maksimal 3 kali).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function insertWithCodeRetry(string $module, $model, array $data, ModuleWriteContext $ctx)
+    {
+        $prefix = $module === 'dpia' ? 'DPIA' : 'ROPA';
+
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            try {
+                return $model->create($data);
+            } catch (QueryException $qe) {
+                $isDup = $qe->getCode() === '23000'
+                    || str_contains($qe->getMessage(), 'Duplicate entry')
+                    || str_contains($qe->getMessage(), 'UNIQUE constraint');
+                if ($isDup && $attempt < 2) {
+                    $data['registration_number'] = $this->codeGenerator->next($prefix, $model, $ctx->orgId);
+
+                    continue;
+                }
+                throw $qe;
+            }
+        }
+
+        throw new \RuntimeException('Gagal menghasilkan registration_number unik setelah 3 percobaan.');
+    }
+
+    // ---------- sinkronisasi pivot ----------
+
+    private function syncPivots(string $module, $record): void
+    {
+        if ($module === 'ropa') {
+            try {
+                $this->syncRopaInformationSystems($record);
+            } catch (\Throwable $e) {
+                Log::warning('syncRopaInformationSystems on create failed: '.$e->getMessage());
+            }
+            try {
+                $this->syncRopaVendors($record);
+            } catch (\Throwable $e) {
+                Log::warning('syncRopaVendors on create failed: '.$e->getMessage());
+            }
+
+            return;
+        }
+
+        try {
+            $this->syncDpiaRopas($record);
+        } catch (\Throwable $e) {
+            Log::warning('syncDpiaRopas on create failed: '.$e->getMessage());
+        }
+    }
+
+    /** Sinkron `information_system_ropa` dari wizard.detail_pemrosesan.sistem_terkait. */
+    public function syncRopaInformationSystems($ropa): void
+    {
+        $wizard = $ropa->wizard_data ?? [];
+        $section = $wizard['detail_pemrosesan'] ?? [];
+        $raw = $section['sistem_terkait'] ?? null;
+        if ($raw === null) {
+            return;
+        }
+
+        $ids = collect(is_array($raw) ? $raw : [])
+            ->map(fn ($v) => is_array($v) ? ($v['id'] ?? null) : (is_string($v) ? $v : null))
+            ->filter()->unique()->values()->all();
+
+        $valid = InformationSystem::whereIn('id', $ids)
+            ->where('org_id', $ropa->org_id)
+            ->pluck('id')->all();
+
+        $syncData = [];
+        foreach ($valid as $id) {
+            $syncData[$id] = ['org_id' => $ropa->org_id];
+        }
+        $ropa->informationSystems()->sync($syncData);
+    }
+
+    /**
+     * Sinkron `ropa_vendor` beserta PERAN tiap pihak ketiga.
+     *
+     * Dua sumber: `vendor_links[]` (membawa peran) dan `vendor_ids[]` (daftar
+     * UUID polos dari wizard lama/impor/AI, diperlakukan sebagai Prosesor —
+     * bagian wizard itu memang "pihak yang memproses").
+     */
+    public function syncRopaVendors($ropa): void
+    {
+        $section = ($ropa->wizard_data ?? [])['penggunaan_penyimpanan'] ?? [];
+        $links = $section['vendor_links'] ?? null;
+        $ids = $section['vendor_ids'] ?? null;
+        if ($links === null && $ids === null) {
+            return;
+        }
+
+        $rows = [];
+        foreach (is_array($links) ? $links : [] as $link) {
+            $id = is_array($link) ? ($link['id'] ?? null) : null;
+            if (! is_string($id) || $id === '') {
+                continue;
+            }
+            $shared = is_array($link['data_shared'] ?? null)
+                ? array_values(array_filter($link['data_shared'], 'is_string'))
+                : null;
+            $rows[$id] = [
+                'role' => Vendor::normalizeRole($link['role'] ?? null) ?? Vendor::ROLE_PROCESSOR,
+                'purpose' => is_string($link['purpose'] ?? null) ? mb_substr($link['purpose'], 0, 2000) : null,
+                // Dibiarkan array: pivot RopaVendor yang meng-encode lewat cast.
+                'data_shared' => $shared ?: null,
+                'contract_ref' => is_string($link['contract_ref'] ?? null) ? mb_substr($link['contract_ref'], 0, 255) : null,
+            ];
+        }
+        foreach (is_array($ids) ? $ids : [] as $id) {
+            if (is_string($id) && $id !== '' && ! isset($rows[$id])) {
+                $rows[$id] = ['role' => Vendor::ROLE_PROCESSOR, 'purpose' => null, 'data_shared' => null, 'contract_ref' => null];
+            }
+        }
+
+        // Hanya pihak ketiga milik org yang sama — tautan lintas tenant tidak pernah dibuat.
+        $valid = $rows
+            ? Vendor::whereIn('id', array_keys($rows))->where('org_id', $ropa->org_id)->pluck('id')->all()
+            : [];
+
+        $syncData = [];
+        foreach ($valid as $id) {
+            $syncData[$id] = $rows[$id] + ['org_id' => $ropa->org_id];
+        }
+        $ropa->vendors()->sync($syncData);
+    }
+
+    /** Sinkron `dpia_ropa` dari wizard.koneksi_ropa.connected_ropas (+ induk warisan). */
+    public function syncDpiaRopas($dpia): void
+    {
+        $wizard = $dpia->wizard_data ?? [];
+        $section = $wizard['koneksi_ropa'] ?? [];
+        // Catatan: versi lama memeriksa `! is_array($ids)` di sini. Cabang itu
+        // tidak pernah jalan — array_filter selalu mengembalikan array — jadi
+        // tidak ikut dibawa. Daftar kosong sudah ditangani sync() di bawah.
+        $ids = array_filter(array_unique($section['connected_ropas'] ?? []));
+
+        $valid = Ropa::whereIn('id', $ids)
+            ->where('org_id', $dpia->org_id)
+            ->pluck('id')->all();
+
+        if ($dpia->ropa_id && ! in_array($dpia->ropa_id, $valid, true)) {
+            $exists = Ropa::where('id', $dpia->ropa_id)->where('org_id', $dpia->org_id)->exists();
+            if ($exists) {
+                $valid[] = $dpia->ropa_id;
+            }
+        }
+
+        $syncData = [];
+        foreach ($valid as $id) {
+            $syncData[$id] = ['org_id' => $dpia->org_id];
+        }
+        $dpia->ropas()->sync($syncData);
+    }
+
+    // ---------- audit & notifikasi ----------
+
+    private function writeCreateAudit(string $module, $record): void
+    {
+        try {
+            AuditLog::log($module, $record->id, 'created', [
+                'registration_number' => $record->registration_number ?? null,
+            ], 'system');
+        } catch (\Throwable $e) {
+            Log::warning('Audit log failed: '.$e->getMessage());
+        }
+    }
+
+    /** @param array<string, mixed> $data */
+    private function notifyCreated(string $module, $record, array $data): void
+    {
+        $meta = [
+            'ropa' => ['label' => 'RoPA', 'sev' => 'low'],
+            'dpia' => ['label' => 'DPIA', 'sev' => 'medium'],
+        ][$module] ?? null;
+
+        try {
+            if ($meta) {
+                $code = $record->registration_number ?? '';
+                NotificationService::dispatch(
+                    kind: 'info',
+                    severity: $meta['sev'],
+                    module: $module,
+                    type: "{$module}.created",
+                    recipient: 'role:dpo,admin',
+                    orgId: $record->org_id,
+                    title: "{$meta['label']} baru dibuat".($code ? ": {$code}" : ''),
+                    body: $record->processing_activity ?? $record->description ?? '',
+                    actionUrl: "/{$module}/{$record->id}",
+                    metadata: ['record_id' => $record->id]
+                );
+            }
+
+            if (! empty($data['assignees']) && is_array($data['assignees'])) {
+                $label = $meta['label'] ?? strtoupper($module);
+                foreach ($data['assignees'] as $uid) {
+                    NotificationService::dispatch(
+                        kind: 'info',
+                        severity: 'low',
+                        module: $module,
+                        type: "{$module}.assigned",
+                        recipient: 'user:'.$uid,
+                        orgId: $record->org_id,
+                        title: "{$label} {$record->registration_number} di-assign ke Anda",
+                        body: $record->processing_activity ?? $record->description ?? '',
+                        actionUrl: "/{$module}/{$record->id}",
+                        metadata: ['record_id' => $record->id]
+                    );
+                }
+            }
+        } catch (\Throwable $e) {
+            // \Throwable, bukan \Exception: \Error dari provider yang salah
+            // konfigurasi (AI/SMTP/Telegram) tidak boleh menggagalkan create.
+            Log::warning('Notification dispatch failed on create: '.$e->getMessage());
+        }
+    }
+
+    // ---------- pemicu otomatis ----------
+
+    /**
+     * RoPA berisiko tinggi menumbuhkan DPIA draf yang mewarisi penugasan induknya.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function spawnAutoDpia(string $module, $record, array $data, ModuleWriteContext $ctx): ?string
+    {
+        if ($module !== 'ropa' || ($data['risk_level'] ?? '') !== 'high') {
+            return null;
+        }
+
+        try {
+            $dpiaModel = new Dpia;
+            if ($dpiaModel->where('ropa_id', $record->id)->first()) {
+                return null;
+            }
+
+            $ropaWiz = $data['wizard_data'] ?? [];
+            $dpoTeam = $ropaWiz['dpo_team'] ?? [];
+
+            $autoDpia = $this->codes->createWithRetry($dpiaModel, [
+                'org_id' => $ctx->orgId,
+                'category_id' => $data['category_id'] ?? null,
+                'registration_number' => $this->codeGenerator->next('DPIA', $dpiaModel, $ctx->orgId, $data['category_id'] ?? null),
+                'ropa_id' => $record->id,
+                'risk_level' => 'high',
+                'status' => 'draft',
+                'description' => 'Auto-generated dari RoPA high-risk: '.($data['processing_activity'] ?? ''),
+                'wizard_data' => [
+                    'informasi_dpia' => [
+                        'description' => $data['processing_activity'] ?? '',
+                        'pic_name' => $dpoTeam['pic_name'] ?? '',
+                        'dpo_name' => $dpoTeam['dpo_name'] ?? '',
+                        'dpo_email' => $dpoTeam['dpo_email'] ?? '',
+                        'dpo_phone' => $dpoTeam['dpo_phone'] ?? '',
+                    ],
+                    'koneksi_ropa' => ['connected_ropas' => [$record->id]],
+                    'potensi_risiko' => [],
+                ],
+                'risk_assessment' => ['likelihood' => 0, 'impact' => 0, 'risks' => []],
+                'mitigation_measures' => [],
+                'created_by' => $ctx->actorUserId,
+                'assign_group' => $data['assign_group'] ?? null,
+                'assignees' => $data['assignees'] ?? [],
+            ], 'registration_number', fn () => $this->codeGenerator->next('DPIA', $dpiaModel, $ctx->orgId));
+
+            $this->notifyAutoDpia($autoDpia, $record, (array) ($data['assignees'] ?? []));
+
+            return $autoDpia->id;
+        } catch (\Throwable $e) {
+            Log::warning('Auto-DPIA on RoPA store failed (non-fatal): '.$e->getMessage());
+
+            return null;
+        }
+    }
+
+    /** @param array<int, mixed> $assignees */
+    private function notifyAutoDpia($autoDpia, $record, array $assignees): void
+    {
+        foreach ($assignees as $assigneeId) {
+            try {
+                NotificationService::dispatch(
+                    kind: 'info',
+                    severity: 'medium',
+                    module: 'dpia',
+                    type: 'dpia.assigned',
+                    recipient: 'user:'.$assigneeId,
+                    orgId: $record->org_id,
+                    title: "DPIA {$autoDpia->registration_number} di-assign ke Anda",
+                    body: 'DPIA otomatis dari RoPA high-risk '.($record->registration_number ?? '').' — assignment mengikuti RoPA.',
+                    actionUrl: "/dpia/{$autoDpia->id}",
+                    metadata: ['record_id' => $autoDpia->id, 'ropa_id' => $record->id]
+                );
+            } catch (\Throwable $e) {
+                Log::warning('Auto-DPIA assignee notification failed: '.$e->getMessage());
+            }
+        }
+
+        try {
+            NotificationService::dispatch(
+                kind: 'warning',
+                severity: 'high',
+                module: 'dpia',
+                type: 'dpia.auto_created',
+                recipient: 'role:dpo',
+                orgId: $record->org_id,
+                title: "⚠️ DPIA otomatis: {$autoDpia->registration_number}",
+                body: "Dibuat dari RoPA high-risk {$record->registration_number} — review diperlukan.",
+                actionUrl: "/dpia/{$autoDpia->id}",
+                metadata: ['record_id' => $autoDpia->id, 'ropa_id' => $record->id]
+            );
+        } catch (\Throwable $e) {
+            Log::warning('DPIA auto-create notification failed: '.$e->getMessage());
+        }
+    }
+
+    /** RoPA berdasar kepentingan sah menumbuhkan LIA draf. */
+    private function spawnAutoLia(string $module, $record, ModuleWriteContext $ctx): ?string
+    {
+        if ($module !== 'ropa') {
+            return null;
+        }
+
+        try {
+            return app(AssessmentAutoTriggerService::class)
+                ->fromRopa($record, $ctx->actorUserId)?->id;
+        } catch (\Throwable $e) {
+            Log::warning('Auto-LIA on RoPA store failed (non-fatal): '.$e->getMessage());
+
+            return null;
+        }
+    }
+}
