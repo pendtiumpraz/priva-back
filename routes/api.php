@@ -83,6 +83,7 @@ use App\Http\Controllers\Api\NotificationPreferenceController;
 use App\Http\Controllers\Api\OrganizationAppController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PentestReportController;
+use App\Http\Controllers\Api\PetaKoneksiController;
 use App\Http\Controllers\Api\PiiPatternRuleController;
 use App\Http\Controllers\Api\PlatformConfigController;
 use App\Http\Controllers\Api\PlatformIncidentController;
@@ -664,6 +665,15 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // =============================================
     // RoPA — DPO Approval Workflow
     // =============================================
+    // Peta koneksi: seluruh record satu modul, atau satu record beserta
+    // tetangganya. Izin diperiksa DI DALAM controller karena modulnya dinamis
+    // di URL sehingga `permission:` tidak bisa dipasang sebagai middleware.
+    // Rute statis didaftarkan lebih dulu agar tidak tertangkap '{module}'.
+    Route::get('/peta-koneksi/modul-tersedia', [PetaKoneksiController::class, 'supported']);
+    Route::get('/peta-koneksi/{module}', [PetaKoneksiController::class, 'module']);
+    Route::get('/peta-koneksi/{module}/{id}', [PetaKoneksiController::class, 'record'])
+        ->where('id', '[0-9a-fA-F-]{36}');
+
     // Tinjauan & pemusnahan masa retensi (UU PDP Pasal 40–42, PP 33 Pasal 80).
     // Didaftarkan SEBELUM grup 'ropa/{id}' supaya '/retensi/jatuh-tempo' tidak
     // tertangkap sebagai id.
