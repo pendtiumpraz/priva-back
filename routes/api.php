@@ -133,6 +133,7 @@ use App\Http\Controllers\Api\TriageQuestionController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\V1\BreachApiController;
 use App\Http\Controllers\Api\V1\ConsentApiV1Controller;
+use App\Http\Controllers\Api\V1\DpiaApiV1Controller;
 use App\Http\Controllers\Api\V1\DsrApiV1Controller;
 use App\Http\Controllers\Api\V1\RopaApiV1Controller;
 use App\Http\Controllers\Api\V1\ThirdPartyApiV1Controller;
@@ -2308,6 +2309,15 @@ Route::prefix('v1')->group(function () {
         ->middleware(AuthenticatePartnerApi::class.':ropa.read');
     Route::get('/ropa/{id}', [RopaApiV1Controller::class, 'show'])
         ->middleware(AuthenticatePartnerApi::class.':ropa.read');
+
+    // DPIA — baca saja (lihat catatan di DpiaApiV1Controller). '/dpia/stats'
+    // didaftarkan lebih dulu supaya tidak tertangkap '/dpia/{id}'.
+    Route::get('/dpia/stats', [DpiaApiV1Controller::class, 'stats'])
+        ->middleware(AuthenticatePartnerApi::class.':dpia.read');
+    Route::get('/dpia', [DpiaApiV1Controller::class, 'index'])
+        ->middleware(AuthenticatePartnerApi::class.':dpia.read');
+    Route::get('/dpia/{id}', [DpiaApiV1Controller::class, 'show'])
+        ->middleware(AuthenticatePartnerApi::class.':dpia.read');
 });
 
 // =============================================
