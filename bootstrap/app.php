@@ -9,8 +9,10 @@ use App\Http\Middleware\EnsureLmsEntitled;
 use App\Http\Middleware\EnsureModuleEntitled;
 use App\Http\Middleware\InitializeTenantDatabase;
 use App\Http\Middleware\PublicAssessmentTokenMiddleware;
+use App\Http\Middleware\PublicEmbedTokenMiddleware;
 use App\Http\Middleware\PublicHoldingAssessmentTokenMiddleware;
 use App\Http\Middleware\PublicPreAssessmentTokenMiddleware;
+use App\Http\Middleware\PublicShareLinkTokenMiddleware;
 use App\Http\Middleware\PublicVendorContractTokenMiddleware;
 use App\Http\Middleware\PublicVendorRopaTokenMiddleware;
 use App\Http\Middleware\RootOnly;
@@ -51,6 +53,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'public-vendor-ropa-token' => PublicVendorRopaTokenMiddleware::class,
             // Public unggah kontrak — dipakai bila perusahaan tidak memegang berkasnya.
             'public-vendor-contract-token' => PublicVendorContractTokenMiddleware::class,
+            // Embed publik RoPA/DPIA — hanya baca, dikendalikan pencabutan token.
+            'public-embed-token' => PublicEmbedTokenMiddleware::class,
+            // Tautan satu dokumen ke lembaga — dijaga kata sandi, jatah kunjungan terbatas.
+            'public-share-link' => PublicShareLinkTokenMiddleware::class,
             // Per-user rate limit khusus endpoint AI — N panggilan per menit
             // per user (default 20, configurable di system_settings).
             'ai-throttle' => AiCallRateLimit::class,

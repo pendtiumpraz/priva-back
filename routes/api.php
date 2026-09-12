@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\AssessmentsController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AutomationController;
 use App\Http\Controllers\Api\AvatarChatController;
+use App\Http\Controllers\Api\BerbagiPublikController;
 use App\Http\Controllers\Api\BreachReportController;
 use App\Http\Controllers\Api\BreachThirdPartyController;
 use App\Http\Controllers\Api\ConnectionMapController;
@@ -58,6 +59,8 @@ use App\Http\Controllers\Api\DsrPublicController;
 use App\Http\Controllers\Api\DsrRequestScopeController;
 use App\Http\Controllers\Api\DsrSqlPackController;
 use App\Http\Controllers\Api\DsrVerificationController;
+use App\Http\Controllers\Api\EmbedPublikController;
+use App\Http\Controllers\Api\EmbedTokenController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\FeatureRequestController;
 use App\Http\Controllers\Api\GapAssessmentController;
@@ -92,6 +95,7 @@ use App\Http\Controllers\Api\PraAsesmenPublikController;
 use App\Http\Controllers\Api\ProcessingCategoryController;
 use App\Http\Controllers\Api\PublicLandingController;
 use App\Http\Controllers\Api\RaciTemplateController;
+use App\Http\Controllers\Api\RecordShareLinkController;
 use App\Http\Controllers\Api\RegulationController;
 use App\Http\Controllers\Api\RetentionPolicyController;
 use App\Http\Controllers\Api\RiskTreatmentPlanController;
@@ -859,6 +863,38 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::get('/template', [VendorCsvImportController::class, 'template'])->middleware('permission:vendor_risk,read');
         Route::post('/preview', [VendorCsvImportController::class, 'preview'])->middleware('permission:vendor_risk,write');
         Route::post('/commit', [VendorCsvImportController::class, 'commit'])->middleware('permission:vendor_risk,write');
+    });
+
+    // Tautan embed (daftar terkurasi untuk iframe) dan tautan dokumen ke lembaga
+    // (satu record, dijaga kata sandi). Modul ditulis eksplisit per grup — bukan
+    // parameter rute — supaya gerbang izinnya benar-benar menjaga modul itu:
+    // kalau modul datang dari payload, pemegang hak tulis RoPA bisa menerbitkan
+    // tautan DPIA. Menerbitkan tautan = membuka data tanpa login, jadi haknya
+    // disamakan dengan hak TULIS, bukan hak baca.
+    Route::prefix('ropa/tautan-embed')->group(function () {
+        Route::get('/', [EmbedTokenController::class, 'index'])->defaults('module', 'ropa')->middleware('permission:ropa,read');
+        Route::post('/', [EmbedTokenController::class, 'store'])->defaults('module', 'ropa')->middleware('permission:ropa,write');
+        Route::post('/{id}/rotasi', [EmbedTokenController::class, 'rotate'])->defaults('module', 'ropa')->middleware('permission:ropa,write');
+        Route::post('/{id}/cabut', [EmbedTokenController::class, 'revoke'])->defaults('module', 'ropa')->middleware('permission:ropa,write');
+    });
+    Route::prefix('dpia/tautan-embed')->group(function () {
+        Route::get('/', [EmbedTokenController::class, 'index'])->defaults('module', 'dpia')->middleware('permission:dpia,read');
+        Route::post('/', [EmbedTokenController::class, 'store'])->defaults('module', 'dpia')->middleware('permission:dpia,write');
+        Route::post('/{id}/rotasi', [EmbedTokenController::class, 'rotate'])->defaults('module', 'dpia')->middleware('permission:dpia,write');
+        Route::post('/{id}/cabut', [EmbedTokenController::class, 'revoke'])->defaults('module', 'dpia')->middleware('permission:dpia,write');
+    });
+
+    Route::prefix('ropa/tautan-lembaga')->group(function () {
+        Route::get('/', [RecordShareLinkController::class, 'index'])->defaults('module', 'ropa')->middleware('permission:ropa,read');
+        Route::post('/', [RecordShareLinkController::class, 'store'])->defaults('module', 'ropa')->middleware('permission:ropa,write');
+        Route::post('/{id}/rotasi', [RecordShareLinkController::class, 'rotate'])->defaults('module', 'ropa')->middleware('permission:ropa,write');
+        Route::post('/{id}/cabut', [RecordShareLinkController::class, 'revoke'])->defaults('module', 'ropa')->middleware('permission:ropa,write');
+    });
+    Route::prefix('dpia/tautan-lembaga')->group(function () {
+        Route::get('/', [RecordShareLinkController::class, 'index'])->defaults('module', 'dpia')->middleware('permission:dpia,read');
+        Route::post('/', [RecordShareLinkController::class, 'store'])->defaults('module', 'dpia')->middleware('permission:dpia,write');
+        Route::post('/{id}/rotasi', [RecordShareLinkController::class, 'rotate'])->defaults('module', 'dpia')->middleware('permission:dpia,write');
+        Route::post('/{id}/cabut', [RecordShareLinkController::class, 'revoke'])->defaults('module', 'dpia')->middleware('permission:dpia,write');
     });
 
     Route::prefix('vendor-ropas')->group(function () {
@@ -2318,6 +2354,25 @@ Route::prefix('v1')->group(function () {
         ->middleware(AuthenticatePartnerApi::class.':dpia.read');
     Route::get('/dpia/{id}', [DpiaApiV1Controller::class, 'show'])
         ->middleware(AuthenticatePartnerApi::class.':dpia.read');
+});
+
+// =============================================
+// Embed publik (iframe) — daftar terkurasi, HANYA baca.
+// Middleware menolak metode selain GET di lapisannya sendiri, supaya rute baru
+// di grup ini tidak bisa tanpa sengaja membuka jalur tulis.
+// =============================================
+Route::prefix('embed-publik/{token}')->middleware(['throttle:api', 'public-embed-token'])->group(function () {
+    Route::get('/', [EmbedPublikController::class, 'config']);
+    Route::get('/data', [EmbedPublikController::class, 'data']);
+});
+
+// =============================================
+// Tautan dokumen ke lembaga — satu RoPA/DPIA, dijaga kata sandi, jatah
+// kunjungan terbatas dan mencabut diri sendiri saat habis.
+// =============================================
+Route::prefix('berbagi-publik/{token}')->middleware(['throttle:api', 'public-share-link'])->group(function () {
+    Route::get('/', [BerbagiPublikController::class, 'info']);
+    Route::post('/buka', [BerbagiPublikController::class, 'buka']);
 });
 
 // =============================================
