@@ -17,9 +17,7 @@ use App\Models\ModuleCustomField;
 use App\Models\Organization;
 use App\Models\ProcessingCategory;
 use App\Models\Ropa;
-use App\Models\Vendor;
 use App\Services\ApprovalWorkflowDispatcher;
-use App\Services\AssessmentAutoTriggerService;
 use App\Services\EntitlementService;
 use App\Services\ModuleWrite\ModuleWriteContext;
 use App\Services\ModuleWrite\ModuleWriteRejected;
@@ -27,11 +25,9 @@ use App\Services\ModuleWrite\RopaDpiaWriter;
 use App\Services\NotificationService;
 use App\Services\PermissionService;
 use App\Services\RegistrationCodeService;
-use App\Services\RopaRiskCalculator;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Schema;
 
 class ModuleCrudController extends Controller
 {
@@ -105,44 +101,6 @@ class ModuleCrudController extends Controller
      * - With category + custom number: `ROPA-HR-PAY-001` — custom_number
      *   is inserted as an extra segment; category counter still advances.
      */
-    /**
-     * Resolve division code untuk RoPA registration number prefix.
-     * Sumber prioritas:
-     *   1. wizard_data.detail_pemrosesan.divisi_penanggung_jawab → cari
-     *      Department by name + ambil .code (mis. "HR Division" → "HR").
-     *   2. wizard_data.detail_pemrosesan.divisi (legacy single).
-     *   3. column `division` di payload (legacy lebih lama).
-     * Return null kalau tidak ada Department yang match (atau code-nya kosong),
-     * sehingga nextCode fallback ke legacy ROPA-YYYY-NNN.
-     */
-    private function resolveDivisionCodeForRopa(array $data, ?string $orgId): ?string
-    {
-        if (! $orgId) {
-            return null;
-        }
-        $wiz = $data['wizard_data'] ?? null;
-        $wiz = is_array($wiz) ? $wiz : (is_string($wiz) ? (json_decode($wiz, true) ?: []) : []);
-        $detail = $wiz['detail_pemrosesan'] ?? [];
-        $candidates = [
-            $detail['divisi_penanggung_jawab'] ?? null,
-            $detail['divisi'] ?? null,
-            $data['division'] ?? null,
-        ];
-        foreach ($candidates as $name) {
-            if (! is_string($name) || trim($name) === '') {
-                continue;
-            }
-            $dept = Department::where('org_id', $orgId)
-                ->where('name', $name)
-                ->first();
-            if ($dept && ! empty($dept->code)) {
-                return (string) $dept->code;
-            }
-        }
-
-        return null;
-    }
-
     private function nextCode(string $prefix, $model, string $orgId, ?string $categoryId = null, ?string $customNumber = null, ?string $divisionCode = null): string
     {
         $year = date('Y');
@@ -204,21 +162,6 @@ class ModuleCrudController extends Controller
     }
 
     /**
-     * Create sebuah record yang punya kolom kode unik (registration_number /
-     * request_id / dst) dengan retry pada collision. Dipakai oleh jalur
-     * auto-create (mis. auto-DPIA dari RoPA high-risk) yang TIDAK lewat
-     * store() sehingga tidak dapat proteksi retry di sana.
-     *
-     * `$codeField` = nama kolom kode; `$regen` = closure yang menghitung kode
-     * baru saat collision (dipanggil ulang tiap attempt). Melempar kembali
-     * exception non-duplicate atau setelah 3 attempt gagal.
-     */
-    private function createWithCodeRetry($model, array $data, string $codeField, callable $regen)
-    {
-        return app(RegistrationCodeService::class)->createWithRetry($model, $data, $codeField, $regen);
-    }
-
-    /**
      * RoPA per-user/divisi access scope. Non-admin/non-DPO hanya lihat RoPA:
      *   (a) assign_group='(All Group)' atau null — terbuka untuk semua user
      *       di tenant yang sama (tenant boundary tetap via org_id),
@@ -257,31 +200,6 @@ class ModuleCrudController extends Controller
      */
     public const ASSIGN_DIV_DELIM = ' | ';
 
-    /**
-     * Tambahkan klausa orWhere yang mencocokkan $deptName pada `assign_group`
-     * baik sebagai nilai tunggal (warisan single-division) MAUPUN sebagai salah
-     * satu elemen dari daftar multi-divisi yang di-join ' | '.
-     *
-     * Anchored pada delimiter ' | ' supaya tidak ada false positive substring
-     * (mis. 'HR' tidak match 'HRD'):
-     *   - exact            : assign_group = 'HR'
-     *   - awal daftar      : assign_group LIKE 'HR | %'
-     *   - akhir daftar     : assign_group LIKE '% | HR'
-     *   - tengah daftar    : assign_group LIKE '% | HR | %'
-     *
-     * Karakter wildcard LIKE ('%', '_') di-escape supaya nama divisi yang
-     * mengandungnya tidak melebar.
-     */
-    private static function applyDivisionMatch($w, string $deptName): void
-    {
-        $d = self::ASSIGN_DIV_DELIM;
-        $esc = addcslashes($deptName, '%_\\');
-        $w->orWhere('assign_group', $deptName)
-            ->orWhere('assign_group', 'like', $esc.$d.'%')
-            ->orWhere('assign_group', 'like', '%'.$d.$esc)
-            ->orWhere('assign_group', 'like', '%'.$d.$esc.$d.'%');
-    }
-
     private function getQuery(Request $request, string $module)
     {
         $model = $this->getModel($module);
@@ -304,51 +222,6 @@ class ModuleCrudController extends Controller
      * Honors risk_level_locked — if true, user-set level is preserved but
      * the triggers/reasons are still recorded for transparency.
      */
-    private function applyRopaAutoRisk(array $data): array
-    {
-        try {
-            $wizard = $data['wizard_data'] ?? [];
-            if (! is_array($wizard)) {
-                $wizard = [];
-            }
-
-            $result = app(RopaRiskCalculator::class)->calculate($wizard);
-
-            $wizard['risk_triggers'] = [
-                'level' => $result['level'],
-                'triggers' => $result['triggers'],
-                'reasons' => $result['reasons'],
-                'computed_at' => now()->toIso8601String(),
-            ];
-            $data['wizard_data'] = $wizard;
-
-            $locked = filter_var($data['risk_level_locked'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            if (! $locked) {
-                $data['risk_level'] = $result['level'];
-            }
-        } catch (\Throwable $e) {
-            // Calculator failure must never block the save — keep whatever
-            // risk_level the caller submitted (or leave unchanged).
-            \Log::warning('applyRopaAutoRisk failed, leaving risk_level untouched: '.$e->getMessage());
-        }
-
-        // Defensive: drop risk_level_locked if the column doesn't exist yet
-        // on the deployed DB (migration 2026_04_22_000005 not run). Mass-
-        // assigning an unknown column bubbles a SQL error that surfaces as
-        // "save ropa gagal".
-        if (array_key_exists('risk_level_locked', $data)) {
-            try {
-                if (! Schema::hasColumn('ropas', 'risk_level_locked')) {
-                    unset($data['risk_level_locked']);
-                }
-            } catch (\Throwable $e) {
-                // If even the schema check fails, strip the field to stay safe.
-                unset($data['risk_level_locked']);
-            }
-        }
-
-        return $data;
-    }
 
     /**
      * Keep `linked_ropa_ids` (array) and legacy `linked_ropa_id` (single FK)
@@ -365,68 +238,12 @@ class ModuleCrudController extends Controller
      * Sync DPIA's dpia_ropa pivot from wizard_data.koneksi_ropa.connected_ropas.
      * Idempotent — replaces (any RoPA removed from wizard is detached too).
      */
-    private function syncDpiaRopas($dpia): void
-    {
-        $wizard = $dpia->wizard_data ?? [];
-        $section = $wizard['koneksi_ropa'] ?? [];
-        $ids = array_filter(array_unique($section['connected_ropas'] ?? []));
-        if (! is_array($ids)) {
-            return;
-        }
-
-        $valid = Ropa::whereIn('id', $ids)
-            ->where('org_id', $dpia->org_id)
-            ->pluck('id')->all();
-
-        // Include legacy single ropa_id if set, so it appears in pivot too
-        if ($dpia->ropa_id && ! in_array($dpia->ropa_id, $valid, true)) {
-            $exists = Ropa::where('id', $dpia->ropa_id)->where('org_id', $dpia->org_id)->exists();
-            if ($exists) {
-                $valid[] = $dpia->ropa_id;
-            }
-        }
-
-        $syncData = [];
-        foreach ($valid as $id) {
-            $syncData[$id] = ['org_id' => $dpia->org_id];
-        }
-        $dpia->ropas()->sync($syncData);
-    }
 
     /**
      * Sync RoPA's information_system_ropa pivot from wizard_data.detail_pemrosesan.sistem_terkait.
      * Idempotent — sync REPLACES (any system removed from wizard is detached too).
      * No-op if no sistem_terkait array provided.
      */
-    private function syncRopaInformationSystems($ropa): void
-    {
-        $wizard = $ropa->wizard_data ?? [];
-        $section = $wizard['detail_pemrosesan'] ?? [];
-        $raw = $section['sistem_terkait'] ?? null;
-        if ($raw === null) {
-            return;
-        }
-
-        // Normalize: array of UUIDs OR array of objects {id: ...}
-        $ids = collect(is_array($raw) ? $raw : [])
-            ->map(fn ($v) => is_array($v) ? ($v['id'] ?? null) : (is_string($v) ? $v : null))
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
-
-        // Verify all belong to same org
-        $valid = InformationSystem::whereIn('id', $ids)
-            ->where('org_id', $ropa->org_id)
-            ->pluck('id')
-            ->all();
-
-        $syncData = [];
-        foreach ($valid as $id) {
-            $syncData[$id] = ['org_id' => $ropa->org_id];
-        }
-        $ropa->informationSystems()->sync($syncData);
-    }
 
     /**
      * Sync RoPA ↔ pihak ketiga (pivot `ropa_vendor`) dari wizard bagian
@@ -440,50 +257,6 @@ class ModuleCrudController extends Controller
      * Idempotent: sync() melepas tautan yang dihapus dari wizard. No-op bila
      * kedua kunci tidak ada, supaya update parsial tidak menghapus tautan.
      */
-    private function syncRopaVendors($ropa): void
-    {
-        $section = ($ropa->wizard_data ?? [])['penggunaan_penyimpanan'] ?? [];
-        $links = $section['vendor_links'] ?? null;
-        $ids = $section['vendor_ids'] ?? null;
-        if ($links === null && $ids === null) {
-            return;
-        }
-
-        $rows = [];
-        foreach (is_array($links) ? $links : [] as $link) {
-            $id = is_array($link) ? ($link['id'] ?? null) : null;
-            if (! is_string($id) || $id === '') {
-                continue;
-            }
-            $shared = is_array($link['data_shared'] ?? null)
-                ? array_values(array_filter($link['data_shared'], 'is_string'))
-                : null;
-            $rows[$id] = [
-                'role' => Vendor::normalizeRole($link['role'] ?? null) ?? Vendor::ROLE_PROCESSOR,
-                'purpose' => is_string($link['purpose'] ?? null) ? mb_substr($link['purpose'], 0, 2000) : null,
-                // Array dibiarkan apa adanya: sync() melewati pivot RopaVendor,
-                // jadi cast 'array' yang meng-encode-nya (encode manual = ganda).
-                'data_shared' => $shared ?: null,
-                'contract_ref' => is_string($link['contract_ref'] ?? null) ? mb_substr($link['contract_ref'], 0, 255) : null,
-            ];
-        }
-        foreach (is_array($ids) ? $ids : [] as $id) {
-            if (is_string($id) && $id !== '' && ! isset($rows[$id])) {
-                $rows[$id] = ['role' => Vendor::ROLE_PROCESSOR, 'purpose' => null, 'data_shared' => null, 'contract_ref' => null];
-            }
-        }
-
-        // Hanya pihak ketiga milik org yang sama — tautan lintas tenant tidak pernah dibuat.
-        $valid = $rows
-            ? Vendor::whereIn('id', array_keys($rows))->where('org_id', $ropa->org_id)->pluck('id')->all()
-            : [];
-
-        $syncData = [];
-        foreach ($valid as $id) {
-            $syncData[$id] = $rows[$id] + ['org_id' => $ropa->org_id];
-        }
-        $ropa->vendors()->sync($syncData);
-    }
 
     /**
      * Samakan bentuk `linked_vendor_ids` dengan linked_ropa_ids: terima array
@@ -707,27 +480,8 @@ class ModuleCrudController extends Controller
 
             // Auto-generate codes
             switch ($module) {
-                case 'ropa':
-                    // Resolve division code dari divisi penanggung jawab
-                    // (wizard_data → divisi_penanggung_jawab → Department.code)
-                    // sebagai pengganti kategori pemrosesan.
-                    $divCode = $this->resolveDivisionCodeForRopa($data, $orgId = $data['org_id']);
-                    $data['registration_number'] = $data['registration_number'] ?? $this->nextCode(
-                        'ROPA', $model, $orgId,
-                        $data['category_id'] ?? null,
-                        $data['custom_number'] ?? null,
-                        $divCode
-                    );
-                    // Auto-risk from 7-step wizard triggers (Sprint E1).
-                    $data = $this->applyRopaAutoRisk($data);
-                    break;
-                case 'dpia':
-                    $data['registration_number'] = $data['registration_number'] ?? $this->nextCode(
-                        'DPIA', $model, $data['org_id'],
-                        $data['category_id'] ?? null,
-                        $data['custom_number'] ?? null
-                    );
-                    break;
+                // ropa & dpia tidak lagi sampai ke sini — penomorannya dikerjakan
+                // RopaDpiaWriter lewat ModuleCodeGenerator.
                 case 'dsr':
                     $data['request_id'] = $data['request_id'] ?? $this->nextCode('DSR', $model, $data['org_id']);
                     $data['deadline_at'] = $data['deadline_at'] ?? now()->addHours(72);
@@ -818,28 +572,6 @@ class ModuleCrudController extends Controller
                 }
             }
 
-            // Sync RoPA ↔ Information System pivot on create
-            if ($module === 'ropa') {
-                try {
-                    $this->syncRopaInformationSystems($record);
-                } catch (\Throwable $e) {
-                    \Log::warning('syncRopaInformationSystems on create failed: '.$e->getMessage());
-                }
-                try {
-                    $this->syncRopaVendors($record);
-                } catch (\Throwable $e) {
-                    \Log::warning('syncRopaVendors on create failed: '.$e->getMessage());
-                }
-            }
-            // Sync DPIA ↔ RoPA pivot on create (from wizard.koneksi_ropa.connected_ropas)
-            if ($module === 'dpia') {
-                try {
-                    $this->syncDpiaRopas($record);
-                } catch (\Throwable $e) {
-                    \Log::warning('syncDpiaRopas on create failed: '.$e->getMessage());
-                }
-            }
-
             // Audit log: record created
             try {
                 AuditLog::log($module, $record->id, 'created', [
@@ -870,9 +602,9 @@ class ModuleCrudController extends Controller
                 // Modul tenant lain: info notification "record baru dibuat" ke
                 // DPO + admin tenant supaya mereka aware tanpa harus polling
                 // list. Hanya untuk modul yang punya code identitas.
+                // RoPA/DPIA tidak lagi di sini — notifikasinya ikut pindah ke
+                // RopaDpiaWriter bersama jalur tulisnya.
                 $moduleNotifMeta = [
-                    'ropa' => ['label' => 'RoPA', 'sev' => 'low'],
-                    'dpia' => ['label' => 'DPIA', 'sev' => 'medium'],
                     'dsr' => ['label' => 'DSR', 'sev' => 'medium'],
                     'consent' => ['label' => 'Consent Point', 'sev' => 'low'],
                 ];
@@ -892,24 +624,6 @@ class ModuleCrudController extends Controller
                         metadata: ['record_id' => $record->id]
                     );
                 }
-                // RoPA/DPIA with assignees → per-user info notification.
-                if (in_array($module, ['ropa', 'dpia'], true) && ! empty($data['assignees']) && is_array($data['assignees'])) {
-                    $assignLabel = ['ropa' => 'RoPA', 'dpia' => 'DPIA'][$module];
-                    foreach ($data['assignees'] as $uid) {
-                        NotificationService::dispatch(
-                            kind: 'info',
-                            severity: 'low',
-                            module: $module,
-                            type: "{$module}.assigned",
-                            recipient: 'user:'.$uid,
-                            orgId: $record->org_id,
-                            title: "{$assignLabel} {$record->registration_number} di-assign ke Anda",
-                            body: $record->processing_activity ?? $record->description ?? '',
-                            actionUrl: "/{$module}/{$record->id}",
-                            metadata: ['record_id' => $record->id]
-                        );
-                    }
-                }
             } catch (\Throwable $e) {
                 // \Throwable (bukan cuma \Exception) supaya \Error dari
                 // provider misconfig (mis. credential AI/SMTP/Telegram) tidak
@@ -917,104 +631,12 @@ class ModuleCrudController extends Controller
                 \Log::warning('Notification dispatch failed on create: '.$e->getMessage());
             }
 
-            // Auto-trigger: if RoPA risk=high → create draft DPIA with inherited wizard_data.
-            // Wrapped in try/catch so DPIA-side failures don't roll back RoPA create.
+            // DPIA & LIA otomatis kini lahir di RopaDpiaWriter bersama jalur
+            // tulis RoPA-nya. Kedua variabel ini tetap ada karena amplop response
+            // di bawah dipakai bersama semua modul — untuk dsr/consent/breach
+            // nilainya memang selalu null, persis seperti sebelumnya.
             $autoDpiaId = null;
-            if ($module === 'ropa' && ($data['risk_level'] ?? '') === 'high') {
-                try {
-                    $dpiaModel = $this->getModel('dpia');
-                    $existingDpia = $dpiaModel->where('ropa_id', $record->id)->first();
-                    if (! $existingDpia) {
-                        // Build DPIA wizard_data from RoPA's wizard_data
-                        $ropaWiz = $data['wizard_data'] ?? [];
-                        $dpoTeam = $ropaWiz['dpo_team'] ?? [];
-                        $dpiaWizardData = [
-                            'informasi_dpia' => [
-                                'description' => $data['processing_activity'] ?? '',
-                                'pic_name' => $dpoTeam['pic_name'] ?? '',
-                                'dpo_name' => $dpoTeam['dpo_name'] ?? '',
-                                'dpo_email' => $dpoTeam['dpo_email'] ?? '',
-                                'dpo_phone' => $dpoTeam['dpo_phone'] ?? '',
-                            ],
-                            'koneksi_ropa' => [
-                                'connected_ropas' => [$record->id],
-                            ],
-                            'potensi_risiko' => [],
-                        ];
-
-                        $autoDpia = $this->createWithCodeRetry($dpiaModel, [
-                            'org_id' => $data['org_id'],
-                            'category_id' => $data['category_id'] ?? null,
-                            'registration_number' => $this->nextCode('DPIA', $dpiaModel, $data['org_id'], $data['category_id'] ?? null),
-                            'ropa_id' => $record->id,
-                            'risk_level' => 'high',
-                            'status' => 'draft',
-                            'description' => 'Auto-generated dari RoPA high-risk: '.($data['processing_activity'] ?? ''),
-                            'wizard_data' => $dpiaWizardData,
-                            'risk_assessment' => ['likelihood' => 0, 'impact' => 0, 'risks' => []],
-                            'mitigation_measures' => [],
-                            'created_by' => $data['created_by'],
-                            // DPIA hasil auto-create MEWARISI assignment RoPA induknya.
-                            'assign_group' => $data['assign_group'] ?? null,
-                            'assignees' => $data['assignees'] ?? [],
-                        ], 'registration_number', fn () => $this->nextCode('DPIA', $dpiaModel, $data['org_id']));
-                        $autoDpiaId = $autoDpia->id;
-
-                        // Notifikasi ke assignee warisan (sama seperti create DPIA manual).
-                        foreach ((array) ($data['assignees'] ?? []) as $assigneeId) {
-                            try {
-                                NotificationService::dispatch(
-                                    kind: 'info',
-                                    severity: 'medium',
-                                    module: 'dpia',
-                                    type: 'dpia.assigned',
-                                    recipient: 'user:'.$assigneeId,
-                                    orgId: $record->org_id,
-                                    title: "DPIA {$autoDpia->registration_number} di-assign ke Anda",
-                                    body: 'DPIA otomatis dari RoPA high-risk '.($record->registration_number ?? '').' — assignment mengikuti RoPA.',
-                                    actionUrl: "/dpia/{$autoDpia->id}",
-                                    metadata: ['record_id' => $autoDpia->id, 'ropa_id' => $record->id]
-                                );
-                            } catch (\Exception $e) {
-                                \Log::warning('Auto-DPIA assignee notification failed: '.$e->getMessage());
-                            }
-                        }
-
-                        // Notify DPO: high-risk RoPA spawned an auto-DPIA.
-                        try {
-                            NotificationService::dispatch(
-                                kind: 'warning',
-                                severity: 'high',
-                                module: 'dpia',
-                                type: 'dpia.auto_created',
-                                recipient: 'role:dpo',
-                                orgId: $record->org_id,
-                                title: "⚠️ DPIA otomatis: {$autoDpia->registration_number}",
-                                body: "Dibuat dari RoPA high-risk {$record->registration_number} — review diperlukan.",
-                                actionUrl: "/dpia/{$autoDpia->id}",
-                                metadata: ['record_id' => $autoDpia->id, 'ropa_id' => $record->id]
-                            );
-                        } catch (\Exception $e) {
-                            \Log::warning('DPIA auto-create notification failed: '.$e->getMessage());
-                        }
-                    }
-                } catch (\Throwable $e) {
-                    \Log::warning('Auto-DPIA on RoPA store failed (non-fatal): '.$e->getMessage());
-                }
-            }
-
-            // Auto-trigger: RoPA with legal_basis = legitimate interest → draft LIA.
-            // Sprint X4 — wraps in try/catch via the service so failure can't roll back RoPA.
             $autoLiaId = null;
-            if ($module === 'ropa') {
-                try {
-                    $lia = app(AssessmentAutoTriggerService::class)
-                        ->fromRopa($record, $data['created_by'] ?? null);
-                    $autoLiaId = $lia?->id;
-                } catch (\Throwable $e) {
-                    \Log::warning('Auto-LIA on RoPA store failed (non-fatal): '.$e->getMessage());
-                }
-            }
 
             // Auto-trigger: DSR with app_id → seed scopes from app.default_information_system_ids
             // so DPO doesn't need to manually pick. Tab Scope page langsung pre-populated.
@@ -1055,7 +677,7 @@ class ModuleCrudController extends Controller
                 'message' => 'Created',
                 'data' => $record,
                 'auto_dpia_id' => $autoDpiaId,
-                'auto_lia_id' => $autoLiaId ?? null,
+                'auto_lia_id' => $autoLiaId,
                 'auto_scope_count' => $autoScopeCount,
             ], 201);
         } catch (\Throwable $e) {
@@ -1206,40 +828,9 @@ class ModuleCrudController extends Controller
             }
         }
 
-        // Assign-group lock: for RoPA/DPIA, assignees/assign_group can only
-        // change while the record is still in_progress. Waiting/revision/
-        // approved records require re-opening (status flip) before reassign.
-        if (in_array($module, ['ropa', 'dpia'], true)) {
-            $assignFieldsTouched = $request->hasAny(['assignees', 'assign_group']);
-            $currentStatus = $record->status ?? 'in_progress';
-            $assignEditable = in_array($currentStatus, ['in_progress', 'draft'], true);
-            if ($assignFieldsTouched && ! $assignEditable) {
-                return response()->json([
-                    'message' => 'Assign group terkunci karena status bukan in_progress.',
-                    'status' => $currentStatus,
-                ], 409);
-            }
-
-            // Review lock: RoPA/DPIA berstatus 'waiting' (sudah di-submit /
-            // di-Selesaikan untuk review) tidak boleh diedit kontennya lagi —
-            // hanya read-only review mode. Satu-satunya update yang diizinkan
-            // lewat endpoint ini adalah PURE status-transition (payload hanya
-            // berisi status + metadata review), supaya flow re-open/approve
-            // berbasis status tetap jalan. Approve/reject resmi memakai jalur
-            // terpisah (RopaApprovalController / ApprovalController) yang
-            // update model langsung — tidak terdampak gate ini.
-            if ($currentStatus === 'waiting') {
-                $allowedTransitionKeys = ['status', 'review_notes', 'approver_id', 'approved_at'];
-                $extraKeys = array_diff(array_keys($request->all()), $allowedTransitionKeys);
-                $isPureTransition = $request->has('status') && count($extraKeys) === 0;
-                if (! $isPureTransition) {
-                    return response()->json([
-                        'message' => strtoupper($module).' berstatus "waiting" (menunggu review) — konten terkunci dan tidak bisa diedit. Gunakan mode review (read-only) atau jalur approve/reject.',
-                        'status' => $currentStatus,
-                    ], 409);
-                }
-            }
-        }
+        // Kunci penyuntingan RoPA/DPIA (assign-group dan konten saat `waiting`)
+        // kini ditegakkan RopaDpiaWriter::guardEditLocks, supaya jalur tulis lain
+        // tidak bisa melewatinya.
 
         // Detect wizard_data changes for audit logging
         $oldWizard = $record->wizard_data ?? [];
@@ -1258,7 +849,6 @@ class ModuleCrudController extends Controller
                 ['wizard_data' => $record->wizard_data, 'risk_level_locked' => $record->risk_level_locked, 'risk_level' => $record->risk_level],
                 $payload
             );
-            $merged = $this->applyRopaAutoRisk($merged);
             $payload['risk_level'] = $merged['risk_level'];
             $payload['wizard_data'] = $merged['wizard_data'];
         }
@@ -1287,28 +877,6 @@ class ModuleCrudController extends Controller
                 );
             } catch (\Throwable $e) {
                 \Log::warning("{$module} status notif failed: ".$e->getMessage());
-            }
-        }
-
-        // Sync RoPA ↔ Information System pivot (many-to-many).
-        if ($module === 'ropa') {
-            try {
-                $this->syncRopaInformationSystems($record);
-            } catch (\Throwable $e) {
-                \Log::warning("syncRopaInformationSystems failed for RoPA {$record->id}: ".$e->getMessage());
-            }
-            try {
-                $this->syncRopaVendors($record);
-            } catch (\Throwable $e) {
-                \Log::warning("syncRopaVendors failed for RoPA {$record->id}: ".$e->getMessage());
-            }
-        }
-        // Sync DPIA ↔ RoPA pivot
-        if ($module === 'dpia') {
-            try {
-                $this->syncDpiaRopas($record);
-            } catch (\Throwable $e) {
-                \Log::warning("syncDpiaRopas failed for DPIA {$record->id}: ".$e->getMessage());
             }
         }
 
@@ -1407,53 +975,8 @@ class ModuleCrudController extends Controller
             }
         }
 
-        // Auto-trigger DPIA when RoPA risk changes to high. Wrapped in
-        // try/catch — DPIA schema quirks (unique collisions, missing optional
-        // columns, soft-deleted twin row, etc.) shouldn't roll back a
-        // successful RoPA update and look like "save ropa gagal" to the user.
-        if ($module === 'ropa' && ($record->risk_level ?? null) === 'high') {
-            try {
-                $dpiaModel = $this->getModel('dpia');
-                $existingDpia = $dpiaModel->where('ropa_id', $record->id)->first();
-                if (! $existingDpia) {
-                    $autoDpia = $this->createWithCodeRetry($dpiaModel, [
-                        'org_id' => $record->org_id,
-                        'category_id' => $record->category_id,
-                        'registration_number' => $this->nextCode('DPIA', $dpiaModel, $record->org_id, $record->category_id),
-                        'ropa_id' => $record->id,
-                        'risk_level' => 'high',
-                        'status' => 'draft',
-                        'description' => 'Auto-generated dari RoPA high-risk: '.$record->processing_activity,
-                        'risk_assessment' => ['likelihood' => 0, 'impact' => 0, 'risks' => []],
-                        'mitigation_measures' => [],
-                        'created_by' => $request->user()->id,
-                        // Warisi assignment RoPA induk + notifikasi assignee.
-                        'assign_group' => $record->assign_group,
-                        'assignees' => $record->assignees ?? [],
-                    ], 'registration_number', fn () => $this->nextCode('DPIA', $dpiaModel, $record->org_id));
-                    foreach ((array) ($record->assignees ?? []) as $assigneeId) {
-                        try {
-                            NotificationService::dispatch(
-                                kind: 'info',
-                                severity: 'medium',
-                                module: 'dpia',
-                                type: 'dpia.assigned',
-                                recipient: 'user:'.$assigneeId,
-                                orgId: $record->org_id,
-                                title: "DPIA {$autoDpia->registration_number} di-assign ke Anda",
-                                body: 'DPIA otomatis dari RoPA high-risk '.($record->registration_number ?? '').' — assignment mengikuti RoPA.',
-                                actionUrl: "/dpia/{$autoDpia->id}",
-                                metadata: ['record_id' => $autoDpia->id, 'ropa_id' => $record->id]
-                            );
-                        } catch (\Exception $e) {
-                            \Log::warning('Auto-DPIA assignee notification failed: '.$e->getMessage());
-                        }
-                    }
-                }
-            } catch (\Throwable $e) {
-                \Log::warning('Auto-DPIA creation for RoPA '.$record->id.' failed: '.$e->getMessage());
-            }
-        }
+        // DPIA otomatis saat risiko RoPA naik ke tinggi kini dikerjakan
+        // RopaDpiaWriter::update().
 
         return response()->json(['message' => 'Updated', 'data' => $record->fresh()]);
     }
