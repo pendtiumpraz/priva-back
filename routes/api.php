@@ -84,6 +84,7 @@ use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PentestReportController;
 use App\Http\Controllers\Api\PiiPatternRuleController;
 use App\Http\Controllers\Api\PlatformConfigController;
+use App\Http\Controllers\Api\PlatformIncidentController;
 use App\Http\Controllers\Api\PlatformStorageSettingsController;
 use App\Http\Controllers\Api\PolicyGeneratorController;
 use App\Http\Controllers\Api\PolicyReviewCrudController;
@@ -2194,6 +2195,20 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // Manage Postgres/MySQL clusters + S3/MinIO/GCS backends that
     // tenants can be assigned to. See BYODB.md §2.5.
     // =============================================
+    // Register insiden PLATFORM (UU PDP Pasal 46). Terhadap tenant kami adalah
+    // Prosesor — insiden di sisi kami menjadi kewajiban pemberitahuan mereka,
+    // jadi pencatatannya milik platform, bukan milik satu tenant.
+    Route::middleware('role.root')->prefix('platform-incidents')->group(function () {
+        Route::get('/', [PlatformIncidentController::class, 'index']);
+        Route::post('/', [PlatformIncidentController::class, 'store']);
+        Route::get('/{id}', [PlatformIncidentController::class, 'show']);
+        Route::put('/{id}', [PlatformIncidentController::class, 'update']);
+        // Penyebaran dipisah dari pencatatan: menyentuh seluruh tenant dan
+        // tidak bisa ditarik kembali.
+        Route::post('/{id}/sebarkan', [PlatformIncidentController::class, 'sebarkan']);
+        Route::post('/{id}/tutup', [PlatformIncidentController::class, 'tutup']);
+    });
+
     Route::middleware('role.root')->prefix('platform-admin')->group(function () {
         // Database pools
         Route::get('/database-pools', [DatabasePoolController::class, 'index']);
