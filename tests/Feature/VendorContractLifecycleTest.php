@@ -139,6 +139,68 @@ class VendorContractLifecycleTest extends TestCase
         $this->assertSame(1, DB::table('contract_reviews')->count());
     }
 
+    public function test_kontrak_unggahan_pihak_ketiga_langsung_masuk_contract_review(): void
+    {
+        $contractId = $this->buatKontrak();
+        $this->postJson("/api/vendor-contracts/{$contractId}/tautan-unggah")->assertOk();
+        $token = VendorContract::find($contractId)->access_token;
+
+        $this->postJson("/api/kontrak-pihak-ketiga/{$token}/unggah", ['file' => $this->pdf('pks.pdf')])->assertOk();
+
+        $contract = VendorContract::find($contractId);
+        $this->assertNotNull(
+            $contract->contract_review_id,
+            'kontrak yang diunggah pihak ketiga justru paling perlu dinilai — tidak boleh mengendap menunggu klik manual',
+        );
+
+        $review = DB::table('contract_reviews')->where('id', $contract->contract_review_id)->first();
+        $this->assertSame('pending', $review->status);
+        $this->assertSame($contract->file['path'], $review->file_path, 'berkas dipakai ulang, bukan disalin');
+        // Tautan dua arah: telaah tahu kontrak mana asalnya.
+        $this->assertSame($contractId, $review->source_document_id);
+        $this->assertSame('vendor_contract', $review->source_module);
+        $this->assertNull($review->created_by, 'tautan publik tidak mengklaim pengguna mana pun');
+
+        // Menekan "Kirim ke Telaah" sesudahnya hanya melapor, tidak menggandakan.
+        $this->postJson("/api/vendor-contracts/{$contractId}/kirim-telaah")->assertOk();
+        $this->assertSame(1, DB::table('contract_reviews')->count());
+    }
+
+    public function test_daftar_kontrak_membawa_skor_telaah(): void
+    {
+        $contractId = $this->buatKontrak();
+        $this->postJson("/api/vendor-contracts/{$contractId}/berkas", ['file' => $this->pdf()])->assertOk();
+        $reviewId = $this->postJson("/api/vendor-contracts/{$contractId}/kirim-telaah")
+            ->assertCreated()->json('data.contract_review_id');
+
+        DB::table('contract_reviews')->where('id', $reviewId)->update([
+            'status' => 'completed',
+            'risk_score' => 72,
+            'overall_rating' => 'perlu_perbaikan',
+        ]);
+
+        $res = $this->getJson('/api/vendor-contracts')->assertOk();
+
+        $res->assertJsonPath('data.0.review.risk_score', 72);
+        $res->assertJsonPath('data.0.review.overall_rating', 'perlu_perbaikan');
+        $res->assertJsonPath('ringkasan.sudah_ditelaah', 1);
+        $res->assertJsonPath('ringkasan.belum_ditelaah', 0);
+        $res->assertJsonPath('ringkasan.skor_risiko_tertinggi', 72);
+    }
+
+    public function test_kontrak_tanpa_telaah_masuk_hitungan_antrean(): void
+    {
+        $contractId = $this->buatKontrak();
+        $this->postJson("/api/vendor-contracts/{$contractId}/berkas", ['file' => $this->pdf()])->assertOk();
+
+        $res = $this->getJson('/api/vendor-contracts')->assertOk();
+
+        // Berkasnya ada tapi belum dinilai — inilah antrean kerja sebenarnya.
+        $res->assertJsonPath('ringkasan.belum_ditelaah', 1);
+        $res->assertJsonPath('ringkasan.sudah_ditelaah', 0);
+        $res->assertJsonPath('data.0.review', null);
+    }
+
     public function test_offboarding_wajib_tuntas_sebelum_kerja_sama_ditutup(): void
     {
         $this->postJson("/api/vendor-risk/{$this->vendor->id}/lifecycle", ['status' => 'offboarding'])->assertOk();

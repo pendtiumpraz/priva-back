@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\Vendor;
 use App\Models\VendorContract;
+use App\Services\ContractReviewLinker;
 use App\Services\FileUploadValidator;
 use App\Services\TenantStorageService;
 use App\Services\VendorContractTokenService;
@@ -79,6 +80,21 @@ class KontrakPihakKetigaPublikController extends Controller
         ])->save();
 
         $tokens->markConsumed($contract, $request);
+
+        // Langsung teruskan ke Contract Review. Tanpa ini kontrak hasil unggahan
+        // pihak ketiga hanya mengendap sampai ada orang tenant yang teringat
+        // menekan "Kirim ke Telaah" — padahal justru kontrak inilah yang paling
+        // perlu dinilai, karena isinya tidak disusun oleh tenant.
+        //
+        // Kegagalan di sini TIDAK boleh menggagalkan unggahan: bagi pihak ketiga
+        // pekerjaannya sudah selesai, dan galat urusan internal tenant bukan
+        // miliknya untuk ditanggung. Pelakunya null — memang tidak ada pengguna
+        // yang login pada tautan publik.
+        try {
+            app(ContractReviewLinker::class)->link($contract->fresh(), null);
+        } catch (\Throwable $e) {
+            \Log::warning('Auto-link kontrak pihak ketiga ke Contract Review gagal: '.$e->getMessage());
+        }
 
         return response()->json([
             'message' => 'Kontrak berhasil diunggah. Terima kasih.',

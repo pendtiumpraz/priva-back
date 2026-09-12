@@ -7,12 +7,11 @@ use App\Models\AuditLog;
 use App\Models\Organization;
 use App\Models\Vendor;
 use App\Models\VendorContract;
+use App\Services\ContractReviewLinker;
 use App\Services\FileUploadValidator;
 use App\Services\TenantStorageService;
 use App\Services\VendorContractTokenService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
@@ -46,6 +45,15 @@ class VendorContractController extends Controller
 
         $items = $query->orderByRaw('end_at is null, end_at asc')->get();
 
+        // Hasil telaah diambil sekali untuk seluruh baris. Halaman ini
+        // menampilkan puluhan kontrak sekaligus; menanyakan skor per baris
+        // akan jadi N+1 yang kasatmata begitu satu tenant punya banyak rekanan.
+        $telaah = app(ContractReviewLinker::class)->summaries($items->pluck('contract_review_id')->all());
+        $items->each(fn ($c) => $c->setAttribute(
+            'review',
+            $c->contract_review_id ? ($telaah[$c->contract_review_id] ?? null) : null
+        ));
+
         return response()->json([
             'data' => $items,
             'ringkasan' => [
@@ -53,6 +61,11 @@ class VendorContractController extends Controller
                 'tanpa_berkas' => $items->filter(fn ($c) => ! $c->has_file)->count(),
                 'akan_berakhir_90_hari' => $items->filter(fn ($c) => $c->days_to_expiry !== null && $c->days_to_expiry >= 0 && $c->days_to_expiry <= 90)->count(),
                 'sudah_berakhir' => $items->filter(fn ($c) => $c->days_to_expiry !== null && $c->days_to_expiry < 0)->count(),
+                // Kontrak yang berkasnya ada tapi belum ditelaah — inilah antrean
+                // kerja yang sebenarnya, bukan sekadar "belum punya berkas".
+                'belum_ditelaah' => $items->filter(fn ($c) => $c->has_file && ! $c->contract_review_id)->count(),
+                'sudah_ditelaah' => $items->filter(fn ($c) => (bool) $c->contract_review_id)->count(),
+                'skor_risiko_tertinggi' => $items->pluck('review')->filter()->max('risk_score'),
             ],
         ]);
     }
@@ -152,22 +165,10 @@ class VendorContractController extends Controller
             ]);
         }
 
-        $reviewId = (string) Str::uuid();
-        DB::table('contract_reviews')->insert([
-            'id' => $reviewId,
-            'org_id' => $contract->org_id,
-            'title' => $contract->title,
-            'contract_type' => $contract->contract_type,
-            'file_path' => $contract->file['path'] ?? null,
-            'file_name' => $contract->file['filename'] ?? null,
-            'status' => 'pending',
-            'risk_score' => 0,
-            'created_by' => $request->user()->id,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        $contract->forceFill(['contract_review_id' => $reviewId])->save();
+        // Pembuatan barisnya tinggal di ContractReviewLinker supaya jalur ini
+        // dan jalur unggahan publik pihak ketiga menghasilkan telaah yang sama
+        // persis bentuknya — termasuk tautan balik source_document_id.
+        $reviewId = app(ContractReviewLinker::class)->link($contract, $request->user()->id);
         $this->audit($request, $contract, 'send_to_review', ['contract_review_id' => $reviewId]);
 
         return response()->json([
