@@ -336,6 +336,12 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     Route::put('/user/settings', [AuthController::class, 'updateSettings']);
     Route::put('/user/profile', [AuthController::class, 'updateProfile']);
 
+    // Hak subjek data ATAS DIRI SENDIRI (UU PDP Pasal 26, 28 & 43). Sengaja
+    // ditaruh bersebelahan dengan /user/profile yang sudah melayani hak koreksi
+    // (Pasal 27) — satu permukaan layanan-mandiri, bukan cabang baru.
+    Route::get('/user/data-export', [AuthController::class, 'dataExport']);
+    Route::post('/user/erasure-request', [AuthController::class, 'erasureRequest']);
+
     // 2FA management — semua butuh auth karena per-user. Setup endpoint
     // boleh dipanggil dengan setup_token (ability '2fa:setup') untuk role
     // yang force enable, jadi user yang stuck di "must setup 2FA" bisa

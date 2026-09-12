@@ -3,9 +3,15 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
+use App\Models\Department;
+use App\Models\License;
+use App\Models\Organization;
+use App\Models\TenantRole;
 use App\Models\User;
 use App\Services\IpAllowlistService;
 use App\Services\LoginAttemptService;
+use App\Services\NotificationService;
 use App\Services\PasswordPolicyService;
 use App\Services\TwoFactorAuthService;
 use Illuminate\Http\JsonResponse;
@@ -46,9 +52,9 @@ class AuthController extends Controller
         }
 
         // Create organization
-        $org = \App\Models\Organization::create([
+        $org = Organization::create([
             'name' => $request->organization_name,
-            'slug' => \Illuminate\Support\Str::slug($request->organization_name) . '-' . uniqid(),
+            'slug' => Str::slug($request->organization_name).'-'.uniqid(),
             'org_level' => 'holding',
         ]);
 
@@ -61,7 +67,7 @@ class AuthController extends Controller
             'password_changed_at' => now(),
         ]);
 
-        $tenantRole = \App\Models\TenantRole::where('org_id', $org->id)->where('name', 'Admin')->first();
+        $tenantRole = TenantRole::where('org_id', $org->id)->where('name', 'Admin')->first();
         if ($tenantRole) {
             $user->tenant_role_id = $tenantRole->id;
             $user->save();
@@ -77,6 +83,7 @@ class AuthController extends Controller
             } catch (\Throwable $e) {
                 \Log::warning('Gagal kirim email verification: '.$e->getMessage());
             }
+
             return response()->json([
                 'user' => $this->userWithPackageType($user),
                 'requires_email_verification' => true,
@@ -94,7 +101,7 @@ class AuthController extends Controller
 
         // Notify superadmins — new tenant signup. Platform-level (org_id=null).
         try {
-            \App\Services\NotificationService::dispatch(
+            NotificationService::dispatch(
                 kind: 'info',
                 severity: 'low',
                 module: 'tenant',
@@ -112,7 +119,7 @@ class AuthController extends Controller
                 ]
             );
         } catch (\Throwable $e) {
-            \Log::warning('Tenant signup notif failed: ' . $e->getMessage());
+            \Log::warning('Tenant signup notif failed: '.$e->getMessage());
         }
 
         return response()->json([
@@ -235,6 +242,7 @@ class AuthController extends Controller
             // User sudah confirm 2FA → masuk flow verify
             if ($user->two_factor_confirmed_at) {
                 $challenge = $this->twoFactor->issueChallenge($user);
+
                 // recordSuccess di-defer ke /auth/2fa/verify supaya counter
                 // failed_login_attempts tetap reset hanya kalau ENTIRE flow
                 // (password + 2FA) sukses.
@@ -244,6 +252,7 @@ class AuthController extends Controller
                     'message' => 'Silakan masukkan kode 2FA dari authenticator app Anda.',
                 ]);
             }
+
             // Role wajib 2FA tapi user belum setup → flag setup_required.
             // Frontend render setup wizard. User tetap tidak dapat token
             // sampai 2FA di-confirm.
@@ -275,7 +284,9 @@ class AuthController extends Controller
     private function enforceSessionLimit(User $user): void
     {
         $max = (int) config('security.max_sessions_per_user', 0);
-        if ($max <= 0) return;
+        if ($max <= 0) {
+            return;
+        }
 
         $tokens = $user->tokens()
             ->where('name', 'auth-token') // hanya count login tokens (skip 2fa-setup dll)
@@ -283,7 +294,9 @@ class AuthController extends Controller
             ->get();
 
         $deleteCount = $tokens->count() - ($max - 1); // -1 karena akan issue baru
-        if ($deleteCount <= 0) return;
+        if ($deleteCount <= 0) {
+            return;
+        }
 
         $tokens->take($deleteCount)->each->delete();
     }
@@ -379,6 +392,7 @@ class AuthController extends Controller
         }
 
         $this->twoFactor->disable($user);
+
         return response()->json(['message' => '2FA berhasil dinonaktifkan.']);
     }
 
@@ -598,6 +612,7 @@ class AuthController extends Controller
     public function whoamiIp(Request $request): JsonResponse
     {
         $user = $request->user();
+
         return response()->json([
             'ip' => $request->ip(),
             'forwarded_for' => $request->header('X-Forwarded-For'),
@@ -612,6 +627,7 @@ class AuthController extends Controller
     public function twoFactorStatus(Request $request): JsonResponse
     {
         $user = $request->user();
+
         return response()->json([
             'enabled' => (bool) $user->two_factor_confirmed_at,
             'pending_setup' => (bool) $user->two_factor_secret && ! $user->two_factor_confirmed_at,
@@ -655,19 +671,151 @@ class AuthController extends Controller
 
         $packageType = null;
         if ($user->org_id) {
-            $license = \App\Models\License::where('org_id', $user->org_id)
+            $license = License::where('org_id', $user->org_id)
                 ->where('status', 'active')
                 ->first();
             if ($license && $license->isActive()) {
                 $packageType = $license->getTrustedPackageType();
             }
-        } elseif (in_array($user->role, ['root','superadmin'], true)) {
+        } elseif (in_array($user->role, ['root', 'superadmin'], true)) {
             $packageType = 'ai_agent';
         }
 
         $userData = $user->toArray();
         $userData['package_type'] = $packageType;
+
         return $userData;
+    }
+
+    /**
+     * GET /user/data-export — hak akses & portabilitas (UU PDP Pasal 26).
+     *
+     * Salinan data pribadi milik pemanggil SENDIRI, dalam bentuk terstruktur
+     * yang lazim dipakai (JSON), supaya bisa dibaca manusia maupun dipindahkan.
+     *
+     * Disusun dari daftar kolom yang DITENTUKAN TEGAS, bukan dari `toArray()`
+     * mentah: menyalin seluruh baris akan ikut membawa kolom internal (penanda
+     * kunci akun, jejak percobaan login, rujukan tenant_role) yang bukan data
+     * pribadi si pemohon dan tidak ada urusannya dengan hak akses.
+     *
+     * Yang sengaja TIDAK disertakan: sandi dan rahasia 2FA (bukan "data yang
+     * diberikan", dan membocorkannya justru merusak keamanan akun yang sama).
+     */
+    public function dataExport(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        // Nilainya diambil lewat pencarian eksplisit, bukan lewat properti
+        // relasi. Hasilnya identik, tetapi tidak menambah pemakaian pola
+        // properti-relasi yang analisis statis di repo ini memang tidak bisa
+        // simpulkan — jadi endpoint ini tidak menyumbang galat baru.
+        $namaOrganisasi = $user->org_id
+            ? Organization::whereKey($user->org_id)->value('name')
+            : null;
+        $namaDepartemen = $user->department_id
+            ? Department::whereKey($user->department_id)->value('name')
+            : null;
+        $namaPeranTenant = $user->tenant_role_id
+            ? TenantRole::whereKey($user->tenant_role_id)->value('name')
+            : null;
+
+        return response()->json([
+            'diambil_pada' => now()->toIso8601String(),
+            'dasar_hukum' => 'UU PDP Pasal 26 — hak mendapatkan salinan data pribadi',
+            'data_pribadi' => [
+                'nama' => $user->name,
+                'email' => $user->email,
+                'telepon' => $user->phone,
+                'jabatan' => $user->position,
+                'avatar_url' => $user->avatar_url,
+                'bahasa' => $user->locale,
+            ],
+            'akun' => [
+                'id' => $user->id,
+                'peran' => $user->role,
+                'peran_tenant' => $namaPeranTenant,
+                'aktif' => (bool) $user->is_active,
+                'email_terverifikasi_pada' => optional($user->email_verified_at)->toIso8601String(),
+                'dibuat_pada' => optional($user->created_at)->toIso8601String(),
+                'login_terakhir' => optional($user->last_login_at)->toIso8601String(),
+                'sandi_diubah_pada' => optional($user->password_changed_at)->toIso8601String(),
+                'dua_faktor_aktif' => $user->two_factor_confirmed_at !== null,
+            ],
+            'organisasi' => [
+                'id' => $user->org_id,
+                'nama' => $namaOrganisasi,
+                'departemen' => $namaDepartemen,
+            ],
+            'preferensi' => $user->settings ?? [],
+        ]);
+    }
+
+    /**
+     * POST /user/erasure-request — hak menghapus (UU PDP Pasal 28 & 43).
+     *
+     * SENGAJA tidak memusnahkan seketika. Permintaan ini menonaktifkan akun
+     * (soft delete), lalu pipeline `users:anonymize-deleted` yang memusnahkan
+     * data pribadinya setelah masa tenggang. Alasannya dua:
+     *
+     *   - memakai ulang satu-satunya jalur pemusnahan yang sudah ada dan teruji,
+     *     bukan membuat jalur kedua yang pasti menyimpang darinya;
+     *   - memberi jeda bagi admin organisasi untuk melihat dan menanggapi —
+     *     akun ini mungkin memegang riwayat persetujuan RoPA/DPIA.
+     *
+     * Penjaga admin terakhir: menghapus diri sendiri tidak boleh mengunci
+     * organisasi dari tenant-nya sendiri. Menghormati satu hak dengan
+     * menciptakan insiden ketersediaan bukan kepatuhan, itu cuma memindahkan
+     * masalah.
+     */
+    public function erasureRequest(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $data = $request->validate([
+            'alasan' => 'nullable|string|max:500',
+        ]);
+
+        if ($user->org_id) {
+            $adminTersisa = User::where('org_id', $user->org_id)
+                ->where('id', '!=', $user->id)
+                ->whereIn('role', ['admin', 'superadmin', 'root'])
+                ->where('is_active', true)
+                ->exists();
+
+            if (! $adminTersisa && in_array($user->role, ['admin', 'superadmin', 'root'], true)) {
+                return response()->json([
+                    'message' => 'Anda satu-satunya admin aktif di organisasi ini. Tunjuk admin lain terlebih dahulu agar organisasi tidak kehilangan akses.',
+                ], 409);
+            }
+        }
+
+        try {
+            AuditLog::create([
+                'module' => 'users',
+                'record_id' => $user->id,
+                'action' => 'erasure_requested',
+                'user_name' => 'Pemilik Akun',
+                'user_role' => $user->role,
+                'section' => 'hak_subjek_data',
+                // Alasannya dicatat, identitasnya tidak — record_id sudah cukup
+                // menunjuk, dan baris ini akan hidup lebih lama dari datanya.
+                'changes' => [
+                    'org_id' => $user->org_id,
+                    'alasan' => $data['alasan'] ?? null,
+                    'basis' => 'UU PDP Pasal 28 & 43',
+                ],
+                'ip_address' => $request->ip(),
+            ]);
+        } catch (\Throwable $e) {
+            \Log::warning('Audit log permintaan penghapusan gagal: '.$e->getMessage());
+        }
+
+        $user->tokens()->delete();
+        $user->delete();
+
+        return response()->json([
+            'message' => 'Permintaan penghapusan diterima. Akun Anda dinonaktifkan sekarang, dan data pribadi Anda dimusnahkan setelah masa tenggang berakhir.',
+            'dinonaktifkan_pada' => now()->toIso8601String(),
+        ], 202);
     }
 
     /**
@@ -706,10 +854,18 @@ class AuthController extends Controller
         ]);
 
         $settings = $user->settings ?? [];
-        if (isset($fields['idle_timeout_enabled'])) $settings['idle_timeout_enabled'] = (bool) $fields['idle_timeout_enabled'];
-        if (isset($fields['idle_timeout_minutes'])) $settings['idle_timeout_minutes'] = (int) $fields['idle_timeout_minutes'];
-        if (array_key_exists('ai_enabled', $fields)) $settings['ai_enabled'] = (bool) $fields['ai_enabled'];
-        if (array_key_exists('show_ai_tokens', $fields)) $settings['show_ai_tokens'] = (bool) $fields['show_ai_tokens'];
+        if (isset($fields['idle_timeout_enabled'])) {
+            $settings['idle_timeout_enabled'] = (bool) $fields['idle_timeout_enabled'];
+        }
+        if (isset($fields['idle_timeout_minutes'])) {
+            $settings['idle_timeout_minutes'] = (int) $fields['idle_timeout_minutes'];
+        }
+        if (array_key_exists('ai_enabled', $fields)) {
+            $settings['ai_enabled'] = (bool) $fields['ai_enabled'];
+        }
+        if (array_key_exists('show_ai_tokens', $fields)) {
+            $settings['show_ai_tokens'] = (bool) $fields['show_ai_tokens'];
+        }
 
         $user->update(['settings' => $settings]);
 
@@ -719,6 +875,7 @@ class AuthController extends Controller
             'settings' => $settings,
         ]);
     }
+
     public function updateProfile(Request $request): JsonResponse
     {
         $user = $request->user();
