@@ -4,7 +4,9 @@ namespace App\Http\Middleware;
 
 use App\Models\ApiRequestLog;
 use App\Models\PartnerApiKey;
+use App\Services\EntitlementService;
 use Closure;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 
@@ -19,12 +21,12 @@ class AuthenticatePartnerApi
         $startTime = microtime(true);
         $apiKey = $request->header('X-Api-Key');
 
-        if (!$apiKey) {
+        if (! $apiKey) {
             return $this->errorResponse('API key diperlukan. Kirim via header X-Api-Key.', 401);
         }
 
         // Extract prefix for fast lookup
-        $prefix = substr($apiKey, 0, 12) . '...' . substr($apiKey, -4);
+        $prefix = substr($apiKey, 0, 12).'...'.substr($apiKey, -4);
 
         // Find key by prefix (cached for performance)
         $keyModel = Cache::remember("api_key:{$prefix}", 300, function () use ($prefix) {
@@ -33,13 +35,14 @@ class AuthenticatePartnerApi
                 ->first();
         });
 
-        if (!$keyModel) {
+        if (! $keyModel) {
             return $this->errorResponse('API key tidak valid.', 401);
         }
 
         // Verify hash
-        if (!$keyModel->verifyKey($apiKey)) {
+        if (! $keyModel->verifyKey($apiKey)) {
             Cache::forget("api_key:{$prefix}");
+
             return $this->errorResponse('API key tidak valid.', 401);
         }
 
@@ -50,18 +53,36 @@ class AuthenticatePartnerApi
 
         // Check IP whitelist
         if ($keyModel->allowed_ips && count($keyModel->allowed_ips) > 0) {
-            if (!in_array($request->ip(), $keyModel->allowed_ips)) {
+            if (! in_array($request->ip(), $keyModel->allowed_ips)) {
                 return $this->errorResponse('IP address tidak diizinkan.', 403);
             }
         }
 
         // Check permission
-        if ($requiredPermission !== '*' && !$keyModel->hasPermission($requiredPermission)) {
+        if ($requiredPermission !== '*' && ! $keyModel->hasPermission($requiredPermission)) {
             return $this->errorResponse("Permission '{$requiredPermission}' tidak dimiliki.", 403);
         }
 
+        // Entitlement — lapisan KOMERSIAL, terpisah dari izin kunci. Izin
+        // menjawab "kunci ini boleh apa"; entitlement menjawab "organisasinya
+        // membeli modul ini atau tidak". Tanpa pemeriksaan ini, modul yang
+        // dicabut tetap terbuka lewat API walau di aplikasi sudah tertutup.
+        //
+        // Modulnya diambil dari PATH, bukan dari scope: grup Breach v1 memanggil
+        // middleware ini tanpa argumen scope ('*'), sehingga peta berbasis scope
+        // akan melewatkannya. Lewat path, setiap rute v1 ikut terjaga dan rute
+        // baru tidak bisa lolos karena lupa dipasangi middleware tambahan.
+        if ($menuKey = $this->menuKeyForPath($request)) {
+            if (! app(EntitlementService::class)->allowsMenuKey($keyModel->org_id, $menuKey)) {
+                return $this->errorResponse(
+                    'Modul ini tidak aktif untuk organisasi Anda. Hubungi administrator platform.',
+                    403,
+                );
+            }
+        }
+
         // Rate limiting
-        $rateLimitKey = "api_rate:{$keyModel->id}:" . now()->format('Y-m-d-H-i');
+        $rateLimitKey = "api_rate:{$keyModel->id}:".now()->format('Y-m-d-H-i');
         $currentCount = (int) Cache::get($rateLimitKey, 0);
 
         if ($currentCount >= $keyModel->rate_limit_per_minute) {
@@ -84,7 +105,7 @@ class AuthenticatePartnerApi
                 'api_key_id' => $keyModel->id,
                 'org_id' => $keyModel->org_id,
                 'method' => $request->method(),
-                'endpoint' => '/' . ltrim($request->path(), '/'),
+                'endpoint' => '/'.ltrim($request->path(), '/'),
                 'status_code' => $response->getStatusCode(),
                 'response_time_ms' => $responseTime,
                 'ip_address' => $request->ip(),
@@ -104,7 +125,32 @@ class AuthenticatePartnerApi
         return $response;
     }
 
-    private function errorResponse(string $message, int $status): \Illuminate\Http\JsonResponse
+    /**
+     * Menu (untuk entitlement) yang mewakili sebuah rute v1.
+     *
+     * Path yang tidak terdaftar mengembalikan null dan dianggap tidak punya
+     * konsep entitlement — sejalan dengan sikap EntitlementService yang hanya
+     * memblokir saat ada pencabutan eksplisit.
+     */
+    private const PATH_MENU_KEY = [
+        'api/v1/ropa*' => 'ropa',
+        'api/v1/dpia*' => 'dpia',
+        'api/v1/third-parties*' => 'vendor-risk',
+        'api/v1/breach*' => 'breach',
+    ];
+
+    private function menuKeyForPath(Request $request): ?string
+    {
+        foreach (self::PATH_MENU_KEY as $pattern => $menuKey) {
+            if ($request->is($pattern)) {
+                return $menuKey;
+            }
+        }
+
+        return null;
+    }
+
+    private function errorResponse(string $message, int $status): JsonResponse
     {
         return response()->json([
             'error' => true,

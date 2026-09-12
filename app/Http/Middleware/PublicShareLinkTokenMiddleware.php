@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\RecordShareLink;
 use App\Services\CurrentOrgContext;
+use App\Services\EntitlementService;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -67,6 +68,14 @@ class PublicShareLinkTokenMiddleware
                 'error' => 'Tautan dokumen sudah kedaluwarsa. Mohon minta tautan baru kepada DPO pengirim.',
                 'expired_at' => $link->expires_at->toIso8601String(),
             ], 410);
+        }
+
+        // Sama seperti embed: modul yang dicabut ikut menutup tautan dokumennya,
+        // walau tautan itu terbit saat modulnya masih aktif.
+        if (! app(EntitlementService::class)->allowsMenuKey($link->org_id, $link->module)) {
+            return response()->json([
+                'error' => 'Modul ini tidak lagi aktif untuk organisasi pengirim. Hubungi DPO pengirim.',
+            ], 403);
         }
 
         $this->orgContext->set($link->org_id);

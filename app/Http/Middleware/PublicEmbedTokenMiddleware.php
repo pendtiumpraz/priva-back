@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\EmbedToken;
 use App\Services\CurrentOrgContext;
+use App\Services\EntitlementService;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -71,6 +72,16 @@ class PublicEmbedTokenMiddleware
                 'error' => 'Tautan embed sudah kedaluwarsa.',
                 'expired_at' => $embed->expires_at->toIso8601String(),
             ], 410);
+        }
+
+        // Mencabut modul harus ikut mematikan embed-nya. Tautan yang terbit saat
+        // modulnya masih aktif tidak boleh terus menyajikan data sesudah modul
+        // itu tidak lagi dibeli — `module` di token ('ropa'/'dpia') memang sama
+        // dengan menu_key entitlement-nya.
+        if (! app(EntitlementService::class)->allowsMenuKey($embed->org_id, $embed->module)) {
+            return response()->json([
+                'error' => 'Modul ini tidak lagi aktif untuk organisasi penerbit tautan.',
+            ], 403);
         }
 
         if (! $embed->allowsOrigin($request->headers->get('Origin'))) {
