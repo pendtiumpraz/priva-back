@@ -71,10 +71,12 @@ class BreachDataDiscoveryTest extends TestCase
                     'name' => 'users',
                     'row_count' => 1200,
                     'columns' => [
-                        ['name' => 'id', 'pii_detected' => false],
-                        ['name' => 'email', 'pii_detected' => true, 'pdp_category' => 'umum'],
+                        ['name' => 'id', 'pii_detected' => false, 'applied_status' => 'not_pii'],
+                        ['name' => 'email', 'pii_detected' => true, 'applied_status' => 'applied_pribadi'],
                         // Kolom disamarkan: nama asli tak bermakna, alias bermakna.
-                        ['name' => 'A1', 'alias' => 'NIK', 'pii_detected' => true, 'pdp_category' => 'spesifik'],
+                        ['name' => 'A1', 'alias' => 'NIK', 'pii_detected' => true, 'applied_status' => 'applied_sensitive'],
+                        // Dugaan pemindai yang BELUM ditinjau — harus diabaikan.
+                        ['name' => 'catatan', 'pii_detected' => true, 'applied_status' => 'pending'],
                     ],
                 ],
                 [
@@ -124,6 +126,25 @@ class BreachDataDiscoveryTest extends TestCase
         $nama = array_column($tabel[0]['kolom_pii'], 'nama');
         $this->assertSame(['email', 'NIK'], $nama, 'kolom tersamar ditampilkan memakai aliasnya');
         $this->assertSame('A1', $tabel[0]['kolom_pii'][1]['kolom_asli']);
+        $this->assertNotContains('catatan', $nama, 'dugaan pemindai yang belum ditinjau tidak boleh ikut');
+    }
+
+    public function test_dugaan_mentah_pemindai_tidak_dipakai(): void
+    {
+        // Satu-satunya kolom ber-PII menurut pemindai, tapi keputusannya belum
+        // ditetapkan. Tabelnya tidak boleh ditawarkan sama sekali.
+        $sistem = $this->sistem('CRM Utama', 'done', [[
+            'name' => 'draft',
+            'columns' => [
+                ['name' => 'nik', 'pii_detected' => true, 'applied_status' => 'pending'],
+                ['name' => 'ktp', 'pii_detected' => true, 'applied_status' => 'rejected'],
+            ],
+        ]]);
+
+        $res = $this->getJson("/api/breach/sistem/{$sistem->id}/tabel")->assertOk();
+
+        $this->assertSame([], $res->json('data.tabel'),
+            'pii_detected hanyalah dugaan — laporan insiden resmi tidak boleh diisi tebakan yang belum ditinjau');
     }
 
     public function test_sistem_belum_dipindai_ditolak(): void
@@ -143,7 +164,9 @@ class BreachDataDiscoveryTest extends TestCase
         ])->assertOk();
 
         $sesudah = $breach->fresh();
-        $this->assertSame(['email', 'NIK'], $sesudah->affected_data_types);
+        // String dipisah koma — bentuk yang sama dengan seluruh penulis lain,
+        // karena UI insiden memanggil `.split(',')` atasnya.
+        $this->assertSame('email, NIK', $sesudah->affected_data_types);
         $this->assertSame(['umum', 'spesifik'], $sesudah->affected_data_categories);
         $this->assertSame('CRM Utama', $sesudah->affected_systems[0]['system_name']);
     }
@@ -164,7 +187,7 @@ class BreachDataDiscoveryTest extends TestCase
         ])->assertOk();
 
         $sesudah = $breach->fresh();
-        $this->assertSame(['email', 'NIK'], $sesudah->affected_data_types, 'kolom hanya boleh dari hasil pindai kita sendiri');
+        $this->assertSame('email, NIK', $sesudah->affected_data_types, 'kolom hanya boleh dari hasil pindai kita sendiri');
         $this->assertCount(1, $sesudah->affected_systems[0]['tables'], 'tabel tanpa PII / tidak dikenal diabaikan');
     }
 
@@ -175,9 +198,11 @@ class BreachDataDiscoveryTest extends TestCase
             'org_id' => $lain->id,
             'name' => 'Milik Tetangga',
             'scanning_status' => 'done',
+            // Kolomnya sengaja LOLOS seluruh saringan PII, supaya yang diuji
+            // benar-benar penyaringan org — bukan kebetulan tersaring hal lain.
             'scan_results' => ['tables' => [[
                 'name' => 'users',
-                'columns' => [['name' => 'nik', 'pii_detected' => true, 'pdp_category' => 'spesifik']],
+                'columns' => [['name' => 'nik', 'pii_detected' => true, 'applied_status' => 'applied_sensitive']],
             ]]],
         ]);
         $breach = $this->breach();
@@ -188,7 +213,7 @@ class BreachDataDiscoveryTest extends TestCase
 
         $sesudah = $breach->fresh();
         $this->assertSame([], $sesudah->affected_systems);
-        $this->assertSame([], $sesudah->affected_data_types);
+        $this->assertSame('', $sesudah->affected_data_types);
     }
 
     public function test_pihak_ketiga_ditelusuri_dari_sistem_lewat_dua_jalur(): void

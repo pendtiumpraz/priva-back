@@ -27,7 +27,14 @@ use Illuminate\Http\Request;
  *     apa yang bocor", katalog itulah yang benar; memakai scan plan akan
  *     menyodorkan daftar "pencarian atas nama Budi", bukan daftar tabel.
  *
- *  2. Klien hanya mengirim NAMA TABEL. Daftar kolom PII tidak pernah diambil
+ *  2. Kolom disaring berdasarkan `applied_status`, bukan `pii_detected`.
+ *     `pii_detected` hanyalah dugaan pemindai; keputusannya ada pada
+ *     `applied_status` (diisi otomatis oleh ColumnAutoAssigner, dapat ditinjau
+ *     ulang pengguna). Memakai dugaan mentah akan memasukkan tebakan yang belum
+ *     ditinjau ke laporan insiden resmi. Sumbernya juga harus `scan_results`,
+ *     bukan `ai_scan_results` — blob AI itu tidak menyimpan `applied_status`.
+ *
+ *  3. Klien hanya mengirim NAMA TABEL. Daftar kolom PII tidak pernah diambil
  *     dari kiriman klien melainkan dibaca ulang dari hasil pindai milik kita
  *     sendiri. Kalau klien boleh menentukan kolomnya, isi laporan insiden —
  *     yang dipakai untuk pemberitahuan resmi — bisa dikarang dari luar.
@@ -145,7 +152,12 @@ class BreachDataDiscoveryController extends Controller
 
         $breach->forceFill([
             'affected_systems' => $terpilih,
-            'affected_data_types' => array_values(array_unique($kolom)),
+            // Ditulis sebagai teks dipisah koma, BUKAN larik. Meski kolomnya
+            // di-cast 'array', seluruh penulis dan pembacanya memperlakukannya
+            // sebagai string — UI insiden memanggil `.split(',')` di dua tempat
+            // dan akan langsung galat bila menerima larik. Bentuk terstrukturnya
+            // sudah tersimpan utuh di `affected_systems`.
+            'affected_data_types' => implode(', ', array_values(array_unique($kolom))),
             'affected_data_categories' => array_values(array_unique($kategori)),
         ])->save();
 
@@ -179,7 +191,15 @@ class BreachDataDiscoveryController extends Controller
 
             $kolomPii = [];
             foreach (($tabel['columns'] ?? []) as $kolom) {
-                if (empty($kolom['pii_detected'])) {
+                // Yang dipakai `applied_status`, BUKAN `pii_detected`.
+                // `pii_detected` adalah dugaan mentah pemindai; sebuah kolom
+                // baru dihitung data pribadi setelah keputusannya ditetapkan
+                // (oleh ColumnAutoAssigner atau ditinjau ulang oleh pengguna).
+                // Memakai dugaan mentah berarti memasukkan tebakan yang belum
+                // ditinjau ke dalam laporan insiden resmi — aturan yang sama
+                // sudah dipegang jalur "tarik dari Data Discovery" di UI.
+                $status = (string) ($kolom['applied_status'] ?? '');
+                if (! in_array($status, ['applied_pribadi', 'applied_sensitive'], true)) {
                     continue;
                 }
                 // Kolom yang disamarkan disimpan dengan nama asli yang tidak
@@ -189,7 +209,10 @@ class BreachDataDiscoveryController extends Controller
                 $kolomPii[] = [
                     'nama' => $alias !== '' ? $alias : ($kolom['name'] ?? ''),
                     'kolom_asli' => $kolom['name'] ?? '',
-                    'kategori_pdp' => $kolom['pdp_category'] ?? null,
+                    // Kategori diturunkan dari KEPUTUSANnya, bukan dari tebakan
+                    // `pdp_category` pemindai: 'sensitif' pada UU PDP adalah
+                    // Data Pribadi bersifat spesifik.
+                    'kategori_pdp' => $status === 'applied_sensitive' ? 'spesifik' : 'umum',
                 ];
             }
 
