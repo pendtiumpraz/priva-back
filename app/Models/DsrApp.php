@@ -41,6 +41,20 @@ class DsrApp extends Model
     ];
 
     /**
+     * Secrets: encrypted at rest, and never serialised.
+     *
+     * `DsrAppController` returns the model itself on index (:64), show (:72),
+     * update (:168) and restore (:191), so without this both values were sent
+     * DECRYPTED to every caller who could list DSR apps.
+     *
+     * `$hidden` only affects toArray()/toJson(). Property reads still work, so
+     * `CaptchaVerifier::verifyForApp` and `AuthenticateDsrApiKey` are
+     * unaffected, and `regenerateApiKeys` still reveals the plaintext key once
+     * because it returns an explicit array key, not the model.
+     */
+    protected $hidden = ['server_key', 'captcha_secret'];
+
+    /**
      * Generate a fresh API key pair. Returns [client_key, server_key_plain].
      * Caller MUST display server_key plaintext exactly once — it's encrypted at rest.
      */

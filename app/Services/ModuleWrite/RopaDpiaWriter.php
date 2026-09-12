@@ -7,6 +7,7 @@ use App\Models\Dpia;
 use App\Models\InformationSystem;
 use App\Models\Ropa;
 use App\Models\Vendor;
+use App\Services\ApprovalWorkflowDispatcher;
 use App\Services\AssessmentAutoTriggerService;
 use App\Services\NotificationService;
 use App\Services\RegistrationCodeService;
@@ -80,6 +81,299 @@ class RopaDpiaWriter
     public function modelFor(string $module)
     {
         return $module === 'dpia' ? new Dpia : new Ropa;
+    }
+
+    /**
+     * Perbarui RoPA/DPIA yang sudah ada.
+     *
+     * Pencarian record dan gerbang izin TETAP milik pemanggil — merekalah yang
+     * tahu siapa yang sedang meminta dan record mana yang boleh ia lihat. Yang
+     * pindah ke sini adalah aturan MODUL-nya: kunci penyuntingan, perhitungan
+     * ulang risiko, sinkronisasi pivot, notifikasi, alur persetujuan, jejak
+     * audit per bagian wizard, dan DPIA otomatis saat risiko naik.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array{record: Model, auto_dpia_id: ?string}
+     *
+     * @throws ModuleWriteRejected saat kunci penyuntingan menolak perubahan
+     */
+    public function update(string $module, $record, array $payload, ModuleWriteContext $ctx): array
+    {
+        $this->guardEditLocks($module, $payload, $record);
+
+        $oldWizard = $record->wizard_data ?? [];
+        $newWizard = $payload['wizard_data'] ?? [];
+        $oldStatus = $record->status;
+        $oldAssignees = $record->assignees ?? [];
+
+        if ($module === 'ropa') {
+            // Wizard bisa datang sebagian; kalkulator harus melihat gabungan
+            // keadaan sekarang dengan kiriman baru, bukan kiriman saja.
+            $merged = $this->applyRopaAutoRisk(array_merge([
+                'wizard_data' => $record->wizard_data,
+                'risk_level_locked' => $record->risk_level_locked,
+                'risk_level' => $record->risk_level,
+            ], $payload));
+            $payload['risk_level'] = $merged['risk_level'];
+            $payload['wizard_data'] = $merged['wizard_data'];
+        }
+
+        $record->update($payload);
+
+        $this->notifyStatusChange($module, $record, $payload, $oldStatus);
+        $this->syncPivots($module, $record);
+        $this->notifyNewAssignees($module, $record, $payload, $oldAssignees);
+        $this->dispatchApproval($module, $record, $payload, $oldStatus);
+        $this->auditWizardSections($module, $record, $oldWizard, $newWizard);
+
+        return [
+            'record' => $record,
+            'auto_dpia_id' => $this->spawnAutoDpiaOnUpdate($module, $record, $ctx),
+        ];
+    }
+
+    /**
+     * Dua kunci penyuntingan, keduanya menolak dengan 409.
+     *
+     * @param  array<string, mixed>  $payload
+     *
+     * @throws ModuleWriteRejected
+     */
+    private function guardEditLocks(string $module, array $payload, $record): void
+    {
+        $currentStatus = $record->status ?? 'in_progress';
+
+        // Penugasan hanya boleh berubah selagi masih dikerjakan. Record yang
+        // sudah menunggu review / disetujui harus dibuka kembali dulu.
+        $menyentuhPenugasan = array_key_exists('assignees', $payload) || array_key_exists('assign_group', $payload);
+        if ($menyentuhPenugasan && ! in_array($currentStatus, ['in_progress', 'draft'], true)) {
+            throw new ModuleWriteRejected(
+                'Assign group terkunci karena status bukan in_progress.',
+                409,
+                ['status' => $currentStatus],
+            );
+        }
+
+        // Berstatus `waiting` berarti sedang ditelaah: isinya terkunci. Yang
+        // tetap diizinkan hanya transisi status MURNI, supaya alur re-open dan
+        // approve berbasis status tetap jalan.
+        if ($currentStatus === 'waiting') {
+            $kunciTransisi = ['status', 'review_notes', 'approver_id', 'approved_at'];
+            $ekstra = array_diff(array_keys($payload), $kunciTransisi);
+            $transisiMurni = array_key_exists('status', $payload) && count($ekstra) === 0;
+            if (! $transisiMurni) {
+                throw new ModuleWriteRejected(
+                    strtoupper($module).' berstatus "waiting" (menunggu review) — konten terkunci dan tidak bisa diedit. Gunakan mode review (read-only) atau jalur approve/reject.',
+                    409,
+                    ['status' => $currentStatus],
+                );
+            }
+        }
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function notifyStatusChange(string $module, $record, array $payload, ?string $oldStatus): void
+    {
+        if (! array_key_exists('status', $payload) || $payload['status'] === $oldStatus) {
+            return;
+        }
+
+        try {
+            $label = ['ropa' => 'RoPA', 'dpia' => 'DPIA'][$module] ?? strtoupper($module);
+            $newStatus = (string) $payload['status'];
+            $sev = in_array($newStatus, ['approved', 'rejected', 'waiting'], true) ? 'medium' : 'low';
+
+            NotificationService::dispatch(
+                kind: $newStatus === 'rejected' ? 'warning' : 'info',
+                severity: $sev,
+                module: $module,
+                type: "{$module}.status.{$newStatus}",
+                recipient: 'role:dpo,admin',
+                orgId: $record->org_id,
+                title: "{$label} {$record->registration_number}: status → {$newStatus}",
+                body: ($oldStatus ?? '-')." → {$newStatus}",
+                actionUrl: "/{$module}/{$record->id}",
+                metadata: ['record_id' => $record->id, 'old_status' => $oldStatus, 'new_status' => $newStatus],
+            );
+        } catch (\Throwable $e) {
+            Log::warning("{$module} status notif failed: ".$e->getMessage());
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @param  array<int, mixed>  $oldAssignees
+     */
+    private function notifyNewAssignees(string $module, $record, array $payload, $oldAssignees): void
+    {
+        if (! array_key_exists('assignees', $payload) || ! is_array($payload['assignees'])) {
+            return;
+        }
+
+        try {
+            // $oldAssignees dibaca dari kolom ber-cast array, jadi selalu array —
+            // tidak perlu dijaga ulang di sini.
+            $ditambahkan = array_values(array_diff($payload['assignees'], $oldAssignees));
+            foreach ($ditambahkan as $uid) {
+                NotificationService::dispatch(
+                    kind: 'info',
+                    severity: 'low',
+                    module: $module,
+                    type: "{$module}.assigned",
+                    recipient: 'user:'.$uid,
+                    orgId: $record->org_id,
+                    title: strtoupper($module).' '.($record->registration_number ?? '').' di-assign ke Anda',
+                    body: $record->processing_activity ?? $record->description ?? '',
+                    actionUrl: "/{$module}/{$record->id}",
+                    metadata: ['record_id' => $record->id]
+                );
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Assignee notification failed: '.$e->getMessage());
+        }
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function dispatchApproval(string $module, $record, array $payload, ?string $oldStatus): void
+    {
+        $masukWaiting = ($payload['status'] ?? null) === 'waiting' && $oldStatus !== 'waiting';
+        if (! $masukWaiting) {
+            return;
+        }
+
+        ApprovalWorkflowDispatcher::dispatch($record->org_id, $module, $record->id);
+
+        try {
+            NotificationService::dispatch(
+                kind: 'alert',
+                severity: 'high',
+                module: 'approval',
+                type: 'approval.pending',
+                recipient: 'role:dpo',
+                orgId: $record->org_id,
+                title: '✋ Approval pending: '.strtoupper($module)." {$record->registration_number}",
+                body: 'Menunggu review DPO untuk '.($record->processing_activity ?? $record->description ?? ''),
+                actionUrl: "/{$module}/{$record->id}",
+                metadata: ['record_id' => $record->id, 'workflow_module' => $module]
+            );
+        } catch (\Throwable $e) {
+            Log::warning('Approval pending notification failed: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Jejak audit per BAGIAN wizard, bukan satu baris untuk seluruh dokumen —
+     * supaya riwayatnya terbaca sebagai "bagian mana yang berubah".
+     *
+     * `$newWizard` sengaja bertipe mixed, bukan array: isinya datang langsung
+     * dari payload klien (`wizard_data`), yang betul-betul bisa dikirim sebagai
+     * string. Penjaga is_array() di bawah melindungi kasus itu dan BUKAN kode
+     * mati — menghapusnya demi menyenangkan analisis statis justru membuat jalur
+     * ini lebih rapuh daripada versi controller yang digantikannya.
+     *
+     * @param  array<string, mixed>  $oldWizard
+     * @param  mixed  $newWizard
+     */
+    private function auditWizardSections(string $module, $record, $oldWizard, $newWizard): void
+    {
+        if (empty($newWizard) || ! is_array($newWizard)) {
+            return;
+        }
+
+        foreach ($newWizard as $sectionKey => $sectionData) {
+            $oldSection = $oldWizard[$sectionKey] ?? [];
+
+            // Penyesuaian tampilan per-record (sembunyikan & urutkan) dicatat
+            // sebagai satu entri bersih, bukan diff field numerik.
+            if (in_array($sectionKey, ['hidden_fields', 'field_order'], true)) {
+                if (json_encode($oldSection) !== json_encode($sectionData)) {
+                    $action = $sectionKey === 'hidden_fields' ? 'fields_hidden_changed' : 'fields_reordered';
+                    AuditLog::log($module, $record->id, $action, [
+                        $sectionKey => ['old' => $oldSection ?: null, 'new' => $sectionData ?: null],
+                    ], $sectionKey);
+                }
+
+                continue;
+            }
+
+            if (json_encode($oldSection) === json_encode($sectionData)) {
+                continue;
+            }
+
+            $berubah = [];
+            if (is_array($sectionData)) {
+                foreach ($sectionData as $field => $value) {
+                    $oldVal = $oldSection[$field] ?? null;
+                    if (json_encode($oldVal) !== json_encode($value)) {
+                        $berubah[$field] = ['old' => $oldVal, 'new' => $value];
+                    }
+                }
+            }
+            if (! empty($berubah)) {
+                AuditLog::log($module, $record->id, 'answer_added', $berubah, $sectionKey);
+            }
+        }
+    }
+
+    /**
+     * DPIA otomatis saat RoPA berisiko tinggi — versi jalur pembaruan.
+     *
+     * Berbeda dari versi create: sumbernya record yang sudah tersimpan, bukan
+     * payload, dan tidak menulis blok informasi_dpia. Dibiarkan terpisah agar
+     * perilakunya sama persis dengan sebelumnya.
+     */
+    private function spawnAutoDpiaOnUpdate(string $module, $record, ModuleWriteContext $ctx): ?string
+    {
+        if ($module !== 'ropa' || ($record->risk_level ?? null) !== 'high') {
+            return null;
+        }
+
+        try {
+            $dpiaModel = new Dpia;
+            if ($dpiaModel->where('ropa_id', $record->id)->first()) {
+                return null;
+            }
+
+            $autoDpia = $this->codes->createWithRetry($dpiaModel, [
+                'org_id' => $record->org_id,
+                'category_id' => $record->category_id,
+                'registration_number' => $this->codeGenerator->next('DPIA', $dpiaModel, $record->org_id, $record->category_id),
+                'ropa_id' => $record->id,
+                'risk_level' => 'high',
+                'status' => 'draft',
+                'description' => 'Auto-generated dari RoPA high-risk: '.$record->processing_activity,
+                'risk_assessment' => ['likelihood' => 0, 'impact' => 0, 'risks' => []],
+                'mitigation_measures' => [],
+                'created_by' => $ctx->actorUserId,
+                'assign_group' => $record->assign_group,
+                'assignees' => $record->assignees ?? [],
+            ], 'registration_number', fn () => $this->codeGenerator->next('DPIA', $dpiaModel, $record->org_id));
+
+            foreach ((array) ($record->assignees ?? []) as $assigneeId) {
+                try {
+                    NotificationService::dispatch(
+                        kind: 'info',
+                        severity: 'medium',
+                        module: 'dpia',
+                        type: 'dpia.assigned',
+                        recipient: 'user:'.$assigneeId,
+                        orgId: $record->org_id,
+                        title: "DPIA {$autoDpia->registration_number} di-assign ke Anda",
+                        body: 'DPIA otomatis dari RoPA high-risk '.($record->registration_number ?? '').' — assignment mengikuti RoPA.',
+                        actionUrl: "/dpia/{$autoDpia->id}",
+                        metadata: ['record_id' => $autoDpia->id, 'ropa_id' => $record->id]
+                    );
+                } catch (\Throwable $e) {
+                    Log::warning('Auto-DPIA assignee notification failed: '.$e->getMessage());
+                }
+            }
+
+            return $autoDpia->id;
+        } catch (\Throwable $e) {
+            Log::warning('Auto-DPIA creation for RoPA '.$record->id.' failed: '.$e->getMessage());
+
+            return null;
+        }
     }
 
     // ---------- penyiapan data ----------

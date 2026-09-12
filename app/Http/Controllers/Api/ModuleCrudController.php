@@ -22,6 +22,7 @@ use App\Services\ApprovalWorkflowDispatcher;
 use App\Services\AssessmentAutoTriggerService;
 use App\Services\EntitlementService;
 use App\Services\ModuleWrite\ModuleWriteContext;
+use App\Services\ModuleWrite\ModuleWriteRejected;
 use App\Services\ModuleWrite\RopaDpiaWriter;
 use App\Services\NotificationService;
 use App\Services\PermissionService;
@@ -1129,6 +1130,34 @@ class ModuleCrudController extends Controller
         // lihat record-nya, tidak boleh update juga (cegah enumeration ID).
         $this->applyRopaUserScope($query, $request, $module);
         $record = $query->findOrFail($id);
+
+        // RoPA & DPIA: aturan pembaruannya tinggal di RopaDpiaWriter — TERMASUK
+        // kedua kunci penyuntingan. Kalau kunci itu ditinggal di sini, jalur
+        // tulis lain (kunci API mitra, impor, agen AI) akan melewatinya: mereka
+        // bisa menyunting record yang sedang terkunci untuk review, padahal dari
+        // aplikasi tidak bisa.
+        //
+        // Gerbang izin dan penyaringan visibilitas di atas SENGAJA tetap di sini:
+        // itu urusan "siapa yang meminta dan boleh melihat apa", bukan aturan
+        // modulnya. Cabang ropa/dpia di bawah menjadi tidak terjangkau dan
+        // dibersihkan terpisah, bersama cabang store().
+        if (in_array($module, ['ropa', 'dpia'], true)) {
+            try {
+                $hasil = app(RopaDpiaWriter::class)->update(
+                    $module,
+                    $record,
+                    $request->all(),
+                    ModuleWriteContext::fromRequest($request),
+                );
+
+                return response()->json([
+                    'message' => 'Updated',
+                    'data' => $hasil['record']->fresh(),
+                ]);
+            } catch (ModuleWriteRejected $e) {
+                return response()->json($e->toResponseBody(), $e->status);
+            }
+        }
 
         // Auto-append timeline + fire notifications for breach status changes.
         if ($module === 'breach' && $request->has('status') && $record->status !== $request->input('status')) {
