@@ -7,7 +7,6 @@ use App\Models\ApiRequestLog;
 use App\Models\PartnerApiKey;
 use App\Models\Webhook;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class ApiHubController extends Controller
 {
@@ -17,6 +16,7 @@ class ApiHubController extends Controller
             if ($request->user()->role !== 'root') {
                 return response()->json(['message' => 'Forbidden. Root only.'], 403);
             }
+
             return $next($request);
         });
     }
@@ -79,7 +79,7 @@ class ApiHubController extends Controller
     public function toggleKey(string $id, Request $request)
     {
         $key = PartnerApiKey::where('org_id', $request->user()->org_id)->findOrFail($id);
-        $key->update(['is_active' => !$key->is_active]);
+        $key->update(['is_active' => ! $key->is_active]);
 
         return response()->json([
             'message' => $key->is_active ? 'API key diaktifkan.' : 'API key dinonaktifkan.',
@@ -205,7 +205,7 @@ class ApiHubController extends Controller
     public function toggleWebhook(string $id, Request $request)
     {
         $webhook = Webhook::where('org_id', $request->user()->org_id)->findOrFail($id);
-        $webhook->update(['is_active' => !$webhook->is_active]);
+        $webhook->update(['is_active' => ! $webhook->is_active]);
 
         return response()->json([
             'message' => $webhook->is_active ? 'Webhook diaktifkan.' : 'Webhook dinonaktifkan.',
@@ -219,6 +219,7 @@ class ApiHubController extends Controller
     public function deleteWebhook(string $id, Request $request)
     {
         Webhook::where('org_id', $request->user()->org_id)->findOrFail($id)->delete();
+
         return response()->json(['message' => 'Webhook dihapus.']);
     }
 
@@ -289,6 +290,55 @@ class ApiHubController extends Controller
                                 'path' => '/breach/stats',
                                 'description' => 'Statistik breach organisasi',
                                 'permissions' => ['breach.read'],
+                            ],
+                        ],
+                    ],
+                    [
+                        'name' => 'Pihak Ketiga (Third Party)',
+                        'prefix' => '/third-parties',
+                        'endpoints' => [
+                            [
+                                'method' => 'GET',
+                                'path' => '/third-parties',
+                                'description' => 'Daftar pihak ketiga organisasi',
+                                'permissions' => ['third_party.read'],
+                                'params' => [
+                                    ['name' => 'search', 'type' => 'string', 'required' => false],
+                                    ['name' => 'country', 'type' => 'string', 'required' => false],
+                                    ['name' => 'risk_level', 'type' => 'string', 'required' => false, 'values' => 'low,medium,high,critical'],
+                                    ['name' => 'lifecycle_status', 'type' => 'string', 'required' => false, 'values' => 'prospective,in_onboarding,active,suspended,offboarding,terminated'],
+                                    ['name' => 'external_ref', 'type' => 'string', 'required' => false],
+                                    ['name' => 'since', 'type' => 'date', 'required' => false],
+                                    ['name' => 'per_page', 'type' => 'integer', 'required' => false, 'default' => 20],
+                                ],
+                            ],
+                            [
+                                'method' => 'GET',
+                                'path' => '/third-parties/{id}',
+                                'description' => 'Detail satu pihak ketiga',
+                                'permissions' => ['third_party.read'],
+                            ],
+                            [
+                                'method' => 'POST',
+                                'path' => '/third-parties',
+                                'description' => 'Buat pihak ketiga; bila external_ref sudah dikenal, barisnya DIPERBARUI (upsert)',
+                                'permissions' => ['third_party.write'],
+                                'body' => [
+                                    ['name' => 'name', 'type' => 'string', 'required' => true],
+                                    ['name' => 'external_ref', 'type' => 'string', 'required' => false],
+                                    ['name' => 'type', 'type' => 'string', 'required' => false, 'values' => 'controller,processor,joint_controller,sub_processor'],
+                                    ['name' => 'country', 'type' => 'string', 'required' => false],
+                                    ['name' => 'contact_email', 'type' => 'string', 'required' => false],
+                                    ['name' => 'services_provided', 'type' => 'array', 'required' => false],
+                                    ['name' => 'data_shared', 'type' => 'array', 'required' => false],
+                                    ['name' => 'dpa_status', 'type' => 'string', 'required' => false, 'values' => 'none,draft,signed,expired'],
+                                ],
+                            ],
+                            [
+                                'method' => 'PUT',
+                                'path' => '/third-parties/{id}',
+                                'description' => 'Perbarui pihak ketiga',
+                                'permissions' => ['third_party.write'],
                             ],
                         ],
                     ],

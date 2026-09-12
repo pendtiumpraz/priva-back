@@ -420,6 +420,10 @@ class VendorRiskController extends Controller
             'services_provided.*' => 'string|max:200',
             'data_shared' => "{$opt}|array",
             'data_shared.*' => 'string|max:200',
+            // Peran bawaan menurut UU PDP. Peran sesungguhnya per kegiatan
+            // disimpan di pivot `ropa_vendor`; nilai ini hanya titik awal saat
+            // pihak ketiga ditautkan ke sebuah RoPA.
+            'type' => "{$opt}|in:".implode(',', Vendor::ROLES),
             'risk_level' => "{$opt}|in:".implode(',', self::RISK_LEVELS),
             'risk_score' => "{$opt}|integer|min:0|max:100",
             'dpa_status' => "{$opt}|in:".implode(',', self::DPA_STATUSES),

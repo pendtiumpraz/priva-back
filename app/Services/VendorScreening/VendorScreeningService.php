@@ -5,6 +5,7 @@ namespace App\Services\VendorScreening;
 use App\Models\Vendor;
 use App\Models\VendorScreening;
 use App\Services\AiService;
+use App\Services\NotificationService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -87,6 +88,17 @@ class VendorScreeningService
                 $context['sanctions_hits'] = $this->sanctionsChecker->check($vendor->name);
             }
 
+            // Kabar buruk dari internet: pernahkah pihak ketiga ini mengalami
+            // kebocoran data, insiden, sanksi, atau gugatan? Hasilnya digabung
+            // ke search_results supaya analisis AI, penyimpanan mentah, dan
+            // perbandingan risiko tetap satu jalur.
+            if (in_array('adverse_media', $sources, true)) {
+                $context['search_results'] = array_merge(
+                    $context['search_results'],
+                    $this->collectAdverseMedia($vendor)
+                );
+            }
+
             // Persist raw inputs untuk audit + future re-analysis tanpa fetch ulang
             $screening->update([
                 'search_results_raw' => $context['search_results'],
@@ -126,6 +138,7 @@ class VendorScreeningService
                 'error_message' => mb_substr($e->getMessage(), 0, 1000),
                 'completed_at' => now(),
             ]);
+
             return $screening->fresh();
         }
     }
@@ -144,7 +157,9 @@ class VendorScreeningService
                 VendorScreening::RISK_CRITICAL => 4,
             ];
             $currentRank = $rank[$current->overall_risk] ?? 0;
-            if ($currentRank === 0) return;
+            if ($currentRank === 0) {
+                return;
+            }
 
             $previous = VendorScreening::query()
                 ->withoutGlobalScope('org')
@@ -155,11 +170,15 @@ class VendorScreeningService
                 ->orderByDesc('completed_at')
                 ->first();
 
-            if (! $previous) return; // pertama kali, tidak ada baseline
+            if (! $previous) {
+                return;
+            } // pertama kali, tidak ada baseline
             $prevRank = $rank[$previous->overall_risk] ?? 0;
-            if ($currentRank <= $prevRank) return;
+            if ($currentRank <= $prevRank) {
+                return;
+            }
 
-            \App\Services\NotificationService::dispatch(
+            NotificationService::dispatch(
                 kind: 'alert',
                 severity: $currentRank >= 4 ? 'high' : 'medium',
                 module: 'tprm',
@@ -167,7 +186,7 @@ class VendorScreeningService
                 recipient: 'role:admin',
                 orgId: $vendor->org_id,
                 title: "⚠️ Risiko pihak ketiga naik: {$vendor->name}",
-                body: "Hasil AI Screening terbaru menunjukkan risiko meningkat dari "
+                body: 'Hasil AI Screening terbaru menunjukkan risiko meningkat dari '
                     ."{$previous->overall_risk} ke {$current->overall_risk}. "
                     .($current->summary ? mb_substr($current->summary, 0, 200) : ''),
                 actionUrl: "/vendor-risk/{$vendor->id}/screening",
@@ -198,9 +217,13 @@ class VendorScreeningService
             $results = $this->searchProvider->search($q, 8);
             foreach ($results as $r) {
                 $key = $r['url'] ?? null;
-                if (! $key || isset($combined[$key])) continue;
+                if (! $key || isset($combined[$key])) {
+                    continue;
+                }
                 $combined[$key] = $r + ['query' => $q];
-                if (count($combined) >= 12) break 2;
+                if (count($combined) >= 12) {
+                    break 2;
+                }
             }
         }
 
@@ -217,12 +240,53 @@ class VendorScreeningService
         return array_values($combined);
     }
 
+    /**
+     * Penelusuran kabar buruk yang terarah.
+     *
+     * `web_search` biasa hanya menambahkan satu kueri negatif umum; pemantauan
+     * berkala butuh pertanyaan spesifik supaya insiden lama pun terangkat —
+     * inilah yang menjawab "pihak ketiga ini pernah kebocoran data atau tidak".
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function collectAdverseMedia(Vendor $vendor): array
+    {
+        $name = trim((string) $vendor->name);
+        if ($name === '') {
+            return [];
+        }
+
+        $queries = [
+            "\"{$name}\" kebocoran data",
+            "\"{$name}\" data breach",
+            "\"{$name}\" sanksi OR denda OR gugatan",
+            "\"{$name}\" ransomware OR peretasan",
+        ];
+
+        $combined = [];
+        foreach ($queries as $query) {
+            foreach ($this->searchProvider->search($query, 6) as $result) {
+                $key = $result['url'] ?? null;
+                if (! $key || isset($combined[$key])) {
+                    continue;
+                }
+                $combined[$key] = $result + ['query' => $query, 'query_kind' => 'adverse_media'];
+                if (count($combined) >= 16) {
+                    break 2;
+                }
+            }
+        }
+
+        return array_values($combined);
+    }
+
     private function fetchPrivacyPolicy(string $url): ?array
     {
         $fetched = $this->webFetcher->fetch($url);
         if (! $fetched) {
             return null;
         }
+
         return [
             'url' => $url,
             'title' => $fetched['title'],
@@ -254,6 +318,7 @@ class VendorScreeningService
         } catch (\Throwable $e) {
             Log::warning('VendorScreeningService extractVendorDocuments failed: '.$e->getMessage());
         }
+
         return $out;
     }
 
@@ -267,8 +332,9 @@ class VendorScreeningService
             }
             $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
             if ($ext === 'pdf') {
-                $parser = new PdfParser();
+                $parser = new PdfParser;
                 $pdf = $parser->parseFile($absolute);
+
                 return trim($pdf->getText());
             }
             if (in_array($ext, ['docx', 'doc'], true)) {
@@ -281,11 +347,14 @@ class VendorScreeningService
                         }
                     }
                 }
+
                 return trim($text);
             }
+
             return '';
         } catch (\Throwable $e) {
             Log::info('extractText failed for '.$path.': '.$e->getMessage());
+
             return '';
         }
     }
@@ -354,7 +423,7 @@ ATURAN PENILAIAN:
 - "critical": sanctions match (kepercayaan medium+) ATAU bukti pelanggaran serius
 SYS;
 
-        $system = $presetBlock . $systemBase;
+        $system = $presetBlock.$systemBase;
 
         $user = "Data pihak ketiga untuk dianalisis:\n\n"
               ."VENDOR INFO:\n{$vendorJson}\n\n"
@@ -362,7 +431,7 @@ SYS;
               ."PRIVACY POLICY EXCERPT:\n{$privacyJson}\n\n"
               ."DOCUMENTS EXTRACTED:\n{$docsJson}\n\n"
               ."SANCTIONS HITS:\n{$sanctionsJson}\n\n"
-              ."Berikan analisis risiko comprehensive dalam format JSON yang diminta.";
+              .'Berikan analisis risiko comprehensive dalam format JSON yang diminta.';
 
         $result = $this->ai->ask($system, $user, 3000);
         if (! is_array($result)) {

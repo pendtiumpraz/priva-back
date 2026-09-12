@@ -8,6 +8,7 @@ use App\Models\Organization;
 use App\Models\Ropa;
 use App\Models\TenantRole;
 use App\Models\User;
+use App\Models\Vendor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -90,6 +91,34 @@ class RopaGraphTest extends TestCase
         // Sumber mengalir MASUK ke RoPA: tepinya dari sistem ke RoPA.
         $edge = collect($g['edges'])->firstWhere('from', 'system:'.$sys->id);
         $this->assertSame('ropa:'.$this->ropa->id, $edge['to']);
+    }
+
+    public function test_pihak_ketiga_muncul_sebagai_penerima_dengan_perannya(): void
+    {
+        $thirdParty = Vendor::create([
+            'org_id' => $this->org->id,
+            'name' => 'PT Cloud Mitra',
+            'country' => 'Singapura',
+            'risk_level' => 'high',
+        ]);
+        $this->ropa->vendors()->attach($thirdParty->id, [
+            'org_id' => $this->org->id,
+            'role' => Vendor::ROLE_JOINT_CONTROLLER,
+            'purpose' => 'Pengelolaan program loyalitas bersama',
+        ]);
+
+        $g = $this->graph();
+
+        $node = collect($g['nodes'])->firstWhere('id', 'thirdparty:'.$thirdParty->id);
+        $this->assertNotNull($node);
+        $this->assertSame('third_party', $node['type']);
+        $this->assertSame('Pengendali Bersama', $node['meta']['peran']);
+        $this->assertStringContainsString('/vendor-risk', $node['href']);
+
+        // Pihak ketiga adalah PENERIMA: tepinya dari RoPA ke pihak ketiga.
+        $edge = collect($g['edges'])->firstWhere('to', 'thirdparty:'.$thirdParty->id);
+        $this->assertSame('ropa:'.$this->ropa->id, $edge['from']);
+        $this->assertSame('pengendali bersama', $edge['label']);
     }
 
     public function test_dpia_menjadi_konsekuensi_dan_membawa_simpul_rtp(): void

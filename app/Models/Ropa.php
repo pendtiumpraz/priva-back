@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\AssignmentVisibility;
 use App\Models\Concerns\BelongsToOrg;
+use App\Models\Pivots\RopaVendor;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -371,6 +372,22 @@ class Ropa extends Model
     {
         return $this->belongsToMany(ConsentCollectionPoint::class, 'consent_collection_ropa', 'ropa_id', 'collection_point_id')
             ->withPivot('notes', 'org_id')
+            ->withTimestamps();
+    }
+
+    /**
+     * Many-to-many: satu kegiatan pemrosesan bisa melibatkan banyak pihak ketiga,
+     * dan tiap tautan punya PERAN sendiri (Pengendali / Prosesor / Pengendali
+     * Bersama / Subprosesor) — kewajiban UU PDP berbeda per peran.
+     *
+     * Sumber lama `wizard_data.penggunaan_penyimpanan.vendor_ids[]` tetap ditulis
+     * wizard dan disinkronkan ke pivot ini oleh ModuleCrudController.
+     */
+    public function vendors()
+    {
+        return $this->belongsToMany(Vendor::class, 'ropa_vendor', 'ropa_id', 'vendor_id')
+            ->using(RopaVendor::class)
+            ->withPivot('role', 'purpose', 'data_shared', 'contract_ref', 'notes', 'org_id')
             ->withTimestamps();
     }
 

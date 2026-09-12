@@ -49,6 +49,14 @@ menyampaikan notifikasi mengenai insiden pelanggaran data pribadi dengan detail 
             {{ $breach->affected_data_types ?? '—' }}
         @endif
     </td></tr>
+    @php $pihakKetiga = is_array($breach->linked_third_parties) ? $breach->linked_third_parties : []; @endphp
+    <tr><td>9. Pihak Ketiga yang Terlibat</td><td>:
+        @if(count($pihakKetiga) > 0)
+            {{ implode(', ', array_map(fn ($v) => ($v['name'] ?? '—').(($v['country'] ?? null) ? ' ('.$v['country'].')' : ''), $pihakKetiga)) }}
+        @else
+            Tidak ada / belum teridentifikasi
+        @endif
+    </td></tr>
 </table>
 
 <h2>Deskripsi Insiden</h2>

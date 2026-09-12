@@ -12,15 +12,22 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class VendorIncident extends Model
 {
-    use HasUuids, BelongsToOrg, SoftDeletes;
+    use BelongsToOrg, HasUuids, SoftDeletes;
 
     public const KIND_SLA_BREACH = 'sla_breach';
+
     public const KIND_DATA_BREACH = 'data_breach';
+
     public const KIND_CONTRACT_VIOLATION = 'contract_violation';
+
     public const KIND_COMPLIANCE_FAILURE = 'compliance_failure';
+
     public const KIND_SERVICE_OUTAGE = 'service_outage';
+
     public const KIND_FINANCIAL_DEFAULT = 'financial_default';
+
     public const KIND_REPUTATION_EVENT = 'reputation_event';
+
     public const KIND_OTHER = 'other';
 
     public const ALL_KINDS = [
@@ -46,18 +53,27 @@ class VendorIncident extends Model
     ];
 
     public const SEVERITY_LOW = 'low';
+
     public const SEVERITY_MEDIUM = 'medium';
+
     public const SEVERITY_HIGH = 'high';
+
     public const SEVERITY_CRITICAL = 'critical';
+
     public const ALL_SEVERITIES = [
         self::SEVERITY_LOW, self::SEVERITY_MEDIUM, self::SEVERITY_HIGH, self::SEVERITY_CRITICAL,
     ];
 
     public const STATUS_OPEN = 'open';
+
     public const STATUS_INVESTIGATING = 'investigating';
+
     public const STATUS_MITIGATED = 'mitigated';
+
     public const STATUS_RESOLVED = 'resolved';
+
     public const STATUS_ESCALATED = 'escalated';
+
     public const ALL_STATUSES = [
         self::STATUS_OPEN, self::STATUS_INVESTIGATING, self::STATUS_MITIGATED,
         self::STATUS_RESOLVED, self::STATUS_ESCALATED,
@@ -82,6 +98,9 @@ class VendorIncident extends Model
         'applied_to_risk_score',
         'related_screening_id',
         'related_review_id',
+        // Jembatan ke modul Insiden: satu kejadian tidak dicatat sebagai dua
+        // kasus yang tak berhubungan.
+        'linked_breach_id',
     ];
 
     protected $casts = [

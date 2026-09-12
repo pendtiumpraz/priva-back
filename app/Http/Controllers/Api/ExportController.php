@@ -258,7 +258,7 @@ class ExportController extends Controller
             'Kategori Subjek (Array)', 'Jenis Data (Array)',
             'Jenis Data Spesifik (Dikumpulkan)', 'Jenis Data Umum (Dikumpulkan)', 'Jenis Data PII (Dikumpulkan)',
             // Sec 5 — Penggunaan/Penyimpanan
-            'Pihak Pemroses', 'Kategori Pihak', 'Kategori Pihak — Lainnya', 'Pihak Ketiga (Y/N)', 'Vendor TPRM (IDs)', 'Vendor TPRM (Nama)',
+            'Pihak Pemroses', 'Kategori Pihak', 'Kategori Pihak — Lainnya', 'Pihak Ketiga (Y/N)', 'Pihak Ketiga (ID)', 'Pihak Ketiga (Nama)', 'Pihak Ketiga (Peran)',
             // Sec 6 — Penerima Internal
             'Penerima Internal (Y/N)', 'Internal — Divisi', 'Internal — PIC', 'Internal — Email PIC', 'Internal — Telepon PIC',
             // Sec 6 — Penerima Eksternal
@@ -300,6 +300,19 @@ class ExportController extends Controller
                 }
             }
         }
+        // Peran per (RoPA × pihak ketiga) dari pivot `ropa_vendor` — sumber yang
+        // sama dengan peta koneksi. Pivot juga memuat tautan yang hanya tercatat
+        // di `vendor_links` (wizard baru), jadi id-nya ikut dikumpulkan di sini.
+        $thirdPartyRoles = [];
+        try {
+            foreach (\DB::table('ropa_vendor')->whereIn('ropa_id', $items->pluck('id')->all())->get(['ropa_id', 'vendor_id', 'role']) as $p) {
+                $thirdPartyRoles[$p->ropa_id][$p->vendor_id] = (string) $p->role;
+                $allVendorIds[$p->vendor_id] = true;
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('ExportController: third-party role lookup failed: '.$e->getMessage());
+        }
+
         $vendorNames = [];
         if (! empty($allVendorIds) && class_exists(Vendor::class)) {
             try {
@@ -310,7 +323,7 @@ class ExportController extends Controller
             }
         }
 
-        $rows = $items->map(function ($r) use ($customFields, $perRecordExtras, $vendorNames) {
+        $rows = $items->map(function ($r) use ($customFields, $perRecordExtras, $vendorNames, $thirdPartyRoles) {
             $w = $r->wizard_data ?? [];
             $s1 = $w['detail_pemrosesan'] ?? [];
             $s2 = $w['dpo_team'] ?? [];
@@ -334,10 +347,18 @@ class ExportController extends Controller
                 }
             }
 
-            // Vendor TPRM lookup
-            $vendorIds = $s5['vendor_ids'] ?? [];
-            $vendorIdsList = is_array($vendorIds) ? array_filter($vendorIds, 'is_string') : [];
-            $vendorNamesList = array_values(array_filter(array_map(fn ($id) => $vendorNames[$id] ?? null, $vendorIdsList)));
+            // Pihak ketiga: tautan berperan (pivot) lebih dulu, lalu id yang
+            // hanya tercatat di wizard lama — ketiga kolom selalu sejajar.
+            $roles = $thirdPartyRoles[$r->id] ?? [];
+            $vendorIdsList = array_keys($roles);
+            $wizardVendorIds = $s5['vendor_ids'] ?? [];
+            foreach (is_array($wizardVendorIds) ? $wizardVendorIds : [] as $vid) {
+                if (is_string($vid) && $vid !== '' && ! in_array($vid, $vendorIdsList, true)) {
+                    $vendorIdsList[] = $vid;
+                }
+            }
+            $vendorNamesList = array_map(fn ($id) => $vendorNames[$id] ?? $id, $vendorIdsList);
+            $vendorRolesList = array_map(fn ($id) => isset($roles[$id]) ? Vendor::roleLabel($roles[$id]) : '—', $vendorIdsList);
 
             // Section approvals — flatten as "section: status, ..."
             $approvals = $w['section_approvals'] ?? [];
@@ -396,6 +417,7 @@ class ExportController extends Controller
                 $s5['pihak_ketiga'] ?? '',
                 implode(', ', $vendorIdsList),
                 implode(', ', $vendorNamesList),
+                implode(', ', $vendorRolesList),
                 // Sec 6 — Penerima Internal
                 $s6['penerima_internal'] ?? '',
                 $s6['penerima_internal_divisi'] ?? '',
@@ -706,6 +728,9 @@ class ExportController extends Controller
             'Terdeteksi', 'Assessed', 'Contained', 'Ditutup',
             'Notif KOMDIGI', 'Notif Subjek',
             'Incident Commander', 'DPO',
+            // Hanya pihak ketiga yang DIPASTIKAN terlibat; dugaan hasil
+            // penelusuran RoPA tidak pernah ikut diekspor.
+            'Pihak Ketiga Terlibat',
         ];
 
         $rows = $items->map(function ($b) use ($nameOf) {
@@ -735,6 +760,7 @@ class ExportController extends Controller
                 $b->notified_subjects_at?->format('Y-m-d H:i') ?? '-',
                 $nameOf($b->incident_commander),
                 $nameOf($b->dpo_id),
+                implode(', ', array_map(fn ($v) => $v['name'] ?? '', $b->linked_third_parties ?? [])) ?: '-',
             ];
         });
 
@@ -1813,6 +1839,7 @@ class ExportController extends Controller
             ['key' => 'contained_at', 'label' => 'Contained', 'format' => 'datetime', 'width' => 22],
             ['key' => 'closed_at', 'label' => 'Ditutup', 'format' => 'datetime', 'width' => 22],
             ['key' => 'root_cause', 'label' => 'Root Cause', 'width' => 36],
+            ['key' => 'third_parties', 'label' => 'Pihak Ketiga Terlibat', 'width' => 30],
         ];
 
         $rows = $items->map(function ($b) {
@@ -1836,6 +1863,7 @@ class ExportController extends Controller
                 'contained_at' => $b->contained_at?->toIso8601String(),
                 'closed_at' => $b->closed_at?->toIso8601String(),
                 'root_cause' => $b->root_cause ?? '-',
+                'third_parties' => implode(', ', array_map(fn ($v) => $v['name'] ?? '', $b->linked_third_parties ?? [])) ?: '-',
             ];
         })->all();
 

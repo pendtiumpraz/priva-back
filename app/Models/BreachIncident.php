@@ -13,7 +13,7 @@ class BreachIncident extends Model
     use BelongsToOrg, HasUuids, SoftDeletes;
 
     protected $fillable = [
-        'org_id', 'incident_code', 'linked_ropa_id', 'linked_ropa_ids', 'title', 'description', 'severity', 'source',
+        'org_id', 'incident_code', 'linked_ropa_id', 'linked_ropa_ids', 'linked_vendor_ids', 'title', 'description', 'severity', 'source',
         'case_type', 'containment_template_id',
         'status', 'is_simulation', 'affected_data_types', 'affected_subjects_count',
         'root_cause', 'containment_actions', 'containment_checklist', 'remediation_plan',
@@ -31,6 +31,7 @@ class BreachIncident extends Model
         'notification_template' => 'array', 'timeline_log' => 'array',
         'custom_raci' => 'array', 'containment_steps' => 'array',
         'linked_ropa_ids' => 'array',
+        'linked_vendor_ids' => 'array',
         'notification_deadline' => 'datetime', 'detected_at' => 'datetime',
         'assessed_at' => 'datetime', 'contained_at' => 'datetime', 'closed_at' => 'datetime',
         'notified_komdigi_at' => 'datetime', 'notified_subjects_at' => 'datetime',
@@ -41,7 +42,7 @@ class BreachIncident extends Model
         'description' => EncryptedString::class,
     ];
 
-    protected $appends = ['linked_ropas'];
+    protected $appends = ['linked_ropas', 'linked_third_parties'];
 
     public function organization()
     {
@@ -72,6 +73,23 @@ class BreachIncident extends Model
 
         return Ropa::whereIn('id', $ids)
             ->get(['id', 'registration_number', 'processing_activity'])
+            ->toArray();
+    }
+
+    /**
+     * Pihak ketiga yang DIPASTIKAN terlibat — dipilih penanggung jawab insiden,
+     * bukan hasil penelusuran. Dugaan lewat RoPA disajikan terpisah oleh
+     * BreachThirdPartyController::suggested() supaya keduanya tidak tertukar.
+     */
+    public function getLinkedThirdPartiesAttribute(): array
+    {
+        $ids = $this->linked_vendor_ids;
+        if (empty($ids) || ! is_array($ids)) {
+            return [];
+        }
+
+        return Vendor::whereIn('id', $ids)
+            ->get(['id', 'name', 'country', 'risk_level'])
             ->toArray();
     }
 }

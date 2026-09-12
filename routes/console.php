@@ -27,6 +27,10 @@ Schedule::command('consent:prune-cookie-logs')->dailyAt('02:30');
 // dan menunggu sampai sehari kemudian bukan pilihan yang dapat diterima.
 // Phase 3a — daily privacy posture snapshot per org. Drives trend chart.
 Schedule::command('privasimu:posture-snapshot')->dailyAt('05:00')->withoutOverlapping();
+
+// Pemantauan kabar buruk pihak ketiga (kebocoran data, sanksi, gugatan).
+// Mingguan: kueri internet mahal, dan kabar seperti ini tidak berubah harian.
+Schedule::command('tprm:scan-adverse-media')->weeklyOn(2, '05:30')->withoutOverlapping();
 // Audit log retention — prune entries lebih lama dari security.audit_log_retention_days.
 // No-op kalau setting = 0 (keep forever, default).
 Schedule::command('audit-logs:prune')->dailyAt('04:00');

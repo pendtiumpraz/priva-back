@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AutomationController;
 use App\Http\Controllers\Api\AvatarChatController;
 use App\Http\Controllers\Api\BreachReportController;
+use App\Http\Controllers\Api\BreachThirdPartyController;
 use App\Http\Controllers\Api\ConnectionMapController;
 use App\Http\Controllers\Api\ConsentCollectionController;
 use App\Http\Controllers\Api\ConsentItemController;
@@ -49,6 +50,7 @@ use App\Http\Controllers\Api\DpiaAssessmentFrameworkController;
 use App\Http\Controllers\Api\DpiaRiskEventTemplateController;
 use App\Http\Controllers\Api\DpiaRtpController;
 use App\Http\Controllers\Api\DsrAppController;
+use App\Http\Controllers\Api\DsrAutomatedDecisionController;
 use App\Http\Controllers\Api\DsrChannelController;
 use App\Http\Controllers\Api\DsrExecutionController;
 use App\Http\Controllers\Api\DsrInboundPublicController;
@@ -64,6 +66,7 @@ use App\Http\Controllers\Api\HoldingAssessmentReviewController;
 use App\Http\Controllers\Api\HoldingDashboardController;
 use App\Http\Controllers\Api\IntegrationController;
 use App\Http\Controllers\Api\KnowledgeBaseController;
+use App\Http\Controllers\Api\KontrakPihakKetigaPublikController;
 use App\Http\Controllers\Api\LiaController;
 use App\Http\Controllers\Api\LicenseController;
 use App\Http\Controllers\Api\LogAnalyzerController;
@@ -100,7 +103,9 @@ use App\Http\Controllers\Api\RopaApprovalController;
 use App\Http\Controllers\Api\RopaCsvImportController;
 use App\Http\Controllers\Api\RopaGraphController;
 use App\Http\Controllers\Api\RopaLinkController;
+use App\Http\Controllers\Api\RopaPihakKetigaPublikController;
 use App\Http\Controllers\Api\RopaTemplateController;
+use App\Http\Controllers\Api\SanctionController;
 use App\Http\Controllers\Api\SimulationController;
 use App\Http\Controllers\Api\SsoLoginController;
 use App\Http\Controllers\Api\StoragePoolController;
@@ -129,9 +134,14 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\V1\BreachApiController;
 use App\Http\Controllers\Api\V1\ConsentApiV1Controller;
 use App\Http\Controllers\Api\V1\DsrApiV1Controller;
+use App\Http\Controllers\Api\V1\ThirdPartyApiV1Controller;
 use App\Http\Controllers\Api\V2\CookieCaptureController;
+use App\Http\Controllers\Api\VendorContractController;
+use App\Http\Controllers\Api\VendorCsvImportController;
+use App\Http\Controllers\Api\VendorLifecycleController;
 use App\Http\Controllers\Api\VendorPreAssessmentController;
 use App\Http\Controllers\Api\VendorRiskController;
+use App\Http\Controllers\Api\VendorRopaController;
 use App\Http\Controllers\Api\VendorScreeningController;
 use App\Http\Controllers\Api\VoiceTtsController;
 use App\Http\Controllers\Api\WizardSchemaController;
@@ -249,6 +259,34 @@ Route::middleware('throttle:api')->group(function () {
             Route::post('/upload', [AsesmenHoldingController::class, 'uploadEvidence']);
             Route::post('/submit', [AsesmenHoldingController::class, 'submit']);
             Route::get('/result', [AsesmenHoldingController::class, 'result']);
+        });
+
+    // =============================================
+    // RoPA Pihak Ketiga — pihak ketiga mencatat SENDIRI kegiatan pemrosesan
+    // yang ia lakukan untuk pengendali, tanpa login, lewat tautan sekali-kirim.
+    // Middleware `public-vendor-ropa-token`: resolve token, expiry, kunci
+    // sekali-kirim (kecuali minta-akses-ubah), tenant context, 30 RPM per token.
+    // =============================================
+    Route::prefix('ropa-pihak-ketiga/{token}')
+        ->middleware('public-vendor-ropa-token')
+        ->group(function () {
+            Route::get('/', [RopaPihakKetigaPublikController::class, 'show']);
+            Route::post('/draf', [RopaPihakKetigaPublikController::class, 'saveDraft']);
+            Route::post('/kirim', [RopaPihakKetigaPublikController::class, 'submit']);
+            Route::get('/hasil', [RopaPihakKetigaPublikController::class, 'hasil']);
+            // Satu-satunya penulisan yang tetap boleh setelah terkunci.
+            Route::post('/minta-akses-ubah', [RopaPihakKetigaPublikController::class, 'mintaAksesUbah']);
+        });
+
+    // =============================================
+    // Unggah kontrak oleh pihak ketiga — dipakai bila perusahaan tidak
+    // memegang berkas kontraknya. Sekali unggah, lalu tautan terkunci.
+    // =============================================
+    Route::prefix('kontrak-pihak-ketiga/{token}')
+        ->middleware('public-vendor-contract-token')
+        ->group(function () {
+            Route::get('/', [KontrakPihakKetigaPublikController::class, 'show']);
+            Route::post('/unggah', [KontrakPihakKetigaPublikController::class, 'upload']);
         });
 
     // SSO Public Routes
@@ -546,7 +584,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // Regulasi — add-on opsional per tenant (UU PDP + PP 33 core, selalu aktif)
     // =============================================
     // Paparan sanksi administratif (PP 33/2026 Pasal 184-186)
-    Route::get('/sanctions', [\App\Http\Controllers\Api\SanctionController::class, 'index'])->middleware('permission:gap_assessment,read');
+    Route::get('/sanctions', [SanctionController::class, 'index'])->middleware('permission:gap_assessment,read');
 
     Route::get('/regulation-addons', [RegulationController::class, 'index'])->middleware('permission:settings,read');
     Route::put('/regulation-addons/{code}', [RegulationController::class, 'update'])
@@ -656,6 +694,11 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     Route::post('/breach/{breachId}/containment', [ContainmentController::class, 'addStep'])->middleware('permission:breach,write');
     Route::put('/breach/{breachId}/containment/{stepKey}', [ContainmentController::class, 'updateStep'])->middleware('permission:breach,write');
     Route::delete('/breach/{breachId}/containment/{stepKey}', [ContainmentController::class, 'removeStep'])->middleware('permission:breach,write');
+
+    // Pihak ketiga pada sebuah insiden: yang dipastikan terlibat + dugaan yang
+    // ditelusuri dari RoPA terdampak (Fase 2).
+    Route::get('/breach/{id}/pihak-ketiga', [BreachThirdPartyController::class, 'suggested'])->middleware('permission:breach,read');
+    Route::post('/breach/{id}/pihak-ketiga/insiden-tprm', [BreachThirdPartyController::class, 'createTprmIncident'])->middleware('permission:breach,write');
 
     // Breach PDF report generators (accept ?size=a4|letter|legal|a3|a5|folio & ?orientation=portrait|landscape)
     Route::get('/breach/{id}/pdf/komdigi', [BreachReportController::class, 'komdigi'])->middleware('permission:breach,read');
@@ -786,10 +829,52 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // =============================================
     // Phase 2: Vendor Risk Management (Third Party Management)
     // =============================================
+    // =============================================
+    // RoPA Pihak Ketiga (sisi pengendali) — meninjau kiriman pihak ketiga dan
+    // menautkannya ke RoPA sendiri; tautan inilah yang dipakai menelusuri
+    // insiden di pihak ketiga sampai ke kegiatan pemrosesan kita.
+    // =============================================
+    // =============================================
+    // Kontrak pihak ketiga + daur hidupnya (Fase 3). Aktivasi dijaga: tanpa
+    // kontrak berlaku yang berkasnya ada, pihak ketiga tidak bisa aktif.
+    // =============================================
+    Route::prefix('vendor-contracts')->group(function () {
+        Route::get('/', [VendorContractController::class, 'index'])->middleware('permission:vendor_risk,read');
+        Route::put('/{id}', [VendorContractController::class, 'update'])->middleware('permission:vendor_risk,write');
+        Route::delete('/{id}', [VendorContractController::class, 'destroy'])->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/berkas', [VendorContractController::class, 'upload'])->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/tautan-unggah', [VendorContractController::class, 'issueUploadLink'])->middleware('permission:vendor_risk,write');
+        Route::post('/{id}/kirim-telaah', [VendorContractController::class, 'sendToReview'])->middleware('permission:vendor_risk,write');
+    });
+    Route::post('/vendor-risk/{vendorId}/contracts', [VendorContractController::class, 'store'])->middleware('permission:vendor_risk,write');
+    Route::post('/vendor-risk/{vendorId}/lifecycle', [VendorLifecycleController::class, 'setStatus'])->middleware('permission:vendor_risk,write');
+    Route::put('/vendor-risk/{vendorId}/offboarding', [VendorLifecycleController::class, 'updateOffboarding'])->middleware('permission:vendor_risk,write');
+    Route::post('/vendor-risk/{vendorId}/offboarding/selesai', [VendorLifecycleController::class, 'complete'])->middleware('permission:vendor_risk,write');
+
+    // Impor massal pihak ketiga dari CSV. Didaftarkan SEBELUM grup
+    // 'vendor-risk' di bawah supaya '/import/...' tidak tertangkap '/{id}'.
+    Route::prefix('vendor-risk/import')->group(function () {
+        Route::get('/template', [VendorCsvImportController::class, 'template'])->middleware('permission:vendor_risk,read');
+        Route::post('/preview', [VendorCsvImportController::class, 'preview'])->middleware('permission:vendor_risk,write');
+        Route::post('/commit', [VendorCsvImportController::class, 'commit'])->middleware('permission:vendor_risk,write');
+    });
+
+    Route::prefix('vendor-ropas')->group(function () {
+        Route::get('/', [VendorRopaController::class, 'index'])->middleware('permission:vendor_risk,read');
+        // Rute statis harus mendahului /{id}.
+        Route::get('/permintaan-ubah', [VendorRopaController::class, 'editRequests'])->middleware('permission:vendor_risk,read');
+        Route::post('/permintaan-ubah/{requestId}/keputusan', [VendorRopaController::class, 'decideEditRequest'])->middleware('permission:vendor_risk,write');
+        Route::get('/{id}', [VendorRopaController::class, 'show'])->middleware('permission:vendor_risk,read');
+        Route::post('/{id}/tinjau', [VendorRopaController::class, 'review'])->middleware('permission:vendor_risk,write');
+        Route::put('/{id}/ropa', [VendorRopaController::class, 'linkRopas'])->middleware('permission:vendor_risk,write');
+    });
+
     Route::prefix('vendor-risk')->group(function () {
         // Phase 2 — Deterministic questionnaire endpoints. Must precede /{id}.
         // Read endpoints: butuh vendor_risk,read.
         Route::get('/categories', [VendorRiskController::class, 'listCategories'])->middleware('permission:vendor_risk,read');
+        // Terbitkan tautan pengisian RoPA untuk pihak ketiga.
+        Route::post('/{vendorId}/ropa-link', [VendorRopaController::class, 'issueLink'])->middleware('permission:vendor_risk,write');
         Route::get('/questionnaire/{category}', [VendorRiskController::class, 'getQuestionnaire'])->middleware('permission:vendor_risk,read');
         // Create/assess endpoints: butuh vendor_risk,write. Sebelumnya TANPA
         // gate sama sekali — bikin permission model TPRM inkonsisten dengan
@@ -1248,7 +1333,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::post('/resend-verification', [DsrVerificationController::class, 'resend'])->middleware('permission:dsr,write');
         Route::post('/manual-verify', [DsrVerificationController::class, 'manualVerify'])->middleware('permission:dsr,write');
         // Keberatan keputusan otomatis — campur tangan manusia / penolakan (PP 33 Pasal 94-95).
-        Route::post('/automated-decision-review', [\App\Http\Controllers\Api\DsrAutomatedDecisionController::class, 'review'])->middleware('permission:dsr,write');
+        Route::post('/automated-decision-review', [DsrAutomatedDecisionController::class, 'review'])->middleware('permission:dsr,write');
 
         // Scope picker
         Route::get('/scopes', [DsrRequestScopeController::class, 'index'])->middleware('permission:dsr,read');
@@ -2198,6 +2283,21 @@ Route::prefix('v1')->middleware(AuthenticatePartnerApi::class)->group(function (
     Route::get('/breach/{id}', [BreachApiController::class, 'show']);
     Route::post('/breach', [BreachApiController::class, 'store']);
     Route::put('/breach/{id}', [BreachApiController::class, 'update']);
+});
+
+// Pihak Ketiga (TPRM) — grup v1 terpisah karena tiap rute memeriksa izin
+// kuncinya sendiri (third_party.read / third_party.write). Menaruhnya di grup
+// Breach di atas akan menjalankan AuthenticatePartnerApi DUA KALI per
+// permintaan: batas laju terpakai ganda dan ApiRequestLog tercatat dobel.
+Route::prefix('v1')->group(function () {
+    Route::get('/third-parties', [ThirdPartyApiV1Controller::class, 'index'])
+        ->middleware(AuthenticatePartnerApi::class.':third_party.read');
+    Route::get('/third-parties/{id}', [ThirdPartyApiV1Controller::class, 'show'])
+        ->middleware(AuthenticatePartnerApi::class.':third_party.read');
+    Route::post('/third-parties', [ThirdPartyApiV1Controller::class, 'store'])
+        ->middleware(AuthenticatePartnerApi::class.':third_party.write');
+    Route::put('/third-parties/{id}', [ThirdPartyApiV1Controller::class, 'update'])
+        ->middleware(AuthenticatePartnerApi::class.':third_party.write');
 });
 
 // =============================================

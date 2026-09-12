@@ -9,6 +9,7 @@ use App\Models\GapAssessment;
 use App\Models\Ropa;
 use App\Models\SecurityAlert;
 use App\Models\Vendor;
+use App\Models\VendorContract;
 use Carbon\Carbon;
 
 class AlertEngineService
@@ -26,6 +27,7 @@ class AlertEngineService
         $generated = array_merge($generated, $this->checkBreachOpen($orgId));
         $generated = array_merge($generated, $this->checkBreachDeadline72h($orgId));
         $generated = array_merge($generated, $this->checkDpaExpiring($orgId));
+        $generated = array_merge($generated, $this->checkContractExpiring($orgId));
         $generated = array_merge($generated, $this->checkRopaHighRiskNoDpia($orgId));
         $generated = array_merge($generated, $this->checkRopaReview90d($orgId));
         $generated = array_merge($generated, $this->checkDpiaReviewDue($orgId));
@@ -288,6 +290,66 @@ class AlertEngineService
     }
 
     /**
+     * Kontrak pihak ketiga akan atau sudah berakhir.
+     *
+     * DPA hanyalah salah satu jenis kontrak; aturan ini melihat seluruh isi
+     * `vendor_contracts` sehingga PKS, NDA, dan MSA ikut terpantau. Ambangnya
+     * 60 hari — lebih longgar daripada DPA karena perpanjangan kontrak biasanya
+     * butuh proses pengadaan.
+     *
+     * @return array<int, SecurityAlert>
+     */
+    protected function checkContractExpiring(string $orgId): array
+    {
+        $alerts = [];
+
+        $contracts = VendorContract::where('org_id', $orgId)
+            ->where('status', '!=', VendorContract::STATUS_TERMINATED)
+            ->whereNotNull('end_at')
+            ->with('vendor:id,name')
+            ->get();
+
+        foreach ($contracts as $contract) {
+            $days = (int) now()->startOfDay()->diffInDays($contract->end_at->startOfDay(), false);
+            if ($days > 60) {
+                continue;
+            }
+
+            $ruleCode = $days < 0 ? 'contract_expired' : 'contract_expiring';
+            $exists = SecurityAlert::where('org_id', $orgId)
+                ->where('rule_code', $ruleCode)
+                ->where('record_id', $contract->id)
+                ->whereIn('status', ['open', 'acknowledged'])
+                ->exists();
+
+            if ($exists) {
+                continue;
+            }
+
+            $name = $contract->vendor?->name ?? 'Pihak ketiga';
+            $alerts[] = SecurityAlert::create([
+                'org_id' => $orgId,
+                'rule_code' => $ruleCode,
+                'severity' => $days < 0 ? 'high' : ($days <= 14 ? 'high' : 'medium'),
+                'title' => $days < 0
+                    ? "Kontrak '{$contract->title}' dengan {$name} sudah berakhir"
+                    : "Kontrak '{$contract->title}' dengan {$name} berakhir dalam {$days} hari",
+                'description' => 'Perpanjang kontrak atau mulai proses offboarding sebelum masa berlakunya lewat.',
+                'module' => 'vendor-risk',
+                'record_id' => $contract->id,
+                'metadata' => [
+                    'vendor_name' => $name,
+                    'contract_title' => $contract->title,
+                    'end_at' => optional($contract->end_at)->toDateString(),
+                    'days_remaining' => $days,
+                ],
+            ]);
+        }
+
+        return $alerts;
+    }
+
+    /**
      * Rule 3: Vendor DPA expired or expiring within 30 days.
      */
     protected function checkDpaExpiring(string $orgId): array
@@ -296,7 +358,11 @@ class AlertEngineService
         $vendors = Vendor::where('org_id', $orgId)->get();
 
         foreach ($vendors as $vendor) {
-            $dpaExpiry = $vendor->dpa_expiry;
+            // Kolomnya `dpa_expires_at`; `dpa_expiry` tidak pernah ada sehingga
+            // nilainya selalu null — akibatnya SETIAP pihak ketiga terus-menerus
+            // dilaporkan "DPA belum ada", dan peringatan akan/sudah kedaluwarsa
+            // tidak pernah berjalan sama sekali.
+            $dpaExpiry = $vendor->dpa_expires_at;
             if (! $dpaExpiry) {
                 // No DPA at all
                 $exists = SecurityAlert::where('org_id', $orgId)

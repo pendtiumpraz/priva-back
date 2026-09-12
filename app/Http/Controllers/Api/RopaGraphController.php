@@ -8,6 +8,7 @@ use App\Models\CrossBorderTransfer;
 use App\Models\LiaAssessment;
 use App\Models\Ropa;
 use App\Models\TiaAssessment;
+use App\Models\Vendor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -35,11 +36,20 @@ use Illuminate\Http\Request;
  */
 class RopaGraphController extends Controller
 {
+    /** Peran tautan RoPA ↔ pihak ketiga → label tepi, sejalan dengan Peta Koneksi DSPM. */
+    private const ROLE_EDGE_LABELS = [
+        Vendor::ROLE_CONTROLLER => 'dibagikan ke pengendali',
+        Vendor::ROLE_PROCESSOR => 'diproses',
+        Vendor::ROLE_JOINT_CONTROLLER => 'pengendali bersama',
+        Vendor::ROLE_SUB_PROCESSOR => 'diproses subprosesor',
+    ];
+
     public function show(Request $request, string $id): JsonResponse
     {
         $ropa = Ropa::with([
             'informationSystems:id,name,source_type,pdp_alert_count',
             'consentPoints:id,collection_id,name,kind',
+            'vendors:id,name,country,risk_level',
             'dpias:id,registration_number,ropa_id,risk_level,status,mitigation_tracking',
             'dpiaCoverages:id,registration_number,risk_level,status,mitigation_tracking',
         ])->findOrFail($id);
@@ -89,6 +99,27 @@ class RopaGraphController extends Controller
                 'href' => '/consent?open='.$cp->id,
             ];
             $edges[] = self::edge($nid, 'ropa:'.$ropa->id, 'dasar consent');
+        }
+
+        // ---- PENERIMA (kanan) : pihak ketiga, dengan perannya di kegiatan ini ----
+        // Sebelumnya graf per-RoPA sama sekali tidak memunculkan pihak ketiga,
+        // padahal Peta Koneksi DSPM sudah menampilkannya.
+        foreach ($ropa->vendors as $thirdParty) {
+            $nid = 'thirdparty:'.$thirdParty->id;
+            $role = Vendor::normalizeRole($thirdParty->pivot->role) ?? Vendor::ROLE_PROCESSOR;
+            $nodes[] = [
+                'id' => $nid,
+                'type' => 'third_party',
+                'label' => $thirdParty->name ?: 'Pihak Ketiga',
+                'code' => $thirdParty->country,
+                'meta' => array_filter([
+                    'risk' => $thirdParty->risk_level,
+                    'peran' => Vendor::ROLE_LABELS[$role],
+                    'tujuan' => $thirdParty->pivot->purpose,
+                ]),
+                'href' => '/vendor-risk?open='.$thirdParty->id,
+            ];
+            $edges[] = self::edge('ropa:'.$ropa->id, $nid, self::ROLE_EDGE_LABELS[$role]);
         }
 
         // ---- KONSEKUENSI (kanan) : DPIA, dan tiap DPIA -> item RTP ----

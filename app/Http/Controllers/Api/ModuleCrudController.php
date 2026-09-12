@@ -17,6 +17,7 @@ use App\Models\ModuleCustomField;
 use App\Models\Organization;
 use App\Models\ProcessingCategory;
 use App\Models\Ropa;
+use App\Models\Vendor;
 use App\Services\ApprovalWorkflowDispatcher;
 use App\Services\AssessmentAutoTriggerService;
 use App\Services\EntitlementService;
@@ -424,6 +425,88 @@ class ModuleCrudController extends Controller
         $ropa->informationSystems()->sync($syncData);
     }
 
+    /**
+     * Sync RoPA ↔ pihak ketiga (pivot `ropa_vendor`) dari wizard bagian
+     * Penggunaan & Penyimpanan.
+     *
+     * Dua sumber, sengaja:
+     *   - `vendor_links[]` — {id, role, purpose, data_shared[], contract_ref};
+     *     sumber kebenaran baru, menyimpan PERAN per kegiatan.
+     *   - `vendor_ids[]`   — daftar UUID polos (wizard lama, impor CSV, isian AI);
+     *     perannya 'processor' karena bagian ini memang "pihak yang MEMPROSES".
+     * Idempotent: sync() melepas tautan yang dihapus dari wizard. No-op bila
+     * kedua kunci tidak ada, supaya update parsial tidak menghapus tautan.
+     */
+    private function syncRopaVendors($ropa): void
+    {
+        $section = ($ropa->wizard_data ?? [])['penggunaan_penyimpanan'] ?? [];
+        $links = $section['vendor_links'] ?? null;
+        $ids = $section['vendor_ids'] ?? null;
+        if ($links === null && $ids === null) {
+            return;
+        }
+
+        $rows = [];
+        foreach (is_array($links) ? $links : [] as $link) {
+            $id = is_array($link) ? ($link['id'] ?? null) : null;
+            if (! is_string($id) || $id === '') {
+                continue;
+            }
+            $shared = is_array($link['data_shared'] ?? null)
+                ? array_values(array_filter($link['data_shared'], 'is_string'))
+                : null;
+            $rows[$id] = [
+                'role' => Vendor::normalizeRole($link['role'] ?? null) ?? Vendor::ROLE_PROCESSOR,
+                'purpose' => is_string($link['purpose'] ?? null) ? mb_substr($link['purpose'], 0, 2000) : null,
+                // Array dibiarkan apa adanya: sync() melewati pivot RopaVendor,
+                // jadi cast 'array' yang meng-encode-nya (encode manual = ganda).
+                'data_shared' => $shared ?: null,
+                'contract_ref' => is_string($link['contract_ref'] ?? null) ? mb_substr($link['contract_ref'], 0, 255) : null,
+            ];
+        }
+        foreach (is_array($ids) ? $ids : [] as $id) {
+            if (is_string($id) && $id !== '' && ! isset($rows[$id])) {
+                $rows[$id] = ['role' => Vendor::ROLE_PROCESSOR, 'purpose' => null, 'data_shared' => null, 'contract_ref' => null];
+            }
+        }
+
+        // Hanya pihak ketiga milik org yang sama — tautan lintas tenant tidak pernah dibuat.
+        $valid = $rows
+            ? Vendor::whereIn('id', array_keys($rows))->where('org_id', $ropa->org_id)->pluck('id')->all()
+            : [];
+
+        $syncData = [];
+        foreach ($valid as $id) {
+            $syncData[$id] = $rows[$id] + ['org_id' => $ropa->org_id];
+        }
+        $ropa->vendors()->sync($syncData);
+    }
+
+    /**
+     * Samakan bentuk `linked_vendor_ids` dengan linked_ropa_ids: terima array
+     * atau string JSON, buang nilai kosong, simpan null bila tidak ada isinya.
+     * Ini pihak ketiga yang DIPASTIKAN terlibat — dugaan lewat RoPA dihitung
+     * terpisah oleh BreachThirdPartyController.
+     */
+    private function normalizeBreachVendorLinks(array $data): array
+    {
+        if (! array_key_exists('linked_vendor_ids', $data)) {
+            return $data;
+        }
+
+        $ids = $data['linked_vendor_ids'];
+        if (is_string($ids)) {
+            $decoded = json_decode($ids, true);
+            $ids = is_array($decoded) ? $decoded : [];
+        }
+        $ids = is_array($ids)
+            ? array_values(array_unique(array_filter(array_map('strval', $ids), fn ($v) => $v !== '')))
+            : [];
+        $data['linked_vendor_ids'] = $ids ?: null;
+
+        return $data;
+    }
+
     private function normalizeBreachRopaLinks(array $data): array
     {
         if (array_key_exists('linked_ropa_ids', $data)) {
@@ -576,6 +659,7 @@ class ModuleCrudController extends Controller
                 $data['affected_subjects_count'] = (int) ($data['affected_subjects_count'] ?? 0);
                 // Multi-RoPA linkage: normalize linked_ropa_ids + sync legacy linked_ropa_id.
                 $data = $this->normalizeBreachRopaLinks($data);
+                $data = $this->normalizeBreachVendorLinks($data);
             }
 
             // Auto-generate codes
@@ -697,6 +781,11 @@ class ModuleCrudController extends Controller
                     $this->syncRopaInformationSystems($record);
                 } catch (\Throwable $e) {
                     \Log::warning('syncRopaInformationSystems on create failed: '.$e->getMessage());
+                }
+                try {
+                    $this->syncRopaVendors($record);
+                } catch (\Throwable $e) {
+                    \Log::warning('syncRopaVendors on create failed: '.$e->getMessage());
                 }
             }
             // Sync DPIA ↔ RoPA pivot on create (from wizard.koneksi_ropa.connected_ropas)
@@ -1089,6 +1178,7 @@ class ModuleCrudController extends Controller
         $payload = $request->all();
         if ($module === 'breach') {
             $payload = $this->normalizeBreachRopaLinks($payload);
+            $payload = $this->normalizeBreachVendorLinks($payload);
         }
         if ($module === 'ropa') {
             // Merge current state so calculator sees the union (wizard_data
@@ -1135,6 +1225,11 @@ class ModuleCrudController extends Controller
                 $this->syncRopaInformationSystems($record);
             } catch (\Throwable $e) {
                 \Log::warning("syncRopaInformationSystems failed for RoPA {$record->id}: ".$e->getMessage());
+            }
+            try {
+                $this->syncRopaVendors($record);
+            } catch (\Throwable $e) {
+                \Log::warning("syncRopaVendors failed for RoPA {$record->id}: ".$e->getMessage());
             }
         }
         // Sync DPIA ↔ RoPA pivot

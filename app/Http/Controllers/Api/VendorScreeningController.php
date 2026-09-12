@@ -11,6 +11,7 @@ use App\Services\VendorScreening\VendorScreeningService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 /**
  * TPRM Phase 3 — AI Vendor Screening endpoints.
@@ -39,7 +40,7 @@ class VendorScreeningController extends Controller
     {
         try {
             return $this->doRun($request, $vendorId, $service);
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e;
         } catch (\Throwable $e) {
             \Log::error('VendorScreeningController::run failed', [
@@ -47,6 +48,7 @@ class VendorScreeningController extends Controller
                 'message' => $e->getMessage(),
                 'file' => $e->getFile().':'.$e->getLine(),
             ]);
+
             return response()->json([
                 'message' => 'Gagal menjalankan screening.',
                 'error' => $e->getMessage(),
@@ -62,7 +64,7 @@ class VendorScreeningController extends Controller
 
         $data = $request->validate([
             'sources' => 'nullable|array',
-            'sources.*' => 'string|in:web_search,privacy_policy,documents,sanctions',
+            'sources.*' => 'string|in:web_search,privacy_policy,documents,sanctions,adverse_media',
             'context_preset' => 'nullable|string|in:'.implode(',', AiContextPresets::ALL_KEYS),
             'async' => 'nullable|boolean',
         ]);
@@ -82,6 +84,7 @@ class VendorScreeningController extends Controller
                     'data' => $this->present($screening),
                 ], 500);
             }
+
             return response()->json([
                 'message' => 'Screening selesai.',
                 'data' => $this->present($screening),
@@ -196,7 +199,7 @@ class VendorScreeningController extends Controller
             'vendor_ids' => 'required|array|min:1|max:50',
             'vendor_ids.*' => 'required|string',
             'sources' => 'nullable|array',
-            'sources.*' => 'string|in:web_search,privacy_policy,documents,sanctions',
+            'sources.*' => 'string|in:web_search,privacy_policy,documents,sanctions,adverse_media',
             'context_preset' => 'nullable|string|in:'.implode(',', AiContextPresets::ALL_KEYS),
         ]);
 
@@ -254,6 +257,7 @@ class VendorScreeningController extends Controller
     public function listPresets()
     {
         $options = AiContextPresets::options();
+
         return response()->json([
             'data' => collect($options)->map(fn ($v, $k) => [
                 'key' => $k,

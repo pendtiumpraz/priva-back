@@ -995,9 +995,12 @@ class RecordReportBuilder
                 ],
             ],
             [
-                'title' => 'III. RoPA Terkait',
+                'title' => 'III. RoPA & Pihak Ketiga Terkait',
                 'rows' => [
                     ['label' => 'Aktivitas Pemrosesan Terkait', 'value' => $this->bullets($this->arr($x->linked_ropas), fn ($r) => trim(($r['registration_number'] ?? '').' — '.($r['processing_activity'] ?? ''), ' —'))],
+                    // Hanya pihak ketiga yang DIPASTIKAN terlibat; dugaan hasil
+                    // penelusuran tidak pernah masuk laporan resmi.
+                    ['label' => 'Pihak Ketiga yang Terlibat', 'value' => $this->bullets($this->arr($x->linked_third_parties), fn ($v) => trim(($v['name'] ?? '').(($v['country'] ?? null) ? ' — '.$v['country'] : ''), ' —'))],
                 ],
             ],
             [

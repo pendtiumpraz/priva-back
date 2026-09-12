@@ -71,8 +71,20 @@ class ConnectionMapScanner
         'assessed_by_tia' => 'dinilai TIA',
         'impacted_by' => 'terdampak insiden',
         'processed_by' => 'diproses pihak ketiga',
+        'shared_to_controller' => 'dibagikan ke pengendali lain',
+        'joint_controller_with' => 'pengendali bersama',
+        'sub_processed_by' => 'diproses subprosesor',
+        'involves_third_party' => 'melibatkan pihak ketiga',
         'received_by' => 'diterima pihak ketiga',
         'targets' => 'menyasar sistem',
+    ];
+
+    /** Peran tautan RoPA ↔ pihak ketiga (pivot `ropa_vendor`) → jenis tepi. */
+    private const ROLE_RELATIONS = [
+        Vendor::ROLE_CONTROLLER => 'shared_to_controller',
+        Vendor::ROLE_PROCESSOR => 'processed_by',
+        Vendor::ROLE_JOINT_CONTROLLER => 'joint_controller_with',
+        Vendor::ROLE_SUB_PROCESSOR => 'sub_processed_by',
     ];
 
     /** @return array<string, mixed> */
@@ -87,15 +99,28 @@ class ConnectionMapScanner
         $ropas = Ropa::query()->where('org_id', $orgId)
             ->get(['id', 'registration_number', 'processing_activity', 'risk_level', 'status', 'wizard_data']);
         $totals['ropa'] = $ropas->count();
+
+        // Peran pihak ketiga per kegiatan (pivot `ropa_vendor`): Pengendali,
+        // Prosesor, Pengendali Bersama, atau Subprosesor — kewajiban tiap peran
+        // berbeda, jadi tepinya pun dibedakan.
+        $thirdPartyRoles = [];
+        foreach (DB::table('ropa_vendor')->where('org_id', $orgId)->get(['ropa_id', 'vendor_id', 'role']) as $p) {
+            $thirdPartyRoles[$p->ropa_id][$p->vendor_id] = (string) $p->role;
+        }
+
         foreach ($ropas as $r) {
             $this->addNode($nodes, 'ropa:'.$r->id, 'ropa', $r->processing_activity ?: ($r->registration_number ?: 'RoPA'),
                 $r->registration_number, ['risk' => $r->risk_level, 'status' => $r->status], '/ropa?open='.$r->id);
 
-            // Pihak ketiga pemroses dicatat di wizard RoPA (bagian Penggunaan &
-            // Penyimpanan) — sumber yang sama dengan ekspor RoPA.
+            foreach ($thirdPartyRoles[$r->id] ?? [] as $tpId => $role) {
+                $links[] = ['ropa:'.$r->id, 'thirdparty:'.$tpId, self::ROLE_RELATIONS[$role] ?? 'processed_by'];
+            }
+
+            // RoPA lama yang belum tersinkron ke pivot: daftar UUID di wizard
+            // (bagian Penggunaan & Penyimpanan) tetap dibaca, tanpa peran.
             $thirdPartyIds = data_get($r->wizard_data, 'penggunaan_penyimpanan.vendor_ids');
             foreach (is_array($thirdPartyIds) ? $thirdPartyIds : [] as $tpId) {
-                if (is_string($tpId) && $tpId !== '') {
+                if (is_string($tpId) && $tpId !== '' && ! isset($thirdPartyRoles[$r->id][$tpId])) {
                     $links[] = ['ropa:'.$r->id, 'thirdparty:'.$tpId, 'processed_by'];
                 }
             }
@@ -159,8 +184,11 @@ class ConnectionMapScanner
             ->get(['id', 'name', 'type', 'country', 'risk_level']);
         $totals['third_party'] = $thirdParties->count();
         foreach ($thirdParties as $v) {
+            // Peran bawaan di registri; peran sesungguhnya per kegiatan ada di tepi.
+            $defaultRole = Vendor::normalizeRole($v->type);
             $this->addNode($nodes, 'thirdparty:'.$v->id, 'third_party', $v->name ?: 'Pihak Ketiga',
-                $v->country, ['risk' => $v->risk_level, 'role' => $v->type], '/vendor-risk?open='.$v->id);
+                $v->country, ['risk' => $v->risk_level, 'role' => $defaultRole ? Vendor::ROLE_LABELS[$defaultRole] : null],
+                '/vendor-risk?open='.$v->id);
         }
 
         // ---- Transfer lintas negara.
@@ -217,7 +245,7 @@ class ConnectionMapScanner
         // ---- Insiden kebocoran. Insiden simulasi (latihan) tidak dipetakan —
         // itu bukan kejadian nyata dan akan menyesatkan pembacaan postur.
         $breaches = BreachIncident::query()->where('org_id', $orgId)->where('is_simulation', false)
-            ->get(['id', 'incident_code', 'title', 'severity', 'status', 'linked_ropa_id', 'linked_ropa_ids']);
+            ->get(['id', 'incident_code', 'title', 'severity', 'status', 'linked_ropa_id', 'linked_ropa_ids', 'linked_vendor_ids']);
         $totals['breach'] = $breaches->count();
         foreach ($breaches as $b) {
             $id = 'breach:'.$b->id;
@@ -232,6 +260,15 @@ class ConnectionMapScanner
             foreach ($ropaIds as $rid) {
                 if (is_string($rid) && $rid !== '') {
                     $links[] = ['ropa:'.$rid, $id, 'impacted_by'];
+                }
+            }
+
+            // Pihak ketiga yang DIPASTIKAN terlibat pada insiden ini. Dugaan
+            // hasil penelusuran sengaja tidak digambar: peta ini menampilkan
+            // hubungan yang sudah ditegaskan orang, bukan kemungkinan.
+            foreach (is_array($b->linked_vendor_ids) ? $b->linked_vendor_ids : [] as $vid) {
+                if (is_string($vid) && $vid !== '') {
+                    $links[] = [$id, 'thirdparty:'.$vid, 'involves_third_party'];
                 }
             }
         }

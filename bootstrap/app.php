@@ -11,6 +11,8 @@ use App\Http\Middleware\InitializeTenantDatabase;
 use App\Http\Middleware\PublicAssessmentTokenMiddleware;
 use App\Http\Middleware\PublicHoldingAssessmentTokenMiddleware;
 use App\Http\Middleware\PublicPreAssessmentTokenMiddleware;
+use App\Http\Middleware\PublicVendorContractTokenMiddleware;
+use App\Http\Middleware\PublicVendorRopaTokenMiddleware;
 use App\Http\Middleware\RootOnly;
 use App\Http\Middleware\RootOrSuperadmin;
 use App\Http\Middleware\SanctumTokenRefresh;
@@ -45,6 +47,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'public-pre-assessment-token' => PublicPreAssessmentTokenMiddleware::class,
             // Public Holding Compliance Assessment — sibling of TPRM token mw, own rate bucket.
             'public-holding-assessment-token' => PublicHoldingAssessmentTokenMiddleware::class,
+            // Public "RoPA Pihak Ketiga" — pihak ketiga mengisi RoPA miliknya sendiri.
+            'public-vendor-ropa-token' => PublicVendorRopaTokenMiddleware::class,
+            // Public unggah kontrak — dipakai bila perusahaan tidak memegang berkasnya.
+            'public-vendor-contract-token' => PublicVendorContractTokenMiddleware::class,
             // Per-user rate limit khusus endpoint AI — N panggilan per menit
             // per user (default 20, configurable di system_settings).
             'ai-throttle' => AiCallRateLimit::class,
