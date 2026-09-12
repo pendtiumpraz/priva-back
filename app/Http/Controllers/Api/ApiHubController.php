@@ -342,6 +342,43 @@ class ApiHubController extends Controller
                             ],
                         ],
                     ],
+                    [
+                        'name' => 'RoPA (Catatan Kegiatan Pemrosesan)',
+                        'prefix' => '/ropa',
+                        'endpoints' => [
+                            [
+                                'method' => 'GET',
+                                'path' => '/ropa',
+                                'description' => 'Daftar RoPA organisasi (tanpa wizard_data)',
+                                'permissions' => ['ropa.read'],
+                                'params' => [
+                                    ['name' => 'search', 'type' => 'string', 'required' => false],
+                                    ['name' => 'risk_level', 'type' => 'string', 'required' => false, 'values' => 'low,medium,high'],
+                                    ['name' => 'status', 'type' => 'string', 'required' => false],
+                                    ['name' => 'division', 'type' => 'string', 'required' => false],
+                                    ['name' => 'legal_basis', 'type' => 'string', 'required' => false],
+                                    ['name' => 'since', 'type' => 'date', 'required' => false],
+                                    ['name' => 'sort', 'type' => 'string', 'required' => false, 'default' => 'created_at'],
+                                    ['name' => 'per_page', 'type' => 'integer', 'required' => false, 'default' => 20],
+                                ],
+                            ],
+                            [
+                                'method' => 'GET',
+                                'path' => '/ropa/stats',
+                                'description' => 'Ringkasan jumlah RoPA per tingkat risiko dan status',
+                                'permissions' => ['ropa.read'],
+                            ],
+                            [
+                                'method' => 'GET',
+                                'path' => '/ropa/{id}',
+                                'description' => 'Detail RoPA beserta pihak ketiga (dengan perannya) dan DPIA terkait',
+                                'permissions' => ['ropa.read'],
+                                'params' => [
+                                    ['name' => 'include', 'type' => 'string', 'required' => false, 'values' => 'wizard_data'],
+                                ],
+                            ],
+                        ],
+                    ],
                 ],
                 'rate_limiting' => [
                     'default' => '60 requests/minute',

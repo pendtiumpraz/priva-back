@@ -134,6 +134,7 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\V1\BreachApiController;
 use App\Http\Controllers\Api\V1\ConsentApiV1Controller;
 use App\Http\Controllers\Api\V1\DsrApiV1Controller;
+use App\Http\Controllers\Api\V1\RopaApiV1Controller;
 use App\Http\Controllers\Api\V1\ThirdPartyApiV1Controller;
 use App\Http\Controllers\Api\V2\CookieCaptureController;
 use App\Http\Controllers\Api\VendorContractController;
@@ -2298,6 +2299,15 @@ Route::prefix('v1')->group(function () {
         ->middleware(AuthenticatePartnerApi::class.':third_party.write');
     Route::put('/third-parties/{id}', [ThirdPartyApiV1Controller::class, 'update'])
         ->middleware(AuthenticatePartnerApi::class.':third_party.write');
+
+    // RoPA — baca saja (lihat catatan di RopaApiV1Controller). '/ropa/stats'
+    // didaftarkan lebih dulu supaya tidak tertangkap '/ropa/{id}'.
+    Route::get('/ropa/stats', [RopaApiV1Controller::class, 'stats'])
+        ->middleware(AuthenticatePartnerApi::class.':ropa.read');
+    Route::get('/ropa', [RopaApiV1Controller::class, 'index'])
+        ->middleware(AuthenticatePartnerApi::class.':ropa.read');
+    Route::get('/ropa/{id}', [RopaApiV1Controller::class, 'show'])
+        ->middleware(AuthenticatePartnerApi::class.':ropa.read');
 });
 
 // =============================================
