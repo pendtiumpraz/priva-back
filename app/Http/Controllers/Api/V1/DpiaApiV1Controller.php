@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Dpia;
+use App\Services\ModuleWrite\ModuleWriteContext;
+use App\Services\ModuleWrite\RopaDpiaWriter;
 use Illuminate\Http\Request;
 
 /**
@@ -107,6 +109,35 @@ class DpiaApiV1Controller extends Controller
         unset($data['ropas']);
 
         return response()->json(['data' => $data]);
+    }
+
+    /**
+     * POST /api/v1/dpia
+     *
+     * Memakai service yang sama dengan jalur antarmuka, termasuk penomoran
+     * DPIA-YYYY-NNN yang dihitung lintas tenant dan sinkronisasi pivot
+     * `dpia_ropa` dari wizard.
+     */
+    public function store(Request $request)
+    {
+        $request->validate([
+            'description' => 'nullable|string',
+            'ropa_id' => 'nullable|uuid',
+            'risk_level' => 'nullable|in:low,medium,high',
+            'status' => 'nullable|string|max:50',
+            'wizard_data' => 'nullable|array',
+        ]);
+
+        $hasil = app(RopaDpiaWriter::class)->create(
+            'dpia',
+            $request->all(),
+            ModuleWriteContext::forApiKey($this->orgId($request)),
+        );
+
+        return response()->json([
+            'message' => 'DPIA dibuat.',
+            'data' => $hasil['record'],
+        ], 201);
     }
 
     /** GET /api/v1/dpia/stats */

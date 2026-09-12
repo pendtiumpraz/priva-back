@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Ropa;
 use App\Models\Vendor;
+use App\Services\ModuleWrite\ModuleWriteContext;
+use App\Services\ModuleWrite\RopaDpiaWriter;
 use Illuminate\Http\Request;
 
 /**
@@ -15,15 +17,16 @@ use Illuminate\Http\Request;
  * `X-Api-Key` (AuthenticatePartnerApi) yang sudah membawa org, izin, batas
  * laju, dan pencatatan permintaannya sendiri.
  *
- * SENGAJA HANYA BACA untuk saat ini. Membuat RoPA bukan sekadar INSERT: jalur
- * tulis di ModuleCrudController menjalankan penomoran berbasis kode divisi,
- * `applyRopaAutoRisk` (kategori data sensitif menaikkan risiko ke high),
- * percobaan ulang saat kode bentrok, pemunculan DPIA draf otomatis saat
- * risiko high, dan sinkronisasi peran pihak ketiga ke pivot `ropa_vendor`.
- * Seluruhnya bergantung pada `$request->user()`, yang tidak ada pada
- * permintaan berkunci API. Menyalin ulang logika itu di sini persis mengulang
- * sebab temuan F-03 — tiga penghasil nomor yang saling menyimpang. Jalur tulis
- * menyusul setelah logika tersebut diangkat ke service bersama.
+ * Jalur tulis memakai RopaDpiaWriter — service yang sama persis dengan yang
+ * dipakai antarmuka. Membuat RoPA bukan sekadar INSERT: sekali tulis membawa
+ * penomoran berbasis kode divisi, `applyRopaAutoRisk`, percobaan ulang saat kode
+ * bentrok, sinkronisasi pivot pihak ketiga dan sistem informasi, jejak audit,
+ * notifikasi, DPIA draf otomatis saat risiko tinggi, serta LIA draf otomatis.
+ * Menyalin logika itu ke sini akan mengulang sebab temuan F-03, jadi yang
+ * dilakukan adalah memakai ulang, bukan menulis ulang.
+ *
+ * Pelakunya dibawa sebagai ModuleWriteContext tanpa pengguna: pada kunci API
+ * memang tidak ada yang login, dan jejak auditnya jujur mencatat itu.
  *
  * `wizard_data` tidak ikut dikirim secara bawaan: isinya besar dan memuat
  * rincian internal (mis. kontak DPO). Minta dengan `?include=wizard_data`.
@@ -122,6 +125,41 @@ class RopaApiV1Controller extends Controller
         unset($data['vendors']);
 
         return response()->json(['data' => $data]);
+    }
+
+    /**
+     * POST /api/v1/ropa
+     *
+     * Payload diteruskan apa adanya ke service, sama seperti jalur antarmuka —
+     * `wizard_data` dan kolom turunannya harus bisa lewat utuh. Kolom yang tidak
+     * boleh ditentukan pemanggil (`org_id`, `created_by`) ditimpa service dari
+     * konteks kunci API, jadi mengirimnya tidak berefek apa-apa.
+     */
+    public function store(Request $request)
+    {
+        $request->validate([
+            'processing_activity' => 'required|string|max:500',
+            'purpose' => 'nullable|string',
+            'legal_basis' => 'nullable|string|max:255',
+            'risk_level' => 'nullable|in:low,medium,high',
+            'status' => 'nullable|string|max:50',
+            'wizard_data' => 'nullable|array',
+        ]);
+
+        $hasil = app(RopaDpiaWriter::class)->create(
+            'ropa',
+            $request->all(),
+            ModuleWriteContext::forApiKey($this->orgId($request)),
+        );
+
+        return response()->json([
+            'message' => 'RoPA dibuat.',
+            'data' => $hasil['record'],
+            // Dua pemicu otomatis yang mungkin ikut lahir; disebut tegas supaya
+            // sistem pemanggil tahu ada record lain yang terbentuk atas namanya.
+            'auto_dpia_id' => $hasil['auto_dpia_id'],
+            'auto_lia_id' => $hasil['auto_lia_id'],
+        ], 201);
     }
 
     /** GET /api/v1/ropa/stats */

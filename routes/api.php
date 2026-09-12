@@ -2327,33 +2327,43 @@ Route::prefix('v1')->middleware(AuthenticatePartnerApi::class)->group(function (
 // kuncinya sendiri (third_party.read / third_party.write). Menaruhnya di grup
 // Breach di atas akan menjalankan AuthenticatePartnerApi DUA KALI per
 // permintaan: batas laju terpakai ganda dan ApiRequestLog tercatat dobel.
+// Urutan middleware tiap rute PENTING dan bukan gaya penulisan: middleware rute
+// dijalankan sesuai urutan ditulis, dan 'api.tenant-db' membaca `api_org_id`
+// yang baru ada setelah AuthenticatePartnerApi lolos. Dibalik, ia tidak akan
+// menemukan tenant mana pun dan diam-diam tidak berbuat apa-apa.
 Route::prefix('v1')->group(function () {
+    $kunci = fn (string $scope) => [AuthenticatePartnerApi::class.':'.$scope, 'api.tenant-db'];
+
     Route::get('/third-parties', [ThirdPartyApiV1Controller::class, 'index'])
-        ->middleware(AuthenticatePartnerApi::class.':third_party.read');
+        ->middleware($kunci('third_party.read'));
     Route::get('/third-parties/{id}', [ThirdPartyApiV1Controller::class, 'show'])
-        ->middleware(AuthenticatePartnerApi::class.':third_party.read');
+        ->middleware($kunci('third_party.read'));
     Route::post('/third-parties', [ThirdPartyApiV1Controller::class, 'store'])
-        ->middleware(AuthenticatePartnerApi::class.':third_party.write');
+        ->middleware($kunci('third_party.write'));
     Route::put('/third-parties/{id}', [ThirdPartyApiV1Controller::class, 'update'])
-        ->middleware(AuthenticatePartnerApi::class.':third_party.write');
+        ->middleware($kunci('third_party.write'));
 
-    // RoPA — baca saja (lihat catatan di RopaApiV1Controller). '/ropa/stats'
-    // didaftarkan lebih dulu supaya tidak tertangkap '/ropa/{id}'.
+    // '/ropa/stats' didaftarkan lebih dulu supaya tidak tertangkap '/ropa/{id}'.
     Route::get('/ropa/stats', [RopaApiV1Controller::class, 'stats'])
-        ->middleware(AuthenticatePartnerApi::class.':ropa.read');
+        ->middleware($kunci('ropa.read'));
     Route::get('/ropa', [RopaApiV1Controller::class, 'index'])
-        ->middleware(AuthenticatePartnerApi::class.':ropa.read');
+        ->middleware($kunci('ropa.read'));
     Route::get('/ropa/{id}', [RopaApiV1Controller::class, 'show'])
-        ->middleware(AuthenticatePartnerApi::class.':ropa.read');
+        ->middleware($kunci('ropa.read'));
+    // Tulis memakai RopaDpiaWriter — service yang sama dengan jalur antarmuka,
+    // lengkap dengan penomoran, auto-risiko, DPIA otomatis, dan LIA otomatis.
+    Route::post('/ropa', [RopaApiV1Controller::class, 'store'])
+        ->middleware($kunci('ropa.write'));
 
-    // DPIA — baca saja (lihat catatan di DpiaApiV1Controller). '/dpia/stats'
-    // didaftarkan lebih dulu supaya tidak tertangkap '/dpia/{id}'.
+    // '/dpia/stats' didaftarkan lebih dulu supaya tidak tertangkap '/dpia/{id}'.
     Route::get('/dpia/stats', [DpiaApiV1Controller::class, 'stats'])
-        ->middleware(AuthenticatePartnerApi::class.':dpia.read');
+        ->middleware($kunci('dpia.read'));
     Route::get('/dpia', [DpiaApiV1Controller::class, 'index'])
-        ->middleware(AuthenticatePartnerApi::class.':dpia.read');
+        ->middleware($kunci('dpia.read'));
     Route::get('/dpia/{id}', [DpiaApiV1Controller::class, 'show'])
-        ->middleware(AuthenticatePartnerApi::class.':dpia.read');
+        ->middleware($kunci('dpia.read'));
+    Route::post('/dpia', [DpiaApiV1Controller::class, 'store'])
+        ->middleware($kunci('dpia.write'));
 });
 
 // =============================================

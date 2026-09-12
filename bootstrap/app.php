@@ -15,6 +15,7 @@ use App\Http\Middleware\PublicPreAssessmentTokenMiddleware;
 use App\Http\Middleware\PublicShareLinkTokenMiddleware;
 use App\Http\Middleware\PublicVendorContractTokenMiddleware;
 use App\Http\Middleware\PublicVendorRopaTokenMiddleware;
+use App\Http\Middleware\ResolveTenantDatabaseForApiKey;
 use App\Http\Middleware\RootOnly;
 use App\Http\Middleware\RootOrSuperadmin;
 use App\Http\Middleware\SanctumTokenRefresh;
@@ -57,6 +58,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'public-embed-token' => PublicEmbedTokenMiddleware::class,
             // Tautan satu dokumen ke lembaga — dijaga kata sandi, jatah kunjungan terbatas.
             'public-share-link' => PublicShareLinkTokenMiddleware::class,
+            // Padanan tenant.context + tenant.db untuk jalur berkunci API mitra
+            // (keduanya yang asli bersandar pada $request->user(), yang tidak ada
+            // di sana). WAJIB dipasang SESUDAH auth kunci API.
+            'api.tenant-db' => ResolveTenantDatabaseForApiKey::class,
             // Per-user rate limit khusus endpoint AI — N panggilan per menit
             // per user (default 20, configurable di system_settings).
             'ai-throttle' => AiCallRateLimit::class,

@@ -377,6 +377,20 @@ class ApiHubController extends Controller
                                     ['name' => 'include', 'type' => 'string', 'required' => false, 'values' => 'wizard_data'],
                                 ],
                             ],
+                            [
+                                'method' => 'POST',
+                                'path' => '/ropa',
+                                'description' => 'Buat RoPA. Memakai jalur tulis yang sama dengan aplikasi: penomoran otomatis, perhitungan ulang risiko, DPIA draf otomatis saat risiko tinggi, LIA draf otomatis untuk kepentingan sah, dan sinkronisasi pihak ketiga dari wizard. org_id & created_by ditentukan kunci API, bukan payload.',
+                                'permissions' => ['ropa.write'],
+                                'body' => [
+                                    ['name' => 'processing_activity', 'type' => 'string', 'required' => true],
+                                    ['name' => 'purpose', 'type' => 'string', 'required' => false],
+                                    ['name' => 'legal_basis', 'type' => 'string', 'required' => false],
+                                    ['name' => 'risk_level', 'type' => 'string', 'required' => false, 'values' => 'low,medium,high'],
+                                    ['name' => 'status', 'type' => 'string', 'required' => false],
+                                    ['name' => 'wizard_data', 'type' => 'object', 'required' => false],
+                                ],
+                            ],
                         ],
                     ],
                     [
@@ -411,6 +425,19 @@ class ApiHubController extends Controller
                                 'permissions' => ['dpia.read'],
                                 'params' => [
                                     ['name' => 'include', 'type' => 'string', 'required' => false, 'values' => 'wizard_data'],
+                                ],
+                            ],
+                            [
+                                'method' => 'POST',
+                                'path' => '/dpia',
+                                'description' => 'Buat DPIA. Penomoran DPIA-YYYY-NNN dihitung lintas tenant, dan RoPA yang dinaungi ikut tersinkron dari wizard.koneksi_ropa.',
+                                'permissions' => ['dpia.write'],
+                                'body' => [
+                                    ['name' => 'description', 'type' => 'string', 'required' => false],
+                                    ['name' => 'ropa_id', 'type' => 'uuid', 'required' => false],
+                                    ['name' => 'risk_level', 'type' => 'string', 'required' => false, 'values' => 'low,medium,high'],
+                                    ['name' => 'status', 'type' => 'string', 'required' => false],
+                                    ['name' => 'wizard_data', 'type' => 'object', 'required' => false],
                                 ],
                             ],
                         ],
