@@ -472,6 +472,16 @@ class UserController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
+        // Data pribadinya sudah dimusnahkan (UU PDP Pasal 43 & 44) — memulihkan
+        // hanya akan menghidupkan akun kosong tanpa identitas, dan memberi kesan
+        // keliru bahwa pemusnahannya bisa dibatalkan. Anonimisasi satu arah.
+        if ($user->isAnonymized()) {
+            return response()->json([
+                'message' => 'Pengguna ini sudah dianonimkan dan tidak dapat dipulihkan.',
+                'anonymized_at' => $user->anonymized_at->toIso8601String(),
+            ], 410);
+        }
+
         if (! in_array($auth->role, ['superadmin', 'admin'])) {
             return response()->json(['message' => 'Forbidden'], 403);
         }

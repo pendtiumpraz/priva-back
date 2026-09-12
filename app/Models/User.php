@@ -4,7 +4,6 @@ namespace App\Models;
 
 use App\Casts\EncryptedString;
 use App\Models\Concerns\LandlordPinned;
-
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -12,12 +11,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, HasUuids, Notifiable, SoftDeletes, LandlordPinned;
+    use HasApiTokens, HasFactory, HasUuids, LandlordPinned, Notifiable, SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
@@ -81,7 +81,48 @@ class User extends Authenticatable implements MustVerifyEmail
             // PII Encryption — AES-256-CBC
             'name' => EncryptedString::class,
             'phone' => EncryptedString::class,
+            'anonymized_at' => 'datetime',
         ];
+    }
+
+    /** Sudah dianonimkan? Datanya tidak bisa dikembalikan. */
+    public function isAnonymized(): bool
+    {
+        return $this->anonymized_at !== null;
+    }
+
+    /**
+     * Hapus data pribadi pengguna, pertahankan barisnya (UU PDP Pasal 43 & 44).
+     *
+     * Baris sengaja TIDAK dihapus: `users.id` dirujuk jejak audit, assignees
+     * RoPA/DPIA, dan penerbit tautan. Menghapusnya akan memutus bukti kepatuhan
+     * — menaati satu pasal dengan melanggar yang lain.
+     *
+     * Surel diganti alamat unik di TLD `.invalid` (RFC 2606: dijamin tidak
+     * pernah routable), memakai id pengguna supaya kendala unik pada kolom
+     * email tetap terpenuhi tanpa kemungkinan bentrok.
+     *
+     * Kredensial ikut dimusnahkan — sandi diacak, rahasia 2FA dan token
+     * diingat dikosongkan — supaya akun tidak bisa dipakai lagi dengan cara
+     * apa pun, bukan sekadar tidak bisa dicari.
+     */
+    public function anonymize(): void
+    {
+        $this->forceFill([
+            'name' => 'Pengguna Dihapus',
+            'email' => 'anonim+'.$this->id.'@privasimu.invalid',
+            'phone' => null,
+            'avatar_url' => null,
+            'position' => null,
+            'settings' => null,
+            'is_active' => false,
+            'password' => bcrypt(Str::random(64)),
+            'remember_token' => null,
+            'two_factor_secret' => null,
+            'two_factor_recovery_codes' => null,
+            'two_factor_confirmed_at' => null,
+            'anonymized_at' => now(),
+        ])->saveQuietly();
     }
 
     /**
@@ -89,7 +130,7 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function organization()
     {
-        return $this->belongsTo(Organization::class , 'org_id');
+        return $this->belongsTo(Organization::class, 'org_id');
     }
 
     public function department()

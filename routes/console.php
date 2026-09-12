@@ -40,6 +40,11 @@ Schedule::command('audit-logs:prune')->dailyAt('04:00');
 // chain rusak, log warning level (akan muncul di alert dashboard).
 Schedule::command('audit-logs:chain verify')->dailyAt('04:30');
 
+// Anonimisasi pengguna terhapus yang melewati masa tenggang (UU PDP Pasal 43 &
+// 44). Soft delete saja menyimpan nama + surel selamanya; tenggang 30 hari
+// menjaga jalur pemulihan akun sebelum datanya dimusnahkan permanen.
+Schedule::command('users:anonymize-deleted')->dailyAt('03:30');
+
 // Sanctum — prune expired personal access tokens (24+ jam past expiry).
 // SanctumTokenRefresh tidak delete old token saat rotate (cegah race condition
 // dengan in-flight parallel requests), jadi cleanup happens here. Built-in
