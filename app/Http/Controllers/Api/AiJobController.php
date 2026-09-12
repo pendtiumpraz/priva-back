@@ -82,6 +82,17 @@ class AiJobController extends Controller
             ], 429);
         }
 
+        // `approved` DIBUANG dari payload kiriman klien. ProcessAiJob membacanya
+        // untuk menentukan apakah sebuah tool call boleh dijalankan tanpa
+        // persetujuan manusia; kalau nilainya boleh datang dari pemohon, maka
+        // gerbang persetujuan AI Agent bisa dilewati cukup dengan menambahkan
+        // "approved": true di badan permintaan. Persetujuan harus keputusan
+        // sisi server, bukan klaim pemohon.
+        $payload = $req->payload ?? [];
+        if (is_array($payload)) {
+            unset($payload['approved']);
+        }
+
         $job = AiJob::create([
             'org_id' => $orgId,
             'user_id' => $userId,
@@ -91,7 +102,7 @@ class AiJobController extends Controller
             'label' => $req->label,
             'status' => AiJob::STATUS_PENDING,
             'progress' => 0,
-            'payload' => $req->payload,
+            'payload' => $payload,
         ]);
 
         $org = Organization::find($orgId);

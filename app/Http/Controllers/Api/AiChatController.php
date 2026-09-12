@@ -8,11 +8,14 @@ use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\KnowledgeBaseSection;
 use App\Models\License;
+use App\Services\AiAgentToolExecutor;
 use App\Services\AiContentSanitizer;
+use App\Services\AiIntentClassifier;
+use App\Services\AiOutputGuard;
 use App\Services\ChatSummaryMemoryService;
 use App\Services\CreditService;
-use Illuminate\Http\Request;
 use App\Support\OutboundHttp;
+use Illuminate\Http\Request;
 
 class AiChatController extends Controller
 {
@@ -45,9 +48,15 @@ class AiChatController extends Controller
     private function isEnterpriseTier(Request $request): bool
     {
         $user = $request->user();
-        if (! $user) return false;
-        if (in_array($user->role, ['root', 'superadmin'], true)) return true;
-        if (! $user->org_id) return false;
+        if (! $user) {
+            return false;
+        }
+        if (in_array($user->role, ['root', 'superadmin'], true)) {
+            return true;
+        }
+        if (! $user->org_id) {
+            return false;
+        }
 
         $license = License::where('org_id', $user->org_id)
             ->where('status', 'active')
@@ -234,15 +243,15 @@ PROMPT;
         // Mutation tools (create/update/delete) TETAP exclusive di AI Agent
         // untuk approval flow integrity.
         $isEnterprise = $this->isEnterpriseTier($request);
-        $intentResult = \App\Services\AiIntentClassifier::classify($userMessage);
+        $intentResult = AiIntentClassifier::classify($userMessage);
         $currentModule = $request->input('current_module');
 
         $widgetTools = null;
-        if ($isEnterprise && $intentResult['intent'] !== \App\Services\AiIntentClassifier::PURE_QA) {
+        if ($isEnterprise && $intentResult['intent'] !== AiIntentClassifier::PURE_QA) {
             // Enterprise + butuh data → kirim read-only tools (filtered by page)
             $widgetTools = $currentModule
-                ? \App\Services\AiAgentToolExecutor::getReadOnlyToolDefinitionsForPage($currentModule)
-                : \App\Services\AiAgentToolExecutor::getReadOnlyToolDefinitions();
+                ? AiAgentToolExecutor::getReadOnlyToolDefinitionsForPage($currentModule)
+                : AiAgentToolExecutor::getReadOnlyToolDefinitions();
         }
 
         \Log::info('AI Chat Widget tool selection', [
@@ -263,7 +272,7 @@ PROMPT;
             // Clamp max_tokens via output guard supaya tidak bisa over-ride
             // hard cap (default 4000). 1500 di bawah cap default, tapi clamp
             // jaga konsistensi kalau admin set cap lebih ketat.
-            $outputGuard = app(\App\Services\AiOutputGuard::class);
+            $outputGuard = app(AiOutputGuard::class);
             $maxTokens = $outputGuard->clampMaxTokens(1500);
 
             $payload = [
@@ -301,7 +310,7 @@ PROMPT;
             // satu kali untuk dapat final text response.
             if (! empty($assistantMessage['tool_calls']) && $widgetTools !== null) {
                 $toolCalls = $assistantMessage['tool_calls'];
-                $executor = new \App\Services\AiAgentToolExecutor($user->org_id ?? '');
+                $executor = new AiAgentToolExecutor($user->org_id ?? '');
 
                 // Append assistant message dengan tool_calls
                 $messages[] = $assistantMessage;
@@ -312,10 +321,10 @@ PROMPT;
 
                     try {
                         // Read-only tools only (widget mini-agent restriction)
-                        if (! in_array($fnName, \App\Services\AiAgentToolExecutor::READ_ONLY_TOOLS, true)) {
+                        if (! in_array($fnName, AiAgentToolExecutor::READ_ONLY_TOOLS, true)) {
                             $result = ['error' => 'Tool ini tidak tersedia di Chat Widget. Buka /ai-agent untuk fitur lengkap.'];
                         } else {
-                            [$result, ] = $executor->execute($fnName, $fnArgs);
+                            [$result] = $executor->execute($fnName, $fnArgs);
                         }
                     } catch (\Throwable $e) {
                         $result = ['error' => $e->getMessage()];
@@ -421,10 +430,22 @@ PROMPT;
     public function knowledgeBase(Request $request)
     {
         if ($request->isMethod('GET')) {
-            // Load all sections from knowledge_base_sections table
-            $sections = KnowledgeBaseSection::where('is_active', true)
-                ->orderBy('sort_order')
-                ->get();
+            $user = $request->user();
+
+            // Tenant HANYA boleh melihat KB miliknya sendiri + baris bersama.
+            // Sebelumnya query ini tanpa filter sama sekali, sehingga seksi KB
+            // milik SELURUH tenant terkirim ke siapa pun yang terautentikasi —
+            // termasuk isinya, bukan cuma judulnya.
+            //
+            // Jalur chat (getKnowledgeBase) sudah memakai visibleTo() sejak
+            // awal; endpoint inilah yang tertinggal. Scope-nya fail-closed:
+            // tanpa org context, hanya baris platform yang keluar.
+            $query = KnowledgeBaseSection::where('is_active', true);
+            if (! in_array($user->role ?? null, ['root', 'superadmin'], true)) {
+                $query->visibleTo($user->org_id ?? null);
+            }
+
+            $sections = $query->orderBy('sort_order')->get();
 
             if ($sections->count() > 0) {
                 $kb = '';
@@ -560,6 +581,7 @@ PROMPT;
         // Fallback: use legacy app_settings knowledge_base or default
         // (juga sanitize — meskipun source dari admin trusted, defensive)
         $fallback = AppSetting::get('knowledge_base', $this->getDefaultKnowledgeBase());
+
         return AiContentSanitizer::neutralize((string) $fallback);
     }
 

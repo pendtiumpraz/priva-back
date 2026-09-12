@@ -2282,8 +2282,13 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // Section-based config: infrastructure, redis, ai, mail, aws, deployment.
     // Gated by `permission:settings,write` — superadmin role bypasses.
     // =============================================
+    // role.root (root + superadmin), BUKAN permission:settings,write — ini
+    // setelan TINGKAT PLATFORM. Dengan gerbang izin tenant, peran tenant yang
+    // kebetulan punya `settings:write` (mis. DPO) bisa menjangkau dan mengubah
+    // konfigurasi infrastruktur seluruh platform. Disamakan dengan grup BYODB
+    // pool di atas yang memang sudah memakai role.root.
     Route::prefix('platform-admin/settings')
-        ->middleware('permission:settings,write')
+        ->middleware('role.root')
         ->group(function () {
             Route::get('/', [SystemSettingsController::class, 'index']);
             Route::get('/health', [SystemSettingsController::class, 'health']);
@@ -2294,7 +2299,7 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // Pentest reports — rekap hasil penetration test dari vendor pihak ketiga.
     // Platform-level (tidak tenant-scoped), gate by settings,write permission.
     Route::prefix('platform-admin/pentest-reports')
-        ->middleware('permission:settings,write')
+        ->middleware('role.root')
         ->group(function () {
             Route::get('/', [PentestReportController::class, 'index']);
             Route::post('/', [PentestReportController::class, 'store']);
