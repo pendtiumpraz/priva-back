@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\FireConsentWebhookJob;
 use App\Jobs\PushConsentToCrmJob;
 use App\Models\ConsentLog;
+use App\Services\Consent\ConsentOutboundGate;
 use Illuminate\Http\Request;
 
 /**
@@ -42,26 +43,38 @@ class ConsentApiV1Controller extends Controller
             'user_agent' => 'partner_api:' . ($data['channel'] ?? 'unknown'),
         ]);
 
-        if ($cp->webhook_url) {
-            FireConsentWebhookJob::dispatch(
-                $cp->webhook_url,
-                $cp->collection_id,
-                [
-                    'event' => 'consent.captured',
-                    'source' => 'partner_api',
-                    'collection_id' => $cp->collection_id,
-                    'user_identifier' => $log->user_identifier,
-                    'consented_items' => $log->consented_items,
-                    'policy_version' => $log->policy_version,
-                    'timestamp' => $log->created_at,
-                ]
-            );
-        }
+        // Gerbang yang sama dengan jalur widget. Pintu masuk yang berbeda tidak
+        // boleh menghasilkan penjagaan yang berbeda — kalau partner API lolos
+        // sementara widget dijaga, aturannya hanya menyulitkan tenant yang
+        // jujur.
+        $gate = app(ConsentOutboundGate::class)->decide(
+            $cp,
+            (string) $log->user_identifier,
+            'partner_api'
+        );
 
-        $org = \App\Models\Organization::find($cp->org_id);
-        $crms = $org?->settings['crm_connections'] ?? [];
-        foreach ($crms as $providerId => $config) {
-            PushConsentToCrmJob::dispatch($providerId, (array) $config, $log->id);
+        if ($gate === null || ! $gate->blocked) {
+            if ($cp->webhook_url) {
+                FireConsentWebhookJob::dispatch(
+                    $cp->webhook_url,
+                    $cp->collection_id,
+                    array_merge([
+                        'event' => 'consent.captured',
+                        'source' => 'partner_api',
+                        'collection_id' => $cp->collection_id,
+                        'user_identifier' => $log->user_identifier,
+                        'consented_items' => $log->consented_items,
+                        'policy_version' => $log->policy_version,
+                        'timestamp' => $log->created_at,
+                    ], $gate ? ['decision' => ConsentOutboundGate::payload($gate)] : [])
+                );
+            }
+
+            $org = \App\Models\Organization::find($cp->org_id);
+            $crms = $org?->settings['crm_connections'] ?? [];
+            foreach ($crms as $providerId => $config) {
+                PushConsentToCrmJob::dispatch($providerId, (array) $config, $log->id);
+            }
         }
 
         return response()->json([

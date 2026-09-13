@@ -20,7 +20,8 @@ class ConsentRuleDecision extends Model
     use BelongsToOrg, HasUuids;
 
     protected $fillable = [
-        'org_id', 'rule_set_id', 'subject_identifier', 'blocked',
+        'org_id', 'rule_set_id', 'collection_point_id', 'context',
+        'subject_identifier', 'blocked',
         'segments', 'matched', 'states', 'decided_at',
     ];
 

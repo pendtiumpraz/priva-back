@@ -22,6 +22,10 @@ Schedule::command('notifications:scan-rtp-deadlines')->dailyAt('06:15')->without
 // RoPA — masa retensi (PP 33 Pasal 80): reminder jatuh tempo <=30 hari + overdue. Anti-spam 20 jam.
 Schedule::command('notifications:scan-ropa-retention')->dailyAt('06:30')->withoutOverlapping();
 Schedule::command('consent:prune-cookie-logs')->dailyAt('02:30');
+// Jejak keputusan aturan consent menyimpan penanda subjek (umumnya surel), satu
+// baris per penangkapan. Tabel yang dibuat demi kepatuhan tidak boleh berubah
+// jadi timbunan data pribadi tanpa batas waktu.
+Schedule::command('consent:prune-rule-decisions')->dailyAt('02:45');
 // Privacy Notice — terbitkan versi yang penjadwalannya sudah jatuh tempo.
 // Tiap 15 menit: penjadwalan naskah hukum lazim ditetapkan pada jam bulat,
 // dan menunggu sampai sehari kemudian bukan pilihan yang dapat diterima.

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Jobs\FireConsentWebhookJob;
 use App\Jobs\PushConsentToCrmJob;
+use App\Services\Consent\ConsentOutboundGate;
 use App\Models\ConsentCollectionPoint;
 use App\Models\ConsentLog;
 use App\Models\Organization;
@@ -266,38 +267,51 @@ class ConsentLogController extends Controller
         // The old `$collection->increment()` serialized writes + caused
         // MySQL/PG row-lock contention at high concurrency.
 
-        // Webhook is async via queue so the response returns in <50ms even if
-        // the tenant's receiver is slow / down / rate-limited. 3 retries with
-        // exponential backoff handled by FireConsentWebhookJob.
-        if ($collection->webhook_url) {
-            FireConsentWebhookJob::dispatch(
-                $collection->webhook_url,
-                $collection->collection_id,
-                [
-                    'event' => 'consent.captured',
-                    'collection_id' => $collection->collection_id,
-                    'user_identifier' => $log->user_identifier,
-                    // Raw map keeps item UUIDs as keys (stable identifiers for
-                    // machine matching) — unchanged for backward compatibility.
-                    'consented_items' => $log->consented_items,
-                    // Additive: same choices with item titles resolved, plus the
-                    // list of granted purpose titles, so receivers can display
-                    // readable names without a lookup.
-                    'consented_items_labeled' => $log->labeledConsentedItems(),
-                    'consented_purposes' => $log->grantedPurposeTitles(),
-                    'policy_version' => $log->policy_version,
-                    'ip_address' => $log->ip_address,
-                    'timestamp' => $log->created_at,
-                ]
-            );
-        }
+        // Gerbang aturan consent. Dijalankan SETELAH log ditulis, supaya
+        // persetujuan yang baru saja diberikan ikut diperhitungkan — dan SEKALI
+        // saja, karena webhook dan CRM di bawah ini harus menaati keputusan yang
+        // sama. Titik yang tidak dijaga mengembalikan null dan semuanya berjalan
+        // seperti sebelum fitur ini ada.
+        $gate = app(ConsentOutboundGate::class)->decide(
+            $collection,
+            (string) $log->user_identifier,
+            'capture'
+        );
 
-        // CRM push also async — a Salesforce/HubSpot round-trip can be
-        // several seconds, we don't block the user for it.
-        $org = Organization::find($collection->org_id);
-        $crms = $org->settings['crm_connections'] ?? [];
-        foreach ($crms as $providerId => $config) {
-            PushConsentToCrmJob::dispatch($providerId, (array) $config, $log->id);
+        if ($gate === null || ! $gate->blocked) {
+            // Webhook is async via queue so the response returns in <50ms even if
+            // the tenant's receiver is slow / down / rate-limited. 3 retries with
+            // exponential backoff handled by FireConsentWebhookJob.
+            if ($collection->webhook_url) {
+                FireConsentWebhookJob::dispatch(
+                    $collection->webhook_url,
+                    $collection->collection_id,
+                    array_merge([
+                        'event' => 'consent.captured',
+                        'collection_id' => $collection->collection_id,
+                        'user_identifier' => $log->user_identifier,
+                        // Raw map keeps item UUIDs as keys (stable identifiers for
+                        // machine matching) — unchanged for backward compatibility.
+                        'consented_items' => $log->consented_items,
+                        // Additive: same choices with item titles resolved, plus the
+                        // list of granted purpose titles, so receivers can display
+                        // readable names without a lookup.
+                        'consented_items_labeled' => $log->labeledConsentedItems(),
+                        'consented_purposes' => $log->grantedPurposeTitles(),
+                        'policy_version' => $log->policy_version,
+                        'ip_address' => $log->ip_address,
+                        'timestamp' => $log->created_at,
+                    ], $gate ? ['decision' => ConsentOutboundGate::payload($gate)] : [])
+                );
+            }
+
+            // CRM push also async — a Salesforce/HubSpot round-trip can be
+            // several seconds, we don't block the user for it.
+            $org = Organization::find($collection->org_id);
+            $crms = $org->settings['crm_connections'] ?? [];
+            foreach ($crms as $providerId => $config) {
+                PushConsentToCrmJob::dispatch($providerId, (array) $config, $log->id);
+            }
         }
 
         // CORS: capture adalah endpoint PUBLIK untuk widget di situs eksternal

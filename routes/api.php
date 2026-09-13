@@ -1545,6 +1545,8 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
             ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
         Route::put('/{id}/rules', [ConsentRuleSetController::class, 'replaceRules'])
             ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+        Route::put('/{id}/collection-points', [ConsentRuleSetController::class, 'bindPoints'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
         // Pratinjau hanya membaca: ia tidak menulis jejak keputusan.
         Route::post('/{id}/preview', [ConsentRuleSetController::class, 'preview'])
             ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,read');
