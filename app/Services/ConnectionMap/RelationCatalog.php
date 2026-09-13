@@ -141,13 +141,13 @@ final class RelationCatalog
                 'from_key' => 'ropa_id', 'to_key' => 'dpia_id',
             ],
             [
-                'relation' => 'weighed_by_lia', 'label' => 'ditimbang LIA',
+                'relation' => 'balanced_by_lia', 'label' => 'dinilai LIA',
                 'from' => 'ropa', 'to' => 'lia',
                 'kind' => 'fk', 'table' => 'lia_assessments', 'owner' => 'lia',
                 'column' => 'linked_ropa_id', 'points_to' => 'ropa', 'inverse' => true,
             ],
             [
-                'relation' => 'weighed_by_lia', 'label' => 'ditimbang LIA',
+                'relation' => 'referenced_by_lia', 'label' => 'dirujuk LIA',
                 'from' => 'dpia', 'to' => 'lia',
                 'kind' => 'fk', 'table' => 'lia_assessments', 'owner' => 'lia',
                 'column' => 'linked_dpia_id', 'points_to' => 'dpia', 'inverse' => true,
@@ -159,7 +159,7 @@ final class RelationCatalog
                 'column' => 'linked_ropa_id', 'points_to' => 'ropa', 'inverse' => true,
             ],
             [
-                'relation' => 'transfer_recipient', 'label' => 'penerima transfer',
+                'relation' => 'received_by', 'label' => 'diterima pihak ketiga',
                 'from' => 'cross_border', 'to' => 'third_party',
                 'kind' => 'fk', 'table' => 'cross_border_transfers', 'owner' => 'cross_border',
                 'column' => 'vendor_id', 'points_to' => 'third_party',
@@ -183,13 +183,13 @@ final class RelationCatalog
                 'column' => 'linked_vendor_id', 'points_to' => 'third_party', 'inverse' => true,
             ],
             [
-                'relation' => 'impacted_by_breach', 'label' => 'terdampak insiden',
+                'relation' => 'impacted_by', 'label' => 'terdampak insiden',
                 'from' => 'ropa', 'to' => 'breach',
                 'kind' => 'fk', 'table' => 'breach_incidents', 'owner' => 'breach',
                 'column' => 'linked_ropa_id', 'points_to' => 'ropa', 'inverse' => true,
             ],
             [
-                'relation' => 'impacted_by_breach', 'label' => 'terdampak insiden',
+                'relation' => 'impacted_by', 'label' => 'terdampak insiden',
                 'from' => 'ropa', 'to' => 'breach',
                 'kind' => 'json_array', 'table' => 'breach_incidents', 'owner' => 'breach',
                 'column' => 'linked_ropa_ids', 'points_to' => 'ropa', 'inverse' => true,
@@ -218,7 +218,7 @@ final class RelationCatalog
                 'from_key' => 'vendor_id', 'to_key' => 'information_system_id', 'role_column' => 'role',
             ],
             [
-                'relation' => 'breach_third_party', 'label' => 'pihak ketiga terlibat',
+                'relation' => 'involves_third_party', 'label' => 'melibatkan pihak ketiga',
                 'from' => 'breach', 'to' => 'third_party',
                 'kind' => 'json_array', 'table' => 'breach_incidents', 'owner' => 'breach',
                 'column' => 'linked_vendor_ids', 'points_to' => 'third_party',
@@ -272,14 +272,14 @@ final class RelationCatalog
 
             // ---------- Permintaan subjek data ----------
             [
-                'relation' => 'searches_system', 'label' => 'menelusuri sistem',
+                'relation' => 'targets', 'label' => 'menyasar sistem',
                 'from' => 'dsr', 'to' => 'data_discovery',
                 'kind' => 'fk', 'table' => 'dsr_request_scopes', 'owner' => 'dsr_scope',
                 'column' => 'information_system_id', 'points_to' => 'data_discovery',
                 'owner_column' => 'dsr_request_id', 'owner_type' => 'dsr',
             ],
             [
-                'relation' => 'searches_system', 'label' => 'menelusuri sistem',
+                'relation' => 'targets', 'label' => 'menyasar sistem',
                 'from' => 'dsr', 'to' => 'data_discovery',
                 'kind' => 'fk', 'table' => 'dsr_executions', 'owner' => 'dsr_execution',
                 'column' => 'information_system_id', 'points_to' => 'data_discovery',

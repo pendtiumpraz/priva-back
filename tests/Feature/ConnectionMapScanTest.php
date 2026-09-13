@@ -325,6 +325,41 @@ class ConnectionMapScanTest extends TestCase
         $this->assertContains('system:'.$orphan->id, $insights['system_without_ropa']['node_ids']);
     }
 
+    /**
+     * Pagar untuk rencana memindahkan pembuatan tepi ke RelationCatalog.
+     *
+     * Scanner menambahkan tepi dari daftar `vendor_ids` di wizard HANYA bila
+     * pasangannya belum dinyatakan di pivot `ropa_vendor`. Katalog memuat
+     * keduanya sebagai entri terpisah, dan dedup `from|to|relation` hanya
+     * meleburnya ketika perannya kebetulan `processed_by`. Begitu perannya
+     * `sub_processed_by` — seperti di sini — pass berbasis katalog yang naif
+     * akan memunculkan tepi KEDUA yang hari ini sengaja ditekan.
+     *
+     * Uji ini mengunci perilaku yang benar sebelum pemindahan itu dikerjakan,
+     * karena fixture uji lain memakai peran bawaan sehingga tidak akan
+     * menangkapnya.
+     */
+    public function test_peran_pivot_tidak_digandakan_oleh_daftar_wizard(): void
+    {
+        $thirdParty = Vendor::create(['org_id' => $this->org->id, 'name' => 'PT Subprosesor']);
+        $ropa = $this->ropa($this->org, 'ROPA-2026-001', 'Payroll', [
+            'wizard_data' => ['penggunaan_penyimpanan' => ['vendor_ids' => [$thirdParty->id]]],
+        ]);
+        DB::table('ropa_vendor')->insert([
+            'ropa_id' => $ropa->id, 'vendor_id' => $thirdParty->id, 'org_id' => $this->org->id,
+            'role' => Vendor::ROLE_SUB_PROCESSOR, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $tepi = collect($this->scan()['graph']['edges'])
+            ->filter(fn ($e) => $e['from'] === 'ropa:'.$ropa->id && $e['to'] === 'thirdparty:'.$thirdParty->id)
+            ->values();
+
+        $this->assertCount(1, $tepi,
+            'daftar wizard tidak boleh menambah tepi kedua ketika pivot sudah menyatakan perannya');
+        $this->assertSame('sub_processed_by', $tepi[0]['relation'],
+            'peran dari pivot yang menang, bukan tebakan bawaan dari wizard');
+    }
+
     public function test_modul_yang_dicabut_tidak_ikut_dipetakan(): void
     {
         $ropa = $this->ropa($this->org, 'ROPA-2026-001', 'Payroll');
