@@ -60,33 +60,10 @@ class ConnectionMapScanner
         'breach', 'dsr', 'data_discovery', 'consent',
     ];
 
-    /** Arti tepi, dibaca dari `from` ke `to`. */
-    public const RELATION_LABELS = [
-        'supplies' => 'memasok data',
-        'consent_basis' => 'dasar consent',
-        'assessed_by_dpia' => 'dinilai DPIA',
-        'treated_by' => 'ditangani RTP',
-        'transfers' => 'mentransfer',
-        'balanced_by_lia' => 'dinilai LIA',
-        'referenced_by_lia' => 'dirujuk LIA',
-        'assessed_by_tia' => 'dinilai TIA',
-        'impacted_by' => 'terdampak insiden',
-        'processed_by' => 'diproses pihak ketiga',
-        'shared_to_controller' => 'dibagikan ke pengendali lain',
-        'joint_controller_with' => 'pengendali bersama',
-        'sub_processed_by' => 'diproses subprosesor',
-        'involves_third_party' => 'melibatkan pihak ketiga',
-        'received_by' => 'diterima pihak ketiga',
-        'targets' => 'menyasar sistem',
-    ];
-
-    /** Peran tautan RoPA ↔ pihak ketiga (pivot `ropa_vendor`) → jenis tepi. */
-    private const ROLE_RELATIONS = [
-        Vendor::ROLE_CONTROLLER => 'shared_to_controller',
-        Vendor::ROLE_PROCESSOR => 'processed_by',
-        Vendor::ROLE_JOINT_CONTROLLER => 'joint_controller_with',
-        Vendor::ROLE_SUB_PROCESSOR => 'sub_processed_by',
-    ];
+    // Arti tepi dan pemetaan peran→jenis tepi kini tinggal di RelationCatalog
+    // (LABELS dan ROLE_RELATIONS). Keduanya sengaja TIDAK disimpan ganda di
+    // sini: peta label yang tertinggal akan menyimpang diam-diam dari yang
+    // benar-benar dipakai, dan justru itu yang hendak dihapus refactor ini.
 
     /** @return array<string, mixed> */
     public function scan(Organization $org): array
@@ -101,30 +78,9 @@ class ConnectionMapScanner
             ->get(['id', 'registration_number', 'processing_activity', 'risk_level', 'status', 'wizard_data']);
         $totals['ropa'] = $ropas->count();
 
-        // Peran pihak ketiga per kegiatan (pivot `ropa_vendor`): Pengendali,
-        // Prosesor, Pengendali Bersama, atau Subprosesor — kewajiban tiap peran
-        // berbeda, jadi tepinya pun dibedakan.
-        $thirdPartyRoles = [];
-        foreach (DB::table('ropa_vendor')->where('org_id', $orgId)->get(['ropa_id', 'vendor_id', 'role']) as $p) {
-            $thirdPartyRoles[$p->ropa_id][$p->vendor_id] = (string) $p->role;
-        }
-
         foreach ($ropas as $r) {
             $this->addNode($nodes, 'ropa:'.$r->id, 'ropa', $r->processing_activity ?: ($r->registration_number ?: 'RoPA'),
                 $r->registration_number, ['risk' => $r->risk_level, 'status' => $r->status], '/ropa?open='.$r->id);
-
-            foreach ($thirdPartyRoles[$r->id] ?? [] as $tpId => $role) {
-                $links[] = ['ropa:'.$r->id, 'thirdparty:'.$tpId, self::ROLE_RELATIONS[$role] ?? 'processed_by'];
-            }
-
-            // RoPA lama yang belum tersinkron ke pivot: daftar UUID di wizard
-            // (bagian Penggunaan & Penyimpanan) tetap dibaca, tanpa peran.
-            $thirdPartyIds = data_get($r->wizard_data, 'penggunaan_penyimpanan.vendor_ids');
-            foreach (is_array($thirdPartyIds) ? $thirdPartyIds : [] as $tpId) {
-                if (is_string($tpId) && $tpId !== '' && ! isset($thirdPartyRoles[$r->id][$tpId])) {
-                    $links[] = ['ropa:'.$r->id, 'thirdparty:'.$tpId, 'processed_by'];
-                }
-            }
         }
 
         // ---- Data Discovery: sistem informasi sebagai sumber data pemrosesan.
@@ -135,9 +91,6 @@ class ConnectionMapScanner
             $this->addNode($nodes, 'system:'.$s->id, 'data_discovery', $s->name ?: 'Sistem',
                 $s->source_type, ['pdp_alerts' => $s->pdp_alert_count ?: null], '/data-discovery?open='.$s->id);
         }
-        foreach (DB::table('information_system_ropa')->where('org_id', $orgId)->get(['information_system_id', 'ropa_id']) as $p) {
-            $links[] = ['system:'.$p->information_system_id, 'ropa:'.$p->ropa_id, 'supplies'];
-        }
 
         // ---- Consent: titik pengumpulan sebagai dasar pemrosesan.
         $consents = ConsentCollectionPoint::query()->where('org_id', $orgId)
@@ -146,9 +99,6 @@ class ConnectionMapScanner
         foreach ($consents as $c) {
             $this->addNode($nodes, 'consent:'.$c->id, 'consent', $c->name ?: 'Titik Consent',
                 $c->collection_id, ['kind' => $c->kind], '/consent?open='.$c->id);
-        }
-        foreach (DB::table('consent_collection_ropa')->where('org_id', $orgId)->get(['collection_point_id', 'ropa_id']) as $p) {
-            $links[] = ['consent:'.$p->collection_point_id, 'ropa:'.$p->ropa_id, 'consent_basis'];
         }
 
         // ---- DPIA, plus satu simpul ringkasan RTP per DPIA.
@@ -159,9 +109,6 @@ class ConnectionMapScanner
             $id = 'dpia:'.$d->id;
             $this->addNode($nodes, $id, 'dpia', $d->registration_number ?: 'DPIA', $d->registration_number,
                 ['risk' => $d->risk_level, 'status' => $d->status], '/dpia?open='.$d->id);
-            if ($d->ropa_id) {
-                $links[] = ['ropa:'.$d->ropa_id, $id, 'assessed_by_dpia'];
-            }
 
             // Item RTP hidup sebagai baris mitigation_tracking, bukan tabel
             // sendiri — diringkas jadi satu simpul per DPIA seperti peta satu RoPA.
@@ -173,11 +120,6 @@ class ConnectionMapScanner
                 $links[] = [$id, 'rtp:'.$d->id, 'treated_by'];
                 $totals['rtp']++;
             }
-        }
-        // DPIA ↔ RoPA banyak-ke-banyak (di luar FK ropa_id lama); duplikat dengan
-        // FK di atas dilebur saat tepi didedup.
-        foreach (DB::table('dpia_ropa')->where('org_id', $orgId)->get(['dpia_id', 'ropa_id']) as $p) {
-            $links[] = ['ropa:'.$p->ropa_id, 'dpia:'.$p->dpia_id, 'assessed_by_dpia'];
         }
 
         // ---- Pihak ketiga.
@@ -200,12 +142,6 @@ class ConnectionMapScanner
             $id = 'crossborder:'.$t->id;
             $this->addNode($nodes, $id, 'cross_border', $t->destination_entity ?: 'Transfer Lintas Negara',
                 $t->destination_country, ['status' => $t->status, 'risk' => $t->risk_level], '/cross-border?open='.$t->id);
-            if ($t->linked_ropa_id) {
-                $links[] = ['ropa:'.$t->linked_ropa_id, $id, 'transfers'];
-            }
-            if ($t->vendor_id) {
-                $links[] = [$id, 'thirdparty:'.$t->vendor_id, 'received_by'];
-            }
         }
 
         // ---- LIA.
@@ -216,12 +152,6 @@ class ConnectionMapScanner
             $id = 'lia:'.$l->id;
             $this->addNode($nodes, $id, 'lia', $l->title ?: ($l->lia_code ?: 'LIA'), $l->lia_code,
                 ['status' => $l->status], '/lia?open='.$l->id);
-            if ($l->linked_ropa_id) {
-                $links[] = ['ropa:'.$l->linked_ropa_id, $id, 'balanced_by_lia'];
-            }
-            if ($l->linked_dpia_id) {
-                $links[] = ['dpia:'.$l->linked_dpia_id, $id, 'referenced_by_lia'];
-            }
         }
 
         // ---- TIA — dapat bertaut ke RoPA, transfer lintas negara, dan pihak ketiga.
@@ -232,15 +162,6 @@ class ConnectionMapScanner
             $id = 'tia:'.$t->id;
             $this->addNode($nodes, $id, 'tia', $t->title ?: ($t->tia_code ?: 'TIA'), $t->tia_code,
                 ['status' => $t->status, 'risk' => $t->overall_risk_level], '/tia?open='.$t->id);
-            if ($t->linked_ropa_id) {
-                $links[] = ['ropa:'.$t->linked_ropa_id, $id, 'assessed_by_tia'];
-            }
-            if ($t->linked_cross_border_id) {
-                $links[] = ['crossborder:'.$t->linked_cross_border_id, $id, 'assessed_by_tia'];
-            }
-            if ($t->linked_vendor_id) {
-                $links[] = ['thirdparty:'.$t->linked_vendor_id, $id, 'assessed_by_tia'];
-            }
         }
 
         // ---- Insiden kebocoran. Insiden simulasi (latihan) tidak dipetakan —
@@ -252,26 +173,6 @@ class ConnectionMapScanner
             $id = 'breach:'.$b->id;
             $this->addNode($nodes, $id, 'breach', $b->title ?: 'Insiden', $b->incident_code,
                 ['severity' => $b->severity, 'status' => $b->status], '/breach?open='.$b->id);
-            // Kolom tunggal lama DAN larik baru sama-sama dibaca, supaya tautan
-            // yang dibuat sebelum migrasi larik tetap muncul.
-            $ropaIds = is_array($b->linked_ropa_ids) ? $b->linked_ropa_ids : [];
-            if ($b->linked_ropa_id) {
-                $ropaIds[] = $b->linked_ropa_id;
-            }
-            foreach ($ropaIds as $rid) {
-                if (is_string($rid) && $rid !== '') {
-                    $links[] = ['ropa:'.$rid, $id, 'impacted_by'];
-                }
-            }
-
-            // Pihak ketiga yang DIPASTIKAN terlibat pada insiden ini. Dugaan
-            // hasil penelusuran sengaja tidak digambar: peta ini menampilkan
-            // hubungan yang sudah ditegaskan orang, bukan kemungkinan.
-            foreach (is_array($b->linked_vendor_ids) ? $b->linked_vendor_ids : [] as $vid) {
-                if (is_string($vid) && $vid !== '') {
-                    $links[] = [$id, 'thirdparty:'.$vid, 'involves_third_party'];
-                }
-            }
         }
 
         // ---- DSR: hanya permintaan yang benar-benar menyasar sistem (scope atau
@@ -298,9 +199,6 @@ class ConnectionMapScanner
                 $this->addNode($nodes, 'dsr:'.$d->id, 'dsr', $d->request_id ?: 'DSR', $d->request_type,
                     ['status' => $d->status], '/dsr?open='.$d->id);
             }
-        }
-        foreach ($dsrPairs as $p) {
-            $links[] = ['dsr:'.$p->dsr_id, 'system:'.$p->system_id, 'targets'];
         }
 
         // ---- Gerbang entitlement. Modul yang DICABUT dari organisasi ini tidak
@@ -333,6 +231,22 @@ class ConnectionMapScanner
         // ---- Tepi. Kedua ujung WAJIB simpul org ini — penjaga isolasi tenant
         // terakhir. Kunci dedup (from|to|relasi) melebur tautan ganda, mis. DPIA
         // yang tertaut lewat FK ropa_id sekaligus pivot dpia_ropa.
+        // Seluruh tepi datang dari RelationCatalog lewat resolver bersama —
+        // pemindai ini dan peta per-record/per-modul memakai sumber yang SAMA,
+        // sehingga keduanya tidak mungkin lagi menyimpang isi. Menambah satu
+        // relasi baru cukup di katalog, dan ketiga peta langsung mengetahuinya.
+        //
+        // Satu-satunya tepi yang tetap dibuat di sini adalah DPIA → RTP, karena
+        // item penanganan risiko bukan baris tabel melainkan isi kolom JSON pada
+        // DPIA-nya; ia tidak punya tabel untuk dirujuk katalog.
+        foreach (app(CatalogLinkResolver::class)->resolve($orgId) as [$ft, $fi, $tt, $ti, $relation]) {
+            $links[] = [
+                RelationCatalog::NODE_PREFIX[$ft].':'.$fi,
+                RelationCatalog::NODE_PREFIX[$tt].':'.$ti,
+                $relation,
+            ];
+        }
+
         $edges = [];
         foreach ($links as [$from, $to, $relation]) {
             if ($from === $to || ! isset($nodes[$from], $nodes[$to])) {
@@ -342,7 +256,7 @@ class ConnectionMapScanner
                 'from' => $from,
                 'to' => $to,
                 'relation' => $relation,
-                'label' => self::RELATION_LABELS[$relation],
+                'label' => RelationCatalog::labelFor($relation),
             ];
         }
 

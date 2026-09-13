@@ -120,9 +120,10 @@ final class RelationCatalog
                 'from_key' => 'collection_point_id', 'to_key' => 'ropa_id',
             ],
             [
-                // Bentuk lama yang masih dipertahankan saat settings diperbarui.
+                // Bentuk lama yang masih dipertahankan saat settings diperbarui —
+                // cadangan bagi pivot `consent_collection_ropa`.
                 'relation' => 'consent_basis', 'label' => 'dasar consent',
-                'from' => 'consent', 'to' => 'ropa',
+                'from' => 'consent', 'to' => 'ropa', 'is_fallback' => true,
                 'kind' => 'json_path', 'table' => 'consent_collection_points', 'owner' => 'consent',
                 'column' => 'settings', 'path' => 'linked_ropa_id', 'points_to' => 'ropa',
             ],
@@ -203,8 +204,14 @@ final class RelationCatalog
                 'from_key' => 'ropa_id', 'to_key' => 'vendor_id', 'role_column' => 'role',
             ],
             [
+                // CADANGAN bagi pivot `ropa_vendor`. RoPA lama yang belum
+                // tersinkron ke pivot menyimpan daftar UUID di wizard, TANPA
+                // peran. Ia hanya boleh dipakai bila pasangan itu belum
+                // dinyatakan pivot — kalau tidak, pihak ketiga yang di pivot
+                // berperan `sub_processed_by` akan mendapat tepi KEDUA
+                // `processed_by` yang salah dan menggandakan hubungannya.
                 'relation' => 'processed_by', 'label' => 'diproses pihak ketiga',
-                'from' => 'ropa', 'to' => 'third_party',
+                'from' => 'ropa', 'to' => 'third_party', 'is_fallback' => true,
                 'kind' => 'json_array', 'table' => 'ropas', 'owner' => 'ropa',
                 'column' => 'wizard_data', 'path' => 'penggunaan_penyimpanan.vendor_ids',
                 'points_to' => 'third_party',
@@ -218,6 +225,10 @@ final class RelationCatalog
                 'from_key' => 'vendor_id', 'to_key' => 'information_system_id', 'role_column' => 'role',
             ],
             [
+                // Pihak ketiga yang DIPASTIKAN terlibat pada insiden — kolom yang
+                // ditandai orang. Dugaan hasil penelusuran (BreachThirdPartyController)
+                // sengaja TIDAK digambar: peta ini menampilkan hubungan yang sudah
+                // ditegaskan, bukan kemungkinan.
                 'relation' => 'involves_third_party', 'label' => 'melibatkan pihak ketiga',
                 'from' => 'breach', 'to' => 'third_party',
                 'kind' => 'json_array', 'table' => 'breach_incidents', 'owner' => 'breach',
@@ -357,13 +368,54 @@ final class RelationCatalog
         ];
     }
 
-    /** Peran tautan pihak ketiga → label tepi, sejalan dengan scanner DSPM. */
+    /** Peran tautan pihak ketiga (pivot ber-`role`) → slug relasi. */
     public const ROLE_RELATIONS = [
-        Vendor::ROLE_CONTROLLER => 'dibagikan ke pengendali',
-        Vendor::ROLE_PROCESSOR => 'diproses',
-        Vendor::ROLE_JOINT_CONTROLLER => 'pengendali bersama',
-        Vendor::ROLE_SUB_PROCESSOR => 'diproses subprosesor',
+        Vendor::ROLE_CONTROLLER => 'shared_to_controller',
+        Vendor::ROLE_PROCESSOR => 'processed_by',
+        Vendor::ROLE_JOINT_CONTROLLER => 'joint_controller_with',
+        Vendor::ROLE_SUB_PROCESSOR => 'sub_processed_by',
     ];
+
+    /**
+     * Arti tepi, dibaca dari `from` ke `to` — SATU sumber untuk semua peta.
+     *
+     * Nilai untuk slug yang sudah ada disalin PERSIS dari
+     * ConnectionMapScanner::RELATION_LABELS. Mengubah satu kata pun di sini akan
+     * mengganti teks tepi pada peta DSPM yang sudah dipakai, dan ujinya tidak
+     * akan menangkapnya karena ia memeriksa pasangan (from, to), bukan label.
+     */
+    public const LABELS = [
+        'supplies' => 'memasok data',
+        'consent_basis' => 'dasar consent',
+        'assessed_by_dpia' => 'dinilai DPIA',
+        'treated_by' => 'ditangani RTP',
+        'transfers' => 'mentransfer',
+        'balanced_by_lia' => 'dinilai LIA',
+        'referenced_by_lia' => 'dirujuk LIA',
+        'assessed_by_tia' => 'dinilai TIA',
+        'impacted_by' => 'terdampak insiden',
+        'processed_by' => 'diproses pihak ketiga',
+        'shared_to_controller' => 'dibagikan ke pengendali lain',
+        'joint_controller_with' => 'pengendali bersama',
+        'sub_processed_by' => 'diproses subprosesor',
+        'involves_third_party' => 'melibatkan pihak ketiga',
+        'received_by' => 'diterima pihak ketiga',
+        'targets' => 'menyasar sistem',
+        // Tautan yang sebelumnya tidak pernah digambar peta mana pun.
+        'operates_system' => 'memegang sistem',
+        'breach_system' => 'sistem terdampak',
+        'third_party_incident' => 'insiden pihak ketiga',
+        'incident_of_breach' => 'kasus dari insiden',
+        'has_contract' => 'kontrak',
+        'contract_reviewed' => 'ditinjau',
+        'third_party_ropa' => 'dicatat pihak ketiga',
+        'covers_ropa' => 'menyentuh kegiatan',
+    ];
+
+    public static function labelFor(string $relation): string
+    {
+        return self::LABELS[$relation] ?? $relation;
+    }
 
     /** Jenis simpul yang punya tautan lintas modul sama sekali. */
     public static function linkableTypes(): array

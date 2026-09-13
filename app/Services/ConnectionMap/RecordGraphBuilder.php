@@ -30,11 +30,10 @@ use Illuminate\Support\Facades\Schema;
  */
 class RecordGraphBuilder
 {
+    public function __construct(private CatalogLinkResolver $resolver) {}
+
     /** Batas record modul yang digambar; sisanya dilaporkan lewat `truncated`. */
     public const MAX_MODULE_NODES = 120;
-
-    /** Batas baris yang dipindai saat mencari tautan di dalam kolom JSON. */
-    private const MAX_JSON_SCAN = 2000;
 
     /** @var array<string, bool> cache Schema::hasColumn — dipanggil berulang per permintaan */
     private array $cacheKolom = [];
@@ -145,17 +144,9 @@ class RecordGraphBuilder
      */
     private function expand(string $orgId, array $benih): array
     {
-        $pasangan = [];   // list of [fromType, fromId, toType, toId, label]
-        foreach (RelationCatalog::relations() as $r) {
-            foreach ($benih as $type => $ids) {
-                if ($r['from'] !== $type && $r['to'] !== $type) {
-                    continue;
-                }
-                foreach ($this->resolve($orgId, $r, $type, $ids) as $p) {
-                    $pasangan[] = $p;
-                }
-            }
-        }
+        // Seluruh pengetahuan relasi datang dari resolver bersama — pemindai
+        // DSPM memakai yang sama, sehingga kedua peta tidak mungkin menyimpang.
+        $pasangan = $this->resolver->resolve($orgId, $benih);
 
         // Simpul diambil per jenis dengan penyaring org — inilah penjaga tenant.
         $perJenis = [];
@@ -173,135 +164,22 @@ class RecordGraphBuilder
         }
 
         $edges = [];
-        foreach ($pasangan as [$ft, $fi, $tt, $ti, $label]) {
+        foreach ($pasangan as [$ft, $fi, $tt, $ti, $relasi, $label]) {
             $from = RelationCatalog::NODE_PREFIX[$ft].':'.$fi;
             $to = RelationCatalog::NODE_PREFIX[$tt].':'.$ti;
             // Tepi yang salah satu ujungnya bukan simpul milik org ini dibuang.
+            // Inilah penjaga isolasi tenant DAN gerbang entitlement sekaligus:
+            // jenis yang tidak diizinkan tidak menghasilkan simpul, sehingga
+            // tepinya gugur di sini tanpa perlu penyaringan kedua.
             if (! isset($nodes[$from]) || ! isset($nodes[$to]) || $from === $to) {
                 continue;
             }
-            $edges[$from.'|'.$to.'|'.$label] = ['from' => $from, 'to' => $to, 'label' => $label];
+            $edges[$from.'|'.$to.'|'.$relasi] = [
+                'from' => $from, 'to' => $to, 'relation' => $relasi, 'label' => $label,
+            ];
         }
 
         return [$nodes, $edges];
-    }
-
-    /**
-     * Pasangan (kiri, kanan) untuk satu relasi, disaring pada sisi yang cocok
-     * dengan benih.
-     *
-     * @param  array<string, mixed>  $r
-     * @param  array<int, string>  $ids
-     * @return list<array{0: string, 1: string, 2: string, 3: string, 4: string}>
-     */
-    private function resolve(string $orgId, array $r, string $benihType, array $ids): array
-    {
-        $label = (string) $r['label'];
-        $out = [];
-
-        if ($r['kind'] === 'pivot') {
-            if (! $this->tabelAda($r['table'])) {
-                return [];
-            }
-            $kiri = $r['from_key'];
-            $kanan = $r['to_key'];
-            $kolom = $r['from'] === $benihType ? $kiri : $kanan;
-
-            $rows = DB::table($r['table'])->whereIn($kolom, $ids)->get([$kiri, $kanan]);
-            foreach ($rows as $row) {
-                $out[] = [$r['from'], (string) $row->{$kiri}, $r['to'], (string) $row->{$kanan}, $label];
-            }
-
-            return $out;
-        }
-
-        if (! $this->tabelAda($r['table'])) {
-            return [];
-        }
-
-        $ownerType = $r['owner_type'] ?? $r['owner'] ?? null;
-        $ownerIdCol = $r['owner_column'] ?? 'id';
-        $ownerAdalahFrom = $ownerType === $r['from'];
-
-        if ($r['kind'] === 'fk') {
-            $kolomTarget = $r['column'];
-            // Sisi mana yang disaring bergantung pada apakah benihnya si pemilik
-            // baris atau yang ditunjuknya.
-            $saring = ($benihType === $ownerType) ? $ownerIdCol : $kolomTarget;
-
-            $rows = DB::table($r['table'])
-                ->whereIn($saring, $ids)
-                ->whereNotNull($kolomTarget)
-                ->get([$ownerIdCol, $kolomTarget]);
-
-            foreach ($rows as $row) {
-                $ownerId = (string) $row->{$ownerIdCol};
-                $targetId = (string) $row->{$kolomTarget};
-                $out[] = $ownerAdalahFrom
-                    ? [$r['from'], $ownerId, $r['to'], $targetId, $label]
-                    : [$r['from'], $targetId, $r['to'], $ownerId, $label];
-            }
-
-            return $out;
-        }
-
-        // ---- Kolom JSON: tidak dapat disaring andal lintas MySQL/Postgres/SQLite,
-        // jadi barisnya dibaca lalu disaring di PHP, dengan batas tegas.
-        $kolomJson = $r['column'];
-        $q = DB::table($r['table']);
-        if ($benihType === $ownerType) {
-            $q->whereIn($ownerIdCol, $ids);
-        } else {
-            if ($this->punyaKolom($r['table'], 'org_id')) {
-                $q->where('org_id', $orgId);
-            }
-            $q->limit(self::MAX_JSON_SCAN);
-        }
-        if ($this->punyaKolom($r['table'], 'deleted_at')) {
-            $q->whereNull('deleted_at');
-        }
-
-        $cari = array_flip($ids);
-        foreach ($q->get([$ownerIdCol, $kolomJson]) as $row) {
-            $isi = $row->{$kolomJson};
-            $data = is_string($isi) ? json_decode($isi, true) : $isi;
-            if (! is_array($data)) {
-                continue;
-            }
-            if (! empty($r['path'])) {
-                $data = data_get($data, $r['path']);
-            }
-
-            $targets = [];
-            if ($r['kind'] === 'json_array') {
-                $targets = is_array($data) ? array_filter($data, 'is_string') : [];
-            } elseif ($r['kind'] === 'json_items') {
-                foreach (is_array($data) ? $data : [] as $item) {
-                    $v = is_array($item) ? ($item[$r['item_key']] ?? null) : null;
-                    if (is_string($v) && $v !== '') {
-                        $targets[] = $v;
-                    }
-                }
-            } else { // json_path
-                if (is_string($data) && $data !== '') {
-                    $targets = [$data];
-                }
-            }
-
-            $ownerId = (string) $row->{$ownerIdCol};
-            foreach ($targets as $t) {
-                // Saat benihnya di sisi target, hanya pasangan yang menyentuh
-                // benih yang diambil — sisanya milik record lain.
-                if ($benihType !== $ownerType && ! isset($cari[$t])) {
-                    continue;
-                }
-                $out[] = $ownerAdalahFrom
-                    ? [$r['from'], $ownerId, $r['to'], (string) $t, $label]
-                    : [$r['from'], (string) $t, $r['to'], $ownerId, $label];
-            }
-        }
-
-        return $out;
     }
 
     /**
