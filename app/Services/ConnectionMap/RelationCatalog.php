@@ -154,6 +154,19 @@ final class RelationCatalog
                 'column' => 'linked_dpia_id', 'points_to' => 'dpia', 'inverse' => true,
             ],
             [
+                // Penanganan risiko TIDAK punya tabel sendiri: ia baris-baris di
+                // kolom JSON `dpias.mitigation_tracking`. Karena itu jenisnya
+                // `json_summary` — SATU simpul ringkasan per DPIA, bukan satu per
+                // item. Peta DSPM sudah menggambarnya sejak awal; peta per-record
+                // dan per-modul tidak, sehingga sebuah DPIA tampak tidak punya
+                // penanganan risiko sama sekali. Sekarang ketiganya membacanya
+                // dari entri yang sama ini.
+                'relation' => 'treated_by', 'label' => 'ditangani RTP',
+                'from' => 'dpia', 'to' => 'rtp',
+                'kind' => 'json_summary', 'table' => 'dpias', 'owner' => 'dpia',
+                'column' => 'mitigation_tracking',
+            ],
+            [
                 'relation' => 'transfers', 'label' => 'mentransfer',
                 'from' => 'ropa', 'to' => 'cross_border',
                 'kind' => 'fk', 'table' => 'cross_border_transfers', 'owner' => 'cross_border',
@@ -309,6 +322,57 @@ final class RelationCatalog
      *
      * @return array<string, array<string, mixed>>
      */
+    /**
+     * Simpul yang DITURUNKAN dari kolom JSON pemiliknya, bukan dari tabelnya
+     * sendiri.
+     *
+     * Satu simpul ringkasan per baris pemilik, dengan id yang SAMA dengan
+     * pemiliknya — itulah yang membuat tepinya bisa dibentuk tanpa tabel
+     * penghubung. Labelnya berupa hitungan, karena yang ingin dibaca orang di
+     * peta memang "ada berapa, dan berapa yang selesai", bukan daftar itemnya
+     * satu per satu.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public static function derivedSources(): array
+    {
+        return [
+            'rtp' => [
+                'from' => 'dpia',
+                'table' => 'dpias',
+                'column' => 'mitigation_tracking',
+                'href' => '/risk-treatment-plan',
+                'satuan' => 'item penanganan risiko',
+                // Item dianggap selesai bila statusnya persis ini — sama dengan
+                // yang dipakai pemindai DSPM sebelum aturannya dipindah ke sini.
+                'status_selesai' => 'completed',
+            ],
+        ];
+    }
+
+    /**
+     * Ringkasan satu simpul turunan dari larik itemnya.
+     *
+     * @param  array<int, mixed>  $items
+     * @param  array<string, mixed>  $spec
+     * @return array{label: string, code: string, meta: array<string, int>}
+     */
+    public static function ringkasTurunan(array $items, array $spec): array
+    {
+        $valid = array_values(array_filter($items, 'is_array'));
+        $total = count($valid);
+        $selesai = count(array_filter(
+            $valid,
+            fn ($i) => ($i['status'] ?? null) === ($spec['status_selesai'] ?? 'completed'),
+        ));
+
+        return [
+            'label' => $total.' '.($spec['satuan'] ?? 'item'),
+            'code' => $selesai.'/'.$total.' selesai',
+            'meta' => ['total' => $total, 'done' => $selesai],
+        ];
+    }
+
     public static function nodeSources(): array
     {
         return [

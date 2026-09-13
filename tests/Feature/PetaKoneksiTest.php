@@ -231,6 +231,111 @@ class PetaKoneksiTest extends TestCase
         $this->assertNotContains('gap', $tersedia['data']);
     }
 
+    /**
+     * Penanganan risiko bukan tabel — ia baris di kolom JSON
+     * `dpias.mitigation_tracking`. Peta DSPM sudah menggambarnya sejak awal,
+     * tetapi peta per-record dan per-modul tidak, sehingga sebuah DPIA tampak
+     * tidak punya penanganan risiko sama sekali.
+     */
+    public function test_peta_dpia_menampilkan_ringkasan_penanganan_risiko(): void
+    {
+        $ropa = $this->ropa('ROPA-2026-010', 'Penilaian Risiko');
+        $dpia = Dpia::create([
+            'org_id' => $this->org->id, 'ropa_id' => $ropa->id,
+            'registration_number' => 'DPIA-2026-010', 'status' => 'draft',
+            'mitigation_tracking' => [
+                ['measure' => 'Enkripsi basis data', 'status' => 'completed'],
+                ['measure' => 'Pembatasan akses', 'status' => 'in_progress'],
+                ['measure' => 'Audit berkala', 'status' => 'planned'],
+            ],
+        ]);
+
+        $g = $this->getJson("/api/peta-koneksi/dpia/{$dpia->id}")->assertOk()->json('data');
+
+        $this->assertTrue($this->hasEdge($g, 'dpia:'.$dpia->id, 'rtp:'.$dpia->id));
+
+        $simpul = collect($g['nodes'])->firstWhere('id', 'rtp:'.$dpia->id);
+        $this->assertNotNull($simpul);
+        $this->assertSame('3 item penanganan risiko', $simpul['label']);
+        $this->assertSame('1/3 selesai', $simpul['code']);
+        $this->assertSame(['total' => 3, 'done' => 1], $simpul['meta']);
+
+        // Peta se-modul harus membawanya juga, bukan hanya peta satu record.
+        $global = $this->getJson('/api/peta-koneksi/dpia')->assertOk()->json('data');
+        $this->assertTrue($this->hasEdge($global, 'dpia:'.$dpia->id, 'rtp:'.$dpia->id));
+    }
+
+    /**
+     * DPIA tanpa satu pun item penanganan TIDAK menghasilkan simpul "0 item" —
+     * simpul kosong hanya menambah derau, dan ketiadaan penanganan justru
+     * terbaca lebih jelas sebagai ketiadaan simpul.
+     */
+    public function test_dpia_tanpa_penanganan_risiko_tidak_menghasilkan_simpul_rtp(): void
+    {
+        $ropa = $this->ropa('ROPA-2026-011', 'Tanpa Penanganan');
+        $dpia = Dpia::create([
+            'org_id' => $this->org->id, 'ropa_id' => $ropa->id,
+            'registration_number' => 'DPIA-2026-011', 'status' => 'draft',
+            'mitigation_tracking' => [],
+        ]);
+
+        $g = $this->getJson("/api/peta-koneksi/dpia/{$dpia->id}")->assertOk()->json('data');
+
+        $this->assertNotContains('rtp:'.$dpia->id, $this->ids($g));
+    }
+
+    /**
+     * "Satu DPIA menyentuh berapa pihak ketiga?" tidak punya jawaban langsung di
+     * skema: tidak ada pivot dpia_vendor. Jalurnya DPIA → RoPA yang dinilainya →
+     * pihak ketiga yang memproses RoPA itu. Dengan satu lompatan saja pertanyaan
+     * itu tidak terjawab di peta, karena pihak ketiganya berjarak dua.
+     */
+    public function test_peta_satu_dpia_mencapai_pihak_ketiga_lewat_ropa(): void
+    {
+        $ropa = $this->ropa('ROPA-2026-012', 'Pemrosesan Gaji');
+        $dpia = Dpia::create([
+            'org_id' => $this->org->id, 'ropa_id' => $ropa->id,
+            'registration_number' => 'DPIA-2026-012', 'status' => 'draft',
+        ]);
+        $pihak = Vendor::create(['org_id' => $this->org->id, 'name' => 'PT Payroll Mitra']);
+        DB::table('ropa_vendor')->insert([
+            'ropa_id' => $ropa->id, 'vendor_id' => $pihak->id, 'org_id' => $this->org->id,
+            'role' => Vendor::ROLE_PROCESSOR, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $g = $this->getJson("/api/peta-koneksi/dpia/{$dpia->id}")->assertOk()->json('data');
+
+        // Rantainya utuh: DPIA ← RoPA → pihak ketiga.
+        $this->assertContains('thirdparty:'.$pihak->id, $this->ids($g));
+        $this->assertTrue($this->hasEdge($g, 'ropa:'.$ropa->id, 'dpia:'.$dpia->id));
+        $this->assertTrue($this->hasEdge($g, 'ropa:'.$ropa->id, 'thirdparty:'.$pihak->id));
+    }
+
+    /**
+     * Peta SE-MODUL tetap satu lompatan. Di sana benihnya sudah seluruh record
+     * modul, dan lompatan kedua akan menarik hampir seluruh isi organisasi ke
+     * dalam satu gambar — persis yang membuat peta lama tidak terbaca.
+     */
+    public function test_peta_se_modul_tidak_ikut_melompat_dua_kali(): void
+    {
+        $ropa = $this->ropa('ROPA-2026-013', 'Pemrosesan Lain');
+        $dpia = Dpia::create([
+            'org_id' => $this->org->id, 'ropa_id' => $ropa->id,
+            'registration_number' => 'DPIA-2026-013', 'status' => 'draft',
+        ]);
+        $pihak = Vendor::create(['org_id' => $this->org->id, 'name' => 'PT Jauh']);
+        DB::table('ropa_vendor')->insert([
+            'ropa_id' => $ropa->id, 'vendor_id' => $pihak->id, 'org_id' => $this->org->id,
+            'role' => Vendor::ROLE_PROCESSOR, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $g = $this->getJson('/api/peta-koneksi/dpia')->assertOk()->json('data');
+
+        $this->assertContains('dpia:'.$dpia->id, $this->ids($g));
+        $this->assertContains('ropa:'.$ropa->id, $this->ids($g));
+        $this->assertNotContains('thirdparty:'.$pihak->id, $this->ids($g));
+    }
+
     /** Cabut entitlement satu modul untuk org ini. */
     private function cabut(string $menuKey): void
     {

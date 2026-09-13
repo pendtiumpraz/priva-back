@@ -110,14 +110,19 @@ class ConnectionMapScanner
             $this->addNode($nodes, $id, 'dpia', $d->registration_number ?: 'DPIA', $d->registration_number,
                 RelationCatalog::metaFor('dpia', $d), '/dpia?open='.$d->id);
 
-            // Item RTP hidup sebagai baris mitigation_tracking, bukan tabel
-            // sendiri — diringkas jadi satu simpul per DPIA seperti peta satu RoPA.
-            $items = array_values(array_filter(is_array($d->mitigation_tracking) ? $d->mitigation_tracking : [], 'is_array'));
-            if ($items) {
-                $done = count(array_filter($items, fn ($i) => ($i['status'] ?? null) === 'completed'));
-                $this->addNode($nodes, 'rtp:'.$d->id, 'rtp', count($items).' item penanganan risiko',
-                    $done.'/'.count($items).' selesai', ['total' => count($items), 'done' => $done], '/risk-treatment-plan');
-                $links[] = [$id, 'rtp:'.$d->id, 'treated_by'];
+            // Item RTP hidup sebagai baris `mitigation_tracking`, bukan tabel
+            // sendiri — diringkas jadi satu simpul per DPIA. Aturan meringkasnya
+            // (satuan, mana yang dihitung "selesai") kini ada di katalog, jadi
+            // ketiga peta memakai angka yang sama. TEPI-nya juga sudah dihasilkan
+            // resolver lewat relasi `json_summary`; di sini tinggal simpulnya.
+            $spec = RelationCatalog::derivedSources()['rtp'];
+            $ringkas = RelationCatalog::ringkasTurunan(
+                is_array($d->mitigation_tracking) ? $d->mitigation_tracking : [],
+                $spec,
+            );
+            if ($ringkas['meta']['total'] > 0) {
+                $this->addNode($nodes, 'rtp:'.$d->id, 'rtp', $ringkas['label'],
+                    $ringkas['code'], $ringkas['meta'], $spec['href']);
                 $totals['rtp']++;
             }
         }
@@ -240,9 +245,10 @@ class ConnectionMapScanner
         // sehingga keduanya tidak mungkin lagi menyimpang isi. Menambah satu
         // relasi baru cukup di katalog, dan ketiga peta langsung mengetahuinya.
         //
-        // Satu-satunya tepi yang tetap dibuat di sini adalah DPIA → RTP, karena
-        // item penanganan risiko bukan baris tabel melainkan isi kolom JSON pada
-        // DPIA-nya; ia tidak punya tabel untuk dirujuk katalog.
+        // Sejak relasi `json_summary` ada, DPIA → RTP pun datang dari katalog —
+        // tidak ada lagi tepi yang dibuat di luar resolver. Yang masih dibangun
+        // di sini hanya SIMPUL-nya, karena simpul turunan perlu diringkas dari
+        // kolom JSON pemiliknya.
         foreach (app(CatalogLinkResolver::class)->resolve($orgId) as [$ft, $fi, $tt, $ti, $relation]) {
             $links[] = [
                 RelationCatalog::NODE_PREFIX[$ft].':'.$fi,

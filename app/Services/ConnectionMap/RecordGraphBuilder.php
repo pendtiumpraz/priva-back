@@ -71,7 +71,8 @@ class RecordGraphBuilder
     {
         $pusat = RelationCatalog::NODE_PREFIX[$type].':'.$id;
 
-        [$nodes, $edges] = $this->expand($orgId, [$type => [$id]]);
+        // Dua lompatan: lihat catatan kedalaman di expand().
+        [$nodes, $edges] = $this->expand($orgId, [$type => [$id]], 2);
 
         // Simpul pusat harus ada walau tidak punya tetangga sama sekali —
         // peta kosong yang menampilkan dirinya sendiri lebih jujur daripada
@@ -142,20 +143,50 @@ class RecordGraphBuilder
      * @param  array<string, array<int, string>>  $benih  jenis → daftar id
      * @return array{0: array<string, array<string, mixed>>, 1: array<string, array<string, mixed>>}
      */
-    private function expand(string $orgId, array $benih): array
+    private function expand(string $orgId, array $benih, int $kedalaman = 1): array
     {
         // Seluruh pengetahuan relasi datang dari resolver bersama — pemindai
         // DSPM memakai yang sama, sehingga kedua peta tidak mungkin menyimpang.
-        $pasangan = $this->resolver->resolve($orgId, $benih);
-
-        // Simpul diambil per jenis dengan penyaring org — inilah penjaga tenant.
+        //
+        // KEDALAMAN. Satu lompatan cukup untuk menjawab "apa yang langsung
+        // menempel". Tetapi sebagian keterkaitan yang ditanyakan orang memang
+        // berjarak dua: sebuah DPIA tidak pernah menunjuk pihak ketiga secara
+        // langsung — tidak ada pivot dpia_vendor di skema — melainkan lewat RoPA
+        // yang dinilainya. Dengan satu lompatan, pertanyaan "DPIA ini menyentuh
+        // berapa pihak ketiga" tidak punya jawaban di peta.
+        //
+        // Dua lompatan hanya dipakai peta SATU RECORD. Peta se-modul tetap satu,
+        // karena di sana benihnya sudah ratusan record dan lompatan kedua akan
+        // menarik hampir seluruh isi organisasi ke dalam satu gambar.
+        $pasangan = [];
         $perJenis = [];
         foreach ($benih as $type => $ids) {
             $perJenis[$type] = array_merge($perJenis[$type] ?? [], $ids);
         }
-        foreach ($pasangan as [$ft, $fi, $tt, $ti]) {
-            $perJenis[$ft][] = $fi;
-            $perJenis[$tt][] = $ti;
+        $gelombang = $benih;
+
+        for ($lompatan = 0; $lompatan < max(1, $kedalaman); $lompatan++) {
+            $baru = $this->resolver->resolve($orgId, $gelombang);
+            if (! $baru) {
+                break;
+            }
+            $pasangan = array_merge($pasangan, $baru);
+
+            // Gelombang berikutnya HANYA simpul yang belum pernah jadi benih —
+            // tanpa itu lompatan kedua akan menelusuri balik ke titik awalnya.
+            $berikut = [];
+            foreach ($baru as [$ft, $fi, $tt, $ti]) {
+                foreach ([[$ft, $fi], [$tt, $ti]] as [$t, $i]) {
+                    if (! in_array($i, $perJenis[$t] ?? [], true)) {
+                        $perJenis[$t][] = $i;
+                        $berikut[$t][] = $i;
+                    }
+                }
+            }
+            if (! $berikut) {
+                break;
+            }
+            $gelombang = $berikut;
         }
 
         $nodes = [];
@@ -190,6 +221,17 @@ class RecordGraphBuilder
      */
     private function nodesOf(string $orgId, string $type, array $ids): array
     {
+        // Simpul turunan (mis. ringkasan RTP) tidak punya tabel sendiri —
+        // ditangani terpisah, dengan gerbang entitlement yang sama.
+        $turunan = RelationCatalog::derivedSources()[$type] ?? null;
+        if ($turunan !== null) {
+            if (! $ids || ($this->jenisDiizinkan !== null && ! isset($this->jenisDiizinkan[$type]))) {
+                return [];
+            }
+
+            return $this->simpulTurunan($orgId, $type, $ids, $turunan);
+        }
+
         $sumber = RelationCatalog::nodeSources()[$type] ?? null;
         if (! $sumber || ! $ids || ! $this->tabelAda($sumber['table'])) {
             return [];
@@ -231,6 +273,57 @@ class RecordGraphBuilder
                 'code' => $sumber['code'] ? ($row->{$sumber['code']} ?? null) : null,
                 'meta' => RelationCatalog::metaFrom($specMeta, $row),
                 'href' => $sumber['href'].$id,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Simpul ringkasan yang diturunkan dari kolom JSON pemiliknya.
+     *
+     * Id-nya sama dengan id baris pemilik — itulah yang membuat tepinya bisa
+     * dibentuk tanpa tabel penghubung. Baris berisi larik kosong tidak
+     * menghasilkan simpul sama sekali, sejalan dengan resolver yang juga tidak
+     * menghasilkan tepinya.
+     *
+     * @param  array<int, string>  $ids
+     * @param  array<string, mixed>  $spec
+     * @return array<string, array<string, mixed>>
+     */
+    private function simpulTurunan(string $orgId, string $type, array $ids, array $spec): array
+    {
+        if (! $this->tabelAda($spec['table']) || ! $this->punyaKolom($spec['table'], $spec['column'])) {
+            return [];
+        }
+
+        $q = DB::table($spec['table']);
+        if ($this->punyaKolom($spec['table'], 'org_id')) {
+            $q->where('org_id', $orgId);
+        }
+        if ($this->punyaKolom($spec['table'], 'deleted_at')) {
+            $q->whereNull('deleted_at');
+        }
+
+        $out = [];
+        foreach ($q->whereIn('id', $ids)->get(['id', $spec['column']]) as $row) {
+            $isi = $row->{$spec['column']};
+            $items = is_string($isi) ? json_decode($isi, true) : $isi;
+            if (! is_array($items)) {
+                continue;
+            }
+            $ringkas = RelationCatalog::ringkasTurunan($items, $spec);
+            if ($ringkas['meta']['total'] === 0) {
+                continue;
+            }
+            $nid = RelationCatalog::NODE_PREFIX[$type].':'.$row->id;
+            $out[$nid] = [
+                'id' => $nid,
+                'type' => $type,
+                'label' => $ringkas['label'],
+                'code' => $ringkas['code'],
+                'meta' => $ringkas['meta'],
+                'href' => $spec['href'],
             ];
         }
 

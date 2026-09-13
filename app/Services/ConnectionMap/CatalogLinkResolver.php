@@ -93,11 +93,66 @@ class CatalogLinkResolver
             return [];
         }
 
-        return $r['kind'] === 'pivot'
-            ? $this->dariPivot($orgId, $r, $seeds)
-            : ($r['kind'] === 'fk'
-                ? $this->dariForeignKey($orgId, $r, $seeds)
-                : $this->dariJson($orgId, $r, $seeds));
+        if ($r['kind'] === 'pivot') {
+            return $this->dariPivot($orgId, $r, $seeds);
+        }
+        if ($r['kind'] === 'fk') {
+            return $this->dariForeignKey($orgId, $r, $seeds);
+        }
+        if ($r['kind'] === 'json_summary') {
+            return $this->dariRingkasanJson($orgId, $r, $seeds);
+        }
+
+        return $this->dariJson($orgId, $r, $seeds);
+    }
+
+    /**
+     * Simpul turunan: satu ringkasan per baris pemilik, ber-id SAMA dengan
+     * pemiliknya.
+     *
+     * Tidak ada tabel tujuan yang perlu dicocokkan — yang menentukan ada atau
+     * tidaknya tepi hanyalah apakah kolom JSON-nya berisi. Baris dengan larik
+     * kosong sengaja TIDAK menghasilkan tepi: DPIA tanpa satu pun item
+     * penanganan risiko memang belum ditangani, dan menggambar simpul "0 item"
+     * hanya menambah derau.
+     *
+     * @param  array<string, mixed>  $r
+     * @param  array<string, array<int, string>>|null  $seeds
+     * @return list<array{0: string, 1: string, 2: string, 3: string, 4: string, 5: string}>
+     */
+    private function dariRingkasanJson(string $orgId, array $r, ?array $seeds): array
+    {
+        if (! $this->punyaKolom($r['table'], $r['column'])) {
+            return [];
+        }
+
+        $q = DB::table($r['table']);
+        if ($this->punyaKolom($r['table'], 'org_id')) {
+            $q->where('org_id', $orgId);
+        }
+        if ($this->punyaKolom($r['table'], 'deleted_at')) {
+            $q->whereNull('deleted_at');
+        }
+
+        // Benih boleh menyebut sisi pemilik ATAU sisi turunan — keduanya memakai
+        // id yang sama, jadi keduanya menyaring baris yang sama.
+        $benih = $seeds[$r['from']] ?? $seeds[$r['to']] ?? null;
+        if ($benih !== null) {
+            $q->whereIn('id', $benih);
+        }
+
+        $out = [];
+        foreach ($q->get(['id', $r['column']]) as $row) {
+            $isi = $row->{$r['column']};
+            $items = is_string($isi) ? json_decode($isi, true) : $isi;
+            if (! is_array($items) || ! array_filter($items, 'is_array')) {
+                continue;
+            }
+            $id = (string) $row->id;
+            $out[] = [$r['from'], $id, $r['to'], $id, $r['relation'], $r['label']];
+        }
+
+        return $out;
     }
 
     /**

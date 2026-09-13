@@ -89,8 +89,19 @@ class PetaKoneksiController extends Controller
         $ent = app(EntitlementService::class);
         $user = $request->user();
 
+        // Simpul TURUNAN ikut ditimbang di sini. Tanpa itu, `rtp` tidak pernah
+        // masuk daftar izin sehingga simpulnya dibuang diam-diam oleh gerbang
+        // entitlement — tepinya terbentuk, simpulnya tidak, dan tepinya ikut
+        // gugur. Entitlement-nya tetap mengikuti modul induknya lewat MODULE_ID
+        // ('rtp' => 'dpia'), jadi mencabut DPIA ikut menghilangkan ringkasan
+        // penanganan risikonya — dan itu memang yang benar.
+        $semuaJenis = array_merge(
+            array_keys(RelationCatalog::nodeSources()),
+            array_keys(RelationCatalog::derivedSources()),
+        );
+
         $izin = [];
-        foreach (array_keys(RelationCatalog::nodeSources()) as $jenis) {
+        foreach ($semuaJenis as $jenis) {
             $moduleId = RelationCatalog::MODULE_ID[$jenis] ?? null;
             // Jenis tanpa konsep entitlement tidak bisa dicabut, jadi selalu boleh.
             if ($moduleId === null || $ent->allowsModule($user, $moduleId)) {
