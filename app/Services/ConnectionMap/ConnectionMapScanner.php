@@ -80,7 +80,7 @@ class ConnectionMapScanner
 
         foreach ($ropas as $r) {
             $this->addNode($nodes, 'ropa:'.$r->id, 'ropa', $r->processing_activity ?: ($r->registration_number ?: 'RoPA'),
-                $r->registration_number, ['risk' => $r->risk_level, 'status' => $r->status], '/ropa?open='.$r->id);
+                $r->registration_number, RelationCatalog::metaFor('ropa', $r), '/ropa?open='.$r->id);
         }
 
         // ---- Data Discovery: sistem informasi sebagai sumber data pemrosesan.
@@ -89,7 +89,7 @@ class ConnectionMapScanner
         $totals['data_discovery'] = $systems->count();
         foreach ($systems as $s) {
             $this->addNode($nodes, 'system:'.$s->id, 'data_discovery', $s->name ?: 'Sistem',
-                $s->source_type, ['pdp_alerts' => $s->pdp_alert_count ?: null], '/data-discovery?open='.$s->id);
+                $s->source_type, RelationCatalog::metaFor('data_discovery', $s), '/data-discovery?open='.$s->id);
         }
 
         // ---- Consent: titik pengumpulan sebagai dasar pemrosesan.
@@ -98,7 +98,7 @@ class ConnectionMapScanner
         $totals['consent'] = $consents->count();
         foreach ($consents as $c) {
             $this->addNode($nodes, 'consent:'.$c->id, 'consent', $c->name ?: 'Titik Consent',
-                $c->collection_id, ['kind' => $c->kind], '/consent?open='.$c->id);
+                $c->collection_id, RelationCatalog::metaFor('consent', $c), '/consent?open='.$c->id);
         }
 
         // ---- DPIA, plus satu simpul ringkasan RTP per DPIA.
@@ -108,7 +108,7 @@ class ConnectionMapScanner
         foreach ($dpias as $d) {
             $id = 'dpia:'.$d->id;
             $this->addNode($nodes, $id, 'dpia', $d->registration_number ?: 'DPIA', $d->registration_number,
-                ['risk' => $d->risk_level, 'status' => $d->status], '/dpia?open='.$d->id);
+                RelationCatalog::metaFor('dpia', $d), '/dpia?open='.$d->id);
 
             // Item RTP hidup sebagai baris mitigation_tracking, bukan tabel
             // sendiri — diringkas jadi satu simpul per DPIA seperti peta satu RoPA.
@@ -130,7 +130,11 @@ class ConnectionMapScanner
             // Peran bawaan di registri; peran sesungguhnya per kegiatan ada di tepi.
             $defaultRole = Vendor::normalizeRole($v->type);
             $this->addNode($nodes, 'thirdparty:'.$v->id, 'third_party', $v->name ?: 'Pihak Ketiga',
-                $v->country, ['risk' => $v->risk_level, 'role' => $defaultRole ? Vendor::ROLE_LABELS[$defaultRole] : null],
+                // Peran BAWAAN dari registri ditambahkan di sini, bukan di katalog:
+                // ia perlu dinormalkan lebih dulu, dan peran sesungguhnya per
+                // kegiatan hidup di tepinya — bukan di simpulnya.
+                $v->country, RelationCatalog::metaFor('third_party', $v)
+                    + ($defaultRole ? ['role' => Vendor::ROLE_LABELS[$defaultRole]] : []),
                 '/vendor-risk?open='.$v->id);
         }
 
@@ -141,7 +145,7 @@ class ConnectionMapScanner
         foreach ($transfers as $t) {
             $id = 'crossborder:'.$t->id;
             $this->addNode($nodes, $id, 'cross_border', $t->destination_entity ?: 'Transfer Lintas Negara',
-                $t->destination_country, ['status' => $t->status, 'risk' => $t->risk_level], '/cross-border?open='.$t->id);
+                $t->destination_country, RelationCatalog::metaFor('cross_border', $t), '/cross-border?open='.$t->id);
         }
 
         // ---- LIA.
@@ -151,7 +155,7 @@ class ConnectionMapScanner
         foreach ($lias as $l) {
             $id = 'lia:'.$l->id;
             $this->addNode($nodes, $id, 'lia', $l->title ?: ($l->lia_code ?: 'LIA'), $l->lia_code,
-                ['status' => $l->status], '/lia?open='.$l->id);
+                RelationCatalog::metaFor('lia', $l), '/lia?open='.$l->id);
         }
 
         // ---- TIA — dapat bertaut ke RoPA, transfer lintas negara, dan pihak ketiga.
@@ -161,7 +165,7 @@ class ConnectionMapScanner
         foreach ($tias as $t) {
             $id = 'tia:'.$t->id;
             $this->addNode($nodes, $id, 'tia', $t->title ?: ($t->tia_code ?: 'TIA'), $t->tia_code,
-                ['status' => $t->status, 'risk' => $t->overall_risk_level], '/tia?open='.$t->id);
+                RelationCatalog::metaFor('tia', $t), '/tia?open='.$t->id);
         }
 
         // ---- Insiden kebocoran. Insiden simulasi (latihan) tidak dipetakan —
@@ -172,7 +176,7 @@ class ConnectionMapScanner
         foreach ($breaches as $b) {
             $id = 'breach:'.$b->id;
             $this->addNode($nodes, $id, 'breach', $b->title ?: 'Insiden', $b->incident_code,
-                ['severity' => $b->severity, 'status' => $b->status], '/breach?open='.$b->id);
+                RelationCatalog::metaFor('breach', $b), '/breach?open='.$b->id);
         }
 
         // ---- DSR: hanya permintaan yang benar-benar menyasar sistem (scope atau
@@ -197,7 +201,7 @@ class ConnectionMapScanner
                 ->get(['id', 'request_id', 'request_type', 'status']);
             foreach ($dsrs as $d) {
                 $this->addNode($nodes, 'dsr:'.$d->id, 'dsr', $d->request_id ?: 'DSR', $d->request_type,
-                    ['status' => $d->status], '/dsr?open='.$d->id);
+                    RelationCatalog::metaFor('dsr', $d), '/dsr?open='.$d->id);
             }
         }
 

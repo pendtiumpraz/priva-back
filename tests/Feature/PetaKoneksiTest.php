@@ -256,6 +256,49 @@ class PetaKoneksiTest extends TestCase
         $this->app->forgetScopedInstances();
     }
 
+    public function test_simpul_membawa_keterangan_bukan_kosong(): void
+    {
+        // Peta per-record dulu mengirim `meta` kosong sementara peta DSPM
+        // membawa risk/status/severity — kartu simpulnya jadi miskin tanpa
+        // alasan. Keduanya kini membaca spesifikasi yang sama dari katalog.
+        $ropa = $this->ropa('ROPA-2026-020', 'Profiling Kredit', ['risk_level' => 'high']);
+        $breach = BreachIncident::create([
+            'org_id' => $this->org->id, 'incident_code' => 'BRC-2026-020',
+            'title' => 'Kebocoran', 'severity' => 'critical', 'status' => 'detected',
+            'linked_ropa_ids' => [$ropa->id],
+        ]);
+
+        $g = $this->getJson("/api/peta-koneksi/ropa/{$ropa->id}")->assertOk()->json('data');
+        $nodes = collect($g['nodes'])->keyBy('id');
+
+        $this->assertSame('high', $nodes['ropa:'.$ropa->id]['meta']['risk']);
+        $this->assertSame('approved', $nodes['ropa:'.$ropa->id]['meta']['status']);
+        $this->assertSame('critical', $nodes['breach:'.$breach->id]['meta']['severity']);
+    }
+
+    public function test_meta_dsr_tidak_pernah_memuat_identitas_pemohon(): void
+    {
+        $sistem = InformationSystem::create(['org_id' => $this->org->id, 'name' => 'CRM', 'source_type' => 'mysql']);
+        $dsr = DsrRequest::create([
+            'org_id' => $this->org->id, 'request_id' => 'DSR-2026-020', 'request_type' => 'erasure',
+            'requester_name' => 'Siti Rahmawati', 'requester_email' => 'siti@contoh.id',
+            'status' => 'new',
+        ]);
+        DB::table('dsr_request_scopes')->insert([
+            'id' => (string) Str::uuid(), 'dsr_request_id' => $dsr->id,
+            'information_system_id' => $sistem->id, 'request_types' => json_encode(['erasure']),
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $g = $this->getJson("/api/peta-koneksi/dsr/{$dsr->id}")->assertOk()->json('data');
+        $meta = collect($g['nodes'])->firstWhere('id', 'dsr:'.$dsr->id)['meta'];
+
+        // Kunci meta DSR dikunci ke `status` saja. Grafnya dapat berakhir sebagai
+        // berkas JSON di storage dan diunduh, jadi menambah kolom apa pun di sini
+        // harus keputusan sadar — bukan efek samping menambah spesifikasi meta.
+        $this->assertSame(['status'], array_keys($meta));
+    }
+
     public function test_modul_yang_dicabut_tidak_muncul_sebagai_tetangga(): void
     {
         $ropa = $this->ropa('ROPA-2026-010', 'Punya DPIA');

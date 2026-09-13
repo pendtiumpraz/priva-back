@@ -312,22 +312,74 @@ final class RelationCatalog
     public static function nodeSources(): array
     {
         return [
-            'ropa' => ['table' => 'ropas', 'label' => 'processing_activity', 'code' => 'registration_number', 'href' => '/ropa?open=', 'soft' => true],
-            'dpia' => ['table' => 'dpias', 'label' => 'registration_number', 'code' => 'registration_number', 'href' => '/dpia?open=', 'soft' => true],
-            'lia' => ['table' => 'lia_assessments', 'label' => 'lia_code', 'code' => 'lia_code', 'href' => '/lia?open=', 'soft' => true],
-            'tia' => ['table' => 'tia_assessments', 'label' => 'title', 'code' => 'tia_code', 'href' => '/tia?open=', 'soft' => true],
-            'cross_border' => ['table' => 'cross_border_transfers', 'label' => 'destination_entity', 'code' => 'destination_country', 'href' => '/cross-border?open=', 'soft' => true],
-            'third_party' => ['table' => 'vendors', 'label' => 'name', 'code' => 'country', 'href' => '/vendor-risk?open=', 'soft' => true],
-            'breach' => ['table' => 'breach_incidents', 'label' => 'title', 'code' => 'incident_code', 'href' => '/breach?open=', 'soft' => true],
-            // Label DSR = nomor permintaan. JANGAN diganti nama/email pemohon.
-            'dsr' => ['table' => 'dsr_requests', 'label' => 'request_id', 'code' => 'request_type', 'href' => '/dsr?open=', 'soft' => true],
-            'data_discovery' => ['table' => 'information_systems', 'label' => 'name', 'code' => 'source_type', 'href' => '/data-discovery?open=', 'soft' => true],
-            'consent' => ['table' => 'consent_collection_points', 'label' => 'name', 'code' => 'collection_id', 'href' => '/consent?open=', 'soft' => true],
-            'contract' => ['table' => 'vendor_contracts', 'label' => 'title', 'code' => 'contract_type', 'href' => '/vendor-risk?open=', 'soft' => true],
-            'contract_review' => ['table' => 'contract_reviews', 'label' => 'title', 'code' => 'contract_type', 'href' => '/contract-review?open=', 'soft' => true],
-            'vendor_incident' => ['table' => 'vendor_incidents', 'label' => 'title', 'code' => 'kind', 'href' => '/vendor-risk?open=', 'soft' => true],
-            'vendor_ropa' => ['table' => 'vendor_ropas', 'label' => 'processing_activity', 'code' => null, 'href' => '/vendor-risk?open=', 'soft' => true],
+            'ropa' => ['table' => 'ropas', 'label' => 'processing_activity', 'code' => 'registration_number', 'href' => '/ropa?open=', 'soft' => true,
+                'meta' => ['risk' => 'risk_level', 'status' => 'status']],
+            'dpia' => ['table' => 'dpias', 'label' => 'registration_number', 'code' => 'registration_number', 'href' => '/dpia?open=', 'soft' => true,
+                'meta' => ['risk' => 'risk_level', 'status' => 'status']],
+            'lia' => ['table' => 'lia_assessments', 'label' => 'lia_code', 'code' => 'lia_code', 'href' => '/lia?open=', 'soft' => true,
+                'meta' => ['status' => 'status']],
+            'tia' => ['table' => 'tia_assessments', 'label' => 'title', 'code' => 'tia_code', 'href' => '/tia?open=', 'soft' => true,
+                'meta' => ['status' => 'status', 'risk' => 'overall_risk_level']],
+            'cross_border' => ['table' => 'cross_border_transfers', 'label' => 'destination_entity', 'code' => 'destination_country', 'href' => '/cross-border?open=', 'soft' => true,
+                'meta' => ['status' => 'status', 'risk' => 'risk_level']],
+            // `role` pada pihak ketiga TIDAK di sini: ia peran BAWAAN di registri
+            // yang masih perlu dinormalkan, dan peran sesungguhnya per kegiatan
+            // hidup di tepinya. Pemindai menambahkannya sendiri.
+            'third_party' => ['table' => 'vendors', 'label' => 'name', 'code' => 'country', 'href' => '/vendor-risk?open=', 'soft' => true,
+                'meta' => ['risk' => 'risk_level']],
+            'breach' => ['table' => 'breach_incidents', 'label' => 'title', 'code' => 'incident_code', 'href' => '/breach?open=', 'soft' => true,
+                'meta' => ['severity' => 'severity', 'status' => 'status']],
+            // Label DSR = nomor permintaan, dan META-nya hanya status. JANGAN
+            // ditambahi kolom apa pun yang memuat identitas pemohon: grafnya bisa
+            // berakhir sebagai berkas JSON di storage dan diunduh.
+            'dsr' => ['table' => 'dsr_requests', 'label' => 'request_id', 'code' => 'request_type', 'href' => '/dsr?open=', 'soft' => true,
+                'meta' => ['status' => 'status']],
+            'data_discovery' => ['table' => 'information_systems', 'label' => 'name', 'code' => 'source_type', 'href' => '/data-discovery?open=', 'soft' => true,
+                'meta' => ['pdp_alerts' => 'pdp_alert_count']],
+            'consent' => ['table' => 'consent_collection_points', 'label' => 'name', 'code' => 'collection_id', 'href' => '/consent?open=', 'soft' => true,
+                'meta' => ['kind' => 'kind']],
+            'contract' => ['table' => 'vendor_contracts', 'label' => 'title', 'code' => 'contract_type', 'href' => '/vendor-risk?open=', 'soft' => true,
+                'meta' => ['status' => 'status']],
+            'contract_review' => ['table' => 'contract_reviews', 'label' => 'title', 'code' => 'contract_type', 'href' => '/contract-review?open=', 'soft' => true,
+                'meta' => ['status' => 'status', 'rating' => 'overall_rating']],
+            'vendor_incident' => ['table' => 'vendor_incidents', 'label' => 'title', 'code' => 'kind', 'href' => '/vendor-risk?open=', 'soft' => true,
+                'meta' => ['severity' => 'severity', 'status' => 'status']],
+            'vendor_ropa' => ['table' => 'vendor_ropas', 'label' => 'processing_activity', 'code' => null, 'href' => '/vendor-risk?open=', 'soft' => true,
+                'meta' => []],
         ];
+    }
+
+    /**
+     * Meta dasar satu simpul, dibaca dari baris sumbernya.
+     *
+     * Dipakai BERSAMA oleh peta per-record dan pemindai DSPM supaya keduanya
+     * menampilkan keterangan yang sama. Sebelumnya peta per-record mengirim
+     * `meta` kosong sementara pemindai membawa risk/status/severity — peta baris
+     * jadi lebih miskin tanpa alasan.
+     *
+     * Nilai kosong dibuang: `meta` yang berisi null hanya menambah derau pada
+     * kartu simpul, bukan keterangan.
+     *
+     * @param  array<string, string>  $spec  kunci keluaran → nama kolom
+     * @return array<string, mixed>
+     */
+    public static function metaFrom(array $spec, object $row): array
+    {
+        $out = [];
+        foreach ($spec as $kunci => $kolom) {
+            $nilai = $row->{$kolom} ?? null;
+            if ($nilai !== null && $nilai !== '' && $nilai !== 0) {
+                $out[$kunci] = $nilai;
+            }
+        }
+
+        return $out;
+    }
+
+    /** Meta dasar untuk satu jenis simpul. */
+    public static function metaFor(string $type, object $row): array
+    {
+        return self::metaFrom(self::nodeSources()[$type]['meta'] ?? [], $row);
     }
 
     /**

@@ -202,9 +202,20 @@ class RecordGraphBuilder
             return [];
         }
 
-        $kolom = array_values(array_unique(array_filter([
-            'id', $sumber['label'], $sumber['code'],
-        ])));
+        // Hanya kolom meta yang benar-benar ada yang diambil: tabel yang belum
+        // punya kolomnya (modul lama, atau migrasi yang belum jalan di satu
+        // lingkungan) tidak boleh membuat seluruh kuerinya galat.
+        $specMeta = [];
+        foreach (($sumber['meta'] ?? []) as $kunci => $kolomMeta) {
+            if ($this->punyaKolom($sumber['table'], $kolomMeta)) {
+                $specMeta[$kunci] = $kolomMeta;
+            }
+        }
+
+        $kolom = array_values(array_unique(array_filter(array_merge(
+            ['id', $sumber['label'], $sumber['code']],
+            array_values($specMeta),
+        ))));
 
         $rows = $this->baseQuery($orgId, $sumber)->whereIn('id', $ids)->get($kolom);
 
@@ -218,7 +229,7 @@ class RecordGraphBuilder
                 'type' => $type,
                 'label' => $label !== '' ? $label : ucfirst(str_replace('_', ' ', $type)),
                 'code' => $sumber['code'] ? ($row->{$sumber['code']} ?? null) : null,
-                'meta' => [],
+                'meta' => RelationCatalog::metaFrom($specMeta, $row),
                 'href' => $sumber['href'].$id,
             ];
         }
