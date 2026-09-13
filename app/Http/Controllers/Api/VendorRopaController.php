@@ -9,6 +9,7 @@ use App\Models\Vendor;
 use App\Models\VendorRopa;
 use App\Models\VendorRopaEditRequest;
 use App\Services\VendorRopaTokenService;
+use App\Support\FrontendUrl;
 use Illuminate\Http\Request;
 
 /**
@@ -81,8 +82,10 @@ class VendorRopaController extends Controller
         }
 
         $token = $tokens->generate($vendorRopa);
-        $baseUrl = config('app.frontend_url', config('app.url', 'http://localhost:3000'));
-        $publicUrl = rtrim((string) $baseUrl, '/').'/ropa-pihak-ketiga/'.$token;
+        // Halaman pengisiannya dilayani Next.js (frontend/src/app/
+        // ropa-pihak-ketiga/[token]), bukan Laravel — jadi basisnya harus host
+        // frontend. Lihat App\Support\FrontendUrl.
+        $publicUrl = FrontendUrl::link('/ropa-pihak-ketiga/'.$token);
 
         $this->audit($request, $vendorRopa, 'generate_token', [
             'pihak_ketiga' => $vendor->name,
@@ -94,6 +97,11 @@ class VendorRopaController extends Controller
             'vendor_ropa_id' => $vendorRopa->id,
             'token' => $token,
             'public_url' => $publicUrl,
+            // Tautan yang menunjuk host API gagal tanpa bunyi apa pun di sisi
+            // kita — ia baru 404 di tangan penerimanya, dan pengendali tidak
+            // akan pernah tahu. Karena itu disampaikan di sini, di layar tempat
+            // tautannya disalin.
+            'url_warning' => FrontendUrl::peringatan(),
         ]);
     }
 
@@ -191,8 +199,7 @@ class VendorRopaController extends Controller
 
         if ($data['action'] === 'approve') {
             $token = $tokens->generate($vendorRopa);
-            $baseUrl = config('app.frontend_url', config('app.url', 'http://localhost:3000'));
-            $publicUrl = rtrim((string) $baseUrl, '/').'/ropa-pihak-ketiga/'.$token;
+            $publicUrl = FrontendUrl::link('/ropa-pihak-ketiga/'.$token);
         }
 
         $editRequest->forceFill([
@@ -211,7 +218,11 @@ class VendorRopaController extends Controller
             'message' => $data['action'] === 'approve'
                 ? 'Permintaan disetujui. Kirimkan tautan berikut ke kontak terdaftar pihak ketiga.'
                 : 'Permintaan ditolak.',
-            'data' => ['status' => $editRequest->status, 'public_url' => $publicUrl],
+            'data' => [
+                'status' => $editRequest->status,
+                'public_url' => $publicUrl,
+                'url_warning' => $publicUrl !== null ? FrontendUrl::peringatan() : null,
+            ],
         ]);
     }
 

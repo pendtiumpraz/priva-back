@@ -72,6 +72,22 @@ return [
     'frontend_url' => env('FRONTEND_URL', env('APP_URL', 'http://localhost:3000')),
 
     /*
+    | Apakah FRONTEND_URL benar-benar di-set, atau nilai di atas hanya hasil
+    | keterjatuhan ke APP_URL.
+    |
+    | Dihitung DI SINI, saat konfigurasi disusun, supaya tetap benar setelah
+    | `php artisan config:cache` — di produksi yang ter-cache, env() saat
+    | runtime mengembalikan null dan pemeriksaan apa pun yang memanggilnya
+    | akan selalu menyimpulkan "belum di-set".
+    |
+    | Dipakai App\Support\FrontendUrl untuk memperingatkan bahwa tautan publik
+    | sedang menunjuk ke host API — kegagalan yang selama ini tidak berbunyi:
+    | tautannya terbentuk rapi dan baru 404 di tangan penerimanya.
+    */
+
+    'frontend_url_explicit' => env('FRONTEND_URL') !== null,
+
+    /*
     |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
