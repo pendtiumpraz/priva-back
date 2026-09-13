@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\ConnectionMapController;
 use App\Http\Controllers\Api\ConsentCollectionController;
 use App\Http\Controllers\Api\ConsentItemController;
 use App\Http\Controllers\Api\ConsentLogController;
+use App\Http\Controllers\Api\ConsentRuleSetController;
 use App\Http\Controllers\Api\ContainmentController;
 use App\Http\Controllers\Api\ContractReviewCrudController;
 use App\Http\Controllers\Api\ControlLibraryController;
@@ -1529,6 +1530,26 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
             ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,read');
         Route::put('/{id}/ropas', [RopaLinkController::class, 'syncForConsent'])
             ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+    });
+
+    // Aturan consent lintas collection point (mesin: App\Services\Consent)
+    Route::get('/consent-rule-options', [ConsentRuleSetController::class, 'options'])->middleware('permission:consent,read');
+    Route::prefix('consent-rule-sets')->group(function () {
+        Route::get('/', [ConsentRuleSetController::class, 'index'])->middleware('permission:consent,read');
+        Route::post('/', [ConsentRuleSetController::class, 'store'])->middleware('permission:consent,write');
+        Route::get('/{id}', [ConsentRuleSetController::class, 'show'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,read');
+        Route::put('/{id}', [ConsentRuleSetController::class, 'update'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+        Route::delete('/{id}', [ConsentRuleSetController::class, 'destroy'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+        Route::put('/{id}/rules', [ConsentRuleSetController::class, 'replaceRules'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+        // Pratinjau hanya membaca: ia tidak menulis jejak keputusan.
+        Route::post('/{id}/preview', [ConsentRuleSetController::class, 'preview'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,read');
+        Route::get('/{id}/decisions', [ConsentRuleSetController::class, 'decisions'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,read');
     });
 
     // Organization Profile (Onboarding)
