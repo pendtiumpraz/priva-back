@@ -41,6 +41,26 @@ final class FrontendUrl
     }
 
     /**
+     * Benarkah URL ini menunjuk halaman milik kita sendiri?
+     *
+     * Dipakai sebagai penjaga pengalihan terbuka. Pemeriksaan yang wajar
+     * ditulis orang — `str_starts_with($url, $base)` — TIDAK cukup: dengan
+     * basis "https://app.contoh.id", alamat "https://app.contoh.id.jahat.com/x"
+     * lolos begitu saja, karena ia memang berawalan sama. Maka di sini
+     * diharuskan tepat sama, atau berlanjut dengan garis miring — yaitu batas
+     * yang memisahkan nama host dari jalurnya.
+     */
+    public static function milikSendiri(?string $url): bool
+    {
+        $base = self::base();
+        if ($base === '' || $url === null || $url === '') {
+            return false;
+        }
+
+        return $url === $base || str_starts_with($url, $base.'/');
+    }
+
+    /**
      * Benarkah basis ini hanya hasil keterjatuhan ke APP_URL?
      *
      * Sengaja dibaca dari konfigurasi, bukan dari env() langsung: pada

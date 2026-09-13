@@ -3,6 +3,7 @@
 namespace App\Mail;
 
 use App\Models\SecurityAlert;
+use App\Support\FrontendUrl;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -63,7 +64,7 @@ class NotificationMail extends Mailable
             with: [
                 'notification' => $this->notification,
                 'recipientName' => $this->recipientName,
-                'appUrl' => config('app.frontend_url', config('app.url', 'http://localhost:3000')),
+                'appUrl' => FrontendUrl::base(),
                 'unsubscribeUrl' => $unsubscribeUrl,
             ],
         );

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\NotificationPreference;
 use App\Services\NotificationService;
+use App\Support\FrontendUrl;
 use Illuminate\Http\Request;
 
 /**
@@ -118,7 +119,6 @@ class NotificationPreferenceController extends Controller
             ['enabled' => false, 'digest' => 'off']
         );
 
-        $frontendUrl = config('app.frontend_url', config('app.url', 'http://localhost:3000'));
-        return redirect(rtrim($frontendUrl, '/') . "/settings/notifications?unsubscribed={$data['kind']}.{$data['module']}");
+        return redirect(FrontendUrl::link("/settings/notifications?unsubscribed={$data['kind']}.{$data['module']}"));
     }
 }

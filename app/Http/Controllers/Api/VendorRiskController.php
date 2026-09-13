@@ -20,6 +20,7 @@ use App\Services\NotificationService;
 use App\Services\TenantStorageService;
 use App\Services\VendorHeadlineService;
 use App\Services\VendorRiskScoreService;
+use App\Support\FrontendUrl;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -303,7 +304,6 @@ class VendorRiskController extends Controller
             // SEMUA tautan aktif, satu per jenis, supaya token jenis lain tidak
             // hilang dari UI saat satu jenis di-regenerate/submit. Field tunggal
             // `active_assessment_token` di atas dipertahankan utk backward-compat.
-            $baseUrl = config('app.frontend_url', config('app.url', 'http://localhost:3000'));
             $activeStatuses = [VendorAssessment::STATUS_DRAFT, VendorAssessment::STATUS_SENT];
 
             // Peta id → nama library untuk semua library_id yang dipakai vendor
@@ -342,7 +342,7 @@ class VendorRiskController extends Controller
                     'risk_level' => $a->risk_level,
                     'submitted_at' => optional($a->submitted_at)->toIso8601String(),
                     'token' => $a->assessment_token,
-                    'public_url' => rtrim((string) $baseUrl, '/').'/asesmen-pihak-ketiga/'.$a->assessment_token,
+                    'public_url' => FrontendUrl::link('/asesmen-pihak-ketiga/'.$a->assessment_token),
                     'expires_at' => $expiresAt,
                     'consumed' => $isConsumed,
                     // shareable = masih bisa dikirim ke pihak ketiga (belum
@@ -1358,10 +1358,9 @@ class VendorRiskController extends Controller
         $token = $tokenSvc->generate($assessment);
         $assessment->refresh();
 
-        // Build public URL — frontend_url fallback ke app.url biar konsisten
-        // dengan controller lain (Auth/Notification/Dsr broadcaster).
-        $baseUrl = config('app.frontend_url', config('app.url', 'http://localhost:3000'));
-        $publicUrl = rtrim((string) $baseUrl, '/').'/asesmen-pihak-ketiga/'.$token;
+        // Halaman asesmennya dilayani Next.js, bukan Laravel — basisnya host
+        // frontend. Lihat App\Support\FrontendUrl.
+        $publicUrl = FrontendUrl::link('/asesmen-pihak-ketiga/'.$token);
 
         // Audit log — token disimpan prefix-only supaya kalau leak tidak
         // langsung pakai. Investigator bisa rekonstruksi full token dari DB.

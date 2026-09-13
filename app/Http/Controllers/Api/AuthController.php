@@ -14,6 +14,7 @@ use App\Services\LoginAttemptService;
 use App\Services\NotificationService;
 use App\Services\PasswordPolicyService;
 use App\Services\TwoFactorAuthService;
+use App\Support\FrontendUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -445,7 +446,11 @@ class AuthController extends Controller
         // browser, ideal-nya redirect ke /login dengan flash message. Untuk
         // API-only behavior, return JSON.
         $redirectTo = $request->query('redirect_to');
-        if ($redirectTo && str_starts_with($redirectTo, config('app.frontend_url', 'http://localhost:3000'))) {
+        // Penjaga pengalihan terbuka. Sebelumnya cukup str_starts_with atas
+        // basis frontend — yang meloloskan "https://app.contoh.id.jahat.com/x"
+        // karena awalannya memang sama. FrontendUrl::milikSendiri mengharuskan
+        // batas garis miring, sehingga nama host tidak bisa disambung.
+        if (FrontendUrl::milikSendiri($redirectTo)) {
             return redirect()->away($redirectTo.'?verified=1');
         }
 

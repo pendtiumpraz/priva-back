@@ -11,6 +11,7 @@ use App\Services\ContractReviewLinker;
 use App\Services\FileUploadValidator;
 use App\Services\TenantStorageService;
 use App\Services\VendorContractTokenService;
+use App\Support\FrontendUrl;
 use Illuminate\Http\Request;
 use RuntimeException;
 
@@ -136,13 +137,13 @@ class VendorContractController extends Controller
     {
         $contract = $this->find($request, $id);
         $token = $tokens->generate($contract);
-        $baseUrl = config('app.frontend_url', config('app.url', 'http://localhost:3000'));
 
         $this->audit($request, $contract, 'issue_upload_link', ['token_prefix' => substr($token, 0, 8)]);
 
         return response()->json([
             'message' => 'Tautan unggah dibuat. Bagikan kepada pihak ketiga.',
-            'public_url' => rtrim((string) $baseUrl, '/').'/kontrak-pihak-ketiga/'.$token,
+            'public_url' => FrontendUrl::link('/kontrak-pihak-ketiga/'.$token),
+            'url_warning' => FrontendUrl::peringatan(),
         ]);
     }
 

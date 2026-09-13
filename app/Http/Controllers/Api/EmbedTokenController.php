@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\EmbedToken;
+use App\Support\FrontendUrl;
 use Illuminate\Http\Request;
 
 /**
@@ -147,8 +148,7 @@ class EmbedTokenController extends Controller
 
         if ($tokenMentah !== null) {
             $out['token'] = $tokenMentah;
-            $out['embed_url'] = rtrim((string) config('app.frontend_url', config('app.url', 'http://localhost:3000')), '/')
-                .'/embed/register/'.$tokenMentah;
+            $out['embed_url'] = FrontendUrl::link('/embed/register/'.$tokenMentah);
             $out['snippet'] = '<iframe src="'.$out['embed_url'].'" '
                 .'style="width:100%;border:0;min-height:520px" loading="lazy" '
                 .'title="'.htmlspecialchars($t->label, ENT_QUOTES).'"></iframe>';

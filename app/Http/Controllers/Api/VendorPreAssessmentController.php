@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\Vendor;
 use App\Models\VendorPreAssessment;
 use App\Services\NotificationService;
+use App\Support\FrontendUrl;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -400,8 +401,7 @@ class VendorPreAssessmentController extends Controller
             'token_consumed_at' => null,
         ])->save();
 
-        $baseUrl = config('app.frontend_url', config('app.url', 'http://localhost:3000'));
-        $publicUrl = rtrim((string) $baseUrl, '/').'/pra-asesmen-pihak-ketiga/'.$token;
+        $publicUrl = FrontendUrl::link('/pra-asesmen-pihak-ketiga/'.$token);
 
         AuditLog::log('tprm.pre_assessment', $pre->id, 'generate_public_link', [
             'vendor_id' => $vendor->id,

@@ -139,6 +139,23 @@ class TautanPublikFrontendTest extends TestCase
 
     // ------------------------------------------------------------- pembantu
 
+    /**
+     * Penjaga pengalihan terbuka. Pemeriksaan yang wajar ditulis orang —
+     * `str_starts_with($url, $base)` — meloloskan nama host yang disambung,
+     * karena awalannya memang sama persis.
+     */
+    public function test_pengalihan_menolak_host_yang_disambung(): void
+    {
+        $this->assertTrue(FrontendUrl::milikSendiri(self::HALAMAN));
+        $this->assertTrue(FrontendUrl::milikSendiri(self::HALAMAN.'/dashboard'));
+
+        $this->assertFalse(FrontendUrl::milikSendiri(self::HALAMAN.'.jahat.com/x'));
+        $this->assertFalse(FrontendUrl::milikSendiri(self::HALAMAN.'@jahat.com'));
+        $this->assertFalse(FrontendUrl::milikSendiri('https://jahat.com/'.self::HALAMAN));
+        $this->assertFalse(FrontendUrl::milikSendiri(null));
+        $this->assertFalse(FrontendUrl::milikSendiri(''));
+    }
+
     public function test_penyusun_tautan_tidak_menghasilkan_garis_miring_ganda(): void
     {
         config(['app.frontend_url' => self::HALAMAN.'/']);

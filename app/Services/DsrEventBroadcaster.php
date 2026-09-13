@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Jobs\FireDsrWebhookJob;
 use App\Models\DsrRequest;
 use App\Models\User;
+use App\Support\FrontendUrl;
 
 /**
  * Single fan-out point for DSR lifecycle events.
@@ -139,8 +140,7 @@ class DsrEventBroadcaster
 
     private function dashboardUrl(DsrRequest $dsr): string
     {
-        $base = rtrim(config('app.frontend_url') ?: config('app.url'), '/');
-        return $base . '/dsr/' . $dsr->id;
+        return FrontendUrl::link('/dsr/'.$dsr->id);
     }
 
     private function humanDeadline(DsrRequest $dsr): string

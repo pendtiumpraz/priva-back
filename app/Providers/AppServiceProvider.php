@@ -116,8 +116,9 @@ class AppServiceProvider extends ServiceProvider
         // link harus ke FE page yang punya form input password baru.
         // FE route: /reset-password?token=...&email=...
         \Illuminate\Auth\Notifications\ResetPassword::createUrlUsing(function ($user, string $token) {
-            $frontend = rtrim(config('app.frontend_url', config('app.url')), '/');
-            return $frontend.'/reset-password?token='.urlencode($token).'&email='.urlencode($user->getEmailForPasswordReset());
+            return \App\Support\FrontendUrl::link(
+                '/reset-password?token='.urlencode($token).'&email='.urlencode($user->getEmailForPasswordReset())
+            );
         });
 
         // 5. RAG (Retrieval-Augmented Generation) observers.

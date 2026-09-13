@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\Dpia;
 use App\Models\RecordShareLink;
 use App\Models\Ropa;
+use App\Support\FrontendUrl;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
@@ -173,8 +174,7 @@ class RecordShareLinkController extends Controller
         ];
 
         if ($token !== null) {
-            $out['url'] = rtrim((string) config('app.frontend_url', config('app.url', 'http://localhost:3000')), '/')
-                .'/berbagi/'.$token;
+            $out['url'] = FrontendUrl::link('/berbagi/'.$token);
             $out['password'] = $password;
             $out['notice'] = 'URL dan kata sandi ini hanya ditampilkan sekali. Simpan sekarang, dan kirimkan lewat kanal terpisah.';
         }

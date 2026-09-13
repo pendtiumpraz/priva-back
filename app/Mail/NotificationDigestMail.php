@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Support\FrontendUrl;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -40,7 +41,7 @@ class NotificationDigestMail extends Mailable
                 'notifications' => $this->notifications,
                 'recipientName' => $this->recipientName,
                 'frequency' => $this->frequency,
-                'appUrl' => config('app.frontend_url', config('app.url', 'http://localhost:3000')),
+                'appUrl' => FrontendUrl::base(),
             ],
         );
     }
