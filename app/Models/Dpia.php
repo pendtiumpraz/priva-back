@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\AssignmentVisibility;
 use App\Models\Concerns\BelongsToOrg;
+use App\Models\Pivots\DpiaVendor;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -81,6 +82,23 @@ class Dpia extends Model
     public function ropa()
     {
         return $this->belongsTo(Ropa::class);
+    }
+
+    /**
+     * Pihak ketiga yang berada di dalam LINGKUP penilaian ini.
+     *
+     * Berbeda dari pihak ketiga pada RoPA yang dinilai: sebuah DPIA bisa sengaja
+     * mempersempit lingkupnya (menilai satu prosesor saja) atau memperluasnya
+     * (menyertakan subprosesor yang belum tercatat di RoPA). Keadaan awalnya
+     * memang diwarisi dari RoPA — lihat migrasi 2026_09_13_000005 — tetapi
+     * sesudah itu ia berdiri sendiri.
+     */
+    public function vendors()
+    {
+        return $this->belongsToMany(Vendor::class, 'dpia_vendor', 'dpia_id', 'vendor_id')
+            ->using(DpiaVendor::class)
+            ->withPivot('role', 'notes', 'org_id')
+            ->withTimestamps();
     }
 
     /**

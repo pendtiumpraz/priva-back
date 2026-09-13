@@ -312,6 +312,37 @@ class PetaKoneksiTest extends TestCase
     }
 
     /**
+     * Tautan LANGSUNG lewat pivot `dpia_vendor` — bukan rantai lewat RoPA.
+     *
+     * Bedanya penting: lingkup sebuah DPIA tidak selalu sama dengan isi RoPA-nya.
+     * Di uji ini pihak ketiganya TIDAK tertaut ke RoPA mana pun, sehingga kalau
+     * tepinya muncul, ia pasti datang dari pivot yang baru — bukan dari rantai
+     * dua langkah yang sudah ada sebelumnya.
+     */
+    public function test_dpia_terhubung_langsung_ke_pihak_ketiga_lewat_pivot(): void
+    {
+        $ropa = $this->ropa('ROPA-2026-014', 'Penilaian Terbatas');
+        $dpia = Dpia::create([
+            'org_id' => $this->org->id, 'ropa_id' => $ropa->id,
+            'registration_number' => 'DPIA-2026-014', 'status' => 'draft',
+        ]);
+        $pihak = Vendor::create(['org_id' => $this->org->id, 'name' => 'PT Subprosesor']);
+        DB::table('dpia_vendor')->insert([
+            'dpia_id' => $dpia->id, 'vendor_id' => $pihak->id, 'org_id' => $this->org->id,
+            'role' => Vendor::ROLE_SUB_PROCESSOR, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $g = $this->getJson("/api/peta-koneksi/dpia/{$dpia->id}")->assertOk()->json('data');
+
+        $this->assertTrue($this->hasEdge($g, 'dpia:'.$dpia->id, 'thirdparty:'.$pihak->id));
+
+        // Dan ia memang tampil di peta se-modul juga — tautan langsung hanya
+        // butuh SATU lompatan, jadi tidak bergantung pada penelusuran dua langkah.
+        $global = $this->getJson('/api/peta-koneksi/dpia')->assertOk()->json('data');
+        $this->assertTrue($this->hasEdge($global, 'dpia:'.$dpia->id, 'thirdparty:'.$pihak->id));
+    }
+
+    /**
      * Peta SE-MODUL tetap satu lompatan. Di sana benihnya sudah seluruh record
      * modul, dan lompatan kedua akan menarik hampir seluruh isi organisasi ke
      * dalam satu gambar — persis yang membuat peta lama tidak terbaca.

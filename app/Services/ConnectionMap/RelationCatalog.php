@@ -154,6 +154,17 @@ final class RelationCatalog
                 'column' => 'linked_dpia_id', 'points_to' => 'dpia', 'inverse' => true,
             ],
             [
+                // Tautan LANGSUNG, bukan lewat RoPA. Sebelumnya hubungan ini
+                // hanya terbaca sebagai rantai dua langkah; sekarang lingkup
+                // sebuah penilaian bisa berbeda dari isi RoPA-nya dan tetap
+                // tergambar apa adanya.
+                'relation' => 'assessed_third_party', 'label' => 'menilai pihak ketiga',
+                'from' => 'dpia', 'to' => 'third_party',
+                'kind' => 'pivot', 'table' => 'dpia_vendor',
+                'from_key' => 'dpia_id', 'to_key' => 'vendor_id',
+                'role_column' => 'role',
+            ],
+            [
                 // Penanganan risiko TIDAK punya tabel sendiri: ia baris-baris di
                 // kolom JSON `dpias.mitigation_tracking`. Karena itu jenisnya
                 // `json_summary` — SATU simpul ringkasan per DPIA, bukan satu per
@@ -504,6 +515,7 @@ final class RelationCatalog
         'supplies' => 'memasok data',
         'consent_basis' => 'dasar consent',
         'assessed_by_dpia' => 'dinilai DPIA',
+        'assessed_third_party' => 'menilai pihak ketiga',
         'treated_by' => 'ditangani RTP',
         'transfers' => 'mentransfer',
         'balanced_by_lia' => 'dinilai LIA',

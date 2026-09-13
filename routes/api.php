@@ -52,6 +52,7 @@ use App\Http\Controllers\Api\DocumentTemplateController;
 use App\Http\Controllers\Api\DpiaAssessmentFrameworkController;
 use App\Http\Controllers\Api\DpiaRiskEventTemplateController;
 use App\Http\Controllers\Api\DpiaRtpController;
+use App\Http\Controllers\Api\DpiaThirdPartyController;
 use App\Http\Controllers\Api\DsrAppController;
 use App\Http\Controllers\Api\DsrAutomatedDecisionController;
 use App\Http\Controllers\Api\DsrChannelController;
@@ -930,6 +931,13 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::post('/{id}/rotasi', [RecordShareLinkController::class, 'rotate'])->defaults('module', 'ropa')->middleware('permission:ropa,write');
         Route::post('/{id}/cabut', [RecordShareLinkController::class, 'revoke'])->defaults('module', 'ropa')->middleware('permission:ropa,write');
     });
+    // Pihak ketiga dalam lingkup sebuah DPIA (pivot dpia_vendor). Lingkup
+    // penilaian tidak selalu sama dengan isi RoPA yang dinilainya.
+    Route::get('/dpia/{id}/pihak-ketiga', [DpiaThirdPartyController::class, 'index'])
+        ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dpia,read');
+    Route::put('/dpia/{id}/pihak-ketiga', [DpiaThirdPartyController::class, 'sync'])
+        ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:dpia,write');
+
     Route::prefix('dpia/tautan-lembaga')->group(function () {
         Route::get('/', [RecordShareLinkController::class, 'index'])->defaults('module', 'dpia')->middleware('permission:dpia,read');
         Route::post('/', [RecordShareLinkController::class, 'store'])->defaults('module', 'dpia')->middleware('permission:dpia,write');
