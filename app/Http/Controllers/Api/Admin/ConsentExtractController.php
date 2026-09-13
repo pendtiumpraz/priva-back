@@ -7,6 +7,9 @@ use App\Jobs\PushExtractToCrmJob;
 use App\Models\ConsentItem;
 use App\Models\ConsentLog;
 use App\Models\ExtractRun;
+use App\Services\Consent\ConsentBulkGate;
+use App\Services\Consent\ConsentBulkVerdict;
+use App\Services\Consent\ExtractQuery;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -19,6 +22,11 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class ConsentExtractController extends Controller
 {
+    public function __construct(
+        private ExtractQuery $extractQuery,
+        private ConsentBulkGate $bulkGate,
+    ) {}
+
     /**
      * Preview count + sample without committing — used by the wizard
      * "matching records: 1,234" indicator.
@@ -34,9 +42,21 @@ class ConsentExtractController extends Controller
         $q = $this->buildQuery($orgId, $filters);
 
         $count = (clone $q)->count();
+
+        // Pratinjau menimbang dengan gerbang yang SAMA dengan jalan
+        // sesungguhnya. Kalau tidak, angka "1.234 cocok" akan berbohong tepat
+        // pada jalan yang aturannya benar-benar memotong sebagian.
+        $verdict = $this->bulkGate->timbang($orgId, $q, $filters['segment'] ?? null);
+        $ringkasan = $verdict->adaPenjagaan() ? $verdict->ringkasan() : null;
+
         $sample = (clone $q)->orderByDesc('created_at')->limit(5)->get([
             'id', 'email', 'name', 'phone', 'source_form', 'collection_id', 'purpose_keys', 'created_at',
         ]);
+
+        $sample->each(fn ($r) => $r->setAttribute(
+            'withheld_by_rules',
+            ! $verdict->izinkan($r->collection_id, $r->email)
+        ));
 
         // Attach resolved purpose titles (purpose_keys holds item UUIDs) so the
         // wizard sample shows item names, not IDs.
@@ -53,6 +73,7 @@ class ConsentExtractController extends Controller
                 'count' => $count,
                 'sample' => $sample,
                 'filters_applied' => $filters,
+                'gate' => $ringkasan,
             ],
         ]);
     }
@@ -77,6 +98,11 @@ class ConsentExtractController extends Controller
         $q = $this->buildQuery($orgId, $filters);
         $count = (clone $q)->count();
 
+        // Ditimbang SEBELUM apa pun dikirim. Pada jalur CSV, galat evaluasi di
+        // tengah aliran unduhan tidak bisa ditarik kembali — berkasnya sudah
+        // separuh sampai di peramban.
+        $verdict = $this->bulkGate->timbang($orgId, $q, $filters['segment'] ?? null);
+
         $run = ExtractRun::create([
             'org_id' => $orgId,
             'initiated_by_user_id' => Auth::id(),
@@ -84,14 +110,20 @@ class ConsentExtractController extends Controller
             'filters' => $filters,
             'output_target' => $target,
             'output_target_ref' => $request->input('output_target_ref'),
+            // `record_count` tetap berarti "cocok dengan penapis", seperti
+            // sebelumnya. Berapa yang benar-benar terkirim ada di gate_summary,
+            // supaya arti kolom lama tidak berubah diam-diam bagi pembacanya.
             'record_count' => $count,
+            'gate_summary' => $verdict->adaPenjagaan() ? $verdict->ringkasan() : null,
             'status' => $target === 'csv' ? ExtractRun::STATUS_DONE : ExtractRun::STATUS_PENDING,
             'started_at' => now(),
             'finished_at' => $target === 'csv' ? now() : null,
         ]);
 
+        $this->bulkGate->catatYangDitahan($orgId, $verdict, $run->id);
+
         if ($target === 'csv') {
-            return $this->streamCsv($q, $run);
+            return $this->streamCsv($q, $run, $verdict);
         }
 
         // Async target — dispatch CRM push job. The job re-loads filters from
@@ -136,43 +168,28 @@ class ConsentExtractController extends Controller
             'country' => 'nullable|string|size:2',
             'date_from' => 'nullable|date',
             'date_to' => 'nullable|date|after_or_equal:date_from',
+            // Segmen yang dituju ekstrak ini. Tanpa ini, aturan yang berbentuk
+            // "kecualikan dari segmen X" tidak punya X untuk dibandingkan, dan
+            // yang berlaku hanya larangan penuh.
+            'segment' => 'nullable|string|max:191',
         ]);
     }
 
+    /**
+     * Penyusunan kueri dipusatkan di ExtractQuery — dipakai bersama dengan
+     * PushExtractToCrmJob, yang dulu menyalinnya. Penapis yang berbeda antara
+     * pratinjau dan dorongan CRM berarti orang yang dilihat operator di layar
+     * bukan orang yang benar-benar terkirim.
+     *
+     * @param  array<string,mixed>  $filters
+     * @return \Illuminate\Database\Eloquent\Builder<ConsentLog>
+     */
     private function buildQuery(string $orgId, array $filters)
     {
-        $q = ConsentLog::query()->where('org_id', $orgId);
-
-        if (! empty($filters['collection_id'])) {
-            $q->where('collection_id', $filters['collection_id']);
-        }
-        if (! empty($filters['source_form'])) {
-            $q->where('source_form', $filters['source_form']);
-        }
-        if (! empty($filters['country'])) {
-            $q->where('ip_country', strtoupper($filters['country']));
-        }
-        if (! empty($filters['date_from'])) {
-            $q->where('created_at', '>=', $filters['date_from']);
-        }
-        if (! empty($filters['date_to'])) {
-            $q->where('created_at', '<=', $filters['date_to']);
-        }
-        if (! empty($filters['purpose_keys'])) {
-            // Filter rows where ALL requested purpose keys are present in
-            // the denormalized purpose_keys array.
-            foreach ($filters['purpose_keys'] as $key) {
-                // DB-portable: LIKE on JSON-encoded array
-                $q->where('purpose_keys', 'like', '%"'.addslashes($key).'"%');
-            }
-        }
-        // Only return rows with email (identifiable)
-        $q->whereNotNull('email');
-
-        return $q;
+        return $this->extractQuery->build($orgId, $filters);
     }
 
-    private function streamCsv($query, ExtractRun $run): StreamedResponse
+    private function streamCsv($query, ExtractRun $run, ConsentBulkVerdict $verdict): StreamedResponse
     {
         $filename = sprintf('consent-extract-%s-%s.csv', $run->id, now()->format('Ymd-His'));
 
@@ -180,13 +197,20 @@ class ConsentExtractController extends Controller
         $collectionIds = (clone $query)->distinct()->pluck('collection_id')->all();
         $titleById = ConsentItem::titleMap($collectionIds);
 
-        return response()->streamDownload(function () use ($query, $titleById) {
+        return response()->streamDownload(function () use ($query, $titleById, $verdict) {
             $out = fopen('php://output', 'w');
             // BOM for Excel UTF-8
             fwrite($out, "\xEF\xBB\xBF");
             fputcsv($out, ['id', 'email', 'name', 'phone', 'source_form', 'purposes', 'country', 'captured_at']);
-            $query->orderBy('created_at')->chunk(500, function ($rows) use ($out, $titleById) {
+            $query->orderBy('created_at')->chunk(500, function ($rows) use ($out, $titleById, $verdict) {
                 foreach ($rows as $r) {
+                    // Baris yang ditahan aturan tidak pernah masuk berkas.
+                    // Berkas CSV berpindah tangan dengan bebas; sekali ia
+                    // memuat orang yang seharusnya dikecualikan, tidak ada lagi
+                    // cara menariknya kembali.
+                    if (! $verdict->izinkan($r->collection_id, $r->email)) {
+                        continue;
+                    }
                     $purposes = is_array($r->purpose_keys)
                         ? implode('|', array_map(fn ($k) => $titleById[$k] ?? $k, $r->purpose_keys))
                         : '';

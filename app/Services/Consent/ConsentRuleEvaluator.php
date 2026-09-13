@@ -40,6 +40,25 @@ class ConsentRuleEvaluator
 
     public function evaluate(ConsentRuleSet $set, string $subject): ConsentDecision
     {
+        return $this->evaluateMany($set, [$subject])[strtolower(trim($subject))];
+    }
+
+    /**
+     * Versi berkelompok — satu pemuatan aturan dan satu kueri keadaan untuk
+     * banyak subjek. Dipakai jalur ekstrak massal, yang menimbang ribuan orang
+     * dalam satu jalan.
+     *
+     * evaluate() DIALIHKAN ke sini, dan keduanya memakai pejalan aturan yang
+     * sama (jalankan()). Semantik "yang pertama menang", sifat terminal `block`,
+     * dan aturan bahwa pengecualian tidak mengizinkan hanya boleh ditulis di
+     * satu tempat; disalin, ia akan menyimpang dan jalur satuan akan menjawab
+     * berbeda dari jalur massal untuk orang yang sama.
+     *
+     * @param  list<string>  $subjects
+     * @return array<string,ConsentDecision> penanda subjek (huruf kecil) → keputusan
+     */
+    public function evaluateMany(ConsentRuleSet $set, array $subjects): array
+    {
         /** @var Collection<int,ConsentRule> $rules */
         $rules = $set->rules()->where('is_active', true)->with('conditions')->get();
 
@@ -55,8 +74,33 @@ class ConsentRuleEvaluator
             }
         }
 
-        $states = $this->resolver->resolve((string) $set->org_id, $subject, array_values($wanted));
+        $kosong = [];
+        foreach ($wanted as $kunci => $_) {
+            $kosong[$kunci] = ConsentStateResolver::NEVER;
+        }
 
+        $perSubjek = $this->resolver->resolveMany((string) $set->org_id, $subjects, array_values($wanted));
+
+        $hasil = [];
+        foreach ($subjects as $s) {
+            $n = strtolower(trim($s));
+            // Penanda kosong tidak punya keadaan apa pun — ia tetap dijalankan
+            // melalui aturan (semuanya "belum pernah"), bukan dilewati, supaya
+            // tindakan bawaan tetap berlaku baginya.
+            $hasil[$n] = $this->jalankan($set, $rules, $perSubjek[$n] ?? $kosong);
+        }
+
+        return $hasil;
+    }
+
+    /**
+     * Pejalan aturan yang murni: tidak menyentuh basis data sama sekali.
+     *
+     * @param  Collection<int,ConsentRule>  $rules
+     * @param  array<string,string>  $states
+     */
+    private function jalankan(ConsentRuleSet $set, Collection $rules, array $states): ConsentDecision
+    {
         $matched = [];
         $decidedSegment = [];
         $allowed = [];

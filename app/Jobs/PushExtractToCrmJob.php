@@ -2,9 +2,10 @@
 
 namespace App\Jobs;
 
-use App\Models\ConsentLog;
 use App\Models\CrmCredential;
 use App\Models\ExtractRun;
+use App\Services\Consent\ConsentBulkGate;
+use App\Services\Consent\ExtractQuery;
 use App\Services\Crm\CrmConnectorFactory;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -108,27 +109,30 @@ class PushExtractToCrmJob implements ShouldQueue
             ->first();
     }
 
+    /**
+     * Kueri disusun ExtractQuery — sama persis dengan yang dipakai pratinjau
+     * dan unduhan CSV. Dulu job ini menyalin penapisnya sendiri; penapis yang
+     * menyimpang berarti orang yang dilihat operator di layar bukan orang yang
+     * benar-benar terdorong ke CRM.
+     *
+     * @return array<int,array<string,mixed>>
+     */
     private function loadRecords(ExtractRun $run): array
     {
         $filters = $run->filters ?? [];
-        $q = ConsentLog::query()->where('org_id', $run->org_id)->whereNotNull('email');
+        $q = app(ExtractQuery::class)->build((string) $run->org_id, $filters);
 
-        foreach (['collection_id', 'source_form'] as $exact) {
-            if (! empty($filters[$exact])) {
-                $q->where($exact, $filters[$exact]);
-            }
-        }
-        if (! empty($filters['country'])) {
-            $q->where('ip_country', strtoupper($filters['country']));
-        }
-        if (! empty($filters['date_from'])) {
-            $q->where('created_at', '>=', $filters['date_from']);
-        }
-        if (! empty($filters['date_to'])) {
-            $q->where('created_at', '<=', $filters['date_to']);
-        }
-        foreach ((array) ($filters['purpose_keys'] ?? []) as $p) {
-            $q->where('purpose_keys', 'like', '%"'.addslashes((string) $p).'"%');
+        // Penimbangan diulang DI SINI, bukan diwariskan dari saat tombol
+        // ditekan. Job ini bisa berjalan beberapa menit — bahkan berjam-jam —
+        // setelahnya, dan seseorang bisa saja menarik persetujuannya di sela
+        // itu. Yang menentukan adalah keadaan pada saat data benar-benar
+        // dikirim.
+        $gate = app(ConsentBulkGate::class);
+        $verdict = $gate->timbang((string) $run->org_id, $q, $filters['segment'] ?? null);
+        $gate->catatYangDitahan((string) $run->org_id, $verdict, $run->id);
+
+        if ($verdict->adaPenjagaan()) {
+            $run->update(['gate_summary' => $verdict->ringkasan()]);
         }
 
         // Resolve item UUIDs → titles so the CRM receives readable purpose
@@ -137,8 +141,11 @@ class PushExtractToCrmJob implements ShouldQueue
         $titleById = \App\Models\ConsentItem::titleMap($collectionIds);
 
         $records = [];
-        $q->orderBy('created_at')->chunk(1000, function ($rows) use (&$records, $titleById) {
+        $q->orderBy('created_at')->chunk(1000, function ($rows) use (&$records, $titleById, $verdict) {
             foreach ($rows as $r) {
+                if (! $verdict->izinkan($r->collection_id, $r->email)) {
+                    continue;
+                }
                 $records[] = [
                     'email' => (string) $r->email,
                     'name' => (string) ($r->name ?? ''),

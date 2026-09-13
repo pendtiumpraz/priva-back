@@ -26,13 +26,14 @@ class ExtractRun extends Model
         'org_id', 'initiated_by_user_id', 'source', 'filters',
         'output_target', 'output_target_ref',
         'record_count', 'success_count', 'failure_count',
-        'status', 'error_summary', 'result_meta',
+        'status', 'error_summary', 'result_meta', 'gate_summary',
         'started_at', 'finished_at',
     ];
 
     protected $casts = [
         'filters' => 'array',
         'result_meta' => 'array',
+        'gate_summary' => 'array',
         'started_at' => 'datetime',
         'finished_at' => 'datetime',
     ];
