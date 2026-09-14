@@ -72,16 +72,16 @@ class LingkupPihakKetigaDpiaTest extends TestCase
         $b = $this->pihak($this->org, 'PT Kurir');
 
         $this->putJson("/api/dpia/{$this->dpia->id}/pihak-ketiga", [
-            'third_parties' => [
-                ['id' => $a->id, 'role' => Vendor::ROLE_PROCESSOR],
-                ['id' => $b->id, 'role' => Vendor::ROLE_SUB_PROCESSOR, 'notes' => 'hanya pengiriman'],
+            'pihak_ketiga' => [
+                ['vendor_id' => $a->id, 'role' => Vendor::ROLE_PROCESSOR],
+                ['vendor_id' => $b->id, 'role' => Vendor::ROLE_SUB_PROCESSOR, 'notes' => 'hanya pengiriman'],
             ],
         ])->assertOk();
 
         $res = $this->getJson("/api/dpia/{$this->dpia->id}/pihak-ketiga")->assertOk();
 
-        $this->assertCount(2, $res->json('data'));
-        $kurir = collect($res->json('data'))->firstWhere('id', $b->id);
+        $this->assertCount(2, $res->json('data.pihak_ketiga'));
+        $kurir = collect($res->json('data.pihak_ketiga'))->firstWhere('id', $b->id);
         $this->assertSame(Vendor::ROLE_SUB_PROCESSOR, $kurir['role']);
         $this->assertSame('hanya pengiriman', $kurir['notes']);
     }
@@ -92,11 +92,11 @@ class LingkupPihakKetigaDpiaTest extends TestCase
         $b = $this->pihak($this->org, 'PT Kurir');
 
         $this->putJson("/api/dpia/{$this->dpia->id}/pihak-ketiga", [
-            'third_parties' => [['id' => $a->id], ['id' => $b->id]],
+            'pihak_ketiga' => [['vendor_id' => $a->id], ['vendor_id' => $b->id]],
         ])->assertOk();
 
         $this->putJson("/api/dpia/{$this->dpia->id}/pihak-ketiga", [
-            'third_parties' => [['id' => $b->id]],
+            'pihak_ketiga' => [['vendor_id' => $b->id]],
         ])->assertOk();
 
         $sisa = DB::table('dpia_vendor')->where('dpia_id', $this->dpia->id)->pluck('vendor_id')->all();
@@ -107,10 +107,10 @@ class LingkupPihakKetigaDpiaTest extends TestCase
     {
         $a = $this->pihak($this->org, 'PT Awan');
         $this->putJson("/api/dpia/{$this->dpia->id}/pihak-ketiga", [
-            'third_parties' => [['id' => $a->id]],
+            'pihak_ketiga' => [['vendor_id' => $a->id]],
         ])->assertOk();
 
-        $this->putJson("/api/dpia/{$this->dpia->id}/pihak-ketiga", ['third_parties' => []])->assertOk();
+        $this->putJson("/api/dpia/{$this->dpia->id}/pihak-ketiga", ['pihak_ketiga' => []])->assertOk();
 
         $this->assertSame(0, DB::table('dpia_vendor')->where('dpia_id', $this->dpia->id)->count());
     }
@@ -124,8 +124,8 @@ class LingkupPihakKetigaDpiaTest extends TestCase
         $asing = $this->pihak($this->orgLain, 'PT Tetangga');
 
         $this->putJson("/api/dpia/{$this->dpia->id}/pihak-ketiga", [
-            'third_parties' => [['id' => $asing->id]],
-        ])->assertStatus(422)->assertJsonValidationErrors(['third_parties']);
+            'pihak_ketiga' => [['vendor_id' => $asing->id]],
+        ])->assertStatus(422)->assertJsonValidationErrors(['pihak_ketiga']);
 
         $this->assertSame(0, DB::table('dpia_vendor')->count());
     }
@@ -136,7 +136,7 @@ class LingkupPihakKetigaDpiaTest extends TestCase
         $asing = $this->pihak($this->orgLain, 'PT Tetangga');
 
         $this->putJson("/api/dpia/{$this->dpia->id}/pihak-ketiga", [
-            'third_parties' => [['id' => $milik->id], ['id' => $asing->id]],
+            'pihak_ketiga' => [['vendor_id' => $milik->id], ['vendor_id' => $asing->id]],
         ])->assertStatus(422);
 
         // Tidak separuh tersimpan: penolakan terjadi SEBELUM transaksi menulis.
@@ -156,7 +156,7 @@ class LingkupPihakKetigaDpiaTest extends TestCase
         ]);
 
         $this->getJson("/api/dpia/{$dpiaAsing->id}/pihak-ketiga")->assertNotFound();
-        $this->putJson("/api/dpia/{$dpiaAsing->id}/pihak-ketiga", ['third_parties' => []])->assertNotFound();
+        $this->putJson("/api/dpia/{$dpiaAsing->id}/pihak-ketiga", ['pihak_ketiga' => []])->assertNotFound();
     }
 
     public function test_peran_di_luar_kosakata_ditolak(): void
@@ -164,8 +164,8 @@ class LingkupPihakKetigaDpiaTest extends TestCase
         $a = $this->pihak($this->org, 'PT Awan');
 
         $this->putJson("/api/dpia/{$this->dpia->id}/pihak-ketiga", [
-            'third_parties' => [['id' => $a->id, 'role' => 'pengawas']],
-        ])->assertStatus(422)->assertJsonValidationErrors(['third_parties.0.role']);
+            'pihak_ketiga' => [['vendor_id' => $a->id, 'role' => 'pengawas']],
+        ])->assertStatus(422)->assertJsonValidationErrors(['pihak_ketiga.0.role']);
     }
 
     public function test_peran_tanpa_izin_tulis_tidak_bisa_menyimpan(): void
@@ -173,7 +173,7 @@ class LingkupPihakKetigaDpiaTest extends TestCase
         $biasa = User::factory()->create(['org_id' => $this->org->id, 'role' => 'staff']);
         Sanctum::actingAs($biasa);
 
-        $this->putJson("/api/dpia/{$this->dpia->id}/pihak-ketiga", ['third_parties' => []])
+        $this->putJson("/api/dpia/{$this->dpia->id}/pihak-ketiga", ['pihak_ketiga' => []])
             ->assertForbidden();
     }
 }

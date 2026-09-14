@@ -21,19 +21,36 @@ use Illuminate\Validation\ValidationException;
  */
 class DpiaThirdPartyController extends Controller
 {
+    /**
+     * Bentuk muatannya SENGAJA sama dengan panel sejenis di Data Discovery
+     * (`/data-discovery/{id}/pihak-ketiga`): kunci `pihak_ketiga`, `vendor_id`,
+     * dan `role_label` yang sudah diterjemahkan. Satu konsep yang sama tidak
+     * boleh punya dua bentuk muatan — komponen antarmukanya pun jadi bisa
+     * dibaca berdampingan tanpa penerjemahan di tengah.
+     */
     public function index(Request $request, string $id)
     {
         $dpia = $this->cari($request, $id);
 
-        return response()->json([
-            'data' => $dpia->vendors()->get(['vendors.id', 'vendors.name', 'vendors.type'])
-                ->map(fn ($v) => [
-                    'id' => $v->id,
-                    'name' => $v->name,
-                    'role' => $v->pivot->role,
-                    'notes' => $v->pivot->notes,
-                ])->values(),
-        ]);
+        return response()->json(['data' => ['pihak_ketiga' => $this->daftar($dpia)]]);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function daftar(Dpia $dpia): array
+    {
+        return $dpia->vendors()
+            ->get(['vendors.id', 'vendors.name', 'vendors.country', 'vendors.risk_level'])
+            ->map(fn ($v) => [
+                'id' => $v->id,
+                'name' => $v->name,
+                'country' => $v->country,
+                'risk_level' => $v->risk_level,
+                'role' => $v->pivot->role,
+                'role_label' => Vendor::ROLE_LABELS[$v->pivot->role] ?? $v->pivot->role,
+                'notes' => $v->pivot->notes,
+            ])->values()->all();
     }
 
     /**
@@ -48,15 +65,15 @@ class DpiaThirdPartyController extends Controller
         $dpia = $this->cari($request, $id);
 
         $request->validate([
-            'third_parties' => 'present|array|max:200',
-            'third_parties.*.id' => 'required|uuid',
-            'third_parties.*.role' => ['nullable', Rule::in(Vendor::ROLES)],
-            'third_parties.*.notes' => 'nullable|string|max:1000',
+            'pihak_ketiga' => 'present|array|max:200',
+            'pihak_ketiga.*.vendor_id' => 'required|uuid',
+            'pihak_ketiga.*.role' => ['nullable', Rule::in(Vendor::ROLES)],
+            'pihak_ketiga.*.notes' => 'nullable|string|max:1000',
         ]);
 
         /** @var array<int,array<string,mixed>> $diminta */
-        $diminta = $request->input('third_parties', []);
-        $ids = array_values(array_unique(array_map(fn ($t) => (string) $t['id'], $diminta)));
+        $diminta = $request->input('pihak_ketiga', []);
+        $ids = array_values(array_unique(array_map(fn ($t) => (string) $t['vendor_id'], $diminta)));
 
         $sah = Vendor::where('org_id', $dpia->org_id)->whereIn('id', $ids)->pluck('id')->all();
         if (count($sah) !== count($ids)) {
@@ -64,7 +81,7 @@ class DpiaThirdPartyController extends Controller
             // "tidak ada" dari "milik tenant lain" memberi tahu penanya bahwa
             // id itu ada di suatu tempat.
             throw ValidationException::withMessages([
-                'third_parties' => 'Ada pihak ketiga yang tidak ditemukan.',
+                'pihak_ketiga' => 'Ada pihak ketiga yang tidak ditemukan.',
             ]);
         }
 
@@ -73,9 +90,9 @@ class DpiaThirdPartyController extends Controller
 
             $baris = [];
             foreach ($diminta as $t) {
-                $baris[$t['id']] = [
+                $baris[$t['vendor_id']] = [
                     'dpia_id' => $dpia->id,
-                    'vendor_id' => $t['id'],
+                    'vendor_id' => $t['vendor_id'],
                     'org_id' => $dpia->org_id,
                     'role' => $t['role'] ?? Vendor::ROLE_PROCESSOR,
                     'notes' => $t['notes'] ?? null,
@@ -92,9 +109,12 @@ class DpiaThirdPartyController extends Controller
             'count' => count($ids),
         ]);
 
+        // Daftar hasilnya dikembalikan utuh supaya panel tidak perlu memuat
+        // ulang — nama dan label peran ikut, jadi baris yang baru ditambahkan
+        // berhenti menampilkan "(memuat…)".
         return response()->json([
             'message' => 'Pihak ketiga dalam lingkup DPIA diperbarui.',
-            'data' => ['count' => count($ids)],
+            'data' => ['pihak_ketiga' => $this->daftar($dpia->fresh())],
         ]);
     }
 
