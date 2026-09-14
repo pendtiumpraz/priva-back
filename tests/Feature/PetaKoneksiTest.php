@@ -308,12 +308,18 @@ class PetaKoneksiTest extends TestCase
     }
 
     /**
-     * "Satu DPIA menyentuh berapa pihak ketiga?" tidak punya jawaban langsung di
-     * skema: tidak ada pivot dpia_vendor. Jalurnya DPIA → RoPA yang dinilainya →
-     * pihak ketiga yang memproses RoPA itu. Dengan satu lompatan saja pertanyaan
-     * itu tidak terjawab di peta, karena pihak ketiganya berjarak dua.
+     * Peta satu record hanya berisi tetangga LANGSUNG.
+     *
+     * Peta satu DPIA sempat menelusuri dua lompatan, sehingga ia ikut memajang
+     * seluruh tetangga RoPA yang dinilainya — sistem, consent, TIA, insiden —
+     * padahal tak satu pun menyentuh DPIA itu. Legendanya berisi delapan jenis
+     * dan pertanyaan yang sebenarnya ("DPIA ini menilai apa, ditangani apa")
+     * tenggelam.
+     *
+     * Datanya tidak hilang, hanya pindah ke peta yang memang menanyakannya:
+     * bagian kedua uji ini memastikan peta RoPA-nya tetap utuh.
      */
-    public function test_peta_satu_dpia_mencapai_pihak_ketiga_lewat_ropa(): void
+    public function test_peta_satu_dpia_hanya_berisi_tetangga_langsung(): void
     {
         $ropa = $this->ropa('ROPA-2026-012', 'Pemrosesan Gaji');
         $dpia = Dpia::create([
@@ -325,13 +331,26 @@ class PetaKoneksiTest extends TestCase
             'ropa_id' => $ropa->id, 'vendor_id' => $pihak->id, 'org_id' => $this->org->id,
             'role' => Vendor::ROLE_PROCESSOR, 'created_at' => now(), 'updated_at' => now(),
         ]);
+        $sistem = InformationSystem::create(['org_id' => $this->org->id, 'name' => 'HRIS', 'source_type' => 'mysql']);
+        DB::table('information_system_ropa')->insert([
+            'information_system_id' => $sistem->id, 'ropa_id' => $ropa->id,
+            'org_id' => $this->org->id, 'created_at' => now(), 'updated_at' => now(),
+        ]);
 
         $g = $this->getJson("/api/peta-koneksi/dpia/{$dpia->id}")->assertOk()->json('data');
+        $ids = $this->ids($g);
 
-        // Rantainya utuh: DPIA ← RoPA → pihak ketiga.
-        $this->assertContains('thirdparty:'.$pihak->id, $this->ids($g));
+        // RoPA yang dinilainya menempel langsung — itu harus ada.
+        $this->assertContains('ropa:'.$ropa->id, $ids);
         $this->assertTrue($this->hasEdge($g, 'ropa:'.$ropa->id, 'dpia:'.$dpia->id));
-        $this->assertTrue($this->hasEdge($g, 'ropa:'.$ropa->id, 'thirdparty:'.$pihak->id));
+
+        // Tetangga RoPA yang berjarak dua langkah dari DPIA: tidak ikut.
+        $this->assertNotContains('thirdparty:'.$pihak->id, $ids);
+        $this->assertNotContains('system:'.$sistem->id, $ids);
+
+        $gr = $this->getJson("/api/peta-koneksi/ropa/{$ropa->id}")->assertOk()->json('data');
+        $this->assertContains('thirdparty:'.$pihak->id, $this->ids($gr));
+        $this->assertContains('system:'.$sistem->id, $this->ids($gr));
     }
 
     /**
@@ -359,8 +378,9 @@ class PetaKoneksiTest extends TestCase
 
         $this->assertTrue($this->hasEdge($g, 'dpia:'.$dpia->id, 'thirdparty:'.$pihak->id));
 
-        // Dan ia memang tampil di peta se-modul juga — tautan langsung hanya
-        // butuh SATU lompatan, jadi tidak bergantung pada penelusuran dua langkah.
+        // Inilah yang menggantikan rantai dua langkah lama: pertanyaan "DPIA ini
+        // menyentuh berapa pihak ketiga" terjawab dari pivotnya sendiri, jadi
+        // peta satu record tidak perlu lagi menyeret tetangga RoPA.
         $global = $this->getJson('/api/peta-koneksi/dpia')->assertOk()->json('data');
         $this->assertTrue($this->hasEdge($global, 'dpia:'.$dpia->id, 'thirdparty:'.$pihak->id));
     }

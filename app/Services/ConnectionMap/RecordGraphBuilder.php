@@ -71,8 +71,7 @@ class RecordGraphBuilder
     {
         $pusat = RelationCatalog::NODE_PREFIX[$type].':'.$id;
 
-        // Dua lompatan: lihat catatan kedalaman di expand().
-        [$nodes, $edges] = $this->expand($orgId, [$type => [$id]], 2);
+        [$nodes, $edges] = $this->expand($orgId, [$type => [$id]]);
 
         // Simpul turunan DIBEDAH di peta satu record — lihat bedahTurunan().
         $this->bedahTurunan($orgId, $nodes, $edges);
@@ -141,55 +140,41 @@ class RecordGraphBuilder
     }
 
     /**
-     * Satu langkah penelusuran dari sekumpulan benih, lalu simpulnya diambil.
+     * SATU langkah penelusuran dari sekumpulan benih, lalu simpulnya diambil.
+     *
+     * Seluruh pengetahuan relasi datang dari resolver bersama — pemindai DSPM
+     * memakai yang sama, sehingga kedua peta tidak mungkin menyimpang.
+     *
+     * KEDALAMAN. Peta satu record sempat menelusuri DUA lompatan, dengan alasan
+     * yang waktu itu benar: sebuah DPIA tidak punya jalan langsung ke pihak
+     * ketiga, jadi "DPIA ini menyentuh berapa pihak ketiga" hanya terjawab lewat
+     * RoPA yang dinilainya. Pivot `dpia_vendor` lalu dibuat dan alasannya habis.
+     *
+     * Yang tersisa dari lompatan kedua tinggal kerugiannya: peta satu DPIA ikut
+     * menyeret SELURUH tetangga RoPA-nya — sistem, consent, TIA, insiden —
+     * padahal tak satu pun menyentuh DPIA itu. Gambar yang seharusnya menjawab
+     * "DPIA ini menilai apa, ditangani apa" berubah jadi peta organisasi yang
+     * kebetulan berpusat di sebuah DPIA. Tetangga sejauh dua langkah tetap bisa
+     * dibaca dengan membuka peta tetangganya sendiri — itulah yang membuat tiap
+     * peta menjawab satu pertanyaan, bukan semuanya sekaligus.
      *
      * @param  array<string, array<int, string>>  $benih  jenis → daftar id
      * @return array{0: array<string, array<string, mixed>>, 1: array<string, array<string, mixed>>}
      */
-    private function expand(string $orgId, array $benih, int $kedalaman = 1): array
+    private function expand(string $orgId, array $benih): array
     {
-        // Seluruh pengetahuan relasi datang dari resolver bersama — pemindai
-        // DSPM memakai yang sama, sehingga kedua peta tidak mungkin menyimpang.
-        //
-        // KEDALAMAN. Satu lompatan cukup untuk menjawab "apa yang langsung
-        // menempel". Tetapi sebagian keterkaitan yang ditanyakan orang memang
-        // berjarak dua: sebuah DPIA tidak pernah menunjuk pihak ketiga secara
-        // langsung — tidak ada pivot dpia_vendor di skema — melainkan lewat RoPA
-        // yang dinilainya. Dengan satu lompatan, pertanyaan "DPIA ini menyentuh
-        // berapa pihak ketiga" tidak punya jawaban di peta.
-        //
-        // Dua lompatan hanya dipakai peta SATU RECORD. Peta se-modul tetap satu,
-        // karena di sana benihnya sudah ratusan record dan lompatan kedua akan
-        // menarik hampir seluruh isi organisasi ke dalam satu gambar.
-        $pasangan = [];
         $perJenis = [];
         foreach ($benih as $type => $ids) {
             $perJenis[$type] = array_merge($perJenis[$type] ?? [], $ids);
         }
-        $gelombang = $benih;
 
-        for ($lompatan = 0; $lompatan < max(1, $kedalaman); $lompatan++) {
-            $baru = $this->resolver->resolve($orgId, $gelombang);
-            if (! $baru) {
-                break;
-            }
-            $pasangan = array_merge($pasangan, $baru);
-
-            // Gelombang berikutnya HANYA simpul yang belum pernah jadi benih —
-            // tanpa itu lompatan kedua akan menelusuri balik ke titik awalnya.
-            $berikut = [];
-            foreach ($baru as [$ft, $fi, $tt, $ti]) {
-                foreach ([[$ft, $fi], [$tt, $ti]] as [$t, $i]) {
-                    if (! in_array($i, $perJenis[$t] ?? [], true)) {
-                        $perJenis[$t][] = $i;
-                        $berikut[$t][] = $i;
-                    }
+        $pasangan = $this->resolver->resolve($orgId, $benih);
+        foreach ($pasangan as [$ft, $fi, $tt, $ti]) {
+            foreach ([[$ft, $fi], [$tt, $ti]] as [$t, $i]) {
+                if (! in_array($i, $perJenis[$t] ?? [], true)) {
+                    $perJenis[$t][] = $i;
                 }
             }
-            if (! $berikut) {
-                break;
-            }
-            $gelombang = $berikut;
         }
 
         $nodes = [];
