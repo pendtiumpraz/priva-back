@@ -31,8 +31,25 @@ use Illuminate\Http\Request;
  *     `pii_detected` hanyalah dugaan pemindai; keputusannya ada pada
  *     `applied_status` (diisi otomatis oleh ColumnAutoAssigner, dapat ditinjau
  *     ulang pengguna). Memakai dugaan mentah akan memasukkan tebakan yang belum
- *     ditinjau ke laporan insiden resmi. Sumbernya juga harus `scan_results`,
- *     bukan `ai_scan_results` — blob AI itu tidak menyimpan `applied_status`.
+ *     ditinjau ke laporan insiden resmi.
+ *
+ *  2b. HASIL DEEP SCAN AI DIDAHULUKAN, pindai standar hanya cadangan.
+ *     Catatan lama di sini menyatakan sumbernya HARUS `scan_results` karena
+ *     "blob AI tidak menyimpan applied_status". Itu sudah tidak benar: sejak
+ *     DataDiscoveryController menulis `$aiResult['tables'] = $originalSchema`
+ *     lalu menjalankannya lewat ColumnAutoAssigner, blob AI membawa
+ *     `applied_status` yang sama.
+ *
+ *     Yang tetap benar: untuk sistem yang deep scan-nya dijalankan SEBELUM
+ *     penyelarasan itu ada, `scan_results` masih berisi pindai standar sementara
+ *     keputusan AI hanya hidup di `ai_scan_results`. Membaca `scan_results` saja
+ *     membuat sistem-sistem itu menyodorkan hasil pindai standar seolah deep
+ *     scan-nya tidak pernah ada.
+ *
+ *     Karena itu sumbernya dipilih per sistem: pakai `ai_scan_results` bila ia
+ *     memuat keputusan, kalau tidak barulah `scan_results`. Sumber yang terpakai
+ *     ikut dikirim ke UI — orang harus bisa melihat daftar ini berasal dari mana
+ *     tanpa menebak.
  *
  *  3. Klien hanya mengirim NAMA TABEL. Daftar kolom PII tidak pernah diambil
  *     dari kiriman klien melainkan dibaca ulang dari hasil pindai milik kita
@@ -47,10 +64,16 @@ class BreachDataDiscoveryController extends Controller
         $systems = InformationSystem::where('org_id', $request->user()->org_id)
             ->where('scanning_status', 'done')
             ->orderBy('name')
-            ->get(['id', 'name', 'code', 'source_type', 'last_scanned_at', 'pii_alert_count', 'pdp_alert_count', 'scan_results']);
+            // `ai_scan_results` ikut diambil: tanpanya sumber katalognya selalu
+            // terbaca 'standar' di daftar ini walau sistemnya sudah di-deep-scan,
+            // sehingga jumlah tabel yang dilaporkan pun berasal dari blob yang
+            // salah. Keduanya kolom JSON besar, jadi daftar kolomnya tetap
+            // dibatasi — yang tidak dipakai tidak ikut ditarik.
+            ->get(['id', 'name', 'code', 'source_type', 'last_scanned_at', 'pii_alert_count', 'pdp_alert_count', 'scan_results', 'ai_scan_results']);
 
         $data = [];
         foreach ($systems as $s) {
+            $katalog = $this->katalog($s);
             $data[] = [
                 'id' => $s->id,
                 'name' => $s->name,
@@ -63,7 +86,10 @@ class BreachDataDiscoveryController extends Controller
                 'last_scanned_at' => $s->last_scanned_at,
                 'pii_alert_count' => $s->pii_alert_count,
                 'pdp_alert_count' => $s->pdp_alert_count,
-                'jumlah_tabel_ber_pii' => count($this->tabelBerPii($s)),
+                'jumlah_tabel_ber_pii' => count($katalog['tabel']),
+                // Dari mana daftar tabelnya berasal. Dikirim supaya orang tidak
+                // perlu menebak kenapa sebuah sistem menampilkan tabel tertentu.
+                'sumber_katalog' => $katalog['sumber'],
             ];
         }
 
@@ -87,10 +113,13 @@ class BreachDataDiscoveryController extends Controller
             ], 422);
         }
 
+        $katalog = $this->katalog($system);
+
         return response()->json([
             'data' => [
                 'sistem' => ['id' => $system->id, 'name' => $system->name],
-                'tabel' => $this->tabelBerPii($system),
+                'sumber' => $katalog['sumber'],
+                'tabel' => $katalog['tabel'],
             ],
         ]);
     }
@@ -122,7 +151,9 @@ class BreachDataDiscoveryController extends Controller
                 continue;
             }
 
-            $tersedia = collect($this->tabelBerPii($system))->keyBy('nama');
+            // Sumber yang sama dengan yang ditawarkan ke pemilihnya — kalau
+            // berbeda, tabel yang tampil bisa tidak ditemukan saat disimpan.
+            $tersedia = collect($this->katalog($system)['tabel'])->keyBy('nama');
             $tabelTerpilih = [];
 
             foreach ($baris['tables'] as $namaTabel) {
@@ -172,19 +203,80 @@ class BreachDataDiscoveryController extends Controller
         ]);
     }
 
+    /** Status kolom yang dihitung sebagai keputusan, bukan dugaan. */
+    private const STATUS_DIPUTUSKAN = ['applied_pribadi', 'applied_sensitive'];
+
+    /**
+     * Katalog tabel sebuah sistem beserta ASALNYA.
+     *
+     * Deep scan AI didahulukan; pindai standar hanya dipakai kalau deep scan
+     * belum pernah menghasilkan keputusan. Lihat catatan 2b di kepala kelas.
+     *
+     * @return array{sumber: string, tabel: array<int, array<string, mixed>>}
+     */
+    private function katalog(InformationSystem $system): array
+    {
+        $ai = $system->ai_scan_results['tables'] ?? null;
+        if (is_array($ai) && $this->adaKeputusan($ai)) {
+            return ['sumber' => 'deep_scan_ai', 'tabel' => $this->tabelBerPiiDari($ai)];
+        }
+
+        $standar = $system->scan_results['tables'] ?? [];
+        if (! is_array($standar)) {
+            $standar = [];
+        }
+
+        return [
+            // Pindai standar yang kolomnya sudah ditinjau AI tetap hasil deep
+            // scan: sejak penyelarasan di DataDiscoveryController, keputusan AI
+            // memang ditulis balik ke `scan_results` dan ditandai 'ai_scan'.
+            'sumber' => $this->adaTandaAi($standar) ? 'deep_scan_ai' : 'standar',
+            'tabel' => $this->tabelBerPiiDari($standar),
+        ];
+    }
+
+    /** @param  array<int, mixed>  $tables */
+    private function adaKeputusan(array $tables): bool
+    {
+        foreach ($tables as $tabel) {
+            foreach ((is_array($tabel) ? ($tabel['columns'] ?? []) : []) as $kolom) {
+                if (in_array((string) ($kolom['applied_status'] ?? ''), self::STATUS_DIPUTUSKAN, true)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /** @param  array<int, mixed>  $tables */
+    private function adaTandaAi(array $tables): bool
+    {
+        foreach ($tables as $tabel) {
+            foreach ((is_array($tabel) ? ($tabel['columns'] ?? []) : []) as $kolom) {
+                if (($kolom['applied_note'] ?? null) === 'ai_scan') {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Tabel yang punya minimal satu kolom ber-PII, beserta kolomnya.
      *
      * Tabel tanpa PII sengaja tidak dikembalikan — menyodorkan seluruh tabel
      * hanya membuat pemilihnya harus menebak mana yang relevan.
      *
+     * @param  array<int, mixed>  $tables
      * @return array<int, array<string, mixed>>
      */
-    private function tabelBerPii(InformationSystem $system): array
+    private function tabelBerPiiDari(array $tables): array
     {
         $hasil = [];
 
-        foreach (($system->scan_results['tables'] ?? []) as $tabel) {
+        foreach ($tables as $tabel) {
             if (! is_array($tabel)) {
                 continue;
             }
@@ -199,7 +291,7 @@ class BreachDataDiscoveryController extends Controller
                 // ditinjau ke dalam laporan insiden resmi — aturan yang sama
                 // sudah dipegang jalur "tarik dari Data Discovery" di UI.
                 $status = (string) ($kolom['applied_status'] ?? '');
-                if (! in_array($status, ['applied_pribadi', 'applied_sensitive'], true)) {
+                if (! in_array($status, self::STATUS_DIPUTUSKAN, true)) {
                     continue;
                 }
                 // Kolom yang disamarkan disimpan dengan nama asli yang tidak

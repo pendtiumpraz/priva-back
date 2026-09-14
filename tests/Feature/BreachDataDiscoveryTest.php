@@ -154,6 +154,120 @@ class BreachDataDiscoveryTest extends TestCase
         $this->getJson("/api/breach/sistem/{$sistem->id}/tabel")->assertStatus(422);
     }
 
+    /**
+     * Hasil deep scan AI mendahului pindai standar.
+     *
+     * Sistem yang deep scan-nya dijalankan sebelum penyelarasan ke
+     * `scan_results` ada hanya menyimpan keputusan AI di `ai_scan_results`.
+     * Membaca `scan_results` saja membuat sistem itu menyodorkan hasil pindai
+     * standar seolah deep scan-nya tidak pernah ada — persis keluhannya.
+     */
+    public function test_deep_scan_ai_didahulukan_daripada_pindai_standar(): void
+    {
+        $sistem = $this->sistem('CRM Utama');
+        $sistem->ai_scan_results = ['tables' => [
+            [
+                'name' => 'transaksi',
+                'row_count' => 4300,
+                'columns' => [
+                    ['name' => 'no_kartu', 'applied_status' => 'applied_sensitive', 'applied_note' => 'ai_scan'],
+                    ['name' => 'nominal', 'applied_status' => 'not_pii', 'applied_note' => 'ai_scan'],
+                ],
+            ],
+        ]];
+        $sistem->save();
+
+        $res = $this->getJson("/api/breach/sistem/{$sistem->id}/tabel")->assertOk();
+
+        $this->assertSame('deep_scan_ai', $res->json('data.sumber'));
+        $this->assertSame(['transaksi'], array_column($res->json('data.tabel'), 'nama'));
+        $this->assertNotContains(
+            'users',
+            array_column($res->json('data.tabel'), 'nama'),
+            'tabel dari pindai standar tidak boleh ikut saat deep scan sudah ada',
+        );
+
+        // Dan yang disimpan ke insiden ikut memakai sumber yang sama — kalau
+        // tidak, tabel yang barusan ditawarkan justru tidak ditemukan.
+        $breach = $this->breach();
+        $this->putJson("/api/breach/{$breach->id}/sistem-terdampak", [
+            'sistem' => [['information_system_id' => $sistem->id, 'tables' => ['transaksi']]],
+        ])->assertOk();
+
+        $this->assertSame('no_kartu', $breach->fresh()->affected_data_types);
+    }
+
+    public function test_pindai_standar_dipakai_saat_deep_scan_belum_pernah_jalan(): void
+    {
+        $sistem = $this->sistem('CRM Utama');
+
+        $res = $this->getJson("/api/breach/sistem/{$sistem->id}/tabel")->assertOk();
+
+        $this->assertSame('standar', $res->json('data.sumber'));
+        $this->assertSame(['users'], array_column($res->json('data.tabel'), 'nama'));
+    }
+
+    /**
+     * Blob AI yang belum memuat keputusan tidak boleh mengosongkan daftarnya.
+     *
+     * Deep scan versi lama menulis `ai_scan_results` tanpa `applied_status`.
+     * Kalau blob itu dipakai apa adanya, sistemnya akan tampak tidak punya
+     * tabel ber-PII sama sekali — lebih buruk daripada menampilkan pindai
+     * standar.
+     */
+    public function test_blob_ai_tanpa_keputusan_jatuh_ke_pindai_standar(): void
+    {
+        $sistem = $this->sistem('CRM Utama');
+        $sistem->ai_scan_results = ['tables' => [
+            ['name' => 'transaksi', 'columns' => [['name' => 'no_kartu', 'pii_detected' => true]]],
+        ]];
+        $sistem->save();
+
+        $res = $this->getJson("/api/breach/sistem/{$sistem->id}/tabel")->assertOk();
+
+        $this->assertSame('standar', $res->json('data.sumber'));
+        $this->assertSame(['users'], array_column($res->json('data.tabel'), 'nama'));
+    }
+
+    /**
+     * Pindai standar yang kolomnya sudah ditinjau AI tetap dihitung deep scan.
+     *
+     * Sejak DataDiscoveryController menulis balik hasil AI ke `scan_results`,
+     * sistem yang baru di-deep-scan tidak lagi punya perbedaan isi antara kedua
+     * blob — penandanya `applied_note = 'ai_scan'`.
+     */
+    public function test_hasil_ai_yang_sudah_ditulis_balik_dikenali_sebagai_deep_scan(): void
+    {
+        $sistem = $this->sistem('CRM Utama', 'done', [
+            [
+                'name' => 'users',
+                'columns' => [
+                    ['name' => 'email', 'applied_status' => 'applied_pribadi', 'applied_note' => 'ai_scan'],
+                ],
+            ],
+        ]);
+
+        $res = $this->getJson("/api/breach/sistem/{$sistem->id}/tabel")->assertOk();
+
+        $this->assertSame('deep_scan_ai', $res->json('data.sumber'));
+    }
+
+    public function test_sumber_katalog_ikut_dikirim_di_daftar_sistem(): void
+    {
+        $ai = $this->sistem('CRM Utama');
+        $ai->ai_scan_results = ['tables' => [
+            ['name' => 'transaksi', 'columns' => [['name' => 'no_kartu', 'applied_status' => 'applied_sensitive']]],
+        ]];
+        $ai->save();
+        $this->sistem('Portal Karyawan');
+
+        $res = $this->getJson('/api/breach/sistem-terpindai')->assertOk();
+
+        $sumber = collect($res->json('data'))->pluck('sumber_katalog', 'name')->all();
+        $this->assertSame('deep_scan_ai', $sumber['CRM Utama']);
+        $this->assertSame('standar', $sumber['Portal Karyawan']);
+    }
+
     public function test_tipe_data_dan_kategori_diturunkan_dari_hasil_pindai(): void
     {
         $sistem = $this->sistem('CRM Utama');
