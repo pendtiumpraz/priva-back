@@ -254,46 +254,97 @@ class DashboardController extends Controller
                 return $row;
             });
 
-        // 3. DPIA risk heatmap — aggregate from risk_assessment JSON
+        /*
+         * 3. Heatmap risiko DPIA (likelihood x impact) + daftar risiko tinggi
+         *    yang belum ditangani.
+         *
+         * KENAPA DITULIS ULANG. Versi lama membaca `risk_assessment` seolah ia
+         * peta KATEGORI -> {likelihood, impact, risks}. Wizard DPIA tidak pernah
+         * menulis bentuk itu; yang ditulisnya adalah
+         * {likelihood, impact, risks: [...]} — satu pasang angka ringkasan di
+         * tingkat atas. Menelusurinya sebagai peta kategori menghasilkan
+         * `$riskData` berupa INT (3, 4) lalu `$riskData['likelihood']` menjadi
+         * null, sehingga TIDAK ADA SATU SEL PUN yang pernah terisi. Heatmap
+         * selalu kosong untuk setiap DPIA yang dibuat lewat wizard, dan pesan
+         * "Belum ada DPIA dengan skor risiko" selalu bohong.
+         *
+         * Sumber yang benar sama dengan yang dibaca halaman rincian DPIA:
+         *   UTAMA   wizard_data.potensi_risiko[kategori].risk_events[]
+         *           dengan `probabilitas` dan `dampak` — inilah yang diisi
+         *           orang di bagian 3 wizard, satu baris per peristiwa risiko.
+         *   CADANGAN risk_assessment.risks[] dengan `likelihood`/`impact` —
+         *           bentuk lama hasil inferensi otomatis dan impor.
+         * Cadangan hanya dipakai bila kategori itu tidak punya risk_events,
+         * sehingga satu peristiwa tidak pernah terhitung dua kali.
+         */
         $dpias = DB::table('dpias')
             ->where('org_id', $orgId)->whereNull('deleted_at')
-            ->whereNotNull('risk_assessment')
-            ->select('id', 'description', 'risk_assessment', 'risk_level')
+            ->select('id', 'description', 'risk_assessment', 'wizard_data', 'risk_level')
             ->get();
 
         $heatmapData = [];
         $unmitigated = [];
 
+        $catat = function (int $likelihood, int $impact) use (&$heatmapData): void {
+            if ($likelihood < 1 || $likelihood > 5 || $impact < 1 || $impact > 5) {
+                return;
+            }
+            $key = "{$likelihood}-{$impact}";
+            $heatmapData[$key] ??= ['likelihood' => $likelihood, 'impact' => $impact, 'count' => 0];
+            $heatmapData[$key]['count']++;
+        };
+
         foreach ($dpias as $dpia) {
-            $assessment = json_decode($dpia->risk_assessment, true);
-            if (! is_array($assessment)) {
-                continue;
+            $wizard = json_decode((string) $dpia->wizard_data, true);
+            $potensi = is_array($wizard) && is_array($wizard['potensi_risiko'] ?? null)
+                ? $wizard['potensi_risiko']
+                : [];
+            $legacy = json_decode((string) $dpia->risk_assessment, true);
+            $legacyRisks = is_array($legacy) && is_array($legacy['risks'] ?? null) ? $legacy['risks'] : [];
+
+            // Peristiwa per kategori: wizard dulu, warisan hanya bila kosong.
+            $perKategori = [];
+            foreach ($potensi as $kategori => $isi) {
+                foreach ((is_array($isi) ? ($isi['risk_events'] ?? []) : []) as $e) {
+                    if (! is_array($e)) {
+                        continue;
+                    }
+                    $perKategori[$kategori][] = [
+                        'likelihood' => (int) ($e['probabilitas'] ?? 0),
+                        'impact' => (int) ($e['dampak'] ?? 0),
+                        // Risiko dianggap sudah ditangani bila ada kontrol atau
+                        // keputusan penanganan — bukan sekadar ada catatan.
+                        'ditangani' => ! empty($e['kontrol']) || ! empty($e['penanganan']),
+                    ];
+                }
+            }
+            foreach ($legacyRisks as $e) {
+                $kategori = is_array($e) ? (string) ($e['risk'] ?? '') : '';
+                if ($kategori === '' || isset($perKategori[$kategori])) {
+                    continue;
+                }
+                $perKategori[$kategori][] = [
+                    'likelihood' => (int) ($e['likelihood'] ?? 0),
+                    'impact' => (int) ($e['impact'] ?? 0),
+                    'ditangani' => ! empty($e['mitigation']),
+                ];
             }
 
-            foreach ($assessment as $categoryKey => $riskData) {
-                $likelihood = $riskData['likelihood'] ?? 0;
-                $impact = $riskData['impact'] ?? 0;
+            foreach ($perKategori as $kategori => $peristiwa) {
+                foreach ($peristiwa as $p) {
+                    $catat($p['likelihood'], $p['impact']);
 
-                if ($likelihood > 0 && $impact > 0) {
-                    $key = "{$likelihood}-{$impact}";
-                    if (! isset($heatmapData[$key])) {
-                        $heatmapData[$key] = ['likelihood' => $likelihood, 'impact' => $impact, 'count' => 0];
+                    $skor = $p['likelihood'] * $p['impact'];
+                    if ($skor >= 12 && ! $p['ditangani']) {
+                        $unmitigated[] = [
+                            'dpia_id' => $dpia->id,
+                            'description' => $dpia->description,
+                            'risk_category' => $kategori,
+                            'likelihood' => $p['likelihood'],
+                            'impact' => $p['impact'],
+                            'risk_score' => $skor,
+                        ];
                     }
-                    $heatmapData[$key]['count']++;
-                }
-
-                // Check for unmitigated risks (high risk without mitigation)
-                $riskScore = $likelihood * $impact;
-                $risks = $riskData['risks'] ?? [];
-                if ($riskScore >= 12 && empty($risks)) {
-                    $unmitigated[] = [
-                        'dpia_id' => $dpia->id,
-                        'description' => $dpia->description,
-                        'risk_category' => $categoryKey,
-                        'likelihood' => $likelihood,
-                        'impact' => $impact,
-                        'risk_score' => $riskScore,
-                    ];
                 }
             }
         }
