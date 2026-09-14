@@ -31,6 +31,88 @@ class AiAgentController extends Controller
     private const MAX_TOOL_ITERATIONS = 5;
 
     /**
+     * Terjemahkan galat provider AI menjadi sesuatu yang bisa DIBACA dan
+     * DITINDAKLANJUTI orang.
+     *
+     * Sebelumnya isi mentah respons provider dilempar apa adanya ke gelembung
+     * chat: `{"error":{"message":"Insufficient Balance","type":"unknown_error",
+     * ...}}`. Bagi orang yang membacanya itu bukan informasi — ia tidak tahu
+     * apakah harus menunggu, mencoba lagi, memanggil admin, atau membayar
+     * tagihan. Padahal jawabannya berbeda untuk setiap jenis galat, dan
+     * providernya sudah memberi tahu lewat kode status.
+     *
+     * Saldo habis khususnya BUKAN galat teknis sama sekali — itu urusan
+     * tagihan, dan menampilkannya sebagai "error" membuat orang melapor bug.
+     *
+     * Publik supaya bisa diuji sendiri: inilah satu-satunya penjaga antara isi
+     * mentah respons provider dan apa yang sampai ke layar orang.
+     *
+     * @return array{kode: string, judul: string, message: string, saran: string, bisa_ulang: bool}
+     */
+    public static function galatProvider(int $status, string $body): array
+    {
+        $teks = strtolower($body);
+        $memuat = fn (string ...$kata) => array_reduce($kata, fn ($acc, $k) => $acc || str_contains($teks, $k), false);
+
+        // Saldo/kuota diperiksa lebih dulu: sebagian provider mengirimnya
+        // dengan status 401 atau 400, bukan 402, sehingga pemeriksaan
+        // berdasarkan status saja akan salah menamainya "kunci tidak sah".
+        if ($status === 402 || $memuat('insufficient balance', 'insufficient_quota', 'exceeded your current quota', 'billing')) {
+            return [
+                'kode' => 'saldo_habis',
+                'judul' => 'Saldo layanan AI habis',
+                'message' => 'Penyedia AI menolak permintaan ini karena saldo akunnya sudah habis.',
+                'saran' => 'Hubungi admin platform untuk mengisi ulang saldo penyedia AI. Data Anda aman — tidak ada yang tersimpan atau berubah.',
+                'bisa_ulang' => false,
+            ];
+        }
+
+        if ($status === 401 || $status === 403 || $memuat('invalid api key', 'incorrect api key', 'unauthorized', 'authentication')) {
+            return [
+                'kode' => 'kunci_tidak_sah',
+                'judul' => 'Kunci penyedia AI ditolak',
+                'message' => 'Penyedia AI tidak menerima kunci yang dipakai organisasi ini.',
+                'saran' => 'Admin platform perlu memeriksa kembali kunci di Pengaturan → Penyedia AI.',
+                'bisa_ulang' => false,
+            ];
+        }
+
+        if ($status === 429 || $memuat('rate limit', 'too many requests')) {
+            return [
+                'kode' => 'terlalu_sering',
+                'judul' => 'Terlalu banyak permintaan',
+                'message' => 'Penyedia AI sedang membatasi jumlah permintaan dari organisasi ini.',
+                'saran' => 'Tunggu sebentar, lalu kirim ulang pertanyaan yang sama.',
+                'bisa_ulang' => true,
+            ];
+        }
+
+        if ($status >= 500) {
+            return [
+                'kode' => 'penyedia_bermasalah',
+                'judul' => 'Penyedia AI sedang bermasalah',
+                'message' => 'Gangguan ada di sisi penyedia AI, bukan di data atau jaringan Anda.',
+                'saran' => 'Coba lagi beberapa saat lagi.',
+                'bisa_ulang' => true,
+            ];
+        }
+
+        /*
+         * Sisanya. Isi mentah provider SENGAJA tidak diikutkan: ia sering
+         * memuat URL, nama model, dan potongan payload, dan tidak pernah
+         * membantu orang yang membacanya. Yang menelusuri masalah membacanya
+         * dari log server, tempat isinya memang disimpan utuh.
+         */
+        return [
+            'kode' => 'tidak_dikenal',
+            'judul' => 'Permintaan ke AI gagal',
+            'message' => 'Permintaan tidak bisa diselesaikan. Rinciannya sudah dicatat di log sistem.',
+            'saran' => 'Coba lagi. Kalau terus berulang, sampaikan waktu kejadiannya ke admin platform.',
+            'bisa_ulang' => true,
+        ];
+    }
+
+    /**
      * License gate for AI Agent endpoints. SuperAdmin (no org) bypasses.
      * Returns null if access denied (caller should return $this->denyBasic()).
      */
@@ -175,8 +257,19 @@ class AiAgentController extends Controller
         $agentAuthHeader = $providerConfig['auth_header'] ?: 'Authorization';
         $agentAuthPrefix = ($providerConfig['auth_header'] && !($providerConfig['auth_prefix'] ?? '')) ? '' : ($providerConfig['auth_prefix'] ?: 'Bearer');
 
-        // DEBUG: Log exact config used (temporary)
-        \Log::info('AI Agent Config Debug', [
+        /*
+         * Log konfigurasi. Ditandai "temporary" sejak lama dan tidak pernah
+         * dicabut — jadi ia dibersihkan, bukan dihapus: yang berguna saat
+         * menelusuri kunci salah tempel tetap ada, yang berbahaya tidak.
+         *
+         * DIBUANG: `api_key_first8`, `api_key_last4`, dan `full_auth_value`.
+         * Ketiganya menuliskan 12 karakter kunci yang sebenarnya ke berkas log —
+         * dan log dikirim ke layanan pihak ketiga, ikut terbawa ke backup, dan
+         * ditempel ke tiket dukungan. "Cuma di log" bukan tempat yang aman untuk
+         * bahan kunci. Panjangnya saja sudah cukup untuk membedakan kunci yang
+         * terpotong dari kunci yang salah provider.
+         */
+        \Log::info('AI Agent Config', [
             'user_id' => $user->id,
             'user_role' => $user->role,
             'org_id' => $orgId,
@@ -185,11 +278,7 @@ class AiAgentController extends Controller
             'base_url' => $agentBaseUrl,
             'auth_header' => $agentAuthHeader,
             'auth_prefix' => $agentAuthPrefix,
-            'api_key_first8' => substr($apiKey, 0, 8),
-            'api_key_last4' => substr($apiKey, -4),
             'api_key_length' => strlen($apiKey),
-            'full_url' => $agentBaseUrl . '/chat/completions',
-            'full_auth_value' => $agentAuthPrefix ? ($agentAuthPrefix . ' ' . substr($apiKey, 0, 8) . '...' . substr($apiKey, -4)) : (substr($apiKey, 0, 8) . '...' . substr($apiKey, -4)),
         ]);
 
         // Credit check (skip for SuperAdmin — no org to bill)
@@ -584,19 +673,36 @@ PROMPT;
                         ->post($fullUrl, $payload);
 
                     if ($response->failed()) {
-                        $debugInfo = json_encode([
-                            'role' => $user->role,
+                        /*
+                         * KEBOCORAN YANG DITUTUP DI SINI.
+                         *
+                         * Versi lama mengirim blok DEBUG ke PERAMBAN, dan blok itu
+                         * memuat `key_start` (8 karakter pertama) dan `key_end` (4
+                         * karakter terakhir) dari API key provider — beserta
+                         * panjangnya. Untuk kunci 35 karakter, membocorkan 12 di
+                         * antaranya beserta panjang pastinya memperkecil ruang
+                         * tebakan secara berarti, dan kunci itu bisa dipakai siapa
+                         * pun yang mendapatkannya, langsung ke provider, atas
+                         * tagihan organisasi ini. Ia juga membocorkan org_id, URL
+                         * provider, nama model, dan nama header autentikasi.
+                         *
+                         * Potongan kunci sekarang tidak dikirim ke mana pun —
+                         * TERMASUK ke log. Log dikirim ke layanan pihak ketiga dan
+                         * ditempel ke tiket dukungan; "cuma di log" bukan tempat
+                         * yang aman untuk bahan kunci. Panjangnya saja tetap
+                         * dicatat karena itulah yang benar-benar berguna saat
+                         * menelusuri kunci yang salah tempel.
+                         */
+                        \Log::error('AI Agent provider error', [
+                            'status' => $response->status(),
+                            'body' => substr($response->body(), 0, 500),
                             'org_id' => $orgId,
-                            'url' => $fullUrl,
                             'model' => $agentModel,
+                            'url' => $fullUrl,
                             'key_len' => strlen($trimmedKey),
-                            'key_start' => substr($trimmedKey, 0, 8),
-                            'key_end' => substr($trimmedKey, -4),
-                            'header' => $agentAuthHeader,
-                            'prefix' => $agentAuthPrefix,
                         ]);
-                        \Log::error('AI Agent error: ' . $response->body() . ' | DEBUG: ' . $debugInfo);
-                        echo json_encode(['type' => 'error', 'message' => 'AI Error: ' . substr($response->body(), 0, 300) . ' | DEBUG: ' . $debugInfo]) . "\n";
+
+                        echo json_encode(['type' => 'error'] + self::galatProvider($response->status(), $response->body())) . "\n";
                         if (ob_get_level() > 0) ob_flush(); flush();
                         break;
                     }
