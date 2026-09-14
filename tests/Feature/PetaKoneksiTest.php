@@ -15,6 +15,7 @@ use App\Models\TenantModuleEntitlement;
 use App\Models\TenantRole;
 use App\Models\User;
 use App\Models\Vendor;
+use App\Services\ConnectionMap\RelationCatalog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -243,26 +244,48 @@ class PetaKoneksiTest extends TestCase
         $dpia = Dpia::create([
             'org_id' => $this->org->id, 'ropa_id' => $ropa->id,
             'registration_number' => 'DPIA-2026-010', 'status' => 'draft',
+            // Kosakata status yang SESUNGGUHNYA dipakai DpiaRtpController —
+            // tidak ada 'completed' di dalamnya. Uji sebelumnya memakai nilai
+            // itu dan karenanya tidak pernah menguji hitungan "selesai".
             'mitigation_tracking' => [
-                ['measure' => 'Enkripsi basis data', 'status' => 'completed'],
-                ['measure' => 'Pembatasan akses', 'status' => 'in_progress'],
-                ['measure' => 'Audit berkala', 'status' => 'planned'],
+                ['risk_event' => 'Enkripsi basis data', 'status' => 'verified'],
+                ['risk_event' => 'Pembatasan akses', 'status' => 'in_progress'],
+                ['risk_event' => 'Audit berkala', 'status' => 'planned'],
             ],
         ]);
 
-        $g = $this->getJson("/api/peta-koneksi/dpia/{$dpia->id}")->assertOk()->json('data');
-
-        $this->assertTrue($this->hasEdge($g, 'dpia:'.$dpia->id, 'rtp:'.$dpia->id));
-
-        $simpul = collect($g['nodes'])->firstWhere('id', 'rtp:'.$dpia->id);
-        $this->assertNotNull($simpul);
-        $this->assertSame('3 item penanganan risiko', $simpul['label']);
-        $this->assertSame('1/3 selesai', $simpul['code']);
-        $this->assertSame(['total' => 3, 'done' => 1], $simpul['meta']);
-
-        // Peta se-modul harus membawanya juga, bukan hanya peta satu record.
+        // PETA SE-MODUL: satu simpul RINGKASAN. Puluhan DPIA yang masing-masing
+        // membawa lima item akan mengisi lingkarannya dengan ratusan titik.
         $global = $this->getJson('/api/peta-koneksi/dpia')->assertOk()->json('data');
         $this->assertTrue($this->hasEdge($global, 'dpia:'.$dpia->id, 'rtp:'.$dpia->id));
+
+        $ringkas = collect($global['nodes'])->firstWhere('id', 'rtp:'.$dpia->id);
+        $this->assertNotNull($ringkas);
+        $this->assertSame('3 item penanganan risiko', $ringkas['label']);
+        $this->assertSame('1/3 selesai', $ringkas['code']);
+        $this->assertSame(['total' => 3, 'done' => 1], $ringkas['meta']);
+
+        // PETA SATU RECORD: dibedah, satu simpul per item, lengkap dengan
+        // teks penanganannya — "3 item" tidak menjawab apa pun di sini.
+        $g = $this->getJson("/api/peta-koneksi/dpia/{$dpia->id}")->assertOk()->json('data');
+
+        $this->assertNotContains('rtp:'.$dpia->id, $this->ids($g), 'ringkasan harus digantikan itemnya');
+
+        $items = collect($g['nodes'])->where('type', 'rtp')->values();
+        $this->assertCount(3, $items);
+        $this->assertSame(
+            ['Enkripsi basis data', 'Pembatasan akses', 'Audit berkala'],
+            $items->pluck('label')->all(),
+        );
+        $this->assertSame(['Verified', 'In Progress', 'Planned'], $items->pluck('code')->all());
+
+        // Tiap item punya tepinya sendiri dari DPIA — tidak ada yang menggantung.
+        foreach ($items as $it) {
+            $this->assertTrue($this->hasEdge($g, 'dpia:'.$dpia->id, $it['id']));
+        }
+
+        // Kliknya harus mendarat pada penanganan DPIA INI, bukan seluruh daftar.
+        $this->assertStringContainsString('dpia_id='.$dpia->id, $items->first()['href']);
     }
 
     /**
@@ -493,5 +516,45 @@ class PetaKoneksiTest extends TestCase
         }
         $this->assertSame('DSR-2026-001', collect($g['nodes'])->firstWhere('id', 'dsr:'.$dsr->id)['label']);
         $this->assertTrue($this->hasEdge($g, 'dsr:'.$dsr->id, 'system:'.$sistem->id));
+    }
+
+    /**
+     * Simpul yang diklik harus mendarat di record-nya, bukan di daftar.
+     *
+     * Dua regresi nyata yang dikunci di sini:
+     *   1. Seluruh href sempat memakai `?open=` — parameter yang TIDAK DIBACA
+     *      satu halaman pun. Klik selalu berakhir di daftar kosong tanpa error.
+     *   2. Kontrak, insiden, dan RoPA pihak ketiga sempat menunjuk
+     *      `/vendor-risk?detail=` padahal yang dibawanya id kontrak/insiden/
+     *      RoPA — halaman registri mencarinya di daftar pihak ketiga dan tidak
+     *      pernah menemukannya.
+     * Keduanya gagal diam-diam: tidak ada 404, tidak ada log.
+     */
+    public function test_href_simpul_membawa_sasaran_dan_menunjuk_halaman_yang_mengenali_idnya(): void
+    {
+        $registri = '/vendor-risk?detail=';
+
+        foreach (RelationCatalog::nodeSources() as $jenis => $spec) {
+            // Href harus berakhir siap-tempel: `?detail=` (query) atau `/` (rute
+            // beralur). Yang berakhir selain itu pasti kehilangan id-nya.
+            $this->assertMatchesRegularExpression(
+                '#(\?detail=|/)$#',
+                $spec['href'],
+                "Href simpul {$jenis} tidak berakhir dengan penampung id: {$spec['href']}",
+            );
+            $this->assertStringNotContainsString('?open=', $spec['href'], "Simpul {$jenis} kembali memakai ?open= yang tidak dibaca halaman mana pun.");
+
+            // Hanya pihak ketiga yang id-nya ada di tabel `vendors`.
+            if ($spec['table'] === 'vendors') {
+                $this->assertSame($registri, $spec['href']);
+
+                continue;
+            }
+            $this->assertNotSame(
+                $registri,
+                $spec['href'],
+                "Simpul {$jenis} membawa id dari tabel {$spec['table']}, bukan vendors — halaman registri tidak akan mengenalinya.",
+            );
+        }
     }
 }

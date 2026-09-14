@@ -9,18 +9,18 @@ use App\Models\Vendor;
  *
  * Selama ini pengetahuan "apa tersambung ke apa" hanya hidup di dalam
  * ConnectionMapScanner, yang memindai SELURUH organisasi. Peta per-record tidak
- * bisa memakai jalan itu — hasil scan disimpan dan baru berubah saat scan
+ * bisa memakai jalan itu â€” hasil scan disimpan dan baru berubah saat scan
  * dijalankan ulang, sehingga tautan yang baru saja dibuat tidak akan terlihat.
  * Menyalin logikanya ke pembangun kedua akan melahirkan penyimpangan yang persis
  * sama seperti bug F-03 dulu: dua tempat yang seharusnya sama, lalu berbeda.
  *
  * Karena itu relasinya dipindah ke sini sebagai DATA, bukan kode. Menambah satu
- * tautan baru cukup menambah satu baris, dan seluruh peta — per-record,
- * per-modul, maupun se-organisasi — langsung mengetahuinya.
+ * tautan baru cukup menambah satu baris, dan seluruh peta â€” per-record,
+ * per-modul, maupun se-organisasi â€” langsung mengetahuinya.
  *
  * Setiap entri mendeskripsikan SATU arah bermakna: `from` adalah yang memasok
  * atau memiliki, `to` adalah yang dihasilkan atau dirujuk. Arah ini mengikuti
- * alur makna, BUKAN arah foreign key — itulah yang membuat peta terbaca sebagai
+ * alur makna, BUKAN arah foreign key â€” itulah yang membuat peta terbaca sebagai
  * "sumber di kiri, konsekuensi di kanan".
  */
 final class RelationCatalog
@@ -43,14 +43,14 @@ final class RelationCatalog
         'vendor_ropa' => 'vendorropa',
     ];
 
-    /** Modul yang benar-benar tidak punya tautan lintas modul — tombol peta disembunyikan. */
+    /** Modul yang benar-benar tidak punya tautan lintas modul â€” tombol peta disembunyikan. */
     public const WITHOUT_RELATIONS = ['gap', 'maturity', 'policy_review'];
 
     /**
-     * Jenis simpul → module_id izin (seperti yang ditulis di `permission:` rute).
+     * Jenis simpul â†’ module_id izin (seperti yang ditulis di `permission:` rute).
      *
      * Dipakai gerbang ENTITLEMENT peta. Sebelumnya hanya modul yang DIPUSATKAN
-     * yang digerbangi, sedangkan simpul tetangganya tidak — sehingga tenant yang
+     * yang digerbangi, sedangkan simpul tetangganya tidak â€” sehingga tenant yang
      * modul DPIA-nya dicabut tetap melihat simpul DPIA di peta RoPA-nya. Itu
      * memperlihatkan data dari modul yang sudah bukan miliknya.
      *
@@ -83,11 +83,11 @@ final class RelationCatalog
     /**
      * Mekanisme yang dipakai tiap relasi:
      *
-     *   fk          — kolom foreign key pada tabel `table`, menunjuk record `points_to`.
-     *   json_array  — kolom JSON berisi larik id polos.
-     *   json_items  — kolom JSON berisi larik objek; id diambil dari `item_key`.
-     *   json_path   — kolom JSON berisi satu id pada jalur `path` (titik sebagai pemisah).
-     *   pivot       — tabel pivot dengan dua kolom kunci.
+     *   fk          â€” kolom foreign key pada tabel `table`, menunjuk record `points_to`.
+     *   json_array  â€” kolom JSON berisi larik id polos.
+     *   json_items  â€” kolom JSON berisi larik objek; id diambil dari `item_key`.
+     *   json_path   â€” kolom JSON berisi satu id pada jalur `path` (titik sebagai pemisah).
+     *   pivot       â€” tabel pivot dengan dua kolom kunci.
      *
      * `owner` adalah jenis simpul pemilik baris/tabelnya.
      *
@@ -106,7 +106,7 @@ final class RelationCatalog
             [
                 // Tautan sistem yang diisi lewat wizard TAPI belum pernah dipromosikan
                 // ke pivot. Tanpa entri ini, sistem yang dipilih DPO di wizard tidak
-                // pernah muncul di peta mana pun — tautannya ada, gambarnya tidak.
+                // pernah muncul di peta mana pun â€” tautannya ada, gambarnya tidak.
                 'relation' => 'supplies', 'label' => 'memasok data',
                 'from' => 'data_discovery', 'to' => 'ropa',
                 'kind' => 'json_items', 'table' => 'ropas', 'owner' => 'ropa',
@@ -120,7 +120,7 @@ final class RelationCatalog
                 'from_key' => 'collection_point_id', 'to_key' => 'ropa_id',
             ],
             [
-                // Bentuk lama yang masih dipertahankan saat settings diperbarui —
+                // Bentuk lama yang masih dipertahankan saat settings diperbarui â€”
                 // cadangan bagi pivot `consent_collection_ropa`.
                 'relation' => 'consent_basis', 'label' => 'dasar consent',
                 'from' => 'consent', 'to' => 'ropa', 'is_fallback' => true,
@@ -167,7 +167,7 @@ final class RelationCatalog
             [
                 // Penanganan risiko TIDAK punya tabel sendiri: ia baris-baris di
                 // kolom JSON `dpias.mitigation_tracking`. Karena itu jenisnya
-                // `json_summary` — SATU simpul ringkasan per DPIA, bukan satu per
+                // `json_summary` â€” SATU simpul ringkasan per DPIA, bukan satu per
                 // item. Peta DSPM sudah menggambarnya sejak awal; peta per-record
                 // dan per-modul tidak, sehingga sebuah DPIA tampak tidak punya
                 // penanganan risiko sama sekali. Sekarang ketiganya membacanya
@@ -231,7 +231,7 @@ final class RelationCatalog
                 // CADANGAN bagi pivot `ropa_vendor`. RoPA lama yang belum
                 // tersinkron ke pivot menyimpan daftar UUID di wizard, TANPA
                 // peran. Ia hanya boleh dipakai bila pasangan itu belum
-                // dinyatakan pivot — kalau tidak, pihak ketiga yang di pivot
+                // dinyatakan pivot â€” kalau tidak, pihak ketiga yang di pivot
                 // berperan `sub_processed_by` akan mendapat tepi KEDUA
                 // `processed_by` yang salah dan menggandakan hubungannya.
                 'relation' => 'processed_by', 'label' => 'diproses pihak ketiga',
@@ -249,7 +249,7 @@ final class RelationCatalog
                 'from_key' => 'vendor_id', 'to_key' => 'information_system_id', 'role_column' => 'role',
             ],
             [
-                // Pihak ketiga yang DIPASTIKAN terlibat pada insiden — kolom yang
+                // Pihak ketiga yang DIPASTIKAN terlibat pada insiden â€” kolom yang
                 // ditandai orang. Dugaan hasil penelusuran (BreachThirdPartyController)
                 // sengaja TIDAK digambar: peta ini menampilkan hubungan yang sudah
                 // ditegaskan, bukan kemungkinan.
@@ -285,7 +285,7 @@ final class RelationCatalog
             ],
             [
                 // Inilah yang menyambungkan Contract Review ke TPRM. Kolomnya sudah
-                // lama ditulis ContractReviewLinker, hanya belum pernah digambar —
+                // lama ditulis ContractReviewLinker, hanya belum pernah digambar â€”
                 // sehingga Contract Review tampak terisolasi padahal tidak.
                 'relation' => 'contract_reviewed', 'label' => 'ditinjau',
                 'from' => 'contract', 'to' => 'contract_review',
@@ -327,7 +327,7 @@ final class RelationCatalog
      * Dari mana simpul tiap jenis dibaca, dan bagaimana ia ditampilkan.
      *
      * `label` sengaja TIDAK BOLEH kolom yang memuat data pribadi. DSR misalnya
-     * berlabel `request_id`, bukan nama pemohon — grafnya bisa berakhir sebagai
+     * berlabel `request_id`, bukan nama pemohon â€” grafnya bisa berakhir sebagai
      * berkas JSON di storage dan diunduh, jadi apa pun yang masuk ke sini harus
      * aman dilihat siapa pun yang boleh membuka peta.
      *
@@ -338,7 +338,7 @@ final class RelationCatalog
      * sendiri.
      *
      * Satu simpul ringkasan per baris pemilik, dengan id yang SAMA dengan
-     * pemiliknya — itulah yang membuat tepinya bisa dibentuk tanpa tabel
+     * pemiliknya â€” itulah yang membuat tepinya bisa dibentuk tanpa tabel
      * penghubung. Labelnya berupa hitungan, karena yang ingin dibaca orang di
      * peta memang "ada berapa, dan berapa yang selesai", bukan daftar itemnya
      * satu per satu.
@@ -354,9 +354,26 @@ final class RelationCatalog
                 'column' => 'mitigation_tracking',
                 'href' => '/risk-treatment-plan',
                 'satuan' => 'item penanganan risiko',
-                // Item dianggap selesai bila statusnya persis ini — sama dengan
-                // yang dipakai pemindai DSPM sebelum aturannya dipindah ke sini.
-                'status_selesai' => 'completed',
+                /*
+                 * Status yang dihitung "selesai".
+                 *
+                 * Sebelumnya berisi 'completed' â€” nilai yang TIDAK ADA di
+                 * kosakata RTP sama sekali. DpiaRtpController hanya mengenal
+                 * planned / in_progress / implemented / verified / overdue /
+                 * on_hold / cancelled, jadi hitungannya selalu "0/N selesai"
+                 * apa pun keadaan sebenarnya. Salahnya diam: angkanya masuk
+                 * akal, hanya kebetulan selalu nol.
+                 *
+                 * `implemented` DAN `verified` sama-sama dihitung: keduanya
+                 * berarti kendalinya sudah terpasang, bedanya `verified` sudah
+                 * diperiksa ulang. `cancelled` bukan selesai â€” ia dibatalkan.
+                 */
+                'status_selesai' => ['implemented', 'verified'],
+                // Urutan pencarian teks item. `risk_event` adalah yang ditulis
+                // DpiaRtpController; `action` dan `measure` menampung bentuk
+                // lama dan isian impor.
+                'item_label' => ['risk_event', 'action', 'measure'],
+                'item_status' => 'status',
             ],
         ];
     }
@@ -372,9 +389,10 @@ final class RelationCatalog
     {
         $valid = array_values(array_filter($items, 'is_array'));
         $total = count($valid);
+        $statusSelesai = (array) ($spec['status_selesai'] ?? []);
         $selesai = count(array_filter(
             $valid,
-            fn ($i) => ($i['status'] ?? null) === ($spec['status_selesai'] ?? 'completed'),
+            fn ($i) => in_array($i[$spec['item_status'] ?? 'status'] ?? null, $statusSelesai, true),
         ));
 
         return [
@@ -384,42 +402,106 @@ final class RelationCatalog
         ];
     }
 
+    /**
+     * Satu simpul per ITEM, untuk peta satu record.
+     *
+     * Peta se-modul memakai ringkasan (`ringkasTurunan`) karena di sana yang
+     * ditanyakan adalah "DPIA mana punya penanganan, berapa banyak". Peta satu
+     * record menjawab pertanyaan yang berbeda â€” "penanganan apa saja yang
+     * dijanjikan DPIA ini, dan sudah sampai mana" â€” dan untuk itu ringkasan
+     * bertuliskan "3 item" tidak menjawab apa pun.
+     *
+     * @param  array<int, mixed>  $items
+     * @param  array<string, mixed>  $spec
+     * @return list<array{label: string, code: string|null, meta: array<string, mixed>}>
+     */
+    public static function rinciTurunan(array $items, array $spec): array
+    {
+        $out = [];
+        foreach (array_values(array_filter($items, 'is_array')) as $i => $item) {
+            $label = '';
+            foreach ((array) ($spec['item_label'] ?? []) as $kunci) {
+                $nilai = trim((string) ($item[$kunci] ?? ''));
+                if ($nilai !== '') {
+                    $label = $nilai;
+                    break;
+                }
+            }
+
+            $status = (string) ($item[$spec['item_status'] ?? 'status'] ?? '');
+
+            $out[] = [
+                // Item tanpa teks sama sekali tetap digambar, bernomor: ia ADA
+                // di basis data, dan menyembunyikannya membuat jumlah di peta
+                // se-modul tidak cocok dengan yang terlihat di sini.
+                'label' => $label !== '' ? $label : 'Item penanganan #'.($i + 1),
+                'code' => $status !== '' ? self::STATUS_RTP[$status] ?? $status : null,
+                'meta' => array_filter([
+                    'status' => $status,
+                    'priority' => $item['priority'] ?? null,
+                    'owner' => $item['owner_name'] ?? null,
+                ], fn ($v) => $v !== null && $v !== ''),
+            ];
+        }
+
+        return $out;
+    }
+
+    /** Label status RTP â€” disalin dari STATUS_CONFIG di halaman Risk Treatment Plan. */
+    public const STATUS_RTP = [
+        'planned' => 'Planned',
+        'in_progress' => 'In Progress',
+        'implemented' => 'Implemented',
+        'verified' => 'Verified',
+        'overdue' => 'Overdue',
+        'on_hold' => 'On Hold',
+        'cancelled' => 'Cancelled',
+    ];
+
     public static function nodeSources(): array
     {
         return [
-            'ropa' => ['table' => 'ropas', 'label' => 'processing_activity', 'code' => 'registration_number', 'href' => '/ropa?open=', 'soft' => true,
+            'ropa' => ['table' => 'ropas', 'label' => 'processing_activity', 'code' => 'registration_number', 'href' => '/ropa?detail=', 'soft' => true,
                 'meta' => ['risk' => 'risk_level', 'status' => 'status']],
-            'dpia' => ['table' => 'dpias', 'label' => 'registration_number', 'code' => 'registration_number', 'href' => '/dpia?open=', 'soft' => true,
+            'dpia' => ['table' => 'dpias', 'label' => 'registration_number', 'code' => 'registration_number', 'href' => '/dpia?detail=', 'soft' => true,
                 'meta' => ['risk' => 'risk_level', 'status' => 'status']],
-            'lia' => ['table' => 'lia_assessments', 'label' => 'lia_code', 'code' => 'lia_code', 'href' => '/lia?open=', 'soft' => true,
+            'lia' => ['table' => 'lia_assessments', 'label' => 'lia_code', 'code' => 'lia_code', 'href' => '/lia?detail=', 'soft' => true,
                 'meta' => ['status' => 'status']],
-            'tia' => ['table' => 'tia_assessments', 'label' => 'title', 'code' => 'tia_code', 'href' => '/tia?open=', 'soft' => true,
+            'tia' => ['table' => 'tia_assessments', 'label' => 'title', 'code' => 'tia_code', 'href' => '/tia?detail=', 'soft' => true,
                 'meta' => ['status' => 'status', 'risk' => 'overall_risk_level']],
-            'cross_border' => ['table' => 'cross_border_transfers', 'label' => 'destination_entity', 'code' => 'destination_country', 'href' => '/cross-border?open=', 'soft' => true,
+            'cross_border' => ['table' => 'cross_border_transfers', 'label' => 'destination_entity', 'code' => 'destination_country', 'href' => '/cross-border?detail=', 'soft' => true,
                 'meta' => ['status' => 'status', 'risk' => 'risk_level']],
             // `role` pada pihak ketiga TIDAK di sini: ia peran BAWAAN di registri
             // yang masih perlu dinormalkan, dan peran sesungguhnya per kegiatan
             // hidup di tepinya. Pemindai menambahkannya sendiri.
-            'third_party' => ['table' => 'vendors', 'label' => 'name', 'code' => 'country', 'href' => '/vendor-risk?open=', 'soft' => true,
+            'third_party' => ['table' => 'vendors', 'label' => 'name', 'code' => 'country', 'href' => '/vendor-risk?detail=', 'soft' => true,
                 'meta' => ['risk' => 'risk_level']],
-            'breach' => ['table' => 'breach_incidents', 'label' => 'title', 'code' => 'incident_code', 'href' => '/breach?open=', 'soft' => true,
+            'breach' => ['table' => 'breach_incidents', 'label' => 'title', 'code' => 'incident_code', 'href' => '/breach?detail=', 'soft' => true,
                 'meta' => ['severity' => 'severity', 'status' => 'status']],
             // Label DSR = nomor permintaan, dan META-nya hanya status. JANGAN
             // ditambahi kolom apa pun yang memuat identitas pemohon: grafnya bisa
             // berakhir sebagai berkas JSON di storage dan diunduh.
-            'dsr' => ['table' => 'dsr_requests', 'label' => 'request_id', 'code' => 'request_type', 'href' => '/dsr?open=', 'soft' => true,
+            'dsr' => ['table' => 'dsr_requests', 'label' => 'request_id', 'code' => 'request_type', 'href' => '/dsr/', 'soft' => true,
                 'meta' => ['status' => 'status']],
-            'data_discovery' => ['table' => 'information_systems', 'label' => 'name', 'code' => 'source_type', 'href' => '/data-discovery?open=', 'soft' => true,
+            'data_discovery' => ['table' => 'information_systems', 'label' => 'name', 'code' => 'source_type', 'href' => '/data-discovery?detail=', 'soft' => true,
                 'meta' => ['pdp_alerts' => 'pdp_alert_count']],
-            'consent' => ['table' => 'consent_collection_points', 'label' => 'name', 'code' => 'collection_id', 'href' => '/consent?open=', 'soft' => true,
+            'consent' => ['table' => 'consent_collection_points', 'label' => 'name', 'code' => 'collection_id', 'href' => '/consent?detail=', 'soft' => true,
                 'meta' => ['kind' => 'kind']],
-            'contract' => ['table' => 'vendor_contracts', 'label' => 'title', 'code' => 'contract_type', 'href' => '/vendor-risk?open=', 'soft' => true,
+            /*
+             * Tiga jenis di bawah ini BUKAN pihak ketiga, hanya tinggal di modul
+             * yang sama. Id yang dibawa simpulnya adalah id kontrak / insiden /
+             * RoPA pihak ketiga â€” bukan id pihak ketiganya. Selama href-nya
+             * '/vendor-risk?detail=' pencarian di halaman registri tidak akan
+             * pernah menemukan padanannya dan modal-nya diam saja; masing-masing
+             * harus menunjuk halamannya sendiri.
+             */
+            'contract' => ['table' => 'vendor_contracts', 'label' => 'title', 'code' => 'contract_type', 'href' => '/vendor-risk/kontrak?detail=', 'soft' => true,
                 'meta' => ['status' => 'status']],
-            'contract_review' => ['table' => 'contract_reviews', 'label' => 'title', 'code' => 'contract_type', 'href' => '/contract-review?open=', 'soft' => true,
+            'contract_review' => ['table' => 'contract_reviews', 'label' => 'title', 'code' => 'contract_type', 'href' => '/contract-review/', 'soft' => true,
                 'meta' => ['status' => 'status', 'rating' => 'overall_rating']],
-            'vendor_incident' => ['table' => 'vendor_incidents', 'label' => 'title', 'code' => 'kind', 'href' => '/vendor-risk?open=', 'soft' => true,
+            'vendor_incident' => ['table' => 'vendor_incidents', 'label' => 'title', 'code' => 'kind', 'href' => '/vendor-risk/incidents?detail=', 'soft' => true,
                 'meta' => ['severity' => 'severity', 'status' => 'status']],
-            'vendor_ropa' => ['table' => 'vendor_ropas', 'label' => 'processing_activity', 'code' => null, 'href' => '/vendor-risk?open=', 'soft' => true,
+            'vendor_ropa' => ['table' => 'vendor_ropas', 'label' => 'processing_activity', 'code' => null, 'href' => '/vendor-risk/ropa-pihak-ketiga?detail=', 'soft' => true,
                 'meta' => []],
         ];
     }
@@ -429,13 +511,13 @@ final class RelationCatalog
      *
      * Dipakai BERSAMA oleh peta per-record dan pemindai DSPM supaya keduanya
      * menampilkan keterangan yang sama. Sebelumnya peta per-record mengirim
-     * `meta` kosong sementara pemindai membawa risk/status/severity — peta baris
+     * `meta` kosong sementara pemindai membawa risk/status/severity â€” peta baris
      * jadi lebih miskin tanpa alasan.
      *
      * Nilai kosong dibuang: `meta` yang berisi null hanya menambah derau pada
      * kartu simpul, bukan keterangan.
      *
-     * @param  array<string, string>  $spec  kunci keluaran → nama kolom
+     * @param  array<string, string>  $spec  kunci keluaran â†’ nama kolom
      * @return array<string, mixed>
      */
     public static function metaFrom(array $spec, object $row): array
@@ -461,7 +543,7 @@ final class RelationCatalog
      * Jalur (swimlane) untuk peta GLOBAL satu modul.
      *
      * Peta global yang sekadar menumpahkan semua simpul akan jadi bola benang
-     * pada tenant dengan ratusan record — terlihat mewah, tak terbaca. Dipisah
+     * pada tenant dengan ratusan record â€” terlihat mewah, tak terbaca. Dipisah
      * menurut TAHAP modulnya sendiri, peta itu justru menjawab pertanyaan yang
      * memang ditanyakan orang: berapa yang masih di screening, dan mereka sudah
      * menyentuh data apa saja.
@@ -495,7 +577,7 @@ final class RelationCatalog
         ];
     }
 
-    /** Peran tautan pihak ketiga (pivot ber-`role`) → slug relasi. */
+    /** Peran tautan pihak ketiga (pivot ber-`role`) â†’ slug relasi. */
     public const ROLE_RELATIONS = [
         Vendor::ROLE_CONTROLLER => 'shared_to_controller',
         Vendor::ROLE_PROCESSOR => 'processed_by',
@@ -504,7 +586,7 @@ final class RelationCatalog
     ];
 
     /**
-     * Arti tepi, dibaca dari `from` ke `to` — SATU sumber untuk semua peta.
+     * Arti tepi, dibaca dari `from` ke `to` â€” SATU sumber untuk semua peta.
      *
      * Nilai untuk slug yang sudah ada disalin PERSIS dari
      * ConnectionMapScanner::RELATION_LABELS. Mengubah satu kata pun di sini akan

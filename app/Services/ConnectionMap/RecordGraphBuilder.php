@@ -74,6 +74,9 @@ class RecordGraphBuilder
         // Dua lompatan: lihat catatan kedalaman di expand().
         [$nodes, $edges] = $this->expand($orgId, [$type => [$id]], 2);
 
+        // Simpul turunan DIBEDAH di peta satu record — lihat bedahTurunan().
+        $this->bedahTurunan($orgId, $nodes, $edges);
+
         // Simpul pusat harus ada walau tidak punya tetangga sama sekali —
         // peta kosong yang menampilkan dirinya sendiri lebih jujur daripada
         // peta yang tampak gagal memuat.
@@ -280,6 +283,116 @@ class RecordGraphBuilder
     }
 
     /**
+     * Mengganti tiap simpul RINGKASAN turunan dengan satu simpul PER ITEM.
+     *
+     * Hanya dipanggil peta satu record. Di peta se-modul ringkasan justru yang
+     * benar: puluhan DPIA yang masing-masing membawa lima item penanganan akan
+     * membuat lingkarannya berisi ratusan titik yang tak seorang pun baca.
+     * Peta satu record menjawab pertanyaan berbeda — "penanganan apa saja yang
+     * dijanjikan DPIA ini, dan sudah sampai mana" — dan di sana "3 item" tidak
+     * menjawab apa pun.
+     *
+     * Tepi ringkasan ikut dibuang dan diganti satu tepi per item, sehingga
+     * tidak ada simpul yang menggantung tanpa penghubung.
+     *
+     * @param  array<string, array<string, mixed>>  $nodes
+     * @param  array<string, array<string, mixed>>  $edges
+     */
+    private function bedahTurunan(string $orgId, array &$nodes, array &$edges): void
+    {
+        foreach (RelationCatalog::derivedSources() as $type => $spec) {
+            $prefix = RelationCatalog::NODE_PREFIX[$type].':';
+
+            // Kumpulkan dulu SELURUH pemilik, baru satu query. Peta satu RoPA
+            // bisa memuat puluhan DPIA; menanyakannya satu per satu adalah N+1
+            // di jalur yang dipanggil tiap kali peta dibuka.
+            $pemilik = [];
+            foreach (array_keys($nodes) as $nid) {
+                if (str_starts_with((string) $nid, $prefix)) {
+                    $pemilik[substr((string) $nid, strlen($prefix))] = (string) $nid;
+                }
+            }
+            if ($pemilik === []) {
+                continue;
+            }
+            $isi = $this->itemTurunan($orgId, array_keys($pemilik), $spec);
+
+            foreach ($pemilik as $ownerId => $nid) {
+                $items = $isi[$ownerId] ?? [];
+                if ($items === []) {
+                    continue;
+                }
+
+                // Tepi lama dicatat dulu: pemiliknya bisa saja bukan `from`,
+                // dan relasinya datang dari katalog — keduanya harus diwarisi
+                // tepi per item supaya labelnya tetap benar.
+                $asal = [];
+                foreach ($edges as $ek => $e) {
+                    if ($e['to'] === $nid || $e['from'] === $nid) {
+                        $asal[] = $e;
+                        unset($edges[$ek]);
+                    }
+                }
+                unset($nodes[$nid]);
+
+                foreach (RelationCatalog::rinciTurunan($items, $spec) as $i => $item) {
+                    $iid = $prefix.$ownerId.':'.$i;
+                    $nodes[$iid] = [
+                        'id' => $iid,
+                        'type' => $type,
+                        'label' => $item['label'],
+                        'code' => $item['code'],
+                        'meta' => $item['meta'],
+                        // Halaman RTP menyaring per DPIA lewat ?dpia_id — tanpa
+                        // itu kliknya mendarat di seluruh daftar penanganan
+                        // se-organisasi, yang bukan "data yang tepat".
+                        'href' => $spec['href'].'?dpia_id='.$ownerId,
+                    ];
+                    foreach ($asal as $e) {
+                        $from = $e['from'] === $nid ? $iid : $e['from'];
+                        $to = $e['to'] === $nid ? $iid : $e['to'];
+                        $edges[$from.'|'.$to.'|'.$e['relation']] = [
+                            'from' => $from, 'to' => $to,
+                            'relation' => $e['relation'], 'label' => $e['label'],
+                        ];
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Larik item mentah dari kolom JSON pemilik, dikunci id pemilik.
+     *
+     * @param  list<string>  $ownerIds
+     * @param  array<string, mixed>  $spec
+     * @return array<string, array<int, mixed>>
+     */
+    private function itemTurunan(string $orgId, array $ownerIds, array $spec): array
+    {
+        if ($ownerIds === [] || ! $this->tabelAda($spec['table']) || ! $this->punyaKolom($spec['table'], $spec['column'])) {
+            return [];
+        }
+
+        $q = DB::table($spec['table'])->select('id', $spec['column']);
+        // org_id TETAP disaring di sini walau id pemiliknya datang dari graf
+        // yang sudah discoping: query builder mentah tidak kena global scope
+        // `org`, jadi id tebakan dari modul lain akan terbaca tanpa penjaga ini.
+        if ($this->punyaKolom($spec['table'], 'org_id')) {
+            $q->where('org_id', $orgId);
+        }
+
+        $out = [];
+        foreach ($q->whereIn('id', $ownerIds)->get() as $row) {
+            $isi = $row->{$spec['column']};
+            $items = is_string($isi) ? json_decode($isi, true) : $isi;
+            $out[(string) $row->id] = is_array($items) ? $items : [];
+        }
+
+        return $out;
+    }
+
+    /**
      * Simpul ringkasan yang diturunkan dari kolom JSON pemiliknya.
      *
      * Id-nya sama dengan id baris pemilik — itulah yang membuat tepinya bisa
@@ -323,7 +436,7 @@ class RecordGraphBuilder
                 'label' => $ringkas['label'],
                 'code' => $ringkas['code'],
                 'meta' => $ringkas['meta'],
-                'href' => $spec['href'],
+                'href' => $spec['href'].'?dpia_id='.$row->id,
             ];
         }
 

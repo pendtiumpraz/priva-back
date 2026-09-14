@@ -122,7 +122,7 @@ class ConnectionMapScanner
             );
             if ($ringkas['meta']['total'] > 0) {
                 $this->addNode($nodes, 'rtp:'.$d->id, 'rtp', $ringkas['label'],
-                    $ringkas['code'], $ringkas['meta'], $spec['href']);
+                    $ringkas['code'], $ringkas['meta'], $spec['href'].'?dpia_id='.$d->id);
                 $totals['rtp']++;
             }
         }
