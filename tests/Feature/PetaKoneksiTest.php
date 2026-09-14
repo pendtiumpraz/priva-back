@@ -632,6 +632,38 @@ class PetaKoneksiTest extends TestCase
     }
 
     /**
+     * RoPA lain tidak ikut tergambar di peta sebuah RoPA.
+     *
+     * Peta ini tentang SATU kegiatan pemrosesan. Kegiatan tetangga — yang
+     * tersambung lewat sistem yang sama, pihak ketiga yang sama, atau DPIA yang
+     * menilai keduanya — adalah peta tetangga, bukan isi peta ini.
+     *
+     * SUDAH DIMUTASI: melepas 'ropa' dari daftar `kecuali` TIDAK membuat uji ini
+     * merah, karena dengan satu lompatan benihnya sudah membatasi kuerinya ke id
+     * itu saja. Jadi aturannya asuransi, bukan perbaikan — dan uji ini mengunci
+     * PERILAKUNYA, supaya ia merah bila penelusuran dua lompatan dihidupkan lagi
+     * (dulu di situlah RoPA tetangga menyelinap masuk: ropa → DPIA → RoPA lain).
+     */
+    public function test_peta_satu_ropa_tidak_memuat_ropa_lain(): void
+    {
+        $ropa = $this->ropa('ROPA-2026-028', 'Penggajian');
+        $tetangga = $this->ropa('ROPA-2026-029', 'Rekrutmen');
+        $sistem = InformationSystem::create(['org_id' => $this->org->id, 'name' => 'HRIS', 'source_type' => 'mysql']);
+        foreach ([$ropa, $tetangga] as $r) {
+            DB::table('information_system_ropa')->insert([
+                'information_system_id' => $sistem->id, 'ropa_id' => $r->id,
+                'org_id' => $this->org->id, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        $g = $this->getJson("/api/peta-koneksi/ropa/{$ropa->id}")->assertOk()->json('data');
+
+        $this->assertContains('ropa:'.$ropa->id, $this->ids($g), 'Pusatnya sendiri tidak boleh ikut tersaring.');
+        $this->assertNotContains('ropa:'.$tetangga->id, $this->ids($g));
+        $this->assertStringNotContainsString('ROPA-2026-029', json_encode($g));
+    }
+
+    /**
      * Satu RoPA dinilai satu DPIA. Dua atau lebih adalah KESALAHAN DATA, dan
      * peta harus mengatakannya — bukan menggambarnya seolah normal.
      */

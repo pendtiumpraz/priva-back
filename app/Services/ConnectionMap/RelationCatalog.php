@@ -492,12 +492,19 @@ final class RelationCatalog
             'dpia' => ['hanya' => ['ropa', 'rtp']],
 
             /*
-             * Item penanganan risiko milik DPIA, bukan milik RoPA. Menaruhnya di
-             * peta RoPA melompati pemiliknya: orang jadi membaca "kegiatan ini
-             * punya lima penanganan risiko" padahal yang benar adalah "DPIA yang
-             * menilai kegiatan ini punya lima". Bukanya lewat simpul DPIA-nya.
+             * `rtp` — item penanganan risiko milik DPIA, bukan milik RoPA.
+             * Menaruhnya di peta RoPA melompati pemiliknya: orang jadi membaca
+             * "kegiatan ini punya lima penanganan risiko" padahal yang benar
+             * adalah "DPIA yang menilai kegiatan ini punya lima". Bukanya lewat
+             * simpul DPIA-nya.
+             *
+             * `ropa` — RoPA LAIN. Simpul pusat sendiri tidak pernah ikut dibuang
+             * (lihat batasiTetangga), jadi yang tersaring di sini hanyalah
+             * kegiatan pemrosesan lain yang kebetulan tersambung lewat perantara.
+             * Peta ini tentang SATU kegiatan; kegiatan tetangga adalah peta
+             * tetangga, bukan isi peta ini.
              */
-            'ropa' => ['kecuali' => ['rtp']],
+            'ropa' => ['kecuali' => ['rtp', 'ropa']],
         ];
     }
 
