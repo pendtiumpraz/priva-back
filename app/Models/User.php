@@ -8,6 +8,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -133,7 +134,15 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->belongsTo(Organization::class, 'org_id');
     }
 
-    public function department()
+    /**
+     * Divisi tempat user ini bernaung — penentu baris mana yang boleh dilihatnya
+     * (lihat App\Support\AssignmentScope). Nullable: user tanpa divisi hanya
+     * melihat baris "(All Group)", yang ditugaskan langsung kepadanya, dan yang
+     * dibuatnya sendiri.
+     *
+     * @return BelongsTo<Department, $this>
+     */
+    public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class);
     }
@@ -143,7 +152,8 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->belongsTo(Position::class, 'position_id');
     }
 
-    public function tenantRole()
+    /** @return BelongsTo<TenantRole, $this> */
+    public function tenantRole(): BelongsTo
     {
         return $this->belongsTo(TenantRole::class, 'tenant_role_id');
     }

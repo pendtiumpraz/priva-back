@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Casts\EncryptedString;
 use App\Models\Pivots\RopaVendor;
+use App\Support\AssignmentScope;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -278,59 +279,27 @@ class Vendor extends Model
     }
 
     /**
-     * Division-scoped visibility — mirrors RoPA's applyRopaUserScope.
+     * Division-scoped visibility.
      *
-     * Admin/superadmin/DPO (kolom role ATAU tenantRole.name admin/dpo) bypass.
-     * Non-admin hanya lihat vendor: assign_group NULL/'(All Group)', user.id di
-     * assignees, atau user.department.name === assign_group (nama divisi).
-     * Vendor tidak punya created_by sehingga klausa creator RoPA di-skip.
+     * Aturannya sama persis dengan RoPA/DPIA dan tinggal di AssignmentScope.
+     * Dulu badan metode ini adalah SALINAN TANGAN dari trait AssignmentVisibility
+     * yang bedanya hanya satu klausa — bentuk duplikasi yang pasti menyimpang
+     * cepat atau lambat. Bedanya sekarang dinyatakan sebagai argumen: pihak
+     * ketiga tidak punya kolom `created_by`, jadi klausa pembuat dimatikan.
      *
-     * Tenant boundary tetap dijaga oleh where('org_id', ...) pemanggil — scope
-     * ini hanya menambah WHERE, tidak pernah melonggarkan org_id.
+     * Batas tenant tetap dijaga `where('org_id', ...)` pemanggil — scope ini
+     * hanya menambah WHERE, tidak pernah melonggarkan apa pun.
      */
     public function scopeVisibleTo($query, $user)
     {
-        if (! $user) {
-            return $query;
-        }
-        $role = $user->role ?? '';
-        $tenantRole = $user->tenantRole;
-        $tenantRoleName = optional($tenantRole)->name;
-        $tenantPerms = $tenantRole?->permissions;
-        $isAdminish = in_array($role, ['root', 'superadmin', 'admin', 'dpo'], true)
-            || in_array(strtolower((string) $tenantRoleName), ['admin', 'dpo'], true)
-            // Tenant admin dengan permission '*' (full access) — bypass scoping.
-            || (is_array($tenantPerms) && in_array('*', $tenantPerms, true));
-        if ($isAdminish) {
-            return $query;
-        }
+        AssignmentScope::terapkan($query, $user, pakaiCreatedBy: false);
 
-        $userId = $user->id;
-        $deptName = optional($user->department)->name;
-
-        return $query->where(function ($w) use ($userId, $deptName) {
-            $w->where(function ($a) {
-                $a->whereNull('assign_group')
-                    ->orWhere('assign_group', '(All Group)');
-            });
-            $w->orWhereJsonContains('assignees', $userId);
-            if ($deptName) {
-                // assign_group bisa SATU nama divisi (warisan) atau BANYAK nama
-                // yang di-join ' | ' (multi-divisi, lihat ASSIGN_DIV_DELIM di FE).
-                // Match anchored pada delimiter supaya 'HR' tidak match 'HRD'.
-                $d = self::ASSIGN_DIV_DELIM;
-                $esc = addcslashes($deptName, '%_\\');
-                $w->orWhere('assign_group', $deptName)
-                    ->orWhere('assign_group', 'like', $esc.$d.'%')
-                    ->orWhere('assign_group', 'like', '%'.$d.$esc)
-                    ->orWhere('assign_group', 'like', '%'.$d.$esc.$d.'%');
-            }
-        });
+        return $query;
     }
 
     /**
      * Delimiter multi-divisi pada `assign_group` — HARUS identik dengan
      * konstanta FE `ASSIGN_DIV_DELIM` (AssignScopeModal.tsx).
      */
-    public const ASSIGN_DIV_DELIM = ' | ';
+    public const ASSIGN_DIV_DELIM = AssignmentScope::DELIM;
 }

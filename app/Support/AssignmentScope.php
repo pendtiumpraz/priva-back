@@ -1,0 +1,121 @@
+<?php
+
+namespace App\Support;
+
+use App\Models\User;
+use Illuminate\Contracts\Database\Query\Builder;
+
+/**
+ * Keterlihatan baris berdasarkan penugasan divisi.
+ *
+ * SATU-SATUNYA tempat aturan "siapa boleh melihat baris apa" ditulis. Sebelum
+ * ini aturannya hidup di dua tempat sekaligus — trait AssignmentVisibility untuk
+ * RoPA/DPIA dan salinan tangan di Vendor::scopeVisibleTo — persis bentuk
+ * duplikasi yang dulu melahirkan F-03.
+ *
+ * Klausanya ditulis terhadap KONTRAK builder, bukan terhadap model. Itu
+ * disengaja: peta koneksi mengambil barisnya lewat `DB::table()` mentah, yang
+ * tidak pernah kena scope Eloquent, sehingga peta memperlihatkan RoPA, DPIA, dan
+ * pihak ketiga milik divisi lain walau tabelnya sendiri sudah menyembunyikannya.
+ * Dengan bentuk ini builder Eloquent dan query builder mentah memakai aturan yang
+ * sama, kata demi kata.
+ *
+ * Aturannya — user non-admin melihat baris yang:
+ *   (a) `assign_group` kosong atau berisi sentinel "(All Group)" — milik semua;
+ *   (b) memuat dirinya di `assignees`;
+ *   (c) dibuatnya sendiri (`created_by`, pada tabel yang punya kolom itu);
+ *   (d) `assign_group`-nya memuat nama divisinya.
+ *
+ * Batas tenant (`org_id`) BUKAN urusan kelas ini — ia hanya MENAMBAH klausa dan
+ * tidak pernah melonggarkan apa pun. Pemanggil tetap wajib memasang org_id.
+ */
+final class AssignmentScope
+{
+    /**
+     * Delimiter multi-divisi pada `assign_group` — HARUS identik dengan
+     * konstanta FE `ASSIGN_DIV_DELIM` di AssignScopeModal.tsx.
+     */
+    public const DELIM = ' | ';
+
+    /** Sentinel "berlaku untuk semua divisi". */
+    public const SEMUA = '(All Group)';
+
+    /**
+     * Apakah user ini menembus penyaringan divisi?
+     *
+     * @param  User|null  $user
+     */
+    public static function melihatSeluruhTenant($user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        $tenantRole = $user->tenantRole;
+        $izin = $tenantRole?->permissions;
+
+        return in_array($user->role ?? '', ['root', 'superadmin', 'admin', 'dpo'], true)
+            || in_array(strtolower((string) optional($tenantRole)->name), ['admin', 'dpo'], true)
+            // Admin tenant sering memakai NAMA role kustom tetapi berizin '*'
+            // (akses penuh) — itulah cara kanonik aplikasi menandai "boleh lihat
+            // semua" (lihat CheckPermission). Tanpa cek ini admin tenant ikut
+            // tersaring dan halamannya kosong.
+            || (is_array($izin) && in_array('*', $izin, true));
+    }
+
+    /**
+     * Tempelkan klausa keterlihatan ke builder apa pun.
+     *
+     * MENGUBAH query di tempat dan tidak mengembalikan apa pun. Itu disengaja:
+     * builder Eloquent dan query builder mentah punya tipe kembalian berbeda,
+     * dan mengembalikan tipe supernya akan memaksa setiap pemanggil melebarkan
+     * tipenya sendiri. Keduanya sama-sama mutable, jadi menempel di tempat tetap
+     * benar untuk keduanya.
+     *
+     * Tidak melakukan apa-apa bila usernya tidak ada (konteks artisan, queue,
+     * pemindai posture) atau memang menembus penyaringan.
+     *
+     * @param  User|null  $user
+     * @param  bool  $pakaiCreatedBy  tabelnya punya `created_by` dan pembuat selalu boleh melihat
+     * @param  bool  $pakaiWizardRopa  RoPA menyimpan divisi terlibat di wizard_data (multi-divisi + warisan)
+     */
+    public static function terapkan(Builder $query, $user, bool $pakaiCreatedBy = true, bool $pakaiWizardRopa = false): void
+    {
+        if (! $user || self::melihatSeluruhTenant($user)) {
+            return;
+        }
+
+        $userId = $user->id;
+        $divisi = optional($user->department)->name;
+
+        $query->where(function ($w) use ($userId, $divisi, $pakaiCreatedBy, $pakaiWizardRopa) {
+            // (a) Milik semua divisi.
+            $w->where(function ($a) {
+                $a->whereNull('assign_group')
+                    ->orWhere('assign_group', self::SEMUA);
+            });
+            // (b) Ditugaskan langsung ke orangnya.
+            $w->orWhereJsonContains('assignees', $userId);
+            // (c) Pembuat record.
+            if ($pakaiCreatedBy) {
+                $w->orWhere('created_by', $userId);
+            }
+            // (d) Divisi. `assign_group` bisa berisi SATU nama (warisan) atau
+            // BANYAK nama yang disambung ' | '. Pencocokannya di-anchor pada
+            // delimiter supaya 'HR' tidak ikut match 'HRD'.
+            if ($divisi) {
+                $d = self::DELIM;
+                $esc = addcslashes($divisi, '%_\\');
+                $w->orWhere('assign_group', $divisi)
+                    ->orWhere('assign_group', 'like', $esc.$d.'%')
+                    ->orWhere('assign_group', 'like', '%'.$d.$esc)
+                    ->orWhere('assign_group', 'like', '%'.$d.$esc.$d.'%');
+                if ($pakaiWizardRopa) {
+                    $w->orWhereJsonContains('wizard_data->detail_pemrosesan->divisi_list', $divisi)
+                        ->orWhere('wizard_data->detail_pemrosesan->divisi', $divisi)
+                        ->orWhere('division', $divisi);
+                }
+            }
+        });
+    }
+}

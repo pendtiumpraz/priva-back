@@ -2,6 +2,8 @@
 
 namespace App\Services\ConnectionMap;
 
+use App\Models\User;
+use App\Support\AssignmentScope;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -66,6 +68,50 @@ class RecordGraphBuilder
         return $this;
     }
 
+    /**
+     * User yang sedang melihat peta, atau null bila tanpa penyaringan divisi.
+     *
+     * Peta HARUS menyaring per divisi seperti halaman daftarnya. Tanpa ini RoPA,
+     * DPIA, dan pihak ketiga milik divisi lain — yang di tabelnya sudah
+     * tersembunyi — tetap tergambar di peta lengkap dengan nama dan kodenya.
+     * Barisnya di sini diambil lewat `DB::table()` mentah, yang tidak pernah kena
+     * scope Eloquent, jadi klausanya harus ditempelkan sendiri.
+     *
+     * Null dipakai konteks tanpa pengguna (artisan, queue, uji unit) dan berarti
+     * "tanpa batas" — sama seperti perilaku scope Eloquent-nya.
+     */
+    private ?User $pengguna = null;
+
+    /** Saring baris sesuai divisi user ini (lihat $pengguna). */
+    public function untukPengguna(?User $user): self
+    {
+        $this->pengguna = $user;
+
+        return $this;
+    }
+
+    /**
+     * Tempelkan klausa keterlihatan divisi untuk satu jenis simpul.
+     *
+     * Kolomnya diperiksa lebih dulu: lingkungan yang migrasinya belum jalan tidak
+     * boleh membuat seluruh peta galat — di sana memang belum ada penugasan sama
+     * sekali, jadi tidak ada yang perlu disaring.
+     */
+    private function saringDivisi(Builder $q, string $table, string $type): void
+    {
+        $ragam = RelationCatalog::visibilityByType()[$type] ?? null;
+        if (! $ragam || ! $this->pengguna || ! $this->punyaKolom($table, 'assign_group')) {
+            return;
+        }
+
+        AssignmentScope::terapkan(
+            $q,
+            $this->pengguna,
+            $ragam['created_by'] && $this->punyaKolom($table, 'created_by'),
+            $ragam['wizard_ropa'],
+        );
+    }
+
     /** @return array<string, mixed> */
     public function forRecord(string $orgId, string $type, string $id): array
     {
@@ -102,8 +148,8 @@ class RecordGraphBuilder
             return $this->kosong($type);
         }
 
-        $total = $this->baseQuery($orgId, $sumber)->count();
-        $ids = $this->baseQuery($orgId, $sumber)
+        $total = $this->baseQuery($orgId, $type, $sumber)->count();
+        $ids = $this->baseQuery($orgId, $type, $sumber)
             ->orderBy('created_at', 'desc')
             ->limit(self::MAX_MODULE_NODES)
             ->pluck('id')
@@ -247,7 +293,7 @@ class RecordGraphBuilder
             array_values($specMeta),
         ))));
 
-        $rows = $this->baseQuery($orgId, $sumber)->whereIn('id', $ids)->get($kolom);
+        $rows = $this->baseQuery($orgId, $type, $sumber)->whereIn('id', $ids)->get($kolom);
 
         $out = [];
         foreach ($rows as $row) {
@@ -300,7 +346,7 @@ class RecordGraphBuilder
             if ($pemilik === []) {
                 continue;
             }
-            $isi = $this->itemTurunan($orgId, array_keys($pemilik), $spec);
+            $isi = $this->itemTurunan($orgId, $type, array_keys($pemilik), $spec);
 
             foreach ($pemilik as $ownerId => $nid) {
                 $items = $isi[$ownerId] ?? [];
@@ -353,7 +399,7 @@ class RecordGraphBuilder
      * @param  array<string, mixed>  $spec
      * @return array<string, array<int, mixed>>
      */
-    private function itemTurunan(string $orgId, array $ownerIds, array $spec): array
+    private function itemTurunan(string $orgId, string $type, array $ownerIds, array $spec): array
     {
         if ($ownerIds === [] || ! $this->tabelAda($spec['table']) || ! $this->punyaKolom($spec['table'], $spec['column'])) {
             return [];
@@ -366,6 +412,10 @@ class RecordGraphBuilder
         if ($this->punyaKolom($spec['table'], 'org_id')) {
             $q->where('org_id', $orgId);
         }
+        // Item penanganan risiko hidup DI DALAM baris DPIA-nya. Kalau DPIA itu
+        // bukan milik divisi user, isinya pun bukan — dan judul tiap item sering
+        // menyebut sistem, vendor, atau kelemahan yang justru paling sensitif.
+        $this->saringDivisi($q, $spec['table'], $type);
 
         $out = [];
         foreach ($q->whereIn('id', $ownerIds)->get() as $row) {
@@ -402,6 +452,8 @@ class RecordGraphBuilder
         if ($this->punyaKolom($spec['table'], 'deleted_at')) {
             $q->whereNull('deleted_at');
         }
+        // Ringkasannya mewarisi keterlihatan baris pemiliknya — lihat itemTurunan().
+        $this->saringDivisi($q, $spec['table'], $type);
 
         $out = [];
         foreach ($q->whereIn('id', $ids)->get(['id', $spec['column']]) as $row) {
@@ -429,7 +481,7 @@ class RecordGraphBuilder
     }
 
     /** @param array<string, mixed> $sumber */
-    private function baseQuery(string $orgId, array $sumber): Builder
+    private function baseQuery(string $orgId, string $type, array $sumber): Builder
     {
         $q = DB::table($sumber['table']);
         if ($this->punyaKolom($sumber['table'], 'org_id')) {
@@ -443,6 +495,7 @@ class RecordGraphBuilder
         if ($this->punyaKolom($sumber['table'], 'is_simulation')) {
             $q->where('is_simulation', false);
         }
+        $this->saringDivisi($q, $sumber['table'], $type);
 
         return $q;
     }
@@ -471,7 +524,7 @@ class RecordGraphBuilder
             return ['urutan' => null];
         }
 
-        $status = $this->baseQuery($orgId, $sumber)
+        $status = $this->baseQuery($orgId, $type, $sumber)
             ->whereIn('id', $ids)
             ->pluck($def['column'], 'id');
 

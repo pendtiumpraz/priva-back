@@ -62,7 +62,19 @@ class PetaKoneksiController extends Controller
     public function record(Request $request, string $module, string $id): Response
     {
         return $this->gate($request, $module, function (string $type, string $orgId) use ($id) {
-            return response()->json(['data' => $this->builder->forRecord($orgId, $type, $id)]);
+            $peta = $this->builder->forRecord($orgId, $type, $id);
+
+            // `center` kosong berarti baris pusatnya tidak terambil sama sekali:
+            // id ngawur, milik tenant lain, atau milik divisi lain. Ketiganya
+            // dijawab 404 yang SAMA — membedakannya akan memberi tahu penanya
+            // bahwa recordnya ada, hanya bukan haknya, dan itu sudah kebocoran
+            // tersendiri. Tanpa penjaga ini peta digambar "kosong" seolah
+            // datanya memang tidak punya tautan.
+            if ($peta['center'] === null) {
+                return response()->json(['message' => 'Data tidak ditemukan.'], 404);
+            }
+
+            return response()->json(['data' => $peta]);
         });
     }
 
@@ -135,6 +147,12 @@ class PetaKoneksiController extends Controller
                 // digerbangi sendiri — tanpa ini, tenant yang modul DPIA-nya
                 // dicabut tetap melihat simpul DPIA di peta RoPA-nya.
                 $this->builder->hanyaJenis($this->jenisYangDimiliki($request));
+
+                // Gerbang KEDUA, dan bukan yang sama: entitlement menjawab
+                // "modul ini masih dimiliki organisasi?", penugasan divisi
+                // menjawab "baris ini bagian dari kerja orang ini?". Sebuah
+                // RoPA divisi lain lolos gerbang pertama dengan mulus.
+                $this->builder->untukPengguna($request->user());
 
                 return $build($type, $orgId);
             },

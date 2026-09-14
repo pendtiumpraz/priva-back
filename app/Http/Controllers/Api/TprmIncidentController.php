@@ -29,7 +29,12 @@ class TprmIncidentController extends Controller
         $orgId = $request->user()->org_id;
 
         $query = VendorIncident::query()
-            ->where('org_id', $orgId);
+            ->where('org_id', $orgId)
+            // Insiden mewarisi keterlihatan pihak ketiganya. Tanpa klausa ini
+            // daftar insiden memperlihatkan nama pihak ketiga divisi lain —
+            // beserta severity dan ringkasannya — padahal registrinya sendiri
+            // sudah menyembunyikan pihak ketiga itu dari orang yang sama.
+            ->whereHas('vendor', fn ($q) => $q->visibleTo($request->user()));
 
         // Filters
         if ($status = $request->query('status')) {

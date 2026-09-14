@@ -458,6 +458,37 @@ final class RelationCatalog
         'cancelled' => 'Cancelled',
     ];
 
+    /**
+     * Jenis yang barisnya ditugaskan per divisi, beserta ragam klausanya.
+     *
+     * Hanya tiga tabel di seluruh skema yang punya kolom penugasan
+     * (`assign_group` + `assignees`): `ropas`, `dpias`, dan `vendors`. Jenis di
+     * luar daftar ini memang tidak punya konsep divisi sama sekali, jadi tidak
+     * disaring — bukan kelalaian.
+     *
+     *   created_by  — tabelnya punya kolom pembuat, dan pembuat selalu boleh lihat.
+     *   wizard_ropa — RoPA juga menyimpan divisi terlibat di `wizard_data`.
+     *
+     * Aturannya sendiri tinggal di App\Support\AssignmentScope; di sini hanya
+     * dicatat tabel mana memakai ragam yang mana. Pemindai posture DSPM sengaja
+     * TIDAK membaca kunci ini: ia memotret keadaan seluruh organisasi, bukan
+     * pandangan satu orang.
+     *
+     * @return array<string, array{created_by: bool, wizard_ropa: bool}>
+     */
+    public static function visibilityByType(): array
+    {
+        return [
+            'ropa' => ['created_by' => true, 'wizard_ropa' => true],
+            'dpia' => ['created_by' => true, 'wizard_ropa' => false],
+            // Pihak ketiga tidak punya kolom `created_by`.
+            'third_party' => ['created_by' => false, 'wizard_ropa' => false],
+            // Item penanganan risiko diturunkan dari baris DPIA-nya, jadi ia
+            // mewarisi keterlihatan DPIA itu — tidak punya penugasan sendiri.
+            'rtp' => ['created_by' => true, 'wizard_ropa' => false],
+        ];
+    }
+
     public static function nodeSources(): array
     {
         return [

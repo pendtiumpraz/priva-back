@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\BelongsToOrg;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -112,7 +113,16 @@ class VendorIncident extends Model
         'applied_to_risk_score' => 'boolean',
     ];
 
-    public function vendor()
+    /**
+     * Pihak ketiga yang mengalami insiden ini.
+     *
+     * Bertipe eksplisit supaya `whereHas('vendor', fn ($q) => $q->visibleTo(...))`
+     * di TprmIncidentController terbaca analisis statis — insiden mewarisi
+     * keterlihatan divisi dari pihak ketiganya.
+     *
+     * @return BelongsTo<Vendor, $this>
+     */
+    public function vendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class, 'vendor_id');
     }
