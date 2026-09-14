@@ -387,6 +387,42 @@ class PetaKoneksiTest extends TestCase
     }
 
     /**
+     * Peta SE-MODUL RoPA memang memuat pihak ketiga (TPRM).
+     *
+     * Hubungannya berjarak SATU lompatan lewat pivot `ropa_vendor`, jadi ia
+     * tidak pernah terpengaruh penurunan kedalaman yang membuang tetangga
+     * berjarak dua. Uji ini ada supaya pertanyaan "kenapa TPRM tidak muncul di
+     * peta seluruh RoPA" punya jawaban yang bisa dijalankan, bukan ditebak:
+     * kalau ini hijau, sebabnya ada di data atau di build yang belum disebar,
+     * bukan di katalog relasinya.
+     *
+     * Bentuk warisan (daftar UUID di wizard, tanpa pivot) ikut dikunci karena
+     * RoPA lama yang belum tersinkron hanya punya itu.
+     */
+    public function test_peta_se_modul_ropa_memuat_pihak_ketiga(): void
+    {
+        $lewatPivot = $this->ropa('ROPA-2026-030', 'Penggajian');
+        $pihakPivot = Vendor::create(['org_id' => $this->org->id, 'name' => 'PT Payroll Mitra']);
+        DB::table('ropa_vendor')->insert([
+            'ropa_id' => $lewatPivot->id, 'vendor_id' => $pihakPivot->id, 'org_id' => $this->org->id,
+            'role' => Vendor::ROLE_PROCESSOR, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $pihakWizard = Vendor::create(['org_id' => $this->org->id, 'name' => 'PT Arsip Lama']);
+        $lewatWizard = $this->ropa('ROPA-2026-031', 'Pengarsipan', [
+            'wizard_data' => ['penggunaan_penyimpanan' => ['vendor_ids' => [$pihakWizard->id]]],
+        ]);
+
+        $g = $this->getJson('/api/peta-koneksi/ropa')->assertOk()->json('data');
+
+        $this->assertTrue($this->hasEdge($g, 'ropa:'.$lewatPivot->id, 'thirdparty:'.$pihakPivot->id));
+        $this->assertTrue(
+            $this->hasEdge($g, 'ropa:'.$lewatWizard->id, 'thirdparty:'.$pihakWizard->id),
+            'RoPA lama yang tautannya baru ada di wizard ikut tergambar lewat jalur cadangan.',
+        );
+    }
+
+    /**
      * Peta SE-MODUL tetap satu lompatan. Di sana benihnya sudah seluruh record
      * modul, dan lompatan kedua akan menarik hampir seluruh isi organisasi ke
      * dalam satu gambar — persis yang membuat peta lama tidak terbaca.
