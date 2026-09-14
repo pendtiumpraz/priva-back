@@ -358,8 +358,12 @@ class PetaKoneksiTest extends TestCase
      *
      * Bedanya penting: lingkup sebuah DPIA tidak selalu sama dengan isi RoPA-nya.
      * Di uji ini pihak ketiganya TIDAK tertaut ke RoPA mana pun, sehingga kalau
-     * tepinya muncul, ia pasti datang dari pivot yang baru — bukan dari rantai
-     * dua langkah yang sudah ada sebelumnya.
+     * tepinya muncul, ia pasti datang dari pivot — bukan dari rantai dua langkah.
+     *
+     * Tempatnya di peta SE-MODUL, yang memang menjawab "DPIA mana menyentuh
+     * pihak ketiga mana". Peta SATU DPIA sengaja tidak menggambarnya: di sana
+     * pertanyaannya lebih sempit — RoPA yang dinilai dan penanganan risikonya —
+     * dan pihak ketiga dibaca lewat panelnya sendiri di halaman DPIA.
      */
     public function test_dpia_terhubung_langsung_ke_pihak_ketiga_lewat_pivot(): void
     {
@@ -374,15 +378,12 @@ class PetaKoneksiTest extends TestCase
             'role' => Vendor::ROLE_SUB_PROCESSOR, 'created_at' => now(), 'updated_at' => now(),
         ]);
 
-        $g = $this->getJson("/api/peta-koneksi/dpia/{$dpia->id}")->assertOk()->json('data');
-
-        $this->assertTrue($this->hasEdge($g, 'dpia:'.$dpia->id, 'thirdparty:'.$pihak->id));
-
-        // Inilah yang menggantikan rantai dua langkah lama: pertanyaan "DPIA ini
-        // menyentuh berapa pihak ketiga" terjawab dari pivotnya sendiri, jadi
-        // peta satu record tidak perlu lagi menyeret tetangga RoPA.
         $global = $this->getJson('/api/peta-koneksi/dpia')->assertOk()->json('data');
         $this->assertTrue($this->hasEdge($global, 'dpia:'.$dpia->id, 'thirdparty:'.$pihak->id));
+
+        // Dan TIDAK di peta satu record — lihat tetanggaPetaRecord().
+        $satu = $this->getJson("/api/peta-koneksi/dpia/{$dpia->id}")->assertOk()->json('data');
+        $this->assertNotContains('thirdparty:'.$pihak->id, $this->ids($satu));
     }
 
     /**
@@ -536,6 +537,127 @@ class PetaKoneksiTest extends TestCase
         }
         $this->assertSame('DSR-2026-001', collect($g['nodes'])->firstWhere('id', 'dsr:'.$dsr->id)['label']);
         $this->assertTrue($this->hasEdge($g, 'dsr:'.$dsr->id, 'system:'.$sistem->id));
+    }
+
+    /**
+     * Peta satu DPIA HANYA berisi RoPA yang dinilainya dan item penanganan
+     * risikonya. Tidak ada yang lain, termasuk DPIA lain.
+     *
+     * Relasinya memang ada — LIA merujuk DPIA, pivot `dpia_vendor` menautkannya
+     * ke pihak ketiga — tetapi punya relasi bukan alasan cukup untuk digambar.
+     * Peta satu record menjawab satu pertanyaan, dan di sini pertanyaannya
+     * "DPIA ini menilai apa, dan apa yang dijanjikan untuk menanganinya".
+     */
+    public function test_peta_satu_dpia_hanya_berisi_ropa_dan_rtp(): void
+    {
+        $ropa = $this->ropa('ROPA-2026-020', 'Penggajian');
+        $dpia = Dpia::create([
+            'org_id' => $this->org->id, 'ropa_id' => $ropa->id,
+            'registration_number' => 'DPIA-2026-020', 'status' => 'draft',
+            'mitigation_tracking' => [['risk_event' => 'Enkripsi basis data', 'status' => 'verified']],
+        ]);
+
+        // Tetangga yang SEHARUSNYA tersaring: keduanya punya relasi sungguhan.
+        $pihak = Vendor::create(['org_id' => $this->org->id, 'name' => 'PT Payroll Mitra']);
+        DB::table('dpia_vendor')->insert([
+            'dpia_id' => $dpia->id, 'vendor_id' => $pihak->id, 'org_id' => $this->org->id,
+            'role' => Vendor::ROLE_PROCESSOR, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('lia_assessments')->insert([
+            'id' => (string) Str::uuid(), 'org_id' => $this->org->id, 'lia_code' => 'LIA-2026-020',
+            'title' => 'Uji Keseimbangan Penggajian', 'processing_activity' => 'Penggajian',
+            'linked_dpia_id' => $dpia->id, 'status' => 'draft',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $g = $this->getJson("/api/peta-koneksi/dpia/{$dpia->id}")->assertOk()->json('data');
+
+        $jenis = collect($g['nodes'])->pluck('type')->unique()->sort()->values()->all();
+        $this->assertSame(['dpia', 'ropa', 'rtp'], $jenis);
+        $this->assertStringNotContainsString('PT Payroll Mitra', json_encode($g));
+        $this->assertStringNotContainsString('LIA-2026-020', json_encode($g));
+    }
+
+    /**
+     * DPIA lain tidak pernah ikut tergambar di peta sebuah DPIA.
+     *
+     * Hari ini ini berlaku karena dua sebab sekaligus — tidak ada relasi
+     * dpia→dpia di katalog, DAN batas tetangga membuangnya — sehingga uji ini
+     * tidak akan merah kalau salah satu saja dilepas. Itu disengaja: yang
+     * dikunci adalah PERILAKUNYA, bukan mekanismenya, supaya ia tetap merah
+     * kalau suatu saat penelusuran dua lompatan dihidupkan lagi.
+     */
+    public function test_peta_satu_dpia_tidak_pernah_memuat_dpia_lain(): void
+    {
+        $ropa = $this->ropa('ROPA-2026-021', 'Penggajian');
+        $satu = Dpia::create([
+            'org_id' => $this->org->id, 'ropa_id' => $ropa->id,
+            'registration_number' => 'DPIA-2026-021', 'status' => 'draft',
+        ]);
+        $dua = Dpia::create([
+            'org_id' => $this->org->id, 'ropa_id' => $ropa->id,
+            'registration_number' => 'DPIA-2026-022', 'status' => 'draft',
+        ]);
+
+        $g = $this->getJson("/api/peta-koneksi/dpia/{$satu->id}")->assertOk()->json('data');
+
+        $this->assertNotContains('dpia:'.$dua->id, $this->ids($g));
+        $this->assertStringNotContainsString('DPIA-2026-022', json_encode($g));
+    }
+
+    /**
+     * Item penanganan risiko milik DPIA, bukan milik RoPA.
+     *
+     * Menaruhnya di peta RoPA melompati pemiliknya: orang membaca "kegiatan ini
+     * punya tiga penanganan risiko" padahal yang benar "DPIA yang menilai
+     * kegiatan ini punya tiga".
+     *
+     * Sama seperti uji DPIA-lain di atas: hari ini berlaku karena dua sebab
+     * sekaligus (satu lompatan tidak pernah mencapai RTP dari sebuah RoPA, DAN
+     * batas tetangga membuangnya). Yang dikunci perilakunya.
+     */
+    public function test_peta_satu_ropa_tidak_memuat_item_penanganan_risiko(): void
+    {
+        $ropa = $this->ropa('ROPA-2026-023', 'Penggajian');
+        Dpia::create([
+            'org_id' => $this->org->id, 'ropa_id' => $ropa->id,
+            'registration_number' => 'DPIA-2026-023', 'status' => 'draft',
+            'mitigation_tracking' => [['risk_event' => 'Enkripsi basis data', 'status' => 'verified']],
+        ]);
+
+        $g = $this->getJson("/api/peta-koneksi/ropa/{$ropa->id}")->assertOk()->json('data');
+
+        $this->assertNotContains('rtp', collect($g['nodes'])->pluck('type')->all());
+        $this->assertStringNotContainsString('Enkripsi basis data', json_encode($g));
+    }
+
+    /**
+     * Satu RoPA dinilai satu DPIA. Dua atau lebih adalah KESALAHAN DATA, dan
+     * peta harus mengatakannya — bukan menggambarnya seolah normal.
+     */
+    public function test_ropa_dengan_dua_dpia_memunculkan_peringatan(): void
+    {
+        $ropa = $this->ropa('ROPA-2026-024', 'Penggajian');
+        foreach (['DPIA-2026-024', 'DPIA-2026-025'] as $nomor) {
+            Dpia::create([
+                'org_id' => $this->org->id, 'ropa_id' => $ropa->id,
+                'registration_number' => $nomor, 'status' => 'draft',
+            ]);
+        }
+
+        $g = $this->getJson("/api/peta-koneksi/ropa/{$ropa->id}")->assertOk()->json('data');
+
+        $this->assertSame('dpia_ganda', $g['peringatan']['kode'] ?? null);
+        $this->assertSame(2, $g['peringatan']['jumlah'] ?? null);
+
+        // Satu DPIA = keadaan normal, tidak ada peringatan yang mengganggu.
+        $wajar = $this->ropa('ROPA-2026-026', 'Rekrutmen');
+        Dpia::create([
+            'org_id' => $this->org->id, 'ropa_id' => $wajar->id,
+            'registration_number' => 'DPIA-2026-027', 'status' => 'draft',
+        ]);
+        $g2 = $this->getJson("/api/peta-koneksi/ropa/{$wajar->id}")->assertOk()->json('data');
+        $this->assertNull($g2['peringatan']);
     }
 
     /**

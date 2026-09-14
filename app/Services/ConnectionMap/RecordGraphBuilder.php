@@ -122,6 +122,10 @@ class RecordGraphBuilder
         // Simpul turunan DIBEDAH di peta satu record — lihat bedahTurunan().
         $this->bedahTurunan($orgId, $nodes, $edges);
 
+        // Baru SESUDAH dibedah: batas tetangga berlaku pada simpul yang
+        // benar-benar akan digambar, termasuk item RTP hasil pembedahan.
+        $this->batasiTetangga($type, $pusat, $nodes, $edges);
+
         // Simpul pusat harus ada walau tidak punya tetangga sama sekali —
         // peta kosong yang menampilkan dirinya sendiri lebih jujur daripada
         // peta yang tampak gagal memuat.
@@ -137,6 +141,79 @@ class RecordGraphBuilder
             'center_type' => $type,
             'lanes' => null,
             'truncated' => null,
+            'peringatan' => $this->peringatanData($type, $pusat, $nodes),
+        ];
+    }
+
+    /**
+     * Buang tetangga yang tidak termasuk pertanyaan peta ini.
+     *
+     * Lihat RelationCatalog::tetanggaPetaRecord() untuk alasannya per jenis.
+     * Simpul pusat tidak pernah ikut dibuang, dan tepi yang kehilangan salah
+     * satu ujungnya gugur — tepi menggantung menggambar hubungan ke sesuatu
+     * yang tidak ada di layar.
+     *
+     * @param  array<string, array<string, mixed>>  $nodes
+     * @param  array<string, array<string, mixed>>  $edges
+     */
+    private function batasiTetangga(string $type, string $pusat, array &$nodes, array &$edges): void
+    {
+        $aturan = RelationCatalog::tetanggaPetaRecord()[$type] ?? null;
+        if (! $aturan) {
+            return;
+        }
+        $hanya = isset($aturan['hanya']) ? array_fill_keys($aturan['hanya'], true) : null;
+        $kecuali = array_fill_keys($aturan['kecuali'] ?? [], true);
+
+        foreach ($nodes as $nid => $n) {
+            if ($nid === $pusat) {
+                continue;
+            }
+            $jenis = $n['type'];
+            $boleh = $hanya === null ? ! isset($kecuali[$jenis]) : isset($hanya[$jenis]);
+            if (! $boleh) {
+                unset($nodes[$nid]);
+            }
+        }
+
+        foreach ($edges as $ek => $e) {
+            if (! isset($nodes[$e['from']]) || ! isset($nodes[$e['to']])) {
+                unset($edges[$ek]);
+            }
+        }
+    }
+
+    /**
+     * Kejanggalan data yang HARUS dilihat orangnya, bukan disembunyikan.
+     *
+     * Satu RoPA dinilai satu DPIA. Kalau di peta sebuah RoPA muncul dua DPIA
+     * atau lebih, itu bukan kekayaan tautan melainkan kesalahan: penilaian yang
+     * sama dikerjakan dua kali, dan yang berlebih harus dihapus atau diarahkan
+     * ke RoPA lain. Menggambarnya diam-diam membuat orang menyangka itu normal.
+     *
+     * @param  array<string, array<string, mixed>>  $nodes
+     * @return array<string, mixed>|null
+     */
+    private function peringatanData(string $type, string $pusat, array $nodes): ?array
+    {
+        if ($type !== 'ropa') {
+            return null;
+        }
+
+        $dpia = 0;
+        foreach ($nodes as $nid => $n) {
+            if ($nid !== $pusat && $n['type'] === 'dpia') {
+                $dpia++;
+            }
+        }
+        if ($dpia < 2) {
+            return null;
+        }
+
+        return [
+            'kode' => 'dpia_ganda',
+            'jumlah' => $dpia,
+            'pesan' => 'Kegiatan ini dinilai oleh '.$dpia.' DPIA. Satu RoPA seharusnya dinilai satu DPIA — hapus yang berlebih, atau arahkan koneksinya ke RoPA lain.',
         ];
     }
 
@@ -176,13 +253,17 @@ class RecordGraphBuilder
             'center_type' => $type,
             'lanes' => $lanes['urutan'],
             'truncated' => $total > count($ids) ? ['shown' => count($ids), 'total' => $total] : null,
+            // Peringatan kejanggalan data hanya lahir di peta satu record —
+            // di peta se-modul ia akan berlaku untuk ratusan baris sekaligus
+            // dan tidak menunjuk apa pun.
+            'peringatan' => null,
         ];
     }
 
     /** @return array<string, mixed> */
     private function kosong(string $type): array
     {
-        return ['nodes' => [], 'edges' => [], 'center' => null, 'center_type' => $type, 'lanes' => null, 'truncated' => null];
+        return ['nodes' => [], 'edges' => [], 'center' => null, 'center_type' => $type, 'lanes' => null, 'truncated' => null, 'peringatan' => null];
     }
 
     /**

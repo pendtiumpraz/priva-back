@@ -459,6 +459,49 @@ final class RelationCatalog
     ];
 
     /**
+     * Tetangga yang boleh tampil di peta SATU RECORD, per jenis pusatnya.
+     *
+     * Peta satu record menjawab SATU pertanyaan, dan jenis pusatnya menentukan
+     * pertanyaan itu. Punya relasi bukan alasan cukup untuk digambar: peta
+     * sebuah DPIA yang ikut memajang LIA yang merujuknya, pihak ketiga yang
+     * dinilainya, dan insiden yang menyentuh RoPA-nya berubah jadi peta
+     * organisasi yang kebetulan berpusat di sebuah DPIA — dan pertanyaan
+     * sebenarnya tenggelam.
+     *
+     *   hanya   — hanya jenis inilah yang boleh muncul selain pusatnya.
+     *   kecuali — semua boleh KECUALI jenis ini.
+     *
+     * Jenis pusat yang tidak terdaftar tidak dibatasi.
+     *
+     * @return array<string, array{hanya?: list<string>, kecuali?: list<string>}>
+     */
+    public static function tetanggaPetaRecord(): array
+    {
+        return [
+            /*
+             * Sebuah DPIA menilai SATU kegiatan pemrosesan, dan janji
+             * penanganannya dijabarkan item RTP. Itu seluruh isi pertanyaannya:
+             * "DPIA ini menilai apa, dan apa yang dijanjikan untuk menanganinya".
+             *
+             * DPIA lain TIDAK PERNAH boleh muncul di sini. Dua DPIA yang tampak
+             * bersinggungan di satu gambar membuat orang mengira keduanya memang
+             * berpasangan, padahal yang terjadi justru sebaliknya: itu tanda
+             * satu RoPA dinilai dua kali, dan salah satunya harus dihapus atau
+             * diarahkan ke RoPA lain.
+             */
+            'dpia' => ['hanya' => ['ropa', 'rtp']],
+
+            /*
+             * Item penanganan risiko milik DPIA, bukan milik RoPA. Menaruhnya di
+             * peta RoPA melompati pemiliknya: orang jadi membaca "kegiatan ini
+             * punya lima penanganan risiko" padahal yang benar adalah "DPIA yang
+             * menilai kegiatan ini punya lima". Bukanya lewat simpul DPIA-nya.
+             */
+            'ropa' => ['kecuali' => ['rtp']],
+        ];
+    }
+
+    /**
      * Jenis yang barisnya ditugaskan per divisi, beserta ragam klausanya.
      *
      * Hanya tiga tabel di seluruh skema yang punya kolom penugasan
