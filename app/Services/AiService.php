@@ -858,6 +858,13 @@ class AiService
             $potensiRisikoExample[$cat] = [
                 'answer' => 'sudah | sebagian | belum | tidak_berlaku (pilih 1)',
                 'description' => 'string: penjelasan singkat kondisi saat ini (1-2 kalimat)',
+                'risk_events' => [[
+                    'risk_event' => 'string: nama peristiwa risiko yang konkret',
+                    'probabilitas' => 'integer 1-5',
+                    'dampak' => 'integer 1-5',
+                    'kontrol' => 'integer 1-3',
+                    'penanganan' => 'mitigate | accept | transfer | terminate',
+                ]],
             ];
         }
 
@@ -872,6 +879,30 @@ class AiService
             ."- \"sebagian\" = Memenuhi Sebagian\n"
             ."- \"belum\" = Belum Memenuhi\n"
             ."- \"tidak_berlaku\" = Tidak Berlaku\n\n"
+            /*
+             * Peristiwa risiko beserta SKORNYA.
+             *
+             * Tanpa bagian ini, auto-fill hanya menjawab 21 kategori lalu
+             * meninggalkan tabel peristiwa risiko berisi deretan dropdown "Pilih"
+             * yang harus diisi tangan satu per satu — pekerjaan yang justru
+             * paling lama di seluruh wizard.
+             *
+             * Skalanya ditulis eksplisit karena TIDAK seragam: dampak dan
+             * probabilitas 1-5, tetapi kontrol hanya 1-3 (Non/Partially/
+             * Effective). Model yang menebak 1-5 untuk kontrol akan menghasilkan
+             * residual risk yang salah di seluruh tabel.
+             */
+            ."ATURAN PENTING — PERISTIWA RISIKO & SKOR:\n"
+            ."Untuk kategori yang jawabannya \"sebagian\" atau \"belum\", WAJIB isi 'risk_events':\n"
+            ."daftar peristiwa risiko KONKRET yang bisa terjadi pada pemrosesan ini, masing-masing dengan skor.\n"
+            ."Kategori \"sudah\" atau \"tidak_berlaku\" cukup 'risk_events': [].\n\n"
+            ."Skalanya BERBEDA-BEDA, jangan disamakan:\n"
+            ."- 'probabilitas' integer 1-5 (1 sangat jarang ... 5 hampir pasti terjadi)\n"
+            ."- 'dampak' integer 1-5 (1 sangat kecil ... 5 sangat besar)\n"
+            ."- 'kontrol' integer 1-3 SAJA (1 Non Effective, 2 Partially Effective, 3 Effective)\n"
+            ."- 'penanganan' PERSIS salah satu: mitigate | accept | transfer | terminate\n\n"
+            ."Beri 2-4 peristiwa risiko per kategori yang belum terpenuhi. Nama peristiwa boleh di luar\n"
+            ."daftar bawaan bila memang lebih tepat untuk pemrosesan ini — yang dikunci hanya 21 kategorinya.\n\n"
             ."FORMAT OUTPUT:\n"
             .json_encode([
                 'description' => 'string: deskripsi pemrosesan yang dinilai (2-3 kalimat)',
@@ -896,9 +927,14 @@ class AiService
         $user = "Buatkan draft DPIA lengkap untuk pemrosesan: \"{$description}\".\n"
             ."WAJIB isi SEMUA 21 kategori di potensi_risiko berdasarkan konteks organisasi.\n"
             ."Untuk setiap kategori, evaluasi apakah sudah/sebagian/belum/tidak_berlaku dan beri 'description' penjelasan singkat.\n"
+            ."Untuk kategori \"sebagian\"/\"belum\", isi juga 'risk_events' lengkap dengan probabilitas, dampak,\n"
+            ."kontrol, dan penanganan — jangan dikosongkan.\n"
             .'Jawab HANYA JSON valid.';
 
-        return $this->ask($system, $user, 4000);
+        // Batas token dinaikkan dari 4000: 21 kategori yang masing-masing membawa
+        // 2-4 peristiwa risiko berskor tidak muat di 4000, dan JSON yang terpotong
+        // di tengah gagal di-decode SELURUHNYA — bukan sebagian.
+        return $this->ask($system, $user, 8000);
     }
 
     /**
