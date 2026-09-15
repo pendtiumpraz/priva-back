@@ -52,6 +52,25 @@ class RopaRiskCalculator
         'mass',
     ];
 
+    /**
+     * Kelompok rentan pada `kategori_subjek` — memicu risiko TINGGI karena
+     * SIAPA subjeknya, bukan karena jenis datanya.
+     *
+     * Dua sumbu ini sering tertukar, dan akibatnya nyata: sebelum ini kalkulator
+     * HANYA membaca `jenis_data_spesifik`. Artinya RoPA yang mencantumkan
+     * subjeknya "Anak" tetapi tidak mencentang "Data Anak" tidak memicu DPIA
+     * sama sekali — padahal itu persis pemrosesan yang dituju PP 33/2026
+     * Pasal 38. Untuk Penyandang Disabilitas lebih parah lagi: opsi itu ada di
+     * `kategori_subjek` tetapi TIDAK PUNYA padanan apa pun di
+     * `jenis_data_spesifik`, sehingga Pasal 39 tidak pernah memicu penilaian
+     * dampak lewat jalur mana pun.
+     *
+     * Dicocokkan sebagai substring huruf kecil, supaya 'Anak' dan
+     * 'Penyandang Disabilitas' sama-sama tertangkap tanpa bergantung pada
+     * ejaan persis di daftar opsi.
+     */
+    private const KELOMPOK_RENTAN_KEYWORDS = ['anak', 'disabilitas'];
+
     /** Keywords that mark an entry in jenis_data_spesifik as sensitive. */
     private const SENSITIVE_KEYWORDS = [
         'kesehatan', 'biometrik', 'genetik', 'anak', 'keuangan',
@@ -105,6 +124,15 @@ class RopaRiskCalculator
         if ($this->hasSensitiveCategory($spesifik)) {
             $triggers[] = 'sensitive_data';
             $reasons[] = 'Memproses kategori data spesifik/sensitif ('.$this->sensitiveLabel($spesifik).').';
+        }
+
+        // Kelompok rentan — dinilai dari SIAPA subjeknya, terpisah dari jenis
+        // datanya. Lihat KELOMPOK_RENTAN_KEYWORDS untuk alasannya.
+        $subjek = $peng['kategori_subjek'] ?? [];
+        if ($this->hasKelompokRentan($subjek)) {
+            $triggers[] = 'vulnerable_subjects';
+            $reasons[] = 'Subjek datanya termasuk kelompok rentan ('.$this->rentanLabel($subjek).') — '
+                .'PP 33/2026 Pasal 38 (Anak) dan Pasal 39 (Penyandang Disabilitas).';
         }
 
         if ($this->isYes($kirim['transfer_luar'] ?? null)) {
@@ -222,6 +250,43 @@ class RopaRiskCalculator
         }
 
         return false;
+    }
+
+    /** Apakah ada kelompok rentan di daftar kategori subjek? */
+    private function hasKelompokRentan($subjek): bool
+    {
+        $list = is_array($subjek) ? $subjek : [$subjek];
+        foreach ($list as $item) {
+            $s = strtolower(trim((string) $item));
+            if ($s === '' || $s === 'not applicable') {
+                continue;
+            }
+            foreach (self::KELOMPOK_RENTAN_KEYWORDS as $kw) {
+                if (str_contains($s, $kw)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /** Nama kelompok rentan yang terdeteksi, untuk ditulis di alasan. */
+    private function rentanLabel($subjek): string
+    {
+        $list = is_array($subjek) ? $subjek : [$subjek];
+        $cocok = [];
+        foreach ($list as $item) {
+            $s = strtolower(trim((string) $item));
+            foreach (self::KELOMPOK_RENTAN_KEYWORDS as $kw) {
+                if ($s !== '' && str_contains($s, $kw)) {
+                    $cocok[] = (string) $item;
+                    break;
+                }
+            }
+        }
+
+        return empty($cocok) ? '-' : implode(', ', array_unique($cocok));
     }
 
     private function sensitiveLabel($spesifik): string
