@@ -25,6 +25,8 @@ use App\Services\ModuleWrite\RopaDpiaWriter;
 use App\Services\NotificationService;
 use App\Services\PermissionService;
 use App\Services\RegistrationCodeService;
+use App\Support\BreachScope;
+use App\Support\InformationSystemScope;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -178,20 +180,35 @@ class ModuleCrudController extends Controller
      */
     private function applyRopaUserScope($query, Request $request, string $module): void
     {
-        // Visibilitas berbasis assignment berlaku utk RoPA & DPIA. Modul lain
-        // (DSR/consent/breach/data-discovery) tidak di-scope di sini.
-        // Visibilitas berbasis assignment berlaku utk RoPA & DPIA. Logikanya
-        // sekarang tinggal di trait AssignmentVisibility (scopeVisibleTo) supaya
-        // SATU sumber kebenaran dipakai juga oleh AI Agent + @mention.
-        if (! in_array($module, ['ropa', 'dpia'], true)) {
-            return;
-        }
         $user = $request->user();
         if (! $user) {
             return;
         }
 
-        $query->visibleTo($user);
+        // RoPA & DPIA punya kolom penugasannya sendiri. Logikanya tinggal di
+        // trait AssignmentVisibility (scopeVisibleTo) supaya SATU sumber
+        // kebenaran dipakai juga oleh AI Agent + @mention.
+        if (in_array($module, ['ropa', 'dpia'], true)) {
+            $query->visibleTo($user);
+
+            return;
+        }
+
+        // Insiden dan sistem informasi TIDAK punya kolom penugasan — divisinya
+        // DITURUNKAN dari RoPA/pihak ketiga yang ditautkannya. Aturannya tidak
+        // bisa dinyatakan lewat scopeVisibleTo atas kolom sendiri, jadi
+        // klausanya ditempel langsung ke query builder di bawahnya.
+        //
+        // DSR dan consent memang belum punya induk apa pun untuk diturunkan,
+        // jadi keduanya tetap se-tenant — itu keterbatasan yang diketahui,
+        // bukan kelalaian di sini.
+        $orgId = (string) $user->org_id;
+
+        match ($module) {
+            'breach' => BreachScope::terapkan($query->getQuery(), $user, $orgId),
+            'data-discovery' => InformationSystemScope::terapkan($query->getQuery(), $user, $orgId),
+            default => null,
+        };
     }
 
     /**

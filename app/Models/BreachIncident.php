@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Casts\EncryptedString;
 use App\Models\Concerns\BelongsToOrg;
+use App\Support\BreachScope;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -57,6 +58,17 @@ class BreachIncident extends Model
     public function ropa()
     {
         return $this->belongsTo(Ropa::class, 'linked_ropa_id');
+    }
+
+    /**
+     * Keterlihatan per divisi — diturunkan dari RoPA terdampak dan pihak ketiga
+     * terlibat, bukan dari kolom sendiri. Aturannya tinggal di BreachScope.
+     */
+    public function scopeVisibleTo($query, $user)
+    {
+        BreachScope::terapkan($query, $user, (string) ($user->org_id ?? ''));
+
+        return $query;
     }
 
     /**

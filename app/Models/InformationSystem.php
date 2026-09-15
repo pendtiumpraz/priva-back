@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToOrg;
+use App\Support\InformationSystemScope;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -30,6 +31,18 @@ class InformationSystem extends Model
     public function organization()
     {
         return $this->belongsTo(Organization::class, 'org_id');
+    }
+
+    /**
+     * Keterlihatan per divisi — diturunkan dari RoPA dan pihak ketiga yang
+     * ditautkan lewat pivot, bukan dari kolom sendiri. Aturannya tinggal di
+     * InformationSystemScope.
+     */
+    public function scopeVisibleTo($query, $user)
+    {
+        InformationSystemScope::terapkan($query, $user, (string) ($user->org_id ?? ''));
+
+        return $query;
     }
 
     /**

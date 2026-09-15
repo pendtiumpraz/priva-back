@@ -56,6 +56,9 @@ use Illuminate\Support\Facades\DB;
  */
 final class ContractReviewScope
 {
+    /** Nama tabel, dipakai untuk korelasi subquery — query luar tidak boleh ber-alias. */
+    private const TABEL = 'contract_reviews';
+
     /**
      * Tempelkan klausa keterlihatan ke builder apa pun atas `contract_reviews`.
      *
@@ -70,40 +73,36 @@ final class ContractReviewScope
      */
     public static function terapkan(Builder $query, $user, string $orgId): void
     {
-        if (! $user || AssignmentScope::melihatSeluruhTenant($user)) {
-            return;
-        }
+        // Amplopnya — termasuk klausa yatim, yang di sini menampung ketiga
+        // bentuk "tanpa pihak ketiga" sekaligus — milik TurunanScope.
+        //
+        // `created_by` sengaja TIDAK dipakai walau kolomnya ada: telaah dari
+        // TPRM hanya bisa dibuat oleh orang yang saat itu melihat kontraknya,
+        // jadi klausa pembuat tidak akan pernah memperluas apa pun. Yang
+        // diubahnya justru hal yang salah — kalau pihak ketiganya kemudian
+        // dipindah ke divisi lain, pembuat lama tetap ikut. Perpindahan divisi
+        // harus memindahkan akses.
+        TurunanScope::rakit($query, $user, $orgId, [
+            self::indukPihakKetiga(...),
+        ]);
+    }
 
-        $query->where(function ($w) use ($user, $orgId) {
-            // (a) Pihak ketiga di ujung rantainya terlihat oleh user ini.
-            //
-            // Dua subquery bersarang, bukan join: klausa AssignmentScope
-            // menulis nama kolom tanpa prefiks tabel, jadi ia hanya boleh
-            // menempel pada query yang tabelnya cuma `vendors`.
-            $w->whereIn('source_document_id', function ($kontrak) use ($user, $orgId) {
-                $kontrak->select('id')
-                    ->from('vendor_contracts')
-                    ->where('org_id', $orgId)
-                    ->whereIn('vendor_id', function ($pihak) use ($user, $orgId) {
-                        $pihak->select('id')
-                            ->from('vendors')
-                            ->where('org_id', $orgId);
-
-                        // Pihak ketiga tidak punya kolom `created_by` —
-                        // argumen yang sama dengan Vendor::scopeVisibleTo.
-                        AssignmentScope::terapkan($pihak, $user, pakaiCreatedBy: false);
-                    });
+    /**
+     * Pihak ketiga di ujung rantai kontrak telaah ini.
+     *
+     * Subquery bersarang, bukan join: klausa AssignmentScope menulis nama kolom
+     * tanpa prefiks tabel, jadi ia hanya boleh menempel pada query yang
+     * tabelnya cuma `vendors`.
+     */
+    private static function indukPihakKetiga(Builder $q, $user, string $orgId): void
+    {
+        $q->select(DB::raw(1))
+            ->from('vendor_contracts')
+            ->where('org_id', $orgId)
+            ->whereColumn('vendor_contracts.id', self::TABEL.'.source_document_id')
+            ->whereIn('vendor_id', function ($pihak) use ($user, $orgId) {
+                $pihak->select('id');
+                IndukTerlihat::pihakKetiga($pihak, $user, $orgId);
             });
-
-            // (b) Tidak ada kontrak pihak ketiga di baliknya — telaah ini
-            //     tidak punya divisi. Lihat docblock kelas untuk ketiga
-            //     bentuknya (unggahan langsung, Document Maker, rantai putus).
-            $w->orWhereNotExists(function ($kontrak) use ($orgId) {
-                $kontrak->select(DB::raw(1))
-                    ->from('vendor_contracts')
-                    ->where('org_id', $orgId)
-                    ->whereColumn('vendor_contracts.id', 'contract_reviews.source_document_id');
-            });
-        });
     }
 }

@@ -49,6 +49,22 @@ final class IndukTerlihat
     }
 
     /**
+     * Arahkan subquery ke `dpias` dan batasi ke yang terlihat oleh $user.
+     *
+     * DPIA punya kolom penugasannya sendiri, tapi TIDAK menyimpan divisi di
+     * wizard seperti RoPA — argumen yang sama dengan Dpia lewat trait
+     * AssignmentVisibility (lihat RelationCatalog::visibilityByType).
+     *
+     * @param  User|null  $user  null = tanpa batas divisi
+     */
+    public static function dpia(Builder $q, $user, string $orgId): void
+    {
+        $q->from('dpias')->where('org_id', $orgId);
+
+        AssignmentScope::terapkan($q, $user, pakaiCreatedBy: true);
+    }
+
+    /**
      * Arahkan subquery ke `vendors` dan batasi ke yang terlihat oleh $user.
      *
      * @param  User|null  $user  null = tanpa batas divisi

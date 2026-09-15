@@ -50,26 +50,13 @@ final class CrossBorderScope
      */
     public static function terapkan(Builder $query, $user, string $orgId): void
     {
-        if (! $user || AssignmentScope::melihatSeluruhTenant($user)) {
-            return;
-        }
-
-        $query->where(function ($w) use ($user, $orgId) {
-            // (a) Pihak ketiga penerimanya terlihat.
-            $w->whereExists(fn ($q) => self::indukPihakKetiga($q, $user, $orgId));
-
-            // (b) Salah satu RoPA yang ditautkannya terlihat.
-            $w->orWhereExists(fn ($q) => self::indukRopa($q, $user, $orgId));
-
-            // (c) Tidak ada induk yang bisa menentukan divisinya. Ditanyakan
-            //     dengan subquery yang SAMA tapi tanpa batas divisi ($user
-            //     null), sehingga "induknya tidak terlihat" tidak pernah
-            //     tertukar dengan "induknya tidak ada".
-            $w->orWhere(function ($yatim) use ($orgId) {
-                $yatim->whereNotExists(fn ($q) => self::indukPihakKetiga($q, null, $orgId))
-                    ->whereNotExists(fn ($q) => self::indukRopa($q, null, $orgId));
-            });
-        });
+        // Amplopnya — "salah satu terlihat", klausa yatim, dan pasangan
+        // terisi/null yang membedakan yatim dari tersaring — milik
+        // TurunanScope. Di sini tinggal induknya.
+        TurunanScope::rakit($query, $user, $orgId, [
+            self::indukPihakKetiga(...),
+            self::indukRopa(...),
+        ]);
     }
 
     /** Pihak ketiga penerima transfer ini. */

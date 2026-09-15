@@ -3,13 +3,14 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToOrg;
-use Illuminate\Database\Eloquent\Model;
+use App\Support\LiaScope;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class LiaAssessment extends Model
 {
-    use HasUuids, SoftDeletes, BelongsToOrg;
+    use BelongsToOrg, HasUuids, SoftDeletes;
 
     protected $fillable = [
         'org_id', 'lia_code', 'title', 'description', 'processing_activity',
@@ -48,12 +49,17 @@ class LiaAssessment extends Model
 
     // Status state machine
     public const STATUS_DRAFT = 'draft';
+
     public const STATUS_SUBMITTED = 'submitted';
+
     public const STATUS_CHECKED = 'checked';
+
     public const STATUS_APPROVED = 'approved';
+
     public const STATUS_REJECTED = 'rejected';
 
     public const VERDICT_PASS = 'lulus';
+
     public const VERDICT_FAIL = 'tidak_lulus';
 
     /** Tiga uji LIA — urutan step wizard. */
@@ -234,9 +240,20 @@ class LiaAssessment extends Model
         return $this->belongsTo(Ropa::class, 'linked_ropa_id');
     }
 
+    /**
+     * Keterlihatan per divisi — diturunkan dari RoPA / DPIA yang ditautkannya,
+     * bukan dari kolom sendiri. Aturannya tinggal di LiaScope.
+     */
+    public function scopeVisibleTo($query, $user)
+    {
+        LiaScope::terapkan($query, $user, (string) ($user->org_id ?? ''));
+
+        return $query;
+    }
+
     public function dpia()
     {
-        return $this->belongsTo(\App\Models\Dpia::class, 'linked_dpia_id');
+        return $this->belongsTo(Dpia::class, 'linked_dpia_id');
     }
 
     public function creator()
@@ -263,10 +280,15 @@ class LiaAssessment extends Model
      * Whether the record is editable for the given user. Locked records
      * are read-only except for root performing an emergency unlock.
      */
-    public function isEditableBy(?\App\Models\User $user): bool
+    public function isEditableBy(?User $user): bool
     {
-        if (!$user) return false;
-        if (!$this->is_locked) return true;
+        if (! $user) {
+            return false;
+        }
+        if (! $this->is_locked) {
+            return true;
+        }
+
         return $user->role === 'root';
     }
 
@@ -284,7 +306,9 @@ class LiaAssessment extends Model
      */
     public static function aggregateAiVerdict(mixed $value): ?string
     {
-        if (empty($value) || ! is_array($value)) return null;
+        if (empty($value) || ! is_array($value)) {
+            return null;
+        }
         // Legacy single object
         $entries = isset($value['status']) ? [$value] : array_values($value);
         $rank = ['non_comply' => 3, 'partial' => 2, 'comply' => 1];
@@ -292,13 +316,16 @@ class LiaAssessment extends Model
         $worstRank = 0;
         foreach ($entries as $e) {
             $st = is_array($e) ? ($e['status'] ?? null) : null;
-            if (! $st || $st === 'unsure') continue;
+            if (! $st || $st === 'unsure') {
+                continue;
+            }
             $r = $rank[$st] ?? 0;
             if ($r > $worstRank) {
                 $worst = $st;
                 $worstRank = $r;
             }
         }
+
         return $worst;
     }
 
@@ -314,7 +341,10 @@ class LiaAssessment extends Model
             $this->conclusion_necessity,
             $this->conclusion_balancing,
         ]);
-        if (count($verdicts) < 3) return null;
+        if (count($verdicts) < 3) {
+            return null;
+        }
+
         return collect($verdicts)->every(fn ($v) => $v === self::VERDICT_PASS)
             ? self::VERDICT_PASS
             : self::VERDICT_FAIL;

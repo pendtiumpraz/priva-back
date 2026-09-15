@@ -4,8 +4,11 @@ namespace App\Services\ConnectionMap;
 
 use App\Models\User;
 use App\Support\AssignmentScope;
+use App\Support\BreachScope;
 use App\Support\ContractReviewScope;
 use App\Support\CrossBorderScope;
+use App\Support\InformationSystemScope;
+use App\Support\LiaScope;
 use App\Support\TiaScope;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -130,6 +133,24 @@ class RecordGraphBuilder
 
         if ($type === 'tia') {
             TiaScope::terapkan($q, $this->pengguna, $orgId);
+
+            return;
+        }
+
+        if ($type === 'lia') {
+            LiaScope::terapkan($q, $this->pengguna, $orgId);
+
+            return;
+        }
+
+        if ($type === 'breach') {
+            BreachScope::terapkan($q, $this->pengguna, $orgId);
+
+            return;
+        }
+
+        if ($type === 'data_discovery') {
+            InformationSystemScope::terapkan($q, $this->pengguna, $orgId);
 
             return;
         }

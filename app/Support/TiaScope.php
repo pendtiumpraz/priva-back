@@ -48,33 +48,12 @@ final class TiaScope
      */
     public static function terapkan(Builder $query, $user, string $orgId): void
     {
-        if (! $user || AssignmentScope::melihatSeluruhTenant($user)) {
-            return;
-        }
-
-        $query->where(function ($w) use ($user, $orgId) {
-            // (a) RoPA yang ditautkannya terlihat.
-            $w->whereExists(fn ($q) => self::indukRopa($q, $user, $orgId));
-
-            // (b) Pihak ketiga yang ditautkannya terlihat.
-            $w->orWhereExists(fn ($q) => self::indukPihakKetiga($q, $user, $orgId));
-
-            // (c) Transfer lintas negara yang ditautkannya terlihat.
-            $w->orWhereExists(fn ($q) => self::indukTransfer($q, $user, $orgId));
-
-            // (d) Dibuatnya sendiri.
-            $w->orWhere(self::TABEL.'.created_by', $user->id);
-
-            // (e) Tidak ada induk yang bisa menentukan divisinya. Ditanyakan
-            //     dengan subquery yang SAMA tapi tanpa batas divisi ($user
-            //     null), sehingga "induknya tidak terlihat" tidak pernah
-            //     tertukar dengan "induknya tidak ada".
-            $w->orWhere(function ($yatim) use ($orgId) {
-                $yatim->whereNotExists(fn ($q) => self::indukRopa($q, null, $orgId))
-                    ->whereNotExists(fn ($q) => self::indukPihakKetiga($q, null, $orgId))
-                    ->whereNotExists(fn ($q) => self::indukTransfer($q, null, $orgId));
-            });
-        });
+        // Amplopnya milik TurunanScope; di sini tinggal induknya.
+        TurunanScope::rakit($query, $user, $orgId, [
+            self::indukRopa(...),
+            self::indukPihakKetiga(...),
+            self::indukTransfer(...),
+        ], self::TABEL.'.created_by');
     }
 
     private static function indukRopa(Builder $q, $user, string $orgId): void

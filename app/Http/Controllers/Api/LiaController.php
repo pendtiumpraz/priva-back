@@ -13,9 +13,13 @@ use App\Services\AiDocumentAnalyzer;
 use App\Services\AssessmentPdfService;
 use App\Services\CreditService;
 use App\Services\FileUploadValidator;
+use App\Services\NotificationService;
 use App\Services\TenantStorageService;
+use App\Support\LiaScope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use RuntimeException;
 
@@ -61,9 +65,33 @@ class LiaController extends Controller
         'legal_basis',
     ];
 
-    public function index(Request $request)
+    /**
+     * Query dasar untuk pemanggil request ini: batas divisi, di atas batas
+     * tenant yang sudah dipasang global scope `org` (BelongsToOrg).
+     *
+     * LIA tidak punya kolom penugasan sendiri — divisinya diturunkan dari RoPA
+     * atau DPIA yang ditautkannya (lihat LiaScope). SEMUA jalur di controller
+     * ini lewat sini, termasuk jalur tulis dan alih status, kecuali penghitung
+     * kode di fromRopa() yang memang harus melihat seluruh tenant supaya dua
+     * divisi tidak menghasilkan nomor LIA kembar.
+     *
+     * @return Builder<LiaAssessment>
+     */
+    private function ruang(): Builder
     {
         $query = LiaAssessment::query();
+        $user = request()->user();
+
+        if ($user) {
+            LiaScope::terapkan($query->getQuery(), $user, (string) $user->org_id);
+        }
+
+        return $query;
+    }
+
+    public function index(Request $request)
+    {
+        $query = $this->ruang();
         if ($request->boolean('trash')) {
             $query->onlyTrashed();
         }
@@ -75,7 +103,7 @@ class LiaController extends Controller
 
     public function show(string $id)
     {
-        $record = LiaAssessment::query()
+        $record = $this->ruang()
             ->with(['ropa:id,custom_number,registration_number,processing_activity,division,risk_level',
                 'dpia:id,custom_number,registration_number,description',
                 'maker:id,name,email', 'checker:id,name,email', 'approver:id,name,email'])
@@ -92,7 +120,7 @@ class LiaController extends Controller
     {
         $data = $this->validatePayload($request);
         // Skip answer_notes if the column has not been migrated yet in this environment.
-        if (array_key_exists('answer_notes', $data) && ! \Illuminate\Support\Facades\Schema::hasColumn('lia_assessments', 'answer_notes')) {
+        if (array_key_exists('answer_notes', $data) && ! Schema::hasColumn('lia_assessments', 'answer_notes')) {
             unset($data['answer_notes']);
         }
         $data['org_id'] = $request->user()->org_id;
@@ -112,7 +140,10 @@ class LiaController extends Controller
      */
     public function fromRopa(Request $request, string $ropaId)
     {
-        $ropa = Ropa::query()->findOrFail($ropaId);
+        // Batas divisi ikut dipasang, sama seperti /tia/from-ropa: 13 field RoPA
+        // ikut TERSALIN sebagai snapshot ke LIA baru, jadi tanpa ini datanya
+        // benar-benar berpindah tangan lintas divisi — bukan sekadar tertaut.
+        $ropa = Ropa::query()->visibleTo($request->user())->findOrFail($ropaId);
         $orgId = $request->user()->org_id;
         if ($ropa->org_id !== $orgId) {
             abort(403, 'RoPA belongs to another org.');
@@ -169,7 +200,7 @@ class LiaController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        $record = LiaAssessment::query()->findOrFail($id);
+        $record = $this->ruang()->findOrFail($id);
         if (! $record->isEditableBy($request->user())) {
             return response()->json([
                 'message' => 'LIA is locked (status='.$record->status.'). Use the reject flow or root unlock to edit.',
@@ -178,7 +209,7 @@ class LiaController extends Controller
 
         $data = $this->validatePayload($request, $id);
         // Skip answer_notes if the column has not been migrated yet in this environment.
-        if (array_key_exists('answer_notes', $data) && ! \Illuminate\Support\Facades\Schema::hasColumn('lia_assessments', 'answer_notes')) {
+        if (array_key_exists('answer_notes', $data) && ! Schema::hasColumn('lia_assessments', 'answer_notes')) {
             unset($data['answer_notes']);
         }
         $record->update($data);
@@ -195,7 +226,7 @@ class LiaController extends Controller
      */
     public function submit(Request $request, string $id)
     {
-        $record = LiaAssessment::query()->findOrFail($id);
+        $record = $this->ruang()->findOrFail($id);
 
         if ($record->is_locked || $record->status !== LiaAssessment::STATUS_DRAFT) {
             return response()->json([
@@ -232,14 +263,16 @@ class LiaController extends Controller
         ], 'manual');
 
         try {
-            \App\Services\NotificationService::dispatch(
+            NotificationService::dispatch(
                 kind: 'warning', severity: 'medium', module: 'lia',
                 type: 'lia.submitted', recipient: 'role:dpo,admin', orgId: $record->org_id,
                 title: "LIA menunggu review: {$record->lia_code}",
                 body: ($record->title ?? 'Legitimate Interest Assessment').' — perlu Checker/Approver.',
                 actionUrl: "/lia/{$record->id}", metadata: ['record_id' => $record->id],
             );
-        } catch (\Throwable $e) { \Log::warning('lia.submitted notif failed: '.$e->getMessage()); }
+        } catch (\Throwable $e) {
+            \Log::warning('lia.submitted notif failed: '.$e->getMessage());
+        }
 
         return response()->json([
             'message' => 'Submitted to Checker / Approver. The record is now read-only.',
@@ -259,7 +292,7 @@ class LiaController extends Controller
             'notes' => 'nullable|string|max:2000',
         ]);
 
-        $record = LiaAssessment::query()->findOrFail($id);
+        $record = $this->ruang()->findOrFail($id);
         if (! in_array($record->status, [LiaAssessment::STATUS_SUBMITTED], true)) {
             return response()->json(['message' => "Cannot check from state '{$record->status}'."], 409);
         }
@@ -307,7 +340,7 @@ class LiaController extends Controller
             'conclusion_notes' => 'nullable|string|max:5000',
         ]);
 
-        $record = LiaAssessment::query()->findOrFail($id);
+        $record = $this->ruang()->findOrFail($id);
         if (! in_array($record->status, [LiaAssessment::STATUS_SUBMITTED, LiaAssessment::STATUS_CHECKED], true)) {
             return response()->json(['message' => "Cannot approve from state '{$record->status}'."], 409);
         }
@@ -334,14 +367,16 @@ class LiaController extends Controller
         ], 'manual');
 
         try {
-            \App\Services\NotificationService::dispatch(
+            NotificationService::dispatch(
                 kind: 'info', severity: 'medium', module: 'lia',
                 type: 'lia.approved', recipient: 'role:dpo,admin', orgId: $record->org_id,
                 title: "LIA disetujui: {$record->lia_code}",
                 body: 'Verdict keseluruhan: '.$record->overallVerdict().'.',
                 actionUrl: "/lia/{$record->id}", metadata: ['record_id' => $record->id],
             );
-        } catch (\Throwable $e) { \Log::warning('lia.approved notif failed: '.$e->getMessage()); }
+        } catch (\Throwable $e) {
+            \Log::warning('lia.approved notif failed: '.$e->getMessage());
+        }
 
         return response()->json([
             'message' => 'LIA approved. Overall verdict: '.$record->overallVerdict(),
@@ -358,7 +393,7 @@ class LiaController extends Controller
             'rejection_reason' => 'required|string|max:5000',
         ]);
 
-        $record = LiaAssessment::query()->findOrFail($id);
+        $record = $this->ruang()->findOrFail($id);
         if (! in_array($record->status, [LiaAssessment::STATUS_SUBMITTED, LiaAssessment::STATUS_CHECKED], true)) {
             return response()->json(['message' => "Cannot reject from state '{$record->status}'."], 409);
         }
@@ -392,7 +427,7 @@ class LiaController extends Controller
             return response()->json(['message' => 'Only root can unlock submitted LIA records.'], 403);
         }
 
-        $record = LiaAssessment::query()->findOrFail($id);
+        $record = $this->ruang()->findOrFail($id);
         if (! $record->is_locked) {
             return response()->json(['message' => 'LIA is not locked.'], 200);
         }
@@ -415,7 +450,7 @@ class LiaController extends Controller
 
     public function destroy(string $id)
     {
-        $record = LiaAssessment::query()->findOrFail($id);
+        $record = $this->ruang()->findOrFail($id);
         $record->delete();
         AuditLog::log('lia', $record->id, 'soft_deleted', [], 'manual');
 
@@ -446,7 +481,7 @@ class LiaController extends Controller
      */
     public function exportPdf(Request $request, AssessmentPdfService $pdf, string $id)
     {
-        $record = LiaAssessment::query()->findOrFail($id);
+        $record = $this->ruang()->findOrFail($id);
         $filename = "LIA_{$record->lia_code}.pdf";
 
         AuditLog::log('lia', $record->id, 'pdf_exported', [
@@ -738,7 +773,7 @@ class LiaController extends Controller
             'file' => 'required|file|max:10240',
         ]);
 
-        $assessment = LiaAssessment::query()
+        $assessment = $this->ruang()
             ->where('org_id', $request->user()->org_id)
             ->findOrFail($id);
 
@@ -776,8 +811,9 @@ class LiaController extends Controller
             );
         } catch (\Throwable $e) {
             report($e);
+
             return response()->json([
-                'message' => 'Gagal menyimpan file ke storage: ' . $e->getMessage(),
+                'message' => 'Gagal menyimpan file ke storage: '.$e->getMessage(),
             ], 500);
         }
 
@@ -789,7 +825,7 @@ class LiaController extends Controller
 
         $attachments = $assessment->attachments ?? [];
 
-        if (!isset($attachments[$qCode]) || !is_array($attachments[$qCode])) {
+        if (! isset($attachments[$qCode]) || ! is_array($attachments[$qCode])) {
             $attachments[$qCode] = [];
         }
 
@@ -838,7 +874,7 @@ class LiaController extends Controller
             'attachment_path' => 'required|string|max:1024',
         ]);
 
-        $assessment = LiaAssessment::query()
+        $assessment = $this->ruang()
             ->where('org_id', $request->user()->org_id)
             ->findOrFail($id);
 
@@ -856,6 +892,7 @@ class LiaController extends Controller
         $questionAttachments = $attachments[$qCode] ?? [];
         $matched = collect($questionAttachments)->first(function ($att) use ($request) {
             $path = is_array($att) ? ($att['path'] ?? null) : $att;
+
             return $path === $request->attachment_path;
         });
 
@@ -878,6 +915,7 @@ class LiaController extends Controller
             CreditService::resetIfNeeded($orgId);
             if (! CreditService::hasCredit($orgId, 'ai_doc_analyze')) {
                 $cost = CreditService::getCost('ai_doc_analyze');
+
                 return response()->json([
                     'message' => "Kredit AI Anda habis. Dibutuhkan {$cost} kredit untuk analisis ini. Silakan top up kredit melalui menu Konfigurasi Platform.",
                     'credits_exhausted' => true,
@@ -933,7 +971,7 @@ class LiaController extends Controller
      */
     public function bulkAnalyzeEvidence(Request $request, string $id, AiDocumentAnalyzer $analyzer)
     {
-        $assessment = LiaAssessment::query()
+        $assessment = $this->ruang()
             ->where('org_id', $request->user()->org_id)
             ->findOrFail($id);
         $orgId = $request->user()->org_id;
@@ -959,6 +997,7 @@ class LiaController extends Controller
             $question = $questionMap->get($qCode);
             if (! $question) {
                 $stats['skipped'] += is_array($files) ? count($files) : 1;
+
                 continue;
             }
 
@@ -975,6 +1014,7 @@ class LiaController extends Controller
                 $attachmentPath = is_array($att) ? ($att['path'] ?? null) : $att;
                 if (! $attachmentPath) {
                     $stats['skipped']++;
+
                     continue;
                 }
 
@@ -983,6 +1023,7 @@ class LiaController extends Controller
                 if ($prev && ! empty($prev['status'])) {
                     $newListForQ[] = $prev;
                     $stats['cached']++;
+
                     continue;
                 }
 
@@ -998,6 +1039,7 @@ class LiaController extends Controller
                         'attachment_path' => $attachmentPath,
                     ];
                     $stats['skipped']++;
+
                     continue;
                 }
 
@@ -1021,6 +1063,7 @@ class LiaController extends Controller
                         'attachment_path' => $attachmentPath,
                     ];
                     $stats['failed']++;
+
                     continue;
                 }
 
@@ -1109,6 +1152,7 @@ class LiaController extends Controller
         if (isset($value['status'])) {
             return [$value];
         }
+
         // Sudah berupa list (numeric indexed).
         return array_values($value);
     }
@@ -1117,9 +1161,12 @@ class LiaController extends Controller
     private function bytesFromIni(string $val): int
     {
         $val = trim($val);
-        if ($val === '') return 0;
+        if ($val === '') {
+            return 0;
+        }
         $unit = strtolower(substr($val, -1));
         $num = (int) $val;
+
         return match ($unit) {
             'g' => $num * 1024 * 1024 * 1024,
             'm' => $num * 1024 * 1024,
@@ -1131,9 +1178,14 @@ class LiaController extends Controller
     /** Format byte ke MB/KB human-readable. */
     private function humanBytes(int $bytes): string
     {
-        if ($bytes >= 1048576) return number_format($bytes / 1048576, 1) . 'MB';
-        if ($bytes >= 1024) return number_format($bytes / 1024, 1) . 'KB';
-        return $bytes . 'B';
+        if ($bytes >= 1048576) {
+            return number_format($bytes / 1048576, 1).'MB';
+        }
+        if ($bytes >= 1024) {
+            return number_format($bytes / 1024, 1).'KB';
+        }
+
+        return $bytes.'B';
     }
 
     /**
@@ -1177,6 +1229,7 @@ class LiaController extends Controller
             if (file_put_contents($tmpPath, $contents) === false) {
                 return null;
             }
+
             return $tmpPath;
         } catch (\Throwable $e) {
             \Log::warning('[LIA resolveAttachmentPath] tenant disk fetch failed', [
@@ -1184,6 +1237,7 @@ class LiaController extends Controller
                 'path' => $rel,
                 'error' => $e->getMessage(),
             ]);
+
             return null;
         }
     }

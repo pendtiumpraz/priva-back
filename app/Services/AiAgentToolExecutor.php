@@ -661,6 +661,7 @@ class AiAgentToolExecutor
     private function listDiscovery(array $args): array
     {
         $records = InformationSystem::where('org_id', $this->orgId)
+            ->tap(fn ($q) => $this->saringDivisi($q))
             ->select('id', 'name', 'source_type', 'scanning_status', 'pdp_alert_count', 'pii_alert_count', 'created_at')
             ->orderBy('created_at', 'desc')->limit(20)->get();
 
@@ -669,7 +670,7 @@ class AiAgentToolExecutor
 
     private function getDiscoveryDetail(array $args): array
     {
-        $r = InformationSystem::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        $r = InformationSystem::where('org_id', $this->orgId)->tap(fn ($q) => $this->saringDivisi($q))->find($args['id'] ?? '');
         if (! $r) {
             return [['error' => 'Sistem tidak ditemukan'], '❌ Sistem informasi tidak ditemukan'];
         }
@@ -747,6 +748,7 @@ class AiAgentToolExecutor
     private function listBreach(array $args): array
     {
         $records = BreachIncident::where('org_id', $this->orgId)
+            ->tap(fn ($q) => $this->saringDivisi($q))
             ->select('id', 'incident_code', 'title', 'severity', 'status', 'created_at')
             ->orderBy('created_at', 'desc')->limit(20)->get();
 
@@ -755,7 +757,7 @@ class AiAgentToolExecutor
 
     private function getBreachDetail(array $args): array
     {
-        $r = BreachIncident::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        $r = BreachIncident::where('org_id', $this->orgId)->tap(fn ($q) => $this->saringDivisi($q))->find($args['id'] ?? '');
         if (! $r) {
             return [['error' => 'Breach tidak ditemukan'], '❌ Breach Incident tidak ditemukan'];
         }
@@ -812,6 +814,7 @@ class AiAgentToolExecutor
     private function listLia(array $args): array
     {
         $records = LiaAssessment::where('org_id', $this->orgId)
+            ->tap(fn ($q) => $this->saringDivisi($q))
             ->select('id', 'lia_code', 'title', 'status', 'overall_score', 'assessment_result', 'created_at')
             ->orderBy('created_at', 'desc')->limit(20)->get();
 
@@ -820,7 +823,7 @@ class AiAgentToolExecutor
 
     private function getLiaDetail(array $args): array
     {
-        $r = LiaAssessment::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        $r = LiaAssessment::where('org_id', $this->orgId)->tap(fn ($q) => $this->saringDivisi($q))->find($args['id'] ?? '');
         if (! $r) {
             return [['error' => 'LIA tidak ditemukan'], '❌ LIA tidak ditemukan'];
         }
@@ -1137,7 +1140,7 @@ class AiAgentToolExecutor
 
     private function updateLia(array $args): array
     {
-        $r = LiaAssessment::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        $r = LiaAssessment::where('org_id', $this->orgId)->tap(fn ($q) => $this->saringDivisi($q))->find($args['id'] ?? '');
         if (! $r) {
             return [['error' => 'LIA tidak ditemukan'], '❌ LIA tidak ditemukan'];
         }
