@@ -4,6 +4,7 @@ namespace App\Services\ConnectionMap;
 
 use App\Models\User;
 use App\Support\AssignmentScope;
+use App\Support\ContractReviewScope;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -97,10 +98,27 @@ class RecordGraphBuilder
      * boleh membuat seluruh peta galat — di sana memang belum ada penugasan sama
      * sekali, jadi tidak ada yang perlu disaring.
      */
-    private function saringDivisi(Builder $q, string $table, string $type): void
+    private function saringDivisi(Builder $q, string $table, string $type, string $orgId): void
     {
+        if (! $this->pengguna) {
+            return;
+        }
+
+        // Telaah kontrak tidak punya penugasan sendiri: divisinya DITURUNKAN
+        // dari pihak ketiga di ujung rantai source_document_id → vendor_contracts
+        // → vendors. Karena itu ia tidak lolos uji kolom `assign_group` di bawah
+        // dan butuh klausanya sendiri — lihat ContractReviewScope.
+        //
+        // Tanpa ini peta membocorkan persis yang paling menarik: JUDUL kontrak
+        // divisi lain, lengkap dengan tautan ke halaman telaahnya.
+        if ($type === 'contract_review') {
+            ContractReviewScope::terapkan($q, $this->pengguna, $orgId);
+
+            return;
+        }
+
         $ragam = RelationCatalog::visibilityByType()[$type] ?? null;
-        if (! $ragam || ! $this->pengguna || ! $this->punyaKolom($table, 'assign_group')) {
+        if (! $ragam || ! $this->punyaKolom($table, 'assign_group')) {
             return;
         }
 
@@ -496,7 +514,7 @@ class RecordGraphBuilder
         // Item penanganan risiko hidup DI DALAM baris DPIA-nya. Kalau DPIA itu
         // bukan milik divisi user, isinya pun bukan — dan judul tiap item sering
         // menyebut sistem, vendor, atau kelemahan yang justru paling sensitif.
-        $this->saringDivisi($q, $spec['table'], $type);
+        $this->saringDivisi($q, $spec['table'], $type, $orgId);
 
         $out = [];
         foreach ($q->whereIn('id', $ownerIds)->get() as $row) {
@@ -534,7 +552,7 @@ class RecordGraphBuilder
             $q->whereNull('deleted_at');
         }
         // Ringkasannya mewarisi keterlihatan baris pemiliknya — lihat itemTurunan().
-        $this->saringDivisi($q, $spec['table'], $type);
+        $this->saringDivisi($q, $spec['table'], $type, $orgId);
 
         $out = [];
         foreach ($q->whereIn('id', $ids)->get(['id', $spec['column']]) as $row) {
@@ -576,7 +594,7 @@ class RecordGraphBuilder
         if ($this->punyaKolom($sumber['table'], 'is_simulation')) {
             $q->where('is_simulation', false);
         }
-        $this->saringDivisi($q, $sumber['table'], $type);
+        $this->saringDivisi($q, $sumber['table'], $type, $orgId);
 
         return $q;
     }

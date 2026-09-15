@@ -6,17 +6,35 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Services\AssessmentPdfService;
 use App\Services\ContractReviewLinker;
+use App\Support\ContractReviewScope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class ContractReviewCrudController extends Controller
 {
-    public function index(Request $request)
+    /**
+     * Query dasar `contract_reviews` untuk pemanggil request ini: batas tenant
+     * DAN batas divisi sekaligus.
+     *
+     * SEMUA jalur di controller ini lewat sini — termasuk hapus, pulihkan, dan
+     * hapus permanen. Telaah divisi lain karena itu tidak hanya tak terbaca,
+     * tapi juga tak bisa disentuh; kalau tak ketemu, jatuhnya 404 yang sama
+     * dengan milik org lain, jadi keberadaannya pun tidak bocor.
+     */
+    private function ruang(Request $request)
     {
         $orgId = $request->user()->org_id;
-        $data = DB::table('contract_reviews')
-            ->where('org_id', $orgId)
+
+        $query = DB::table('contract_reviews')->where('org_id', $orgId);
+        ContractReviewScope::terapkan($query, $request->user(), $orgId);
+
+        return $query;
+    }
+
+    public function index(Request $request)
+    {
+        $data = $this->ruang($request)
             ->whereNull('deleted_at')
             ->orderBy('created_at', 'desc')
             ->get();
@@ -26,9 +44,7 @@ class ContractReviewCrudController extends Controller
 
     public function trashed(Request $request)
     {
-        $orgId = $request->user()->org_id;
-        $data = DB::table('contract_reviews')
-            ->where('org_id', $orgId)
+        $data = $this->ruang($request)
             ->whereNotNull('deleted_at')
             ->orderBy('deleted_at', 'desc')
             ->get();
@@ -38,9 +54,8 @@ class ContractReviewCrudController extends Controller
 
     public function show(Request $request, string $id)
     {
-        $item = DB::table('contract_reviews')
+        $item = $this->ruang($request)
             ->where('id', $id)
-            ->where('org_id', $request->user()->org_id)
             ->first();
 
         if (! $item) {
@@ -130,9 +145,8 @@ class ContractReviewCrudController extends Controller
     {
         $orgId = $request->user()->org_id;
 
-        $item = DB::table('contract_reviews')
+        $item = $this->ruang($request)
             ->where('id', $id)
-            ->where('org_id', $orgId)
             ->whereNull('deleted_at')
             ->first();
 
@@ -170,9 +184,8 @@ class ContractReviewCrudController extends Controller
 
     public function destroy(Request $request, string $id)
     {
-        $affected = DB::table('contract_reviews')
+        $affected = $this->ruang($request)
             ->where('id', $id)
-            ->where('org_id', $request->user()->org_id)
             ->whereNull('deleted_at')
             ->update(['deleted_at' => now()]);
 
@@ -185,9 +198,8 @@ class ContractReviewCrudController extends Controller
 
     public function restore(Request $request, string $id)
     {
-        $affected = DB::table('contract_reviews')
+        $affected = $this->ruang($request)
             ->where('id', $id)
-            ->where('org_id', $request->user()->org_id)
             ->whereNotNull('deleted_at')
             ->update(['deleted_at' => null]);
 
@@ -200,9 +212,8 @@ class ContractReviewCrudController extends Controller
 
     public function forceDelete(Request $request, string $id)
     {
-        $affected = DB::table('contract_reviews')
+        $affected = $this->ruang($request)
             ->where('id', $id)
-            ->where('org_id', $request->user()->org_id)
             ->delete();
 
         if (! $affected) {
