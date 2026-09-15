@@ -26,6 +26,7 @@ use App\Models\TiaAssessment;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Models\VendorPreAssessment;
+use App\Support\PenugasanDivisi;
 
 /**
  * Executes AI Agent tool calls with strict tenant isolation.
@@ -421,7 +422,10 @@ class AiAgentToolExecutor
 
     private function createRopa(array $args): array
     {
-        $forbidden = ['org_id', 'id'];
+        // `origin_division` ikut terlarang: kolom itu adalah KUNCI penugasan
+        // divisi, dan agen tidak boleh menentukannya sendiri — nilainya selalu
+        // datang dari orang yang menjalankan agen (PenugasanDivisi::saatBuat).
+        $forbidden = ['org_id', 'id', 'origin_division'];
         $data = array_diff_key($args, array_flip($forbidden));
         $data['org_id'] = $this->orgId;
         // Nomor DIHITUNG GLOBAL (F-03). Sebelumnya `rand(100, 999)`: batasan
@@ -437,6 +441,10 @@ class AiAgentToolExecutor
         // Extract wizard_data before creating (it's a JSON column)
         $wizardData = $data['wizard_data'] ?? null;
         unset($data['wizard_data']);
+
+        // Dibuat ATAS NAMA orang yang menjalankan agen, jadi divisinya ikut
+        // terkunci sama seperti kalau ia membuatnya sendiri lewat UI.
+        $data = PenugasanDivisi::saatBuat($data, $this->actingUser);
 
         $r = $codes->createWithRetry(new Ropa, $data, 'registration_number', $regen);
 
@@ -469,6 +477,11 @@ class AiAgentToolExecutor
         }
         $forbidden = ['org_id', 'id'];
         $data = array_diff_key($args, array_flip($forbidden));
+
+        // Divisi asal tidak boleh dilepas lewat agen — sama seperti lewat UI.
+        // saatUbah() juga membuang `origin_division` dari payload, sehingga
+        // agen tidak bisa memindahkan kuncinya sendiri.
+        $data = PenugasanDivisi::saatUbah($data, $r->origin_division ?? null);
 
         // Extract wizard_data before updating
         $wizardData = $data['wizard_data'] ?? null;
@@ -571,8 +584,10 @@ class AiAgentToolExecutor
 
     private function createDpia(array $args): array
     {
-        $data = array_diff_key($args, array_flip(['org_id', 'id']));
+        // `origin_division` terlarang — lihat createRopa().
+        $data = array_diff_key($args, array_flip(['org_id', 'id', 'origin_division']));
         $data['org_id'] = $this->orgId;
+        $data = PenugasanDivisi::saatBuat($data, $this->actingUser);
         // Dihitung global, penanda "-AI-" dipertahankan — lihat createRopa().
         $codes = app(RegistrationCodeService::class);
         $regen = fn () => $codes->nextGlobal('DPIA-AI', Dpia::class, 'registration_number');
@@ -609,6 +624,9 @@ class AiAgentToolExecutor
             return [['error' => 'DPIA tidak ditemukan'], '❌ DPIA tidak ditemukan atau bukan dalam cakupan akses Anda'];
         }
         $data = array_diff_key($args, array_flip(['org_id', 'id']));
+
+        // Divisi asal tidak boleh dilepas lewat agen — lihat updateRopa().
+        $data = PenugasanDivisi::saatUbah($data, $r->origin_division ?? null);
 
         // Extract wizard_data before updating
         $wizardData = $data['wizard_data'] ?? null;
@@ -1032,6 +1050,7 @@ class AiAgentToolExecutor
         }
         $data['org_id'] = $this->orgId;
         $data['pdp_scope_status'] = 'unscreened';
+        $data = PenugasanDivisi::saatBuat($data, $this->actingUser);
         $v = Vendor::create($data);
 
         // Mirror controller: high/critical or offshore vendor auto-spawns draft TIA.

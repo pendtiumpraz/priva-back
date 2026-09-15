@@ -21,6 +21,7 @@ use App\Services\TenantStorageService;
 use App\Services\VendorHeadlineService;
 use App\Services\VendorRiskScoreService;
 use App\Support\FrontendUrl;
+use App\Support\PenugasanDivisi;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -193,6 +194,10 @@ class VendorRiskController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate($this->writeRules(false));
+
+        // Divisi pembuatnya dikunci ke penugasan pihak ketiga ini — aturan yang
+        // sama dengan RoPA/DPIA, lihat PenugasanDivisi.
+        $data = PenugasanDivisi::saatBuat($data, $request->user());
 
         $vendor = Vendor::create(array_merge($data, [
             'org_id' => $request->user()->org_id,
@@ -377,6 +382,10 @@ class VendorRiskController extends Controller
         // draft→waiting gate on the vendor row itself), so assign changes are
         // always allowed here — intentionally no lock.
         $oldAssignees = is_array($vendor->assignees) ? $vendor->assignees : [];
+
+        // Divisi asal tidak boleh dilepas — dibaca dari record, bukan dari
+        // divisi orang yang sedang mengubah.
+        $data = PenugasanDivisi::saatUbah($data, $vendor->origin_division ?? null);
 
         $vendor->update($data);
 

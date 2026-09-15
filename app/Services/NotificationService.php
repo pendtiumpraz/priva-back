@@ -179,8 +179,10 @@ class NotificationService
             if ($orgId) {
                 $org = Organization::find($orgId);
                 if ($org) {
+                    // `?? []` sudah menjamin larik — cast `settings` pada
+                    // Organization memang bertipe array.
                     $settings = $org->settings ?? [];
-                    if (is_array($settings) && array_key_exists('notifications_enabled', $settings)) {
+                    if (array_key_exists('notifications_enabled', $settings)) {
                         return (bool) $settings['notifications_enabled'];
                     }
                 }

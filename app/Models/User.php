@@ -15,6 +15,12 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\HasApiTokens;
 
+/**
+ * Lihat catatan yang sama di Organization: cast `settings` lewat casts() tidak
+ * terbaca analisis statis, jadi tipenya dinyatakan di sini.
+ *
+ * @property array<string, mixed>|null $settings
+ */
 class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */

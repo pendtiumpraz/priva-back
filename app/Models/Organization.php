@@ -9,6 +9,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * Cast `settings` dideklarasikan lewat casts() (gaya Laravel 11), yang tidak
+ * terbaca analisis statis — tanpa baris ini ia tersimpul `string|null` dari tipe
+ * kolomnya dan setiap pembacaan sebagai larik ditandai mustahil.
+ *
+ * @property array<string, mixed>|null $settings
+ */
 class Organization extends Model
 {
     use HasFactory, HasUuids, LandlordPinned, SoftDeletes;

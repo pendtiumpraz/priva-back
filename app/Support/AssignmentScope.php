@@ -62,6 +62,20 @@ final class AssignmentScope
     }
 
     /**
+     * Divisi yang dipakai menyaring baris untuk orang ini.
+     *
+     * Biasanya divisinya sendiri. Bedanya hanya untuk DPO se-perusahaan yang
+     * sedang MEMPERSEMPIT pandangannya ke satu divisi — ia lalu melihat divisi
+     * pilihannya, bukan divisi tempat akunnya terdaftar. Lihat CakupanDpo.
+     *
+     * @param  User|null  $user
+     */
+    public static function divisiEfektif($user): ?string
+    {
+        return CakupanDpo::pandanganDipersempit($user) ?? optional(optional($user)->department)->name;
+    }
+
+    /**
      * Apakah user ini menembus penyaringan divisi?
      *
      * @param  User|null  $user
@@ -77,11 +91,22 @@ final class AssignmentScope
             return true;
         }
 
+        // DPO diputuskan tersendiri, dan HARUS didahulukan: cakupannya diatur
+        // admin tenant (se-perusahaan / per-divisi), dan ia sendiri boleh
+        // mempersempit pandangannya. Kalau pemeriksaan izin '*' di bawah
+        // dibiarkan lebih dulu, DPO per-divisi yang — seperti lazimnya —
+        // berizin penuh atas semua modul akan tetap menembus batas divisi,
+        // dan settingnya tidak pernah berarti apa-apa. '*' berarti "semua
+        // MODUL", bukan "semua divisi".
+        if (self::berperanDpo($user)) {
+            return CakupanDpo::melihatSeluruhPerusahaan($user);
+        }
+
         $tenantRole = $user->tenantRole;
         $izin = $tenantRole?->permissions;
 
-        return in_array($user->role ?? '', ['admin', 'dpo'], true)
-            || in_array(strtolower((string) optional($tenantRole)->name), ['admin', 'dpo'], true)
+        return ($user->role ?? '') === 'admin'
+            || strtolower((string) optional($tenantRole)->name) === 'admin'
             // Admin tenant sering memakai NAMA role kustom tetapi berizin '*'
             // (akses penuh) — itulah cara kanonik aplikasi menandai "boleh lihat
             // semua" (lihat CheckPermission). Tanpa cek ini admin tenant ikut
@@ -112,7 +137,7 @@ final class AssignmentScope
         }
 
         $userId = $user->id;
-        $divisi = optional($user->department)->name;
+        $divisi = self::divisiEfektif($user);
 
         $query->where(function ($w) use ($userId, $divisi, $pakaiCreatedBy, $pakaiWizardRopa) {
             // (a) Milik semua divisi.

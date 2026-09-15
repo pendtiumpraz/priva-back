@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\BreachIncident;
 use App\Models\Organization;
+use App\Services\NotificationService;
+use App\Services\OutboundUrlValidator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
@@ -88,12 +91,13 @@ class IntegrationController extends Controller
                 if ($fKey === 'webhook_url') {
                     // Generate webhook URL dynamically
                     $maskedConfig[$fKey] = url("/api/webhooks/threat-intel/{$org->id}");
+
                     continue;
                 }
                 if (isset($config[$fKey]) && in_array($fKey, $provider['secret_fields'])) {
                     $val = $config[$fKey];
                     $maskedConfig[$fKey] = strlen($val) > 8
-                        ? substr($val, 0, 4) . '••••' . substr($val, -4)
+                        ? substr($val, 0, 4).'••••'.substr($val, -4)
                         : '••••••••';
                 } else {
                     $maskedConfig[$fKey] = $config[$fKey] ?? '';
@@ -122,7 +126,7 @@ class IntegrationController extends Controller
      */
     public function update(string $provider, Request $request)
     {
-        if (!isset(self::PROVIDERS[$provider])) {
+        if (! isset(self::PROVIDERS[$provider])) {
             return response()->json(['message' => 'Provider tidak valid.'], 404);
         }
 
@@ -136,17 +140,19 @@ class IntegrationController extends Controller
 
         foreach ($providerDef['fields'] as $field) {
             $fKey = $field['key'];
-            if ($fKey === 'webhook_url') continue; // readonly
+            if ($fKey === 'webhook_url') {
+                continue;
+            } // readonly
             $val = $request->input($fKey);
             if ($val !== null && $val !== '') {
                 // SSRF guard untuk field URL yang user-supplied. Validate
                 // sebelum simpan — gak save URL yang resolve ke private IP.
                 if (str_ends_with($fKey, '_url') || str_contains($fKey, 'url')) {
                     try {
-                        app(\App\Services\OutboundUrlValidator::class)->validate($val);
+                        app(OutboundUrlValidator::class)->validate($val);
                     } catch (\RuntimeException $e) {
                         return response()->json([
-                            'message' => "URL '{$fKey}' ditolak: " . $e->getMessage(),
+                            'message' => "URL '{$fKey}' ditolak: ".$e->getMessage(),
                         ], 422);
                     }
                 }
@@ -165,8 +171,8 @@ class IntegrationController extends Controller
         $org->update(['integration_config' => Crypt::encryptString(json_encode($allConfig))]);
 
         return response()->json([
-            'message' => $providerDef['name'] . ' berhasil disimpan.',
-            'webhook_secret' => ($provider === 'socradar' && !isset($existing['webhook_secret']))
+            'message' => $providerDef['name'].' berhasil disimpan.',
+            'webhook_secret' => ($provider === 'socradar' && ! isset($existing['webhook_secret']))
                 ? $newConfig['webhook_secret'] : null,
         ]);
     }
@@ -177,7 +183,7 @@ class IntegrationController extends Controller
      */
     public function test(string $provider, Request $request)
     {
-        if (!isset(self::PROVIDERS[$provider])) {
+        if (! isset(self::PROVIDERS[$provider])) {
             return response()->json(['message' => 'Provider tidak valid.'], 404);
         }
 
@@ -202,7 +208,7 @@ class IntegrationController extends Controller
                 default: return response()->json(['success' => false, 'message' => 'Test tidak tersedia.']);
             }
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'Error: '.$e->getMessage()]);
         }
     }
 
@@ -212,7 +218,7 @@ class IntegrationController extends Controller
      */
     public function destroy(string $provider, Request $request)
     {
-        if (!isset(self::PROVIDERS[$provider])) {
+        if (! isset(self::PROVIDERS[$provider])) {
             return response()->json(['message' => 'Provider tidak valid.'], 404);
         }
 
@@ -224,7 +230,7 @@ class IntegrationController extends Controller
             'integration_config' => empty($allConfig) ? null : Crypt::encryptString(json_encode($allConfig)),
         ]);
 
-        return response()->json(['message' => self::PROVIDERS[$provider]['name'] . ' dihapus.']);
+        return response()->json(['message' => self::PROVIDERS[$provider]['name'].' dihapus.']);
     }
 
     // ==================== Legacy tenant settings (Breach screen) ====================
@@ -303,8 +309,10 @@ class IntegrationController extends Controller
     public function syncBreachTelegram(Request $request, $id)
     {
         try {
-            $breach = \App\Models\BreachIncident::where('org_id', $request->user()->org_id)->find($id);
-            if (!$breach) return response()->json(['error' => 'Breach not found'], 404);
+            $breach = BreachIncident::where('org_id', $request->user()->org_id)->find($id);
+            if (! $breach) {
+                return response()->json(['error' => 'Breach not found'], 404);
+            }
 
             $org = Organization::findOrFail($request->user()->org_id);
             $config = $this->getProviderConfig($org, 'telegram');
@@ -316,7 +324,7 @@ class IntegrationController extends Controller
                 ], 400);
             }
 
-            $message = \App\Services\NotificationService::buildBreachTelegramMessage($breach);
+            $message = NotificationService::buildBreachTelegramMessage($breach);
 
             $response = Http::post("https://api.telegram.org/bot{$config['bot_token']}/sendMessage", [
                 'chat_id' => $config['chat_id'], 'text' => $message, 'parse_mode' => 'Markdown',
@@ -327,8 +335,9 @@ class IntegrationController extends Controller
             }
             throw new \Exception($response->body());
         } catch (\Exception $e) {
-            Log::error("Telegram Sync Error: " . $e->getMessage());
-            return response()->json(['error' => 'Failed: ' . $e->getMessage()], 500);
+            Log::error('Telegram Sync Error: '.$e->getMessage());
+
+            return response()->json(['error' => 'Failed: '.$e->getMessage()], 500);
         }
     }
 
@@ -340,8 +349,10 @@ class IntegrationController extends Controller
         try {
             // Same fix as syncBreachTelegram — use Eloquent so EncryptedString
             // casts apply; raw DB::table bypasses them and leaks ciphertext.
-            $breach = \App\Models\BreachIncident::where('org_id', $request->user()->org_id)->find($id);
-            if (!$breach) return response()->json(['error' => 'Breach not found'], 404);
+            $breach = BreachIncident::where('org_id', $request->user()->org_id)->find($id);
+            if (! $breach) {
+                return response()->json(['error' => 'Breach not found'], 404);
+            }
 
             $org = Organization::findOrFail($request->user()->org_id);
             $config = $this->getProviderConfig($org, 'siem');
@@ -354,8 +365,8 @@ class IntegrationController extends Controller
             }
 
             $headers = [];
-            if (!empty($config['api_key'])) {
-                $headers['Authorization'] = 'Bearer ' . $config['api_key'];
+            if (! empty($config['api_key'])) {
+                $headers['Authorization'] = 'Bearer '.$config['api_key'];
             }
 
             $payload = [
@@ -378,8 +389,9 @@ class IntegrationController extends Controller
             }
             throw new \Exception($response->body());
         } catch (\Exception $e) {
-            Log::error("SIEM Sync Error: " . $e->getMessage());
-            return response()->json(['error' => 'Failed: ' . $e->getMessage()], 500);
+            Log::error('SIEM Sync Error: '.$e->getMessage());
+
+            return response()->json(['error' => 'Failed: '.$e->getMessage()], 500);
         }
     }
 
@@ -395,9 +407,10 @@ class IntegrationController extends Controller
             'text' => "✅ *PRIVASIMU Test*\n\nKoneksi Telegram berhasil! Breach alert akan dikirim ke sini.",
             'parse_mode' => 'Markdown',
         ]);
+
         return $res->ok() && $res->json('ok')
             ? response()->json(['success' => true, 'message' => 'Pesan test terkirim ke Telegram!'])
-            : response()->json(['success' => false, 'message' => 'Gagal: ' . ($res->json('description') ?? 'Unknown')]);
+            : response()->json(['success' => false, 'message' => 'Gagal: '.($res->json('description') ?? 'Unknown')]);
     }
 
     private function testSiem(array $config)
@@ -405,10 +418,11 @@ class IntegrationController extends Controller
         if (empty($config['endpoint'])) {
             return response()->json(['success' => false, 'message' => 'Endpoint wajib.']);
         }
-        $headers = !empty($config['api_key']) ? ['Authorization' => 'Bearer ' . $config['api_key']] : [];
+        $headers = ! empty($config['api_key']) ? ['Authorization' => 'Bearer '.$config['api_key']] : [];
         $res = Http::withHeaders($headers)->timeout(10)->post($config['endpoint'], [
             'event_type' => 'test', 'source' => 'privasimu', 'message' => 'SIEM connection test', 'timestamp' => now()->toISOString(),
         ]);
+
         return $res->successful()
             ? response()->json(['success' => true, 'message' => "SIEM terhubung! Status: {$res->status()}"])
             : response()->json(['success' => false, 'message' => "Gagal. Status: {$res->status()}"]);
@@ -420,8 +434,11 @@ class IntegrationController extends Controller
             return response()->json(['success' => false, 'message' => 'Endpoint wajib.']);
         }
         $headers = ['Content-Type' => 'application/json'];
-        if (!empty($config['api_key'])) $headers['Authorization'] = 'Bearer ' . $config['api_key'];
+        if (! empty($config['api_key'])) {
+            $headers['Authorization'] = 'Bearer '.$config['api_key'];
+        }
         $res = Http::withHeaders($headers)->timeout(10)->get($config['endpoint']);
+
         return $res->successful()
             ? response()->json(['success' => true, 'message' => "SOAR terhubung! Status: {$res->status()}"])
             : response()->json(['success' => false, 'message' => "Gagal. Status: {$res->status()}"]);
@@ -432,8 +449,9 @@ class IntegrationController extends Controller
         if (empty($config['api_key'])) {
             return response()->json(['success' => false, 'message' => 'API Key wajib.']);
         }
-        $res = Http::withHeaders(['Authorization' => 'Bearer ' . $config['api_key']])
-            ->timeout(10)->get("https://platform.socradar.com/api/v2/company/" . ($config['company_id'] ?? '') . "/incidents");
+        $res = Http::withHeaders(['Authorization' => 'Bearer '.$config['api_key']])
+            ->timeout(10)->get('https://platform.socradar.com/api/v2/company/'.($config['company_id'] ?? '').'/incidents');
+
         return $res->successful()
             ? response()->json(['success' => true, 'message' => 'SOCRadar terhubung!'])
             : response()->json(['success' => false, 'message' => "Gagal. Status: {$res->status()}"]);
@@ -447,30 +465,35 @@ class IntegrationController extends Controller
         if ($org->integration_config) {
             try {
                 return json_decode(Crypt::decryptString($org->integration_config), true) ?? [];
-            } catch (\Exception $e) {}
+            } catch (\Exception $e) {
+            }
         }
         // Migrate from old settings format
         $settings = $org->settings ?? [];
-        if (!empty($settings['telegram_bot_token'])) {
+        if (! empty($settings['telegram_bot_token'])) {
             return [
                 'telegram' => [
                     'enabled' => true,
-                    'bot_token' => $settings['telegram_bot_token'] ?? '',
+                    // Tanpa `?? ''` — cabang ini hanya dimasuki setelah
+                    // !empty($settings['telegram_bot_token']) di atas.
+                    'bot_token' => $settings['telegram_bot_token'],
                     'chat_id' => $settings['telegram_chat_id'] ?? '',
                 ],
                 'siem' => [
-                    'enabled' => !empty($settings['siem_webhook_url']),
+                    'enabled' => ! empty($settings['siem_webhook_url']),
                     'endpoint' => $settings['siem_webhook_url'] ?? '',
                     'type' => 'custom',
                 ],
             ];
         }
+
         return [];
     }
 
     private function getProviderConfig(Organization $org, string $provider): array
     {
         $all = $this->decryptConfig($org);
+
         return $all[$provider] ?? [];
     }
 }

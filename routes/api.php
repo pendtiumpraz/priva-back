@@ -48,6 +48,7 @@ use App\Http\Controllers\Api\DiscoveryChangelogController;
 use App\Http\Controllers\Api\DiscoveryProbeController;
 use App\Http\Controllers\Api\DocumentImportController;
 use App\Http\Controllers\Api\DocumentMakerController;
+use App\Http\Controllers\Api\DpoScopeController;
 use App\Http\Controllers\Api\DocumentTemplateController;
 use App\Http\Controllers\Api\DpiaAssessmentFrameworkController;
 use App\Http\Controllers\Api\DpiaRiskEventTemplateController;
@@ -418,6 +419,16 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // Organization
     Route::get('/organization', [OrganizationController::class, 'show']);
     Route::put('/organization', [OrganizationController::class, 'update']);
+
+    // Cakupan DPO — siapa yang dilihat DPO, dan berapa akun boleh memegang
+    // peran itu. Gerbangnya di dalam controller (admin tenant, BUKAN DPO),
+    // bukan middleware `permission:`, karena yang menentukan bukan izin modul
+    // melainkan peran orangnya. Lihat DpoScopeController::bolehMengatur.
+    Route::get('/organization/dpo-scope', [DpoScopeController::class, 'show']);
+    Route::put('/organization/dpo-scope', [DpoScopeController::class, 'update']);
+
+    // Preferensi pandangan milik DPO sendiri — hanya mempersempit.
+    Route::put('/me/dpo-view', [DpoScopeController::class, 'setPandangan']);
 
     // Organization Configuration (Enterprise SSO)
     Route::get('/tenant-ssos', [TenantSsoController::class, 'show']);

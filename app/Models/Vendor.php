@@ -56,6 +56,9 @@ class Vendor extends Model
         'scope_approved_at',
         // TPRM assignment + division-scoped visibility (mirrors RoPA).
         'assign_group',
+        // Lihat catatan yang sama di Ropa: diisi server saat membuat, dibuang
+        // dari tiap payload perubahan.
+        'origin_division',
         'assignees',
         // Daur hidup pihak ketiga: onboarding → aktif → offboarding.
         'lifecycle_status',

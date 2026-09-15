@@ -2,6 +2,7 @@
 
 namespace App\Services\ModuleWrite;
 
+use App\Models\User;
 use Illuminate\Http\Request;
 
 /**
@@ -19,9 +20,13 @@ use Illuminate\Http\Request;
  */
 final class ModuleWriteContext
 {
+    /**
+     * @param  User|null  $actor  pelakunya sebagai objek, bila memang ada orangnya
+     */
     public function __construct(
         public readonly string $orgId,
         public readonly ?string $actorUserId = null,
+        public readonly ?User $actor = null,
     ) {}
 
     /**
@@ -38,12 +43,24 @@ final class ModuleWriteContext
             ? (string) $request->input('org_id')
             : (string) $user->org_id;
 
-        return new self($orgId, $user->id);
+        // Objek penggunanya ikut dibawa, bukan cuma id-nya. Penugasan divisi
+        // otomatis butuh relasi `department` dan `tenantRole` orang itu; kalau
+        // yang tersedia hanya id, tiap penulisan harus memuat ulang ketiganya.
+        return new self($orgId, $user->id, $user);
     }
 
     /** Konteks untuk kunci API mitra — tanpa pengguna, tetap terikat organisasi kuncinya. */
     public static function forApiKey(string $orgId): self
     {
-        return new self($orgId, null);
+        return new self($orgId, null, null);
+    }
+
+    /**
+     * Konteks untuk pelaku yang sudah berupa objek — agen AI, pekerjaan antrean,
+     * dan jalur lain yang tidak punya request.
+     */
+    public static function forUser(string $orgId, ?User $actor): self
+    {
+        return new self($orgId, $actor?->id, $actor);
     }
 }

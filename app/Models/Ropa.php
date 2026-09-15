@@ -75,6 +75,11 @@ class Ropa extends Model
         'org_id', 'regulation_code', 'category_id', 'custom_number', 'registration_number',
         'processing_activity', 'entity', 'division',
         'work_unit', 'description', 'kategori_pemrosesan', 'assign_group', 'assignees',
+        // Diisi SERVER saat membuat (PenugasanDivisi::saatBuat) dan dibuang dari
+        // tiap payload perubahan (PenugasanDivisi::saatUbah). Ia harus ada di
+        // sini karena jalur create memakai mass-assignment; yang menjaganya
+        // bukan daftar ini, melainkan pembuangan di jalur ubah.
+        'origin_division',
         'risk_level', 'risk_level_locked', 'status', 'purpose', 'legal_basis', 'legal_basis_detail', 'data_categories', 'data_subjects',
         'recipients', 'retention_period', 'retention_due_date', 'security_measures',
         'wizard_data', 'raci_matrix', 'progress',

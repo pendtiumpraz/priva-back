@@ -12,6 +12,7 @@ use App\Services\AssessmentAutoTriggerService;
 use App\Services\NotificationService;
 use App\Services\RegistrationCodeService;
 use App\Services\RopaRiskCalculator;
+use App\Support\PenugasanDivisi;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Log;
@@ -61,6 +62,12 @@ class RopaDpiaWriter
         $data['org_id'] = $ctx->orgId;
         $data['created_by'] = $ctx->actorUserId;
 
+        // Divisi pembuatnya dikunci ke penugasan record ini. Tanpa ini
+        // `assign_group` jatuh ke NULL, yang di AssignmentScope berarti
+        // "(All Group)" — record baru buatan staf HR jadi terbaca seluruh
+        // tenant, kebalikan dari maksud penyaringan divisi.
+        $data = PenugasanDivisi::saatBuat($data, $ctx->actor);
+
         $data = $this->prepare($module, $data, $model, $ctx);
         $record = $this->insertWithCodeRetry($module, $model, $data, $ctx);
 
@@ -100,6 +107,11 @@ class RopaDpiaWriter
     public function update(string $module, $record, array $payload, ModuleWriteContext $ctx): array
     {
         $this->guardEditLocks($module, $payload, $record);
+
+        // Divisi asal tidak boleh dilepas dari penugasan. Dibaca dari RECORD-nya
+        // — bukan dari divisi orang yang sedang mengubah — karena kuncinya milik
+        // record itu, bukan milik siapa pun yang kebetulan menyuntingnya.
+        $payload = PenugasanDivisi::saatUbah($payload, $record->origin_division ?? null);
 
         $oldWizard = $record->wizard_data ?? [];
         $newWizard = $payload['wizard_data'] ?? [];

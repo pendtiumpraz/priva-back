@@ -21,6 +21,9 @@ class Dpia extends Model
         'description', 'risk_assessment', 'mitigation_measures',
         'mitigation_tracking',
         'assign_group', 'assignees',
+        // Lihat catatan yang sama di Ropa: diisi server saat membuat, dibuang
+        // dari tiap payload perubahan.
+        'origin_division',
         'wizard_data', 'raci_matrix', 'progress',
         'approver_id', 'approved_at', 'created_by',
         'assigned_roles',
