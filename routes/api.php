@@ -110,6 +110,7 @@ use App\Http\Controllers\Api\Root\QaCenterController;
 use App\Http\Controllers\Api\RootDashboardController;
 use App\Http\Controllers\Api\RopaApprovalController;
 use App\Http\Controllers\Api\RopaCsvImportController;
+use App\Http\Controllers\Api\RopaDariSumberController;
 use App\Http\Controllers\Api\RopaGraphController;
 use App\Http\Controllers\Api\RopaLinkController;
 use App\Http\Controllers\Api\RopaPihakKetigaPublikController;
@@ -954,6 +955,11 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::post('/{id}/tinjau', [VendorRopaController::class, 'review'])->middleware('permission:vendor_risk,write');
         Route::put('/{id}/ropa', [VendorRopaController::class, 'linkRopas'])->middleware('permission:vendor_risk,write');
     });
+
+    // Membuat RoPA draf dari modul lain yang belum tertaut ke RoPA mana pun
+    // (laporan pihak ketiga, titik pengumpulan persetujuan). Izinnya `ropa,write`
+    // karena yang dibuat memang sebuah RoPA — modul sumbernya hanya dibaca.
+    Route::post('/ropa/dari-sumber', [RopaDariSumberController::class, 'store'])->middleware('permission:ropa,write');
 
     Route::prefix('vendor-risk')->group(function () {
         // Phase 2 — Deterministic questionnaire endpoints. Must precede /{id}.
