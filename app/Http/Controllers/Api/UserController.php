@@ -233,8 +233,13 @@ class UserController extends Controller
 
             $adminRole = TenantRole::create(['org_id' => $org->id, 'name' => 'Admin', 'is_system' => true, 'description' => 'Administrator dengan full akses', 'permissions' => ['*']]);
             TenantRole::create(['org_id' => $org->id, 'name' => 'DPO', 'is_system' => true, 'description' => 'Data Protection Officer', 'permissions' => $allWrite]);
-            TenantRole::create(['org_id' => $org->id, 'name' => 'Maker', 'is_system' => true, 'description' => 'User operasional', 'permissions' => array_filter($allWrite, fn ($p) => ! str_contains($p, 'users') && ! str_contains($p, 'settings'))]);
-            TenantRole::create(['org_id' => $org->id, 'name' => 'Viewer', 'is_system' => true, 'description' => 'Akses read-only', 'permissions' => $allRead]);
+            // `maturity` dikecualikan dari Maker & Viewer — bawaannya milik DPO
+            // dan admin tenant. Aturan yang sama ditulis di TenantRoleSeeder;
+            // keduanya HARUS sepakat, karena organisasi bisa lahir dari mana
+            // pun di antara keduanya.
+            $tanpaMaturity = fn ($p) => ! str_starts_with($p, 'maturity');
+            TenantRole::create(['org_id' => $org->id, 'name' => 'Maker', 'is_system' => true, 'description' => 'User operasional', 'permissions' => array_values(array_filter($allWrite, fn ($p) => ! str_contains($p, 'users') && ! str_contains($p, 'settings') && $tanpaMaturity($p)))]);
+            TenantRole::create(['org_id' => $org->id, 'name' => 'Viewer', 'is_system' => true, 'description' => 'Akses read-only', 'permissions' => array_values(array_filter($allRead, $tanpaMaturity))]);
 
             $validated['tenant_role_id'] = $adminRole->id;
         } elseif (! in_array($auth->role, ['root', 'superadmin'], true) && empty($validated['org_id'])) {

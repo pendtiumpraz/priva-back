@@ -48,12 +48,12 @@ use App\Http\Controllers\Api\DiscoveryChangelogController;
 use App\Http\Controllers\Api\DiscoveryProbeController;
 use App\Http\Controllers\Api\DocumentImportController;
 use App\Http\Controllers\Api\DocumentMakerController;
-use App\Http\Controllers\Api\DpoScopeController;
 use App\Http\Controllers\Api\DocumentTemplateController;
 use App\Http\Controllers\Api\DpiaAssessmentFrameworkController;
 use App\Http\Controllers\Api\DpiaRiskEventTemplateController;
 use App\Http\Controllers\Api\DpiaRtpController;
 use App\Http\Controllers\Api\DpiaThirdPartyController;
+use App\Http\Controllers\Api\DpoScopeController;
 use App\Http\Controllers\Api\DsrAppController;
 use App\Http\Controllers\Api\DsrAutomatedDecisionController;
 use App\Http\Controllers\Api\DsrChannelController;
@@ -1902,11 +1902,19 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     // 3 input methods (questionnaire / document / auto_derive). No
     // formal approval — status flow draft → submitted → published.
     // =============================================
-    Route::prefix('maturity')->group(function () {
+    // Maturity Level Assessment — sebelumnya grup ini TIDAK punya gerbang izin
+    // sama sekali, sehingga setiap pengguna yang login bisa membuka dan
+    // mengisinya; modul paling terbuka di seluruh aplikasi. Gerbangnya kini
+    // sama dengan modul lain: izin `maturity` menentukan akses, dan izin itu
+    // dicabut dari role Maker & Viewer bawaan (lihat migrasi
+    // 2026_09_15_000004) sehingga bawaannya DPO + admin tenant saja. Admin
+    // tenant tetap dapat memberikannya ke orang tertentu — bukti maturity
+    // lazimnya diunggah tim IT/keamanan di bawah supervisi DPO.
+    Route::prefix('maturity')->middleware('permission:maturity,read')->group(function () {
         Route::get('/questions', [MaturityController::class, 'questions']);
         // Factory reset: hapus SEMUA override default + SEMUA custom
         // questions org. MUST precede /{id} wildcards.
-        Route::post('/questions/factory-reset', [MaturityController::class, 'factoryResetQuestions']);
+        Route::post('/questions/factory-reset', [MaturityController::class, 'factoryResetQuestions'])->middleware('permission:maturity,write');
         Route::get('/trend', [MaturityController::class, 'trend']);
 
         // Kelola Pertanyaan (mirror GAP): custom questions full CRUD +
@@ -1914,28 +1922,28 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         // MUST precede /{id} or Laravel routes GET /maturity/custom-questions
         // ke show($id='custom-questions') → 404.
         Route::get('/custom-questions', [MaturityController::class, 'customQuestions']);
-        Route::post('/custom-questions', [MaturityController::class, 'storeCustomQuestion']);
-        Route::put('/custom-questions/{id}', [MaturityController::class, 'updateCustomQuestion']);
-        Route::delete('/custom-questions/{id}', [MaturityController::class, 'destroyCustomQuestion']);
-        Route::put('/default-questions/{questionCode}', [MaturityController::class, 'updateDefaultQuestion']);
-        Route::post('/default-questions/{questionCode}/reset', [MaturityController::class, 'resetDefaultQuestion']);
+        Route::post('/custom-questions', [MaturityController::class, 'storeCustomQuestion'])->middleware('permission:maturity,write');
+        Route::put('/custom-questions/{id}', [MaturityController::class, 'updateCustomQuestion'])->middleware('permission:maturity,write');
+        Route::delete('/custom-questions/{id}', [MaturityController::class, 'destroyCustomQuestion'])->middleware('permission:maturity,write');
+        Route::put('/default-questions/{questionCode}', [MaturityController::class, 'updateDefaultQuestion'])->middleware('permission:maturity,write');
+        Route::post('/default-questions/{questionCode}/reset', [MaturityController::class, 'resetDefaultQuestion'])->middleware('permission:maturity,write');
 
         Route::get('/', [MaturityController::class, 'index']);
-        Route::post('/', [MaturityController::class, 'store']);
+        Route::post('/', [MaturityController::class, 'store'])->middleware('permission:maturity,write');
         Route::get('/{id}', [MaturityController::class, 'show']);
-        Route::delete('/{id}', [MaturityController::class, 'destroy']);
-        Route::post('/{id}/restore', [MaturityController::class, 'restore']);
-        Route::delete('/{id}/force', [MaturityController::class, 'forceDelete']);
+        Route::delete('/{id}', [MaturityController::class, 'destroy'])->middleware('permission:maturity,write');
+        Route::post('/{id}/restore', [MaturityController::class, 'restore'])->middleware('permission:maturity,write');
+        Route::delete('/{id}/force', [MaturityController::class, 'forceDelete'])->middleware('permission:maturity,write');
 
-        Route::post('/{id}/responses', [MaturityController::class, 'upsertResponse']);
-        Route::post('/{id}/responses/bulk', [MaturityController::class, 'bulkUpsertResponses']);
-        Route::post('/{id}/auto-derive', [MaturityController::class, 'autoDerive']);
+        Route::post('/{id}/responses', [MaturityController::class, 'upsertResponse'])->middleware('permission:maturity,write');
+        Route::post('/{id}/responses/bulk', [MaturityController::class, 'bulkUpsertResponses'])->middleware('permission:maturity,write');
+        Route::post('/{id}/auto-derive', [MaturityController::class, 'autoDerive'])->middleware('permission:maturity,write');
         // Per-question evidence upload + AI document analysis (parity dgn GAP)
-        Route::post('/{id}/upload-evidence', [MaturityController::class, 'uploadEvidence']);
-        Route::post('/{id}/analyze-evidence', [MaturityController::class, 'analyzeEvidence']);
-        Route::post('/{id}/analyze-evidence-bulk', [MaturityController::class, 'bulkAnalyzeEvidence']);
-        Route::post('/{id}/submit', [MaturityController::class, 'submit']);
-        Route::post('/{id}/publish', [MaturityController::class, 'publish']);
+        Route::post('/{id}/upload-evidence', [MaturityController::class, 'uploadEvidence'])->middleware('permission:maturity,write');
+        Route::post('/{id}/analyze-evidence', [MaturityController::class, 'analyzeEvidence'])->middleware('permission:maturity,write');
+        Route::post('/{id}/analyze-evidence-bulk', [MaturityController::class, 'bulkAnalyzeEvidence'])->middleware('permission:maturity,write');
+        Route::post('/{id}/submit', [MaturityController::class, 'submit'])->middleware('permission:maturity,write');
+        Route::post('/{id}/publish', [MaturityController::class, 'publish'])->middleware('permission:maturity,write');
         Route::get('/{id}/recommendations', [MaturityController::class, 'recommendations']);
         Route::get('/{id}/export.pdf', [MaturityController::class, 'exportPdf']); // Sprint X4
     });

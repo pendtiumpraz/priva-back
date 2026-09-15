@@ -22,8 +22,13 @@ class TenantRoleSeeder extends Seeder
             $allWrite[] = "$mod:read";
             $allWrite[] = "$mod:write";
         }
+        // Viewer membaca semua modul KECUALI maturity — alasannya sama dengan
+        // yang dicatat di $makerPerms.
         $allRead = [];
         foreach ($allModules as $mod) {
+            if ($mod === 'maturity') {
+                continue;
+            }
             $allRead[] = "$mod:read";
         }
 
@@ -41,7 +46,11 @@ class TenantRoleSeeder extends Seeder
             'dpia:read', 'dpia:write',
             'lia:read', 'lia:write',
             'tia:read', 'tia:write',
-            'maturity:read', 'maturity:write',
+            // `maturity` SENGAJA TIDAK ADA di sini. Penilaian tingkat kematangan
+            // adalah penilaian menyeluruh atas program privasi organisasi —
+            // bawaannya milik DPO dan admin tenant. Admin tetap dapat
+            // memberikannya ke orang tertentu (bukti maturity lazimnya diunggah
+            // tim IT/keamanan), tapi itu keputusan sadar, bukan bawaan.
             'ppdp:read', 'ppdp:write',
             'data_discovery:read', 'data_discovery:write',
             'contract_review:read', 'contract_review:write',

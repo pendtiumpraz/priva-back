@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Casts\EncryptedString;
+use App\Models\Concerns\AssignmentVisibility;
 use App\Models\Concerns\BelongsToOrg;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class DsrRequest extends Model
 {
-    use BelongsToOrg, HasUuids, SoftDeletes;
+    use AssignmentVisibility, BelongsToOrg, HasUuids, SoftDeletes;
 
     protected $fillable = [
         'org_id', 'app_id', 'request_id', 'request_type', 'requester_name', 'requester_email',
@@ -19,7 +20,11 @@ class DsrRequest extends Model
         'verification_method', 'verified_at',
         'response', 'rejection_reason',
         'deadline_at', 'responded_at', 'closed_at', 'closed_reason',
+        // `assigned_to` = SATU penanggung jawab, dipakai rute notifikasi.
+        // `assign_group`/`assignees` = keterlihatan per divisi — beda hal,
+        // sengaja tidak digabung.
         'assigned_to', 'created_by',
+        'assign_group', 'assignees', 'origin_division',
         'nda_signed_at', 'nda_signed_doc_id',
         'subject_certificate_doc_id', 'internal_certificate_doc_id',
         'completion_certificate_doc_id',
@@ -33,6 +38,7 @@ class DsrRequest extends Model
         'verified_at' => 'datetime',
         'nda_signed_at' => 'datetime',
         'subject_data' => 'array',
+        'assignees' => 'array',
         // PII Encryption — AES-256-CBC
         'requester_name' => EncryptedString::class,
         'requester_email' => EncryptedString::class,

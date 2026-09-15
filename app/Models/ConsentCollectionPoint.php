@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Casts\EncryptedString;
+use App\Models\Concerns\AssignmentVisibility;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -11,11 +12,12 @@ use Illuminate\Support\Str;
 
 class ConsentCollectionPoint extends Model
 {
-    use HasUuids, SoftDeletes;
+    use AssignmentVisibility, HasUuids, SoftDeletes;
 
     protected $fillable = [
         'org_id', 'collection_id', 'name', 'kind', 'domain', 'redirect_url',
         'settings', 'webhook_url', 'created_by',
+        'assign_group', 'assignees', 'origin_division',
         'embed_token', 'client_key', 'server_key', 'auth_methods', 'allowed_domains',
         'display_mode', 'display_frequency', 'audience', 'locale',
         'captcha_provider', 'captcha_site_key', 'captcha_secret',
@@ -30,6 +32,7 @@ class ConsentCollectionPoint extends Model
 
     protected $casts = [
         'settings' => 'array',
+        'assignees' => 'array',
         'auth_methods' => 'array',
         'allowed_domains' => 'array',
         'api_keys_last_rotated_at' => 'datetime',

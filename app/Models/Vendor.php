@@ -10,6 +10,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * Kolomnya baru (migrasi 2026_09_15_000002) dan belum dikenal analisis statis
+ * dari skema — dinyatakan di sini supaya pembacaannya tidak ditandai properti
+ * tak terdefinisi. Lihat PenugasanDivisi untuk artinya.
+ *
+ * @property string|null $origin_division
+ */
 class Vendor extends Model
 {
     use HasFactory, HasUuids, SoftDeletes;

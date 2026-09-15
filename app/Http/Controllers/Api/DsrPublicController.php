@@ -149,6 +149,13 @@ class DsrPublicController extends Controller
             'verification_method' => 'email_otp',
             'deadline_at' => now()->addHours(72),
             'assigned_to' => $app->default_assignee_user_id,
+            // Divisi bawaan aplikasi DSR — permohonan dari portal HR jatuh ke
+            // HR. KOSONG bila aplikasinya belum dipetakan, dan itu memang
+            // disengaja: permohonan lalu terlihat semua orang sampai ada yang
+            // men-triase. DSR punya tenggat 3x24 jam; permohonan yang
+            // tersembunyi karena salah konfigurasi jauh lebih mahal daripada
+            // permohonan yang terlihat terlalu banyak orang.
+            'assign_group' => $app->default_division,
         ]);
 
         AuditLog::create([

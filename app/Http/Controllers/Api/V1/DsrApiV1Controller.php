@@ -61,7 +61,9 @@ class DsrApiV1Controller extends Controller
             ->with(['scopes', 'executions'])
             ->first();
 
-        if (!$dsr) return response()->json(['error' => 'DSR not found'], 404);
+        if (! $dsr) {
+            return response()->json(['error' => 'DSR not found'], 404);
+        }
 
         return response()->json([
             'request_id' => $dsr->request_id,
@@ -87,10 +89,12 @@ class DsrApiV1Controller extends Controller
     private function createDsr(Request $request, bool $autoVerify): mixed
     {
         $app = $request->dsrApp;
-        if (!$app) return response()->json(['error' => 'App context not resolved'], 500);
+        if (! $app) {
+            return response()->json(['error' => 'App context not resolved'], 500);
+        }
 
         $rules = [
-            'request_type' => 'required|in:' . implode(',', DsrRequest::REQUEST_TYPES),
+            'request_type' => 'required|in:'.implode(',', DsrRequest::REQUEST_TYPES),
             'requester_name' => 'required|string|max:200',
             'requester_email' => 'required|email|max:200',
             'requester_phone' => 'nullable|string|max:20',
@@ -146,11 +150,14 @@ class DsrApiV1Controller extends Controller
             'verification_token' => $verificationToken,
             'verification_expires_at' => $autoVerify ? null : $now->copy()->addHours(24),
             'verification_method' => $autoVerify
-                ? ('partner_api:' . ($data['verified_via'] ?? 'unknown'))
+                ? ('partner_api:'.($data['verified_via'] ?? 'unknown'))
                 : 'email_otp',
             'verified_at' => $autoVerify ? $now : null,
             'deadline_at' => $now->copy()->addHours(72),
             'assigned_to' => $app->default_assignee_user_id,
+            // Lihat catatan yang sama di DsrPublicController: kosong berarti
+            // terlihat semua orang sampai ditriase, bukan tersembunyi.
+            'assign_group' => $app->default_division,
         ]);
 
         // Auto-seed scopes from app defaults
@@ -175,13 +182,13 @@ class DsrApiV1Controller extends Controller
         // Verification email — only when not autoVerify
         $emailDispatched = false;
         $verifyUrl = null;
-        if (!$autoVerify && $verificationToken) {
+        if (! $autoVerify && $verificationToken) {
             $verifyUrl = url("/public/dsr/verify/{$verificationToken}");
             try {
                 Mail::to($dsr->requester_email)->queue(new DsrVerificationMail($dsr, $verifyUrl, $app));
                 $emailDispatched = true;
             } catch (\Throwable $e) {
-                Log::warning("DSR API submit mail failed for {$dsr->request_id}: " . $e->getMessage());
+                Log::warning("DSR API submit mail failed for {$dsr->request_id}: ".$e->getMessage());
             }
         }
 
@@ -194,18 +201,20 @@ class DsrApiV1Controller extends Controller
             'request_id' => $dsr->request_id,
             'status' => $dsr->status,
             'verification_status' => $dsr->verification_status,
-            'verification_required' => !$autoVerify,
+            'verification_required' => ! $autoVerify,
             'email_dispatched' => $autoVerify ? null : $emailDispatched,
             'verify_url' => $verifyUrl, // null kalau preverified
             'deadline_at' => $dsr->deadline_at?->toIso8601String(),
-        ], fn($v) => $v !== null), 201);
+        ], fn ($v) => $v !== null), 201);
     }
 
     private function seedScopesFromApp(DsrRequest $dsr, DsrApp $app): void
     {
         try {
             $defaultIds = $app->default_information_system_ids ?? [];
-            if (empty($defaultIds)) return;
+            if (empty($defaultIds)) {
+                return;
+            }
             $validIs = InformationSystem::whereIn('id', $defaultIds)
                 ->where('org_id', $app->org_id)
                 ->get(['id', 'is_sharded', 'shards']);
@@ -215,13 +224,13 @@ class DsrApiV1Controller extends Controller
                     'information_system_id' => $is->id,
                     'request_types' => [$dsr->request_type],
                     'shards_affected' => $is->is_sharded
-                        ? collect($is->shards ?? [])->map(fn($s) => is_array($s) ? ($s['name'] ?? null) : $s)->filter()->values()->all()
+                        ? collect($is->shards ?? [])->map(fn ($s) => is_array($s) ? ($s['name'] ?? null) : $s)->filter()->values()->all()
                         : [],
                     'sql_pack_status' => 'pending',
                 ]);
             }
         } catch (\Throwable $e) {
-            Log::warning("Auto-seed scope failed for DSR {$dsr->request_id}: " . $e->getMessage());
+            Log::warning("Auto-seed scope failed for DSR {$dsr->request_id}: ".$e->getMessage());
         }
     }
 }

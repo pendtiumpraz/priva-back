@@ -27,12 +27,29 @@ use App\Services\PermissionService;
 use App\Services\RegistrationCodeService;
 use App\Support\BreachScope;
 use App\Support\InformationSystemScope;
+use App\Support\PenugasanDivisi;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
 class ModuleCrudController extends Controller
 {
+    /**
+     * Modul yang punya kolom penugasan sendiri (`assign_group`, `assignees`,
+     * `origin_division`) dan karena itu memakai trait AssignmentVisibility apa
+     * adanya.
+     *
+     * Dipakai DUA arah dan harus tetap sama: menyaring bacaan
+     * (applyRopaUserScope) DAN memasang divisi pembuat saat membuat (store).
+     * Memisahkan kedua daftar itu berarti ada modul yang tersaring tapi tidak
+     * pernah ditugaskan — atau sebaliknya.
+     *
+     * `breach` dan `data-discovery` TIDAK di sini: divisinya diturunkan dari
+     * baris yang ditautkannya, bukan kolom sendiri (lihat BreachScope dan
+     * InformationSystemScope).
+     */
+    private const MODUL_BERPENUGASAN = ['ropa', 'dpia', 'dsr', 'consent'];
+
     /**
      * Map URL slug to permission module ID.
      */
@@ -185,10 +202,10 @@ class ModuleCrudController extends Controller
             return;
         }
 
-        // RoPA & DPIA punya kolom penugasannya sendiri. Logikanya tinggal di
+        // Modul yang punya kolom penugasannya sendiri. Logikanya tinggal di
         // trait AssignmentVisibility (scopeVisibleTo) supaya SATU sumber
         // kebenaran dipakai juga oleh AI Agent + @mention.
-        if (in_array($module, ['ropa', 'dpia'], true)) {
+        if (in_array($module, self::MODUL_BERPENUGASAN, true)) {
             $query->visibleTo($user);
 
             return;
@@ -199,9 +216,6 @@ class ModuleCrudController extends Controller
         // bisa dinyatakan lewat scopeVisibleTo atas kolom sendiri, jadi
         // klausanya ditempel langsung ke query builder di bawahnya.
         //
-        // DSR dan consent memang belum punya induk apa pun untuk diturunkan,
-        // jadi keduanya tetap se-tenant — itu keterbatasan yang diketahui,
-        // bukan kelalaian di sini.
         $orgId = (string) $user->org_id;
 
         match ($module) {
@@ -484,6 +498,14 @@ class ModuleCrudController extends Controller
             }
 
             $data['created_by'] = $request->user()->id;
+
+            // Divisi pembuat dikunci ke penugasan — hanya untuk modul yang
+            // memang punya kolomnya. RoPA & DPIA tidak sampai ke sini
+            // (dikerjakan RopaDpiaWriter); yang tersisa dari daftar itu adalah
+            // DSR dan consent.
+            if (in_array($module, self::MODUL_BERPENUGASAN, true)) {
+                $data = PenugasanDivisi::saatBuat($data, $request->user());
+            }
 
             // Ensure boolean fields are properly cast
             if ($module === 'breach') {
@@ -855,6 +877,15 @@ class ModuleCrudController extends Controller
         $oldStatus = $record->status;
         $oldAssignees = $record->assignees ?? [];
         $payload = $request->all();
+
+        // Divisi asal tidak boleh dilepas — dibaca dari RECORD, bukan dari
+        // divisi orang yang sedang mengubah. Sekaligus membuang
+        // `origin_division` dari payload, sehingga kuncinya tidak bisa
+        // dipindahkan lewat satu baris kiriman.
+        if (in_array($module, self::MODUL_BERPENUGASAN, true)) {
+            $payload = PenugasanDivisi::saatUbah($payload, $record->origin_division ?? null);
+        }
+
         if ($module === 'breach') {
             $payload = $this->normalizeBreachRopaLinks($payload);
             $payload = $this->normalizeBreachVendorLinks($payload);

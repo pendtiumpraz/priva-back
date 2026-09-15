@@ -15,13 +15,13 @@ use Illuminate\Support\Str;
  */
 class DsrApp extends Model
 {
-    use HasUuids, SoftDeletes, BelongsToOrg;
+    use BelongsToOrg, HasUuids, SoftDeletes;
 
     protected $fillable = [
         'org_id', 'name', 'app_code', 'description', 'embed_token',
         'client_key', 'server_key', 'auth_methods', 'api_keys_last_rotated_at',
         'allowed_domains', 'default_information_system_ids',
-        'default_assignee_user_id', 'webhook_url', 'branding',
+        'default_assignee_user_id', 'default_division', 'webhook_url', 'branding',
         'requires_nda_for_access', 'nda_template_doc_id', 'nda_signing_method',
         'captcha_provider', 'captcha_site_key', 'captcha_secret',
         'locale',
