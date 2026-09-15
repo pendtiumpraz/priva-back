@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\ConsentCollectionPoint;
 use App\Models\ConsentItem;
+use App\Models\CrossBorderTransfer;
 use App\Models\Organization;
 use App\Models\Ropa;
 use App\Models\TenantRole;
@@ -187,6 +188,61 @@ class RopaDariSumberTest extends TestCase
         $this->assertSame('draft', $ropa->status);
 
         $this->assertSame($ropa->id, $titik->fresh()->settings['linked_ropa_id']);
+    }
+
+    public function test_ropa_diturunkan_dari_transfer_lintas_negara(): void
+    {
+        $cb = CrossBorderTransfer::create([
+            'org_id' => $this->org->id,
+            'destination_country' => 'Singapura',
+            'destination_entity' => 'Mailchimp Pte Ltd',
+            'transfer_purpose' => 'Pengiriman email pemasaran',
+            'legal_basis' => 'Persetujuan',
+            'data_categories' => ['Email', 'Nama'],
+            'safeguards' => ['SCC', 'Enkripsi in-transit'],
+            'retention_period_days' => 365,
+        ]);
+
+        $res = $this->postJson('/api/ropa/dari-sumber', [
+            'sumber' => 'cross_border',
+            'id' => $cb->id,
+        ])->assertStatus(201);
+
+        $ropa = Ropa::find($res->json('data.id'));
+
+        // "Ke mana" adalah bagian dari identitas kegiatan transfer, jadi negara
+        // tujuannya masuk ke nama kegiatan — bukan hanya deskripsi.
+        $this->assertStringContainsString('Mailchimp Pte Ltd', $ropa->processing_activity);
+        $this->assertStringContainsString('Singapura', $ropa->processing_activity);
+
+        $this->assertSame('Pengiriman email pemasaran', $ropa->purpose);
+        $this->assertSame('Persetujuan', $ropa->legal_basis);
+        $this->assertSame(['Email', 'Nama'], $ropa->data_categories);
+        $this->assertSame(['Mailchimp Pte Ltd'], $ropa->recipients);
+        $this->assertSame('SCC, Enkripsi in-transit', $ropa->security_measures);
+
+        // Satuannya WAJIB ikut: "365" tanpa satuan bisa terbaca bulan atau tahun.
+        $this->assertSame('365 hari', $ropa->retention_period);
+
+        $this->assertSame('draft', $ropa->status);
+        $this->assertSame($ropa->id, $cb->fresh()->linked_ropa_id);
+    }
+
+    public function test_transfer_yang_sudah_tertaut_ditolak(): void
+    {
+        $cb = CrossBorderTransfer::create([
+            'org_id' => $this->org->id,
+            'destination_country' => 'Singapura',
+            'destination_entity' => 'Mailchimp Pte Ltd',
+            'transfer_purpose' => 'Pengiriman email pemasaran',
+        ]);
+
+        $this->postJson('/api/ropa/dari-sumber', ['sumber' => 'cross_border', 'id' => $cb->id])
+            ->assertStatus(201);
+        $this->postJson('/api/ropa/dari-sumber', ['sumber' => 'cross_border', 'id' => $cb->id])
+            ->assertStatus(409);
+
+        $this->assertSame(1, Ropa::where('org_id', $this->org->id)->count());
     }
 
     public function test_sumber_tenant_lain_tidak_bisa_disisipkan(): void

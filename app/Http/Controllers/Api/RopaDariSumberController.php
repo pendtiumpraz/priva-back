@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\ConsentCollectionPoint;
+use App\Models\CrossBorderTransfer;
 use App\Models\Ropa;
 use App\Models\VendorRopa;
 use App\Services\RegistrationCodeService;
@@ -51,7 +52,7 @@ class RopaDariSumberController extends Controller
     public function __construct(private RegistrationCodeService $codes) {}
 
     /** Sumber yang sudah punya aturan penurunannya. */
-    private const SUMBER = ['vendor_ropa', 'consent'];
+    private const SUMBER = ['vendor_ropa', 'consent', 'cross_border'];
 
     public function store(Request $request)
     {
@@ -66,6 +67,7 @@ class RopaDariSumberController extends Controller
         [$isi, $tautkan, $sumberLabel] = match ((string) $data['sumber']) {
             'vendor_ropa' => $this->dariVendorRopa($orgId, (string) $data['id']),
             'consent' => $this->dariConsent($orgId, (string) $data['id']),
+            'cross_border' => $this->dariCrossBorder($orgId, (string) $data['id']),
             // Tidak terjangkau lewat validasi di atas, tetapi ditulis supaya
             // menambah satu sumber tanpa aturan penurunannya gagal keras di sini,
             // bukan diam-diam membuat RoPA kosong.
@@ -181,6 +183,58 @@ class RopaDariSumberController extends Controller
             $titik->settings = array_merge($settings, ['linked_ropa_id' => $ropa->id]);
             $titik->save();
         }, $titik->name];
+    }
+
+    /**
+     * Transfer data ke luar negeri.
+     *
+     * Kesenjangan di sini yang paling tajam dari ketiganya: mengirim data
+     * pribadi ke luar wilayah Indonesia untuk kegiatan yang tidak pernah
+     * didaftarkan di register sendiri. Transfernya tahu TUJUANnya
+     * (`transfer_purpose` wajib diisi saat dibuat) dan dasar hukumnya, jadi RoPA
+     * yang lahir dari sini tidak kosong di dua field penentunya.
+     *
+     * Negara tujuan sengaja masuk ke nama kegiatannya, bukan cuma deskripsi —
+     * "ke mana" adalah bagian dari identitas kegiatan transfer, dan itu yang
+     * dicari orang saat menyisir register.
+     *
+     * @return array{0: array<string,mixed>, 1: callable, 2: string}
+     */
+    private function dariCrossBorder(string $orgId, string $id): array
+    {
+        $cb = CrossBorderTransfer::where('org_id', $orgId)->findOrFail($id);
+
+        if (! empty($cb->linked_ropa_id)) {
+            abort(409, 'Transfer ini sudah tertaut ke RoPA.');
+        }
+
+        $penerima = $cb->destination_entity ?: 'penerima di luar negeri';
+        $negara = $cb->destination_country ?: 'luar negeri';
+
+        $isi = [
+            'processing_activity' => "Transfer data ke {$penerima} ({$negara})",
+            'purpose' => $cb->transfer_purpose,
+            'legal_basis' => $cb->legal_basis,
+            'data_categories' => $cb->data_categories ?? [],
+            'recipients' => [$penerima],
+            // `safeguards` larik, `ropas.security_measures` teks — bentuknya
+            // berlawanan, sama seperti di jalur laporan pihak ketiga.
+            'security_measures' => $cb->safeguards
+                ? implode(', ', $cb->safeguards)
+                : null,
+            // Retensinya tersimpan sebagai ANGKA HARI; `ropas.retention_period`
+            // kolom teks bebas. Satuannya ditulis supaya "365" tidak terbaca
+            // sebagai bulan atau tahun oleh siapa pun yang membacanya nanti.
+            'retention_period' => $cb->retention_period_days
+                ? $cb->retention_period_days.' hari'
+                : null,
+            'description' => "Dibuat dari catatan transfer lintas negara ke {$penerima} di {$negara}.",
+        ];
+
+        return [$isi, function (Ropa $ropa) use ($cb) {
+            $cb->linked_ropa_id = $ropa->id;
+            $cb->save();
+        }, $penerima];
     }
 
     private function catat(Request $request, Ropa $ropa, string $sumber, string $sumberId, string $label): void
