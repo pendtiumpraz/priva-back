@@ -75,6 +75,10 @@ class CrossBorderTransfer extends Model
         'retention_period_days',
         'recipient_dpo_name', 'recipient_dpo_email',
         'linked_ropa_id',
+        // Daftar penuh. `linked_ropa_id` tetap ada berisi tautan PERTAMA supaya
+        // pembaca lama tidak perlu diubah serentak — pola yang sama dipakai
+        // breach_incidents.
+        'linked_ropa_ids',
         // PP 33/2026 Pasal 162 & 169(2)
         'transfer_sector', 'storage_location', 'onward_transfer_allowed',
         'onward_transfer_detail', 'accountability_doc',
@@ -82,6 +86,7 @@ class CrossBorderTransfer extends Model
 
     protected $casts = [
         'data_categories' => 'array',
+        'linked_ropa_ids' => 'array',
         'safeguards' => 'array',
         'tia_answers' => 'array',
         'onward_transfer_allowed' => 'boolean',

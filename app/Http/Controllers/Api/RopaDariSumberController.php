@@ -204,7 +204,9 @@ class RopaDariSumberController extends Controller
     {
         $cb = CrossBorderTransfer::where('org_id', $orgId)->findOrFail($id);
 
-        if (! empty($cb->linked_ropa_id)) {
+        // Dicek dari DAFTARNYA, bukan kolom tunggalnya: sebuah transfer boleh
+        // punya banyak RoPA, dan yang tunggal hanya cerminan anggota pertama.
+        if (! empty($cb->linked_ropa_ids) || ! empty($cb->linked_ropa_id)) {
             abort(409, 'Transfer ini sudah tertaut ke RoPA.');
         }
 
@@ -232,7 +234,13 @@ class RopaDariSumberController extends Controller
         ];
 
         return [$isi, function (Ropa $ropa) use ($cb) {
-            $cb->linked_ropa_id = $ropa->id;
+            // Keduanya diisi: daftarnya sumber kebenaran, yang tunggal tetap
+            // dipakai pembaca lama. Membiarkannya berbeda akan membuat dua layar
+            // menampilkan tautan berbeda untuk transfer yang sama.
+            $daftar = $cb->linked_ropa_ids ?? [];
+            $daftar[] = $ropa->id;
+            $cb->linked_ropa_ids = array_values(array_unique($daftar));
+            $cb->linked_ropa_id = $cb->linked_ropa_ids[0];
             $cb->save();
         }, $penerima];
     }

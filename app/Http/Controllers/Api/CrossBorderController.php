@@ -46,6 +46,7 @@ class CrossBorderController extends Controller
     {
         $data = $request->validate($this->writeRules(false));
         $data = $this->applyLinkedVendor($request->user()->org_id, $data);
+        $data = $this->selaraskanTautanRopa($data);
 
         $transfer = CrossBorderTransfer::create(array_merge($data, [
             'org_id' => $request->user()->org_id,
@@ -95,6 +96,7 @@ class CrossBorderController extends Controller
         $oldStatus = $transfer->status;
         $data = $request->validate($this->writeRules(true));
         $data = $this->applyLinkedVendor($request->user()->org_id, $data);
+        $data = $this->selaraskanTautanRopa($data);
         $transfer->update($data);
 
         // Trigger Approval Workflow saat status → 'pending' (submit for approval).
@@ -360,6 +362,34 @@ class CrossBorderController extends Controller
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
+    /**
+     * Menjaga `linked_ropa_id` (lama) selalu sepakat dengan `linked_ropa_ids`.
+     *
+     * Satu transfer bisa melayani beberapa kegiatan pemrosesan, jadi daftarnya
+     * yang jadi sumber kebenaran. Tetapi kolom tunggalnya masih dibaca di
+     * beberapa tempat (tampilan rincian, ekspor, TIA), dan membiarkan keduanya
+     * berbeda akan membuat dua layar menampilkan tautan berbeda untuk transfer
+     * yang sama. Karena itu yang tunggal selalu diisi anggota PERTAMA daftarnya,
+     * dan ikut dikosongkan saat daftarnya dikosongkan.
+     *
+     * Pemanggil lama yang hanya mengirim `linked_ropa_id` tidak disentuh.
+     *
+     * @param  array<string,mixed>  $data
+     * @return array<string,mixed>
+     */
+    private function selaraskanTautanRopa(array $data): array
+    {
+        if (! array_key_exists('linked_ropa_ids', $data)) {
+            return $data;
+        }
+
+        $ids = array_values(array_unique(array_filter((array) $data['linked_ropa_ids'])));
+        $data['linked_ropa_ids'] = $ids;
+        $data['linked_ropa_id'] = $ids[0] ?? null;
+
+        return $data;
+    }
+
     private function applyLinkedVendor(string $orgId, array $data): array
     {
         if (empty($data['vendor_id'])) {
@@ -416,6 +446,11 @@ class CrossBorderController extends Controller
             'recipient_dpo_name' => "{$opt}|string|max:255",
             'recipient_dpo_email' => "{$opt}|email|max:255",
             'linked_ropa_id' => "{$opt}|uuid|exists:ropas,id",
+            // Daftar penuh tautan RoPA. `linked_ropa_id` tetap diterima dan tetap
+            // diisi (tautan pertama) supaya pembaca lama tidak patah — lihat
+            // sinkronisasinya di bawah.
+            'linked_ropa_ids' => "{$opt}|array|max:50",
+            'linked_ropa_ids.*' => 'uuid|exists:ropas,id',
 
             // PP 33/2026 Pasal 162 & 169(2)
             'transfer_sector' => "{$opt}|string|max:150",

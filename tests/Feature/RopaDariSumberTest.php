@@ -225,7 +225,12 @@ class RopaDariSumberTest extends TestCase
         $this->assertSame('365 hari', $ropa->retention_period);
 
         $this->assertSame('draft', $ropa->status);
-        $this->assertSame($ropa->id, $cb->fresh()->linked_ropa_id);
+
+        // Keduanya terisi dan sepakat: daftarnya sumber kebenaran, kolom
+        // tunggalnya cerminan anggota pertama untuk pembaca lama.
+        $segar = $cb->fresh();
+        $this->assertSame([$ropa->id], $segar->linked_ropa_ids);
+        $this->assertSame($ropa->id, $segar->linked_ropa_id);
     }
 
     public function test_transfer_yang_sudah_tertaut_ditolak(): void
