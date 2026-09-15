@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\AiJob;
 use App\Models\AuditLog;
+use App\Models\User;
 use App\Services\AiAgentToolExecutor;
 use App\Services\AiFieldMappingService;
 use App\Services\AiService;
@@ -145,7 +146,20 @@ class ProcessAiJob implements ShouldQueue
 
         // Re-instantiate the executor with the row's org_id rather than
         // relying on request state (workers have none).
-        $executor = app(AiAgentToolExecutor::class, ['orgId' => $job->org_id]);
+        //
+        // PEMILIK PEKERJAANNYA IKUT DIPASANG. Baris ini dulu hanya membawa
+        // org_id, sehingga saringan divisi di executor tidak pernah terpasang —
+        // tool call yang diantrekan membaca RoPA/DPIA/pihak ketiga dari SELURUH
+        // divisi, lebih luas daripada yang orangnya lihat di UI. Pekerjaannya
+        // dikerjakan ATAS NAMA seseorang (`$job->user_id`), jadi batas lihatnya
+        // harus batas orang itu juga.
+        //
+        // Kalau `user_id` kosong, executor melempar — dan itu memang yang
+        // diinginkan: pekerjaan gagal keras, bukan diam-diam melihat semuanya.
+        $pemilik = $job->user_id ? User::find($job->user_id) : null;
+
+        $executor = app(AiAgentToolExecutor::class, ['orgId' => $job->org_id])
+            ->actingAs($pemilik);
 
         // execute() returns [result, step_description] — both shapes are
         // useful so we wrap into a normalized array.

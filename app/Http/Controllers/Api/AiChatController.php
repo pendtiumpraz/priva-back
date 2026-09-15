@@ -310,7 +310,14 @@ PROMPT;
             // satu kali untuk dapat final text response.
             if (! empty($assistantMessage['tool_calls']) && $widgetTools !== null) {
                 $toolCalls = $assistantMessage['tool_calls'];
-                $executor = new AiAgentToolExecutor($user->org_id ?? '');
+                // `actingAs()` DULU TIDAK DIPANGGIL DI SINI, dan akibatnya tidak
+                // terlihat dari mana pun: saringan divisi di executor dipasang
+                // lewat `->when($actingUser, …)` yang gagal TERBUKA, sehingga AI
+                // Chat membaca RoPA/DPIA/pihak ketiga dari SELURUH divisi dalam
+                // tenant — lebih luas daripada yang user itu lihat di UI normal.
+                // Sekarang executornya melempar kalau ini terlupa lagi.
+                $executor = (new AiAgentToolExecutor($user->org_id ?? ''))
+                    ->actingAs($user);
 
                 // Append assistant message dengan tool_calls
                 $messages[] = $assistantMessage;

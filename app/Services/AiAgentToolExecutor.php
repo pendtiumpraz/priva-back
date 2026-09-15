@@ -15,8 +15,8 @@ use App\Models\DsrRequest;
 use App\Models\GapAssessment;
 use App\Models\InformationSystem;
 use App\Models\LeakDetection;
-use App\Models\License;
 use App\Models\LiaAssessment;
+use App\Models\License;
 use App\Models\MaturityAssessment;
 use App\Models\Organization;
 use App\Models\PostureFinding;
@@ -67,8 +67,13 @@ class AiAgentToolExecutor
     /**
      * User yang sedang menjalankan AI Agent. Dipakai untuk division/assignment
      * visibility scoping (RoPA/DPIA/pihak ketiga) — AI hanya boleh membaca
-     * record yang user-nya boleh lihat di UI normal. Null = tidak di-scope
-     * (mis. dipanggil dari konteks sistem tanpa user).
+     * record yang user-nya boleh lihat di UI normal.
+     *
+     * NULL BERARTI GAGAL, BUKAN "TANPA SARINGAN". Sebelumnya penyaringnya
+     * dipasang lewat `->when($this->actingUser, …)`, yang gagal TERBUKA: satu
+     * pemanggil yang lupa `actingAs()` membuat seluruh saringan divisi lenyap
+     * tanpa satu pun tanda — dan itu benar-benar terjadi di AiChatController.
+     * Lihat saringDivisi().
      */
     private ?User $actingUser = null;
 
@@ -87,6 +92,37 @@ class AiAgentToolExecutor
         $this->actingUser = $user;
 
         return $this;
+    }
+
+    /**
+     * Memasang saringan divisi/penugasan pada satu kueri.
+     *
+     * GAGAL TERTUTUP. Kalau pemanggilnya lupa `actingAs()`, ini melempar alih-alih
+     * mengembalikan kueri tanpa saringan. Bentuk lamanya —
+     * `->when($this->actingUser, …)` — melakukan kebalikannya: tanpa user,
+     * saringannya hilang diam-diam dan AI membaca seluruh tenant lintas divisi.
+     * Itu bukan kemungkinan teoretis; AiChatController memang membuat executor
+     * tanpa `actingAs()`, dan tidak ada apa pun yang menandainya.
+     *
+     * Aturan di dalamnya sendiri tidak diulang di sini — ia milik
+     * AssignmentScope, dan admin/DPO/superadmin (peran global maupun nama tenant
+     * role) melewatinya sehingga tetap melihat seluruh tenant lintas divisi.
+     *
+     * @template TQuery
+     *
+     * @param  TQuery  $query
+     * @return TQuery
+     */
+    private function saringDivisi($query)
+    {
+        if (! $this->actingUser) {
+            throw new \RuntimeException(
+                'AiAgentToolExecutor dijalankan tanpa actingAs(): saringan divisi tidak bisa dipasang. '
+                .'Panggil ->actingAs($user) saat membuat executor.'
+            );
+        }
+
+        return $query->visibleTo($this->actingUser);
     }
 
     /**
@@ -319,7 +355,7 @@ class AiAgentToolExecutor
      */
     private static function sanitizeForAi($data)
     {
-        return \App\Services\AiContentSanitizer::sanitizeForAi($data);
+        return AiContentSanitizer::sanitizeForAi($data);
     }
 
     /**
@@ -328,7 +364,7 @@ class AiAgentToolExecutor
      */
     private static function neutralizePromptInjection(string $text): string
     {
-        return \App\Services\AiContentSanitizer::neutralize($text);
+        return AiContentSanitizer::neutralize($text);
     }
 
     // =============================================
@@ -337,7 +373,7 @@ class AiAgentToolExecutor
     private function listRopa(array $args): array
     {
         $records = Ropa::where('org_id', $this->orgId)
-            ->when($this->actingUser, fn ($q) => $q->visibleTo($this->actingUser))
+            ->tap(fn ($q) => $this->saringDivisi($q))
             ->select('id', 'registration_number', 'processing_activity', 'status', 'risk_level', 'progress', 'created_at')
             ->orderBy('created_at', 'desc')->limit(20)->get();
 
@@ -347,7 +383,7 @@ class AiAgentToolExecutor
     private function getRopaDetail(array $args): array
     {
         $r = Ropa::where('org_id', $this->orgId)
-            ->when($this->actingUser, fn ($q) => $q->visibleTo($this->actingUser))
+            ->tap(fn ($q) => $this->saringDivisi($q))
             ->find($args['id'] ?? '');
         if (! $r) {
             return [['error' => 'RoPA tidak ditemukan'], '❌ RoPA tidak ditemukan atau bukan dalam cakupan akses Anda'];
@@ -426,7 +462,7 @@ class AiAgentToolExecutor
     private function updateRopa(array $args): array
     {
         $r = Ropa::where('org_id', $this->orgId)
-            ->when($this->actingUser, fn ($q) => $q->visibleTo($this->actingUser))
+            ->tap(fn ($q) => $this->saringDivisi($q))
             ->find($args['id'] ?? '');
         if (! $r) {
             return [['error' => 'RoPA tidak ditemukan'], '❌ RoPA tidak ditemukan atau bukan dalam cakupan akses Anda'];
@@ -488,7 +524,7 @@ class AiAgentToolExecutor
     private function listDpia(array $args): array
     {
         $records = Dpia::where('org_id', $this->orgId)
-            ->when($this->actingUser, fn ($q) => $q->visibleTo($this->actingUser))
+            ->tap(fn ($q) => $this->saringDivisi($q))
             ->select('id', 'registration_number', 'risk_level', 'status', 'progress', 'created_at')
             ->orderBy('created_at', 'desc')->limit(20)->get();
 
@@ -498,7 +534,7 @@ class AiAgentToolExecutor
     private function getDpiaDetail(array $args): array
     {
         $r = Dpia::where('org_id', $this->orgId)
-            ->when($this->actingUser, fn ($q) => $q->visibleTo($this->actingUser))
+            ->tap(fn ($q) => $this->saringDivisi($q))
             ->with('ropa:id,processing_activity')->find($args['id'] ?? '');
         if (! $r) {
             return [['error' => 'DPIA tidak ditemukan'], '❌ DPIA tidak ditemukan atau bukan dalam cakupan akses Anda'];
@@ -567,7 +603,7 @@ class AiAgentToolExecutor
     private function updateDpia(array $args): array
     {
         $r = Dpia::where('org_id', $this->orgId)
-            ->when($this->actingUser, fn ($q) => $q->visibleTo($this->actingUser))
+            ->tap(fn ($q) => $this->saringDivisi($q))
             ->find($args['id'] ?? '');
         if (! $r) {
             return [['error' => 'DPIA tidak ditemukan'], '❌ DPIA tidak ditemukan atau bukan dalam cakupan akses Anda'];
@@ -842,7 +878,7 @@ class AiAgentToolExecutor
     private function listThirdParty(array $args): array
     {
         $records = Vendor::where('org_id', $this->orgId)
-            ->when($this->actingUser, fn ($q) => $q->visibleTo($this->actingUser))
+            ->tap(fn ($q) => $this->saringDivisi($q))
             ->select('id', 'name', 'type', 'country', 'category', 'risk_score', 'risk_level', 'dpa_status', 'pdp_scope_status', 'created_at')
             ->orderBy('created_at', 'desc')->limit(20)->get();
 
@@ -852,7 +888,7 @@ class AiAgentToolExecutor
     private function getThirdPartyDetail(array $args): array
     {
         $r = Vendor::where('org_id', $this->orgId)
-            ->when($this->actingUser, fn ($q) => $q->visibleTo($this->actingUser))
+            ->tap(fn ($q) => $this->saringDivisi($q))
             ->find($args['id'] ?? '');
         if (! $r) {
             return [['error' => 'Pihak ketiga tidak ditemukan'], '❌ Pihak ketiga tidak ditemukan atau bukan dalam cakupan akses Anda'];
@@ -868,7 +904,7 @@ class AiAgentToolExecutor
     {
         $vendorId = $args['vendor_id'] ?? $args['id'] ?? '';
         $vendor = Vendor::where('org_id', $this->orgId)
-            ->when($this->actingUser, fn ($q) => $q->visibleTo($this->actingUser))
+            ->tap(fn ($q) => $this->saringDivisi($q))
             ->find($vendorId);
         if (! $vendor) {
             return [['error' => 'Pihak ketiga tidak ditemukan'], '❌ Pihak ketiga tidak ditemukan atau bukan dalam cakupan akses Anda'];
@@ -881,7 +917,7 @@ class AiAgentToolExecutor
             return [['vendor_id' => $vendor->id, 'pre_assessment' => null, 'pdp_scope_status' => $vendor->pdp_scope_status], "ℹ️ Belum ada pra-asesmen untuk {$vendor->name}"];
         }
 
-        return [$pre->toArray(), "🧭 Membaca pra-asesmen pihak ketiga: {$vendor->name} (scope: ".($pre->final_scope ?: $pre->suggested_scope).")"];
+        return [$pre->toArray(), "🧭 Membaca pra-asesmen pihak ketiga: {$vendor->name} (scope: ".($pre->final_scope ?: $pre->suggested_scope).')'];
     }
 
     // =============================================
@@ -995,7 +1031,7 @@ class AiAgentToolExecutor
 
         // Mirror controller: high/critical or offshore vendor auto-spawns draft TIA.
         try {
-            app(\App\Services\AssessmentAutoTriggerService::class)->fromVendor($v, $this->initiatorUserId);
+            app(AssessmentAutoTriggerService::class)->fromVendor($v, $this->initiatorUserId);
         } catch (\Throwable $e) {
         }
         try {
@@ -1012,7 +1048,7 @@ class AiAgentToolExecutor
     private function updateThirdParty(array $args): array
     {
         $v = Vendor::where('org_id', $this->orgId)
-            ->when($this->actingUser, fn ($q) => $q->visibleTo($this->actingUser))
+            ->tap(fn ($q) => $this->saringDivisi($q))
             ->find($args['id'] ?? '');
         if (! $v) {
             return [['error' => 'Pihak ketiga tidak ditemukan'], '❌ Pihak ketiga tidak ditemukan atau bukan dalam cakupan akses Anda'];
@@ -1047,7 +1083,7 @@ class AiAgentToolExecutor
 
         // Pasal 56: every cross-border transfer must have a TIA — always spawn draft.
         try {
-            app(\App\Services\AssessmentAutoTriggerService::class)->fromCrossBorder($t, $this->initiatorUserId);
+            app(AssessmentAutoTriggerService::class)->fromCrossBorder($t, $this->initiatorUserId);
         } catch (\Throwable $e) {
         }
         try {
@@ -1344,16 +1380,19 @@ class AiAgentToolExecutor
     private static function sanitizeRagResults(array $results): array
     {
         return array_map(function ($row) {
-            if (! is_array($row)) return $row;
+            if (! is_array($row)) {
+                return $row;
+            }
             foreach (['content_excerpt', 'content', 'summary', 'description', 'notes'] as $field) {
                 if (isset($row[$field]) && is_string($row[$field])) {
-                    $row[$field] = \App\Services\AiContentSanitizer::neutralize($row[$field]);
+                    $row[$field] = AiContentSanitizer::neutralize($row[$field]);
                 }
             }
             // metadata array can also contain injected fields
             if (isset($row['metadata']) && is_array($row['metadata'])) {
-                $row['metadata'] = \App\Services\AiContentSanitizer::sanitizeForAi($row['metadata']);
+                $row['metadata'] = AiContentSanitizer::sanitizeForAi($row['metadata']);
             }
+
             return $row;
         }, $results);
     }
@@ -1369,11 +1408,11 @@ class AiAgentToolExecutor
             return [['error' => 'RAG nonaktif di config sistem'], '⚠️ Semantic search nonaktif (config ai_embedding.enabled=false)'];
         }
         try {
-            $results = app(\App\Services\VectorSearchService::class)
+            $results = app(VectorSearchService::class)
                 ->search($this->orgId, $query, $topK, ['ropa']);
             $results = self::sanitizeRagResults($results);
 
-            return [['results' => $results], "🔎 Mencari RoPA mirip secara semantik... (".count($results)." hasil)"];
+            return [['results' => $results], '🔎 Mencari RoPA mirip secara semantik... ('.count($results).' hasil)'];
         } catch (\Throwable $e) {
             return [['error' => 'Vector search gagal: '.$e->getMessage()], '❌ Vector search gagal'];
         }
@@ -1390,11 +1429,11 @@ class AiAgentToolExecutor
             return [['error' => 'RAG nonaktif di config sistem'], '⚠️ Semantic search nonaktif (config ai_embedding.enabled=false)'];
         }
         try {
-            $results = app(\App\Services\VectorSearchService::class)
+            $results = app(VectorSearchService::class)
                 ->search($this->orgId, $query, $topK, ['dpia']);
             $results = self::sanitizeRagResults($results);
 
-            return [['results' => $results], "🔎 Mencari DPIA mirip secara semantik... (".count($results)." hasil)"];
+            return [['results' => $results], '🔎 Mencari DPIA mirip secara semantik... ('.count($results).' hasil)'];
         } catch (\Throwable $e) {
             return [['error' => 'Vector search gagal: '.$e->getMessage()], '❌ Vector search gagal'];
         }
@@ -1411,11 +1450,11 @@ class AiAgentToolExecutor
             return [['error' => 'RAG nonaktif di config sistem'], '⚠️ Semantic search nonaktif (config ai_embedding.enabled=false)'];
         }
         try {
-            $results = app(\App\Services\VectorSearchService::class)
+            $results = app(VectorSearchService::class)
                 ->search($this->orgId, $query, $topK, ['breach']);
             $results = self::sanitizeRagResults($results);
 
-            return [['results' => $results], "🔎 Mencari Breach mirip secara semantik... (".count($results)." hasil)"];
+            return [['results' => $results], '🔎 Mencari Breach mirip secara semantik... ('.count($results).' hasil)'];
         } catch (\Throwable $e) {
             return [['error' => 'Vector search gagal: '.$e->getMessage()], '❌ Vector search gagal'];
         }
@@ -1432,11 +1471,11 @@ class AiAgentToolExecutor
             return [['error' => 'RAG nonaktif di config sistem'], '⚠️ Semantic search nonaktif (config ai_embedding.enabled=false)'];
         }
         try {
-            $results = app(\App\Services\VectorSearchService::class)
+            $results = app(VectorSearchService::class)
                 ->search($this->orgId, $query, $topK, ['kb', 'kb_shared', 'pasal_uu_pdp']);
             $results = self::sanitizeRagResults($results);
 
-            return [['results' => $results], "📚 Mencari knowledge base & Pasal UU PDP... (".count($results)." hasil)"];
+            return [['results' => $results], '📚 Mencari knowledge base & Pasal UU PDP... ('.count($results).' hasil)'];
         } catch (\Throwable $e) {
             return [['error' => 'Vector search gagal: '.$e->getMessage()], '❌ Knowledge base search gagal'];
         }
@@ -1454,11 +1493,11 @@ class AiAgentToolExecutor
             return [['error' => 'RAG nonaktif'], '⚠️ Semantic search nonaktif (config ai_embedding.enabled=false)'];
         }
         try {
-            $results = app(\App\Services\VectorSearchService::class)
+            $results = app(VectorSearchService::class)
                 ->findRelated($this->orgId, $sourceType, $sourceId, $topK);
             $results = self::sanitizeRagResults($results);
 
-            return [['results' => $results], "🔗 Mencari record terkait dengan {$sourceType}... (".count($results)." hasil)"];
+            return [['results' => $results], "🔗 Mencari record terkait dengan {$sourceType}... (".count($results).' hasil)'];
         } catch (\Throwable $e) {
             return [['error' => 'Find related gagal: '.$e->getMessage()], '❌ Find related gagal'];
         }
@@ -1783,6 +1822,7 @@ class AiAgentToolExecutor
         }
 
         $allowedNames = array_merge(self::PAGE_TOOL_MAP[$module], self::UNIVERSAL_TOOLS);
+
         return array_values(array_filter($allTools, function ($tool) use ($allowedNames) {
             return in_array($tool['function']['name'] ?? '', $allowedNames, true);
         }));
@@ -1795,6 +1835,7 @@ class AiAgentToolExecutor
     public static function getReadOnlyToolDefinitions(): array
     {
         $allTools = self::getToolDefinitions();
+
         return array_values(array_filter($allTools, function ($tool) {
             return in_array($tool['function']['name'] ?? '', self::READ_ONLY_TOOLS, true);
         }));
@@ -1806,6 +1847,7 @@ class AiAgentToolExecutor
     public static function getReadOnlyToolDefinitionsForPage(?string $module = null): array
     {
         $pageTools = self::getToolDefinitionsForPage($module);
+
         return array_values(array_filter($pageTools, function ($tool) {
             return in_array($tool['function']['name'] ?? '', self::READ_ONLY_TOOLS, true);
         }));
