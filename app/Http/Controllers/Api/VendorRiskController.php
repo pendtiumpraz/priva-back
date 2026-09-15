@@ -118,6 +118,11 @@ class VendorRiskController extends Controller
                     // drives the Assign Group column + quick-edit modal in FE.
                     'assign_group' => $vendor->assign_group,
                     'assignees' => is_array($vendor->assignees) ? $vendor->assignees : [],
+                    // Divisi pembuat yang terkunci di penugasan. Ikut dikirim
+                    // supaya modal penugasan dapat menampilkannya sebagai
+                    // tercentang-dan-tidak-bisa-dilepas; tanpa ini pengguna
+                    // mencoba melepasnya lalu server memasangnya lagi diam-diam.
+                    'origin_division' => $vendor->origin_division,
                     'pre_assessment' => $pre ? [
                         'id' => $pre->id,
                         'status' => $pre->status,

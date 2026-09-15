@@ -307,6 +307,33 @@ class AutoAssignDivisiTest extends TestCase
     }
 
     #[Test]
+    public function divisi_asal_ikut_terkirim_di_daftar_ropa(): void
+    {
+        // Modal penugasan memakai nilai ini untuk menampilkan divisi pembuat
+        // sebagai tercentang-dan-terkunci. Tanpa terkirim, kuncinya tidak
+        // pernah tampil dan pengguna mencoba melepasnya berulang kali.
+        Sanctum::actingAs($this->pengguna('maker', 'staff', 'HR'));
+        $this->buatRopa();
+
+        $baris = $this->getJson('/api/m/ropa')->assertOk()->json('data');
+
+        $this->assertSame('HR', $baris[0]['origin_division'] ?? null);
+    }
+
+    #[Test]
+    public function divisi_asal_ikut_terkirim_di_daftar_pihak_ketiga(): void
+    {
+        // Daftar pihak ketiga merakit field-nya satu per satu, bukan `select *`
+        // — jadi kolom baru TIDAK ikut dengan sendirinya seperti di RoPA/DPIA.
+        Sanctum::actingAs($this->pengguna('maker', 'staff', 'HR'));
+        $this->postJson('/api/vendor-risk', ['name' => 'PT Awan Data'])->assertSuccessful();
+
+        $baris = $this->getJson('/api/vendor-risk')->assertOk()->json('data');
+
+        $this->assertSame('HR', $baris[0]['origin_division'] ?? null);
+    }
+
+    #[Test]
     public function pihak_ketiga_divisi_asal_tidak_bisa_dilepas_saat_mengubah(): void
     {
         Sanctum::actingAs($this->pengguna('maker', 'staff', 'HR'));
