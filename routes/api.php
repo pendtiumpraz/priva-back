@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\ConnectionMapController;
 use App\Http\Controllers\Api\ConsentCollectionController;
 use App\Http\Controllers\Api\ConsentItemController;
 use App\Http\Controllers\Api\ConsentLogController;
+use App\Http\Controllers\Api\GuardianConsentPublicController;
 use App\Http\Controllers\Api\ConsentRuleSetController;
 use App\Http\Controllers\Api\ContainmentController;
 use App\Http\Controllers\Api\ContractReviewCrudController;
@@ -205,6 +206,16 @@ Route::middleware('throttle:api')->group(function () {
     Route::post('/public/consent/capture', [ConsentLogController::class, 'capture']); // alias for clarity
     Route::get('/public/consent/config', [ConsentLogController::class, 'config']);
     Route::get('/public/consent/state', [ConsentLogController::class, 'state']);
+
+    // Alur wali — PP 33/2026 Pasal 38 (anak) & 39 (disabilitas).
+    // GET verify hanya MENAMPILKAN; POST verify yang menyetujui. Pemindai
+    // tautan di server surel tidak boleh "menyetujui" atas nama wali.
+    Route::post('/public/consent/guardian/request', [GuardianConsentPublicController::class, 'request'])
+        ->middleware('throttle:10,1');
+    Route::get('/public/consent/guardian/verify/{token}', [GuardianConsentPublicController::class, 'show'])
+        ->middleware('throttle:30,1');
+    Route::post('/public/consent/guardian/verify/{token}', [GuardianConsentPublicController::class, 'confirm'])
+        ->middleware('throttle:10,1');
 
     // Public Cookie Banner API v2 (Phase B — anonymous visitor capture)
     Route::post('/v2/cookies/capture', [CookieCaptureController::class, 'capture']);
@@ -2529,6 +2540,9 @@ Route::prefix('v1/consent')->middleware('consent.api_key')->group(function () {
     Route::post('/capture', [ConsentApiV1Controller::class, 'capture']);
     Route::get('/state', [ConsentApiV1Controller::class, 'state']);
     Route::get('/items', [ConsentApiV1Controller::class, 'items']);
+    // Alur wali (PP 33/2026 Pasal 38) dari sisi server tenant.
+    Route::post('/guardian/request', [ConsentApiV1Controller::class, 'guardianRequest']);
+    Route::get('/guardian/{id}', [ConsentApiV1Controller::class, 'guardianStatus'])->where('id', '[0-9a-fA-F-]{36}');
 });
 
 // =============================================

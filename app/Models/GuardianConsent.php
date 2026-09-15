@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 /**
  * Kewenangan seorang wali atas seorang SUBJEK — inti Pasal 38 ayat (2) & (4).
@@ -26,9 +27,12 @@ use Illuminate\Support\Carbon;
  * metode apa, nomor rujukan penyedia berapa. BUKAN NIK, BUKAN foto KTP.
  *
  * @property string|null $org_id
+ * @property string|null $collection_point_id
  * @property Carbon|null $verified_at
+ * @property Carbon|null $verification_expires_at
  * @property Carbon|null $revoked_at
  * @property string|null $revoke_reason
+ * @property array<string, mixed>|null $pending_capture
  */
 class GuardianConsent extends Model
 {
@@ -38,22 +42,90 @@ class GuardianConsent extends Model
     public const ALASAN_CABUT = ['peralihan_dewasa', 'manual'];
 
     protected $fillable = [
-        'org_id', 'consent_subject_id', 'guardian_id',
+        'org_id', 'consent_subject_id', 'guardian_id', 'collection_point_id',
         'verification_method_code', 'verification_driver', 'verification_confidence',
         'verified_at', 'verification_reference', 'statement_shown',
+        'verification_token_hash', 'verification_expires_at', 'pending_capture',
         'ip_address', 'user_agent',
         'revoked_at', 'revoke_reason',
     ];
 
     protected $casts = [
         'verified_at' => 'datetime',
+        'verification_expires_at' => 'datetime',
         'revoked_at' => 'datetime',
+        // Pilihan yang menunggu wali — tersandi; berisi penanda subjek dan
+        // pilihan consent-nya, dan tidak boleh terbaca dari dump basis data.
+        'pending_capture' => 'encrypted:array',
     ];
+
+    /**
+     * Dua-duanya rahasia operasional. Hash token yang bocor lewat respons API
+     * memang tidak bisa dibalik, tapi tidak ada satu pun alasan ia perlu
+     * keluar; dan pending_capture berisi pilihan yang BELUM disetujui siapa
+     * pun — menampilkannya seolah ia keadaan consent adalah kekeliruan.
+     */
+    protected $hidden = ['verification_token_hash', 'pending_capture'];
 
     /** @return BelongsTo<Guardian, $this> */
     public function guardian(): BelongsTo
     {
         return $this->belongsTo(Guardian::class);
+    }
+
+    /** @return BelongsTo<ConsentCollectionPoint, $this> */
+    public function collectionPoint(): BelongsTo
+    {
+        return $this->belongsTo(ConsentCollectionPoint::class, 'collection_point_id');
+    }
+
+    // ───────────── Token tautan verifikasi ─────────────
+
+    public static function hashToken(string $mentah): string
+    {
+        return hash('sha256', $mentah);
+    }
+
+    /**
+     * Terbitkan token tautan baru, simpan HASH-nya, kembalikan yang mentah.
+     *
+     * Yang mentah hanya hidup di surel wali. Kalau basis data bocor, yang bocor
+     * adalah hash — bukan tumpukan tautan persetujuan yang bisa diklik siapa
+     * saja. Menerbitkan ulang mematikan token sebelumnya.
+     */
+    public function terbitkanToken(int $berlakuJam = 24): string
+    {
+        $mentah = Str::random(64);
+
+        $this->forceFill([
+            'verification_token_hash' => self::hashToken($mentah),
+            'verification_expires_at' => now()->addHours($berlakuJam),
+        ])->save();
+
+        return $mentah;
+    }
+
+    /**
+     * Cari kewenangan dari token mentah di tautan.
+     *
+     * Tanpa scope org: tautan dibuka wali dari kotak surelnya, di luar konteks
+     * tenant mana pun. Token 64 karakter acak sudah cukup jadi kuncinya.
+     */
+    public static function denganToken(string $mentah): ?self
+    {
+        $mentah = trim($mentah);
+        if ($mentah === '') {
+            return null;
+        }
+
+        return self::withoutGlobalScope('org')
+            ->where('verification_token_hash', self::hashToken($mentah))
+            ->first();
+    }
+
+    public function tokenKedaluwarsa(): bool
+    {
+        return $this->verification_expires_at === null || $this->verification_expires_at->isPast();
     }
 
     /** @return BelongsTo<ConsentSubject, $this> */

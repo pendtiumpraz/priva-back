@@ -10,6 +10,17 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
+/**
+ * @property string|null $org_id
+ * @property string|null $collection_id
+ * @property string|null $name
+ * @property string|null $kind
+ * @property array<string, mixed>|null $settings
+ * @property string|null $webhook_url
+ * @property string|null $captcha_provider
+ * @property string|null $captcha_site_key
+ * @property string|null $consent_rule_set_id
+ */
 class ConsentCollectionPoint extends Model
 {
     use AssignmentVisibility, HasUuids, SoftDeletes;

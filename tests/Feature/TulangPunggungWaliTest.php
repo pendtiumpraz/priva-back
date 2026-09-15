@@ -434,28 +434,35 @@ class TulangPunggungWaliTest extends TestCase
     #[Test]
     public function metode_bawaan_platform_terlihat_semua_tenant(): void
     {
+        // Migrasi 000009 menyeed dua metode bawaan platform (org_id NULL).
         // Ini yang akan rusak kalau VerificationMethod memakai BelongsToOrg:
         // global scope menyaring baris org_id NULL dan katalognya kosong.
-        VerificationMethod::create([
-            'org_id' => null, 'code' => 'otp_email', 'label' => 'OTP Email',
-            'driver' => VerificationMethod::DRIVER_OTP, 'confidence' => 'rendah',
-        ]);
+        $bawaan = VerificationMethod::whereNull('org_id')->pluck('code')->all();
+        $this->assertContains('otp_email', $bawaan);
+        $this->assertContains('otp_phone', $bawaan);
 
-        $this->assertSame(1, VerificationMethod::untukOrg($this->org->id)->count());
-        $this->assertSame(1, VerificationMethod::untukOrg(Organization::factory()->create()->id)->count());
+        $this->assertSame(count($bawaan), VerificationMethod::untukOrg($this->org->id)->count());
+        $this->assertSame(count($bawaan), VerificationMethod::untukOrg(Organization::factory()->create()->id)->count());
+
+        // Dan bawaan yang dipakai alur OTP jujur soal keyakinannya.
+        $otp = VerificationMethod::whereNull('org_id')->where('code', 'otp_email')->first();
+        $this->assertSame(VerificationMethod::DRIVER_OTP, $otp->driver);
+        $this->assertSame('rendah', $otp->confidence);
     }
 
     #[Test]
     public function metode_milik_tenant_tidak_bocor_ke_tenant_lain(): void
     {
         $lain = Organization::factory()->create();
+        $bawaan = VerificationMethod::whereNull('org_id')->count();
+
         VerificationMethod::create([
             'org_id' => $this->org->id, 'code' => 'dukcapil', 'label' => 'Dukcapil',
             'driver' => VerificationMethod::DRIVER_DUKCAPIL, 'confidence' => 'tinggi',
         ]);
 
-        $this->assertSame(1, VerificationMethod::untukOrg($this->org->id)->count());
-        $this->assertSame(0, VerificationMethod::untukOrg($lain->id)->count());
+        $this->assertSame($bawaan + 1, VerificationMethod::untukOrg($this->org->id)->count());
+        $this->assertSame($bawaan, VerificationMethod::untukOrg($lain->id)->count());
     }
 
     #[Test]

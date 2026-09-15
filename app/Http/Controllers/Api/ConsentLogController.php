@@ -5,11 +5,14 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Jobs\FireConsentWebhookJob;
 use App\Jobs\PushConsentToCrmJob;
-use App\Services\Consent\ConsentOutboundGate;
 use App\Models\ConsentCollectionPoint;
 use App\Models\ConsentLog;
 use App\Models\Organization;
 use App\Services\CaptchaVerifier;
+use App\Services\Consent\ConsentOutboundGate;
+use App\Services\Consent\GerbangWali;
+use App\Services\Consent\IpGeoResolver;
+use App\Services\Consent\UserAgentParser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\RateLimiter;
@@ -195,6 +198,9 @@ class ConsentLogController extends Controller
             'consented_items' => 'required|array',
             'policy_version' => 'nullable|string|max:32',
             'captcha_token' => 'nullable|string|max:4000',
+            // PP 33/2026 Pasal 38 — diperiksa GerbangWali sebelum ledger ditulis.
+            'subject_class' => 'nullable|in:dewasa,anak,disabilitas',
+            'guardian_consent_id' => 'nullable|uuid',
         ]);
 
         // Rate limit per IP — generous since legitimate widgets fire 1x per session.
@@ -238,13 +244,27 @@ class ConsentLogController extends Controller
             }
         }
 
-        $ua = \App\Services\Consent\UserAgentParser::parse($request->userAgent());
-        $geo = \App\Services\Consent\IpGeoResolver::resolve($request->ip());
+        $ua = UserAgentParser::parse($request->userAgent());
+        $geo = IpGeoResolver::resolve($request->ip());
+
+        // Gerbang wali — PP 33/2026 Pasal 38. Dijalankan SEBELUM ledger ditulis:
+        // penangkapan untuk anak tanpa kewenangan wali yang sah ditolak (422)
+        // dan tidak meninggalkan baris apa pun. Ledger ini "yang terbaru
+        // menang" — baris yang terlanjur masuk akan terbaca sebagai
+        // persetujuan yang sah oleh ConsentStateResolver.
+        $wali = app(GerbangWali::class)->periksa(
+            $collection,
+            (string) $request->user_identifier,
+            $request->input('subject_class'),
+            $request->input('guardian_consent_id'),
+        );
 
         $log = ConsentLog::create([
             'org_id' => $collection->org_id,
             'collection_id' => $collection->id,
             'user_identifier' => $request->user_identifier,
+            'subject_class' => $wali['subject_class'],
+            'guardian_consent_id' => $wali['guardian_consent_id'],
             'email' => $email ? strtolower($email) : null,
             'name' => $request->input('name'),
             'phone' => $request->input('phone'),
