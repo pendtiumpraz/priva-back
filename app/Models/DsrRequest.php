@@ -31,6 +31,10 @@ class DsrRequest extends Model
         // hanya supaya jalur yang mengoper larik penuh tidak tertolak;
         // nilainya selalu ditimpa server.
         'requester_email_hash',
+        // Pasal 39 ayat (5): "Penyandang Disabilitas DAN/ATAU wali ... dapat
+        // mengajukan". Kata dan/atau itu mengunci bawaannya 'subjek' — portal
+        // DSR tidak boleh mewajibkan wali, dan jalur diri-sendiri harus mulus.
+        'requester_type', 'requester_relation', 'subject_class',
         'nda_signed_at', 'nda_signed_doc_id',
         'subject_certificate_doc_id', 'internal_certificate_doc_id',
         'completion_certificate_doc_id',
@@ -165,4 +169,33 @@ class DsrRequest extends Model
     ];
 
     public const TYPE_AUTOMATED_DECISION = 'automated_decision_objection';
+
+    /**
+     * Siapa yang mengajukan — Pasal 39 ayat (5) dan Pasal 38 ayat (5)–(7).
+     *
+     * Bawaannya SUBJEK, dan itu bukan sekadar nilai default yang nyaman: kalau
+     * portal DSR mewajibkan wali, kita melanggar pasal yang sedang kita bantu
+     * penuhi. Jalur 'subjek' harus mulus — tanpa pertanyaan tambahan, tanpa
+     * verifikasi ekstra dibanding pemohon lain.
+     */
+    public const PEMOHON_SUBJEK = 'subjek';
+
+    public const PEMOHON_WALI = 'wali';
+
+    public const PEMOHON_PENDAMPING = 'pendamping';
+
+    public const PEMOHON = [self::PEMOHON_SUBJEK, self::PEMOHON_WALI, self::PEMOHON_PENDAMPING];
+
+    /**
+     * Permohonan ini butuh bukti kewenangan wali?
+     *
+     * Hanya jalur 'wali'. Pendamping BUKAN pengambil keputusan — ia membantu
+     * subjek memahami, dan subjeknya sendiri yang mengajukan. Menuntut bukti
+     * kewenangan dari pendamping akan memperlakukannya seperti wali, lalu
+     * menghambat orang yang sebenarnya mengajukan sendiri.
+     */
+    public function butuhBuktiWali(): bool
+    {
+        return $this->requester_type === self::PEMOHON_WALI;
+    }
 }
