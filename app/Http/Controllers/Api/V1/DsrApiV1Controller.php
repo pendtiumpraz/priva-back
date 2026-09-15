@@ -111,10 +111,11 @@ class DsrApiV1Controller extends Controller
         $data = $request->validate($rules);
 
         // Anti-duplicate
+        // Lihat catatan yang sama di DsrPublicController: `requester_email`
+        // tersandi dengan IV acak, jadi pencariannya lewat hash.
         $existing = DsrRequest::where('org_id', $app->org_id)
             ->where('app_id', $app->id)
-            ->whereNotIn('status', ['completed', 'rejected', 'cancelled', 'closed'])
-            ->where('requester_email', $data['requester_email'])
+            ->surelAktif($data['requester_email'])
             ->first();
         if ($existing) {
             return response()->json([

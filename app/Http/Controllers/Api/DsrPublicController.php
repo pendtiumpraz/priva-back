@@ -110,11 +110,15 @@ class DsrPublicController extends Controller
             ], 422);
         }
 
-        // Anti-duplicate: 1 active DSR per email per app at a time
+        // Anti-duplicate: 1 active DSR per email per app at a time.
+        //
+        // Dicari lewat `surelAktif()`, BUKAN `where('requester_email', ...)`:
+        // kolom itu tersandi dengan IV acak, sehingga perbandingan langsung
+        // tidak pernah cocok dan pemeriksaan ini tidak pernah menemukan apa pun
+        // sejak ditulis — tanpa galat, tanpa tanda.
         $existing = DsrRequest::where('org_id', $app->org_id)
             ->where('app_id', $app->id)
-            ->whereNotIn('status', ['completed', 'rejected', 'cancelled', 'closed'])
-            ->where('requester_email', $data['requester_email'])
+            ->surelAktif($data['requester_email'])
             ->first();
 
         if ($existing) {

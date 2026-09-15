@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Casts\EncryptedString;
 use App\Models\Concerns\BelongsToOrg;
+use App\Support\KunciPencarian;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -42,33 +43,17 @@ class Guardian extends Model
     ];
 
     /**
-     * Normalkan kontak sebelum di-hash.
+     * Kunci pencarian wali. Deterministik — tidak seperti kontaknya yang
+     * terenkripsi.
      *
-     * Tanpa normalisasi, "Budi@Contoh.ID " dan "budi@contoh.id" menghasilkan
-     * hash berbeda dan sistem membuat DUA wali untuk orang yang sama — persis
-     * yang hendak dicegah indeks unik di migrasi.
+     * Aturan normalisasinya tinggal di KunciPencarian, dipakai bersama dengan
+     * `dsr_requests.requester_email_hash`. Dua salinan yang "kurang lebih sama"
+     * akan menyimpang, lalu menghasilkan duplikat yang sulit ditelusuri karena
+     * kedua sisinya tampak benar.
      */
-    public static function normalkan(string $kontak): string
-    {
-        $k = trim(mb_strtolower($kontak));
-
-        // Nomor telepon: buang segala pemisah, samakan awalan Indonesia.
-        if (! str_contains($k, '@')) {
-            $k = preg_replace('/[^0-9+]/', '', $k) ?? $k;
-            if (str_starts_with($k, '+62')) {
-                $k = '0'.substr($k, 3);
-            } elseif (str_starts_with($k, '62')) {
-                $k = '0'.substr($k, 2);
-            }
-        }
-
-        return $k;
-    }
-
-    /** Kunci pencarian wali. Deterministik — tidak seperti kontaknya yang terenkripsi. */
     public static function hashKontak(string $kontak): string
     {
-        return hash('sha256', self::normalkan($kontak));
+        return (string) KunciPencarian::hash($kontak);
     }
 
     /**

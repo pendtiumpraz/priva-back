@@ -5,6 +5,8 @@ namespace App\Models;
 use App\Casts\EncryptedString;
 use App\Models\Concerns\AssignmentVisibility;
 use App\Models\Concerns\BelongsToOrg;
+use App\Support\KunciPencarian;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -25,6 +27,10 @@ class DsrRequest extends Model
         // sengaja tidak digabung.
         'assigned_to', 'created_by',
         'assign_group', 'assignees', 'origin_division',
+        // Diisi OTOMATIS dari `requester_email` (lihat booted()). Ada di sini
+        // hanya supaya jalur yang mengoper larik penuh tidak tertolak;
+        // nilainya selalu ditimpa server.
+        'requester_email_hash',
         'nda_signed_at', 'nda_signed_doc_id',
         'subject_certificate_doc_id', 'internal_certificate_doc_id',
         'completion_certificate_doc_id',
@@ -45,6 +51,42 @@ class DsrRequest extends Model
         'requester_phone' => EncryptedString::class,
         'description' => EncryptedString::class,
     ];
+
+    /**
+     * Jaga `requester_email_hash` selalu sepakat dengan `requester_email`.
+     *
+     * Dipasang di MODEL, bukan di tiap pemanggil, karena permohonan DSR lahir
+     * dari banyak pintu: formulir publik, kunci API mitra, universal CRUD,
+     * kanal surel masuk, dan agen AI. Menaruhnya di satu-dua controller berarti
+     * pintu yang terlupa menghasilkan baris tanpa hash — dan baris itu tidak
+     * akan pernah ikut terperiksa sebagai duplikat, tanpa tanda apa pun.
+     *
+     * Kolomnya TIDAK boleh datang dari luar: ia selalu diturunkan dari surel.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (self $dsr) {
+            if ($dsr->isDirty('requester_email') || $dsr->requester_email_hash === null) {
+                $dsr->attributes['requester_email_hash'] = KunciPencarian::hash($dsr->requester_email);
+            }
+        });
+    }
+
+    /**
+     * Permohonan AKTIF dari surel yang sama.
+     *
+     * Satu-satunya cara yang benar memeriksa duplikat. Mencari lewat
+     * `where('requester_email', ...)` tidak akan pernah cocok — kolomnya
+     * tersandi dengan IV acak.
+     *
+     * @param  Builder<DsrRequest>  $query
+     */
+    public function scopeSurelAktif($query, string $surel)
+    {
+        return $query
+            ->where('requester_email_hash', KunciPencarian::hash($surel))
+            ->whereNotIn('status', ['completed', 'rejected', 'cancelled', 'closed']);
+    }
 
     public function organization()
     {
