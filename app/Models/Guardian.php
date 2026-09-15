@@ -89,9 +89,18 @@ class Guardian extends Model
         return $this->hasMany(GuardianConsent::class);
     }
 
-    /** Persetujuan yang kewenangannya masih berjalan. */
+    /**
+     * Kewenangan yang masih berjalan.
+     *
+     * Terverifikasi DAN belum dicabut — sama persis dengan
+     * GuardianConsent::masihBerlaku(). Dulu di sini hanya `revoked_at` yang
+     * diperiksa, sehingga kewenangan yang BELUM pernah diverifikasi ikut
+     * terhitung aktif: seorang wali yang baru mengisi formulir dan belum
+     * menyentuh OTP akan terbaca berwenang. Dua tempat yang menjawab pertanyaan
+     * sama harus menjawabnya sama.
+     */
     public function kewenanganAktif(): HasMany
     {
-        return $this->guardianConsents()->whereNull('revoked_at');
+        return $this->guardianConsents()->whereNotNull('verified_at')->whereNull('revoked_at');
     }
 }

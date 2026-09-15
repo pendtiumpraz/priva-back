@@ -18,7 +18,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class ConsentLog extends Model
 {
-    use HasFactory, HasUuids, BelongsToOrg;
+    use BelongsToOrg, HasFactory, HasUuids;
 
     protected $fillable = [
         'org_id',
@@ -43,6 +43,9 @@ class ConsentLog extends Model
         'browser_version',
         'os_name',
         'device_type',
+        // Pasal 38 & 39 — lihat migrasi 2026_09_15_000008.
+        'guardian_consent_id',
+        'subject_class',
     ];
 
     protected $casts = [
@@ -53,6 +56,20 @@ class ConsentLog extends Model
     public function organization()
     {
         return $this->belongsTo(Organization::class, 'org_id');
+    }
+
+    /**
+     * Kewenangan wali yang memayungi penangkapan ini — NULL untuk subjek dewasa,
+     * yaitu mayoritas baris.
+     *
+     * `subject_class` di baris ini adalah POTRET SAAT PENANGKAPAN dan tidak ikut
+     * berubah saat subjeknya dewasa; keadaan sekarang ada di ConsentSubject.
+     * Bedanya penting saat diaudit: pertanyaannya "waktu itu ia masih anak?",
+     * bukan "sekarang ia anak?".
+     */
+    public function guardianConsent()
+    {
+        return $this->belongsTo(GuardianConsent::class, 'guardian_consent_id');
     }
 
     public function collectionPoint()

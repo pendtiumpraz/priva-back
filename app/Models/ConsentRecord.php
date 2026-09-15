@@ -5,69 +5,38 @@ namespace App\Models;
 use App\Casts\EncryptedString;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * TABEL LAMA — TIDAK ADA YANG MENULIS KE SINI.
+ *
+ * Penangkapan consent yang sebenarnya masuk ke `consent_logs`, lewat
+ * ConsentLogController::capture dan ConsentApiV1Controller::capture. Tabel ini
+ * pada praktiknya kosong; ConsentCollectionPoint::logs() dan
+ * ConsentStateResolver sudah lama menyebutkannya.
+ *
+ * Alasan kedua, yang lebih menentukan: `subject_identifier` di sini tersandi
+ * dengan IV acak, sehingga `where('subject_identifier', $x)` TIDAK AKAN PERNAH
+ * cocok. Apa pun yang dibangun di atas tabel ini akan diam-diam menjawab "belum
+ * pernah" untuk semua orang.
+ *
+ * Kalau hendak menambahkan kolom untuk fitur baru, TABEL INI BUKAN TEMPATNYA —
+ * itu persis kekeliruan yang diperbaiki migrasi 2026_09_15_000008.
+ */
 class ConsentRecord extends Model
 {
     use HasUuids;
-
-    /** Kelas subjek — menentukan alur mana yang berlaku. Bawaannya dewasa. */
-    public const KELAS_DEWASA = 'dewasa';
-
-    public const KELAS_ANAK = 'anak';
-
-    public const KELAS_DISABILITAS = 'disabilitas';
-
-    public const KELAS = [self::KELAS_DEWASA, self::KELAS_ANAK, self::KELAS_DISABILITAS];
-
-    /**
-     * Keadaan peralihan anak → dewasa (Pasal 38 ayat 8).
-     *
-     * NULL berarti belum relevan. `menunggu_konfirmasi` BUKAN berarti consent
-     * batal — dasar hukumnya diperoleh secara sah dan tidak hilang karena ulang
-     * tahun; yang berakhir adalah kewenangan walinya.
-     */
-    public const TRANSISI_MENUNGGU = 'menunggu_konfirmasi';
-
-    public const TRANSISI_DIKONFIRMASI = 'dikonfirmasi';
-
-    public const TRANSISI_DITARIK = 'ditarik';
-
-    public const TRANSISI = [self::TRANSISI_MENUNGGU, self::TRANSISI_DIKONFIRMASI, self::TRANSISI_DITARIK];
 
     protected $fillable = [
         'consent_item_id', 'collection_point_id', 'subject_identifier',
         'subject_name', 'channel', 'is_granted', 'ip_address', 'user_agent',
         'proof', 'granted_at', 'revoked_at', 'revoke_reason', 'recorded_by',
-        // Pasal 38 & 39 — lihat migrasi 2026_09_15_000005.
-        'subject_class', 'transition_date', 'transition_state', 'subject_own_channel',
     ];
 
     protected $casts = [
         'is_granted' => 'boolean', 'granted_at' => 'datetime', 'revoked_at' => 'datetime',
-        'transition_date' => 'date',
         // PII Encryption — AES-256-CBC
         'subject_identifier' => EncryptedString::class,
         'subject_name' => EncryptedString::class,
         'ip_address' => EncryptedString::class,
-        // Kanal milik subjek sendiri — untuk consent anak, `subject_identifier`
-        // biasanya berisi kontak ORANG TUANYA.
-        'subject_own_channel' => EncryptedString::class,
     ];
-
-    /** @return HasMany<GuardianConsent, $this> */
-    public function guardianConsents()
-    {
-        return $this->hasMany(GuardianConsent::class);
-    }
-
-    /**
-     * Kewenangan wali yang masih berjalan atas persetujuan ini.
-     *
-     * Terverifikasi DAN belum dicabut — keduanya wajib.
-     */
-    public function waliBerwenang()
-    {
-        return $this->guardianConsents()->whereNotNull('verified_at')->whereNull('revoked_at');
-    }
 }

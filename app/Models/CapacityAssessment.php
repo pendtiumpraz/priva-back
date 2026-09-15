@@ -48,7 +48,11 @@ class CapacityAssessment extends Model
     public const HASIL = [self::HASIL_MAMPU, self::HASIL_PENDAMPINGAN, self::HASIL_WALI];
 
     protected $fillable = [
-        'org_id', 'consent_record_id', 'dsr_request_id',
+        // Menunjuk ORANG (consent_subjects), bukan satu baris consent. Penilaian
+        // kapasitas melekat pada subjeknya dan berlaku lintas kejadian —
+        // mengulang penilaian tiap kali orangnya mengisi formulir adalah
+        // hambatan yang justru dilarang Pasal 39. Lihat migrasi 000008.
+        'org_id', 'consent_subject_id', 'dsr_request_id',
         'subject_class', 'result', 'reason',
         'assessed_by', 'assessed_at', 'dpia_id',
     ];
