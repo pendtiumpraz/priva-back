@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToOrg;
+use App\Support\CrossBorderScope;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -113,6 +114,20 @@ class CrossBorderTransfer extends Model
     public function vendor()
     {
         return $this->belongsTo(Vendor::class, 'vendor_id');
+    }
+
+    /**
+     * Keterlihatan per divisi — diturunkan dari induknya, bukan dari kolom
+     * sendiri (tabel ini tidak punya `assign_group` maupun `created_by`).
+     * Aturannya tinggal di CrossBorderScope.
+     *
+     * Batas tenant tetap dijaga `where('org_id', ...)` pemanggil.
+     */
+    public function scopeVisibleTo($query, $user)
+    {
+        CrossBorderScope::terapkan($query, $user, (string) ($user->org_id ?? ''));
+
+        return $query;
     }
 
     /**

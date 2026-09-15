@@ -834,6 +834,7 @@ class AiAgentToolExecutor
     private function listTia(array $args): array
     {
         $records = TiaAssessment::where('org_id', $this->orgId)
+            ->tap(fn ($q) => $this->saringDivisi($q))
             ->select('id', 'tia_code', 'title', 'status', 'overall_risk_score', 'overall_risk_level', 'conclusion_verdict', 'created_at')
             ->orderBy('created_at', 'desc')->limit(20)->get();
 
@@ -842,7 +843,7 @@ class AiAgentToolExecutor
 
     private function getTiaDetail(array $args): array
     {
-        $r = TiaAssessment::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        $r = TiaAssessment::where('org_id', $this->orgId)->tap(fn ($q) => $this->saringDivisi($q))->find($args['id'] ?? '');
         if (! $r) {
             return [['error' => 'TIA tidak ditemukan'], '❌ TIA tidak ditemukan'];
         }
@@ -926,6 +927,7 @@ class AiAgentToolExecutor
     private function listCrossBorder(array $args): array
     {
         $records = CrossBorderTransfer::where('org_id', $this->orgId)
+            ->tap(fn ($q) => $this->saringDivisi($q))
             ->select('id', 'destination_country', 'destination_entity', 'transfer_purpose', 'legal_basis', 'status', 'risk_score', 'risk_level', 'created_at')
             ->orderBy('created_at', 'desc')->limit(20)->get();
 
@@ -934,7 +936,7 @@ class AiAgentToolExecutor
 
     private function getCrossBorderDetail(array $args): array
     {
-        $r = CrossBorderTransfer::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        $r = CrossBorderTransfer::where('org_id', $this->orgId)->tap(fn ($q) => $this->saringDivisi($q))->find($args['id'] ?? '');
         if (! $r) {
             return [['error' => 'Cross-Border Transfer tidak ditemukan'], '❌ Transfer lintas negara tidak ditemukan'];
         }
@@ -1096,7 +1098,7 @@ class AiAgentToolExecutor
 
     private function updateCrossBorder(array $args): array
     {
-        $t = CrossBorderTransfer::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        $t = CrossBorderTransfer::where('org_id', $this->orgId)->tap(fn ($q) => $this->saringDivisi($q))->find($args['id'] ?? '');
         if (! $t) {
             return [['error' => 'Cross-Border Transfer tidak ditemukan'], '❌ Transfer lintas negara tidak ditemukan'];
         }
@@ -1177,7 +1179,7 @@ class AiAgentToolExecutor
 
     private function updateTia(array $args): array
     {
-        $r = TiaAssessment::where('org_id', $this->orgId)->find($args['id'] ?? '');
+        $r = TiaAssessment::where('org_id', $this->orgId)->tap(fn ($q) => $this->saringDivisi($q))->find($args['id'] ?? '');
         if (! $r) {
             return [['error' => 'TIA tidak ditemukan'], '❌ TIA tidak ditemukan'];
         }

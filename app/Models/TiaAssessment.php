@@ -3,13 +3,14 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToOrg;
+use App\Support\TiaScope;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class TiaAssessment extends Model
 {
-    use HasUuids, SoftDeletes, BelongsToOrg;
+    use BelongsToOrg, HasUuids, SoftDeletes;
 
     protected $fillable = [
         'org_id', 'tia_code', 'title', 'description',
@@ -55,14 +56,20 @@ class TiaAssessment extends Model
     ];
 
     public const STATUS_DRAFT = 'draft';
+
     public const STATUS_SUBMITTED = 'submitted';
+
     public const STATUS_CHECKED = 'checked';
+
     public const STATUS_APPROVED = 'approved';
+
     public const STATUS_REJECTED = 'rejected';
 
-    public const VERDICT_APPROVED    = 'approved';      // safe to transfer
+    public const VERDICT_APPROVED = 'approved';      // safe to transfer
+
     public const VERDICT_CONDITIONAL = 'conditional';   // safe with mitigations
-    public const VERDICT_REJECTED    = 'rejected';      // unsafe — block transfer
+
+    public const VERDICT_REJECTED = 'rejected';      // unsafe — block transfer
 
     /**
      * 6 risk metric keys (high score = risky). Used by computeOverallRisk()
@@ -225,6 +232,20 @@ class TiaAssessment extends Model
         return $this->belongsTo(CrossBorderTransfer::class, 'linked_cross_border_id');
     }
 
+    /**
+     * Keterlihatan per divisi — diturunkan dari RoPA / pihak ketiga / transfer
+     * yang ditautkannya, bukan dari kolom sendiri (tabel ini tidak punya
+     * `assign_group`). Aturannya tinggal di TiaScope.
+     *
+     * Batas tenant tetap dijaga `where('org_id', ...)` pemanggil.
+     */
+    public function scopeVisibleTo($query, $user)
+    {
+        TiaScope::terapkan($query, $user, (string) ($user->org_id ?? ''));
+
+        return $query;
+    }
+
     public function ropa()
     {
         return $this->belongsTo(Ropa::class, 'linked_ropa_id');
@@ -257,8 +278,13 @@ class TiaAssessment extends Model
 
     public function isEditableBy(?User $user): bool
     {
-        if (!$user) return false;
-        if (!$this->is_locked) return true;
+        if (! $user) {
+            return false;
+        }
+        if (! $this->is_locked) {
+            return true;
+        }
+
         return $user->role === 'root';
     }
 
@@ -276,7 +302,9 @@ class TiaAssessment extends Model
      */
     public static function aggregateAiVerdict(mixed $value): ?string
     {
-        if (empty($value) || ! is_array($value)) return null;
+        if (empty($value) || ! is_array($value)) {
+            return null;
+        }
         // Legacy single object
         $entries = isset($value['status']) ? [$value] : array_values($value);
         $rank = ['non_comply' => 3, 'partial' => 2, 'comply' => 1];
@@ -284,13 +312,16 @@ class TiaAssessment extends Model
         $worstRank = 0;
         foreach ($entries as $e) {
             $st = is_array($e) ? ($e['status'] ?? null) : null;
-            if (! $st || $st === 'unsure') continue;
+            if (! $st || $st === 'unsure') {
+                continue;
+            }
             $r = $rank[$st] ?? 0;
             if ($r > $worstRank) {
                 $worst = $st;
                 $worstRank = $r;
             }
         }
+
         return $worst;
     }
 
@@ -304,7 +335,6 @@ class TiaAssessment extends Model
      * Caller is responsible for tia_code, title, status, maker_id /
      * created_by — those vary by trigger source.
      *
-     * @param  CrossBorderTransfer  $cbt
      * @return array<string, mixed>
      */
     public static function buildPrefillFromCrossBorder(CrossBorderTransfer $cbt): array
@@ -312,21 +342,21 @@ class TiaAssessment extends Model
         $adequacy = $cbt->adequacy();
 
         $volumeRisk = match ($cbt->transfer_volume_band) {
-            'mass'   => 9,
-            'large'  => 7,
+            'mass' => 9,
+            'large' => 7,
             'medium' => 5,
-            'small'  => 3,
-            default  => null,
+            'small' => 3,
+            default => null,
         };
         $sensitivityRisk = match ($cbt->data_sensitivity) {
-            'extra_sensitive'    => 9,
+            'extra_sensitive' => 9,
             'sensitive_specific' => 7,
-            'personal'           => 5,
-            'general'            => 2,
-            default              => null,
+            'personal' => 5,
+            'general' => 2,
+            default => null,
         };
-        $protocolScore   = $cbt->encryption_in_transit ? 7 : 3;
-        $encryptionScore = $cbt->encryption_at_rest    ? 7 : 3;
+        $protocolScore = $cbt->encryption_in_transit ? 7 : 3;
+        $encryptionScore = $cbt->encryption_at_rest ? 7 : 3;
 
         return [
             'org_id' => $cbt->org_id,
@@ -349,11 +379,11 @@ class TiaAssessment extends Model
                 'recipient_dpo_email' => $cbt->recipient_dpo_email,
             ],
             'risk_regulation_mismatch' => $adequacy?->default_regulation_mismatch,
-            'risk_sovereign_access'    => $adequacy?->default_sovereign_access_risk,
-            'risk_admin_sanctions'     => $adequacy?->default_admin_sanctions,
-            'risk_data_leak'           => $volumeRisk,
-            'risk_data_integrity'      => $sensitivityRisk,
-            'security_protocol_score'   => $protocolScore,
+            'risk_sovereign_access' => $adequacy?->default_sovereign_access_risk,
+            'risk_admin_sanctions' => $adequacy?->default_admin_sanctions,
+            'risk_data_leak' => $volumeRisk,
+            'risk_data_integrity' => $sensitivityRisk,
+            'security_protocol_score' => $protocolScore,
             'security_encryption_score' => $encryptionScore,
             'wizard_data' => [
                 'cross_border_id' => $cbt->id,
@@ -423,6 +453,7 @@ class TiaAssessment extends Model
                 $hasActiveRiskMetric = true;
                 if ($value === null) {
                     $missingRiskScore = true;
+
                     continue;
                 }
                 $riskSum += (float) $value * $weight;
@@ -436,8 +467,12 @@ class TiaAssessment extends Model
             }
         }
 
-        if (! $hasActiveRiskMetric) return 0.0;
-        if ($missingRiskScore) return null;
+        if (! $hasActiveRiskMetric) {
+            return 0.0;
+        }
+        if ($missingRiskScore) {
+            return null;
+        }
 
         $riskComponent = $riskWeight > 0 ? $riskSum / $riskWeight : 0.0;
         $securityComponent = $secWeight > 0 ? $secSum / $secWeight : 0.0;
@@ -452,9 +487,16 @@ class TiaAssessment extends Model
     public function riskLevel(): ?string
     {
         $score = $this->computeOverallRisk();
-        if ($score === null) return null;
-        if ($score >= 7) return 'high';
-        if ($score >= 4) return 'medium';
+        if ($score === null) {
+            return null;
+        }
+        if ($score >= 7) {
+            return 'high';
+        }
+        if ($score >= 4) {
+            return 'medium';
+        }
+
         return 'low';
     }
 }

@@ -516,12 +516,16 @@ final class RelationCatalog
      * luar daftar ini memang tidak punya konsep divisi sama sekali, jadi tidak
      * disaring — bukan kelalaian.
      *
-     * SATU pengecualian, dan ia sengaja TIDAK ada di daftar ini: `contract_review`
-     * punya divisi tapi tidak punya kolomnya — divisinya diturunkan dari pihak
-     * ketiga di ujung rantai kontraknya. Aturannya tidak bisa dinyatakan sebagai
-     * ragam klausa atas kolom sendiri, jadi ia ditangani lebih dulu di
-     * RecordGraphBuilder::saringDivisi lewat ContractReviewScope. Menambahkannya
-     * ke daftar ini tidak akan berefek apa-apa selain menyesatkan pembacanya.
+     * TIGA pengecualian, dan ketiganya sengaja TIDAK ada di daftar ini:
+     * `contract_review`, `cross_border`, dan `tia` punya divisi tapi tidak punya
+     * kolomnya — divisinya diturunkan dari baris yang ditautkannya (pihak ketiga
+     * di ujung rantai kontrak; pihak ketiga/RoPA penerima transfer; dan untuk TIA
+     * ketiga-tiganya sekaligus, dengan aturan transfer dipinjam utuh sehingga
+     * turunannya dua lapis). Aturan seperti itu tidak bisa dinyatakan sebagai
+     * ragam klausa atas kolom sendiri, jadi ketiganya ditangani lebih dulu di
+     * RecordGraphBuilder::saringDivisi lewat ContractReviewScope / CrossBorderScope
+     * / TiaScope. Menambahkannya ke daftar ini tidak akan berefek apa-apa selain
+     * menyesatkan pembacanya.
      *
      *   created_by  — tabelnya punya kolom pembuat, dan pembuat selalu boleh lihat.
      *   wizard_ropa — RoPA juga menyimpan divisi terlibat di `wizard_data`.

@@ -10,6 +10,7 @@ use App\Services\AiService;
 use App\Services\ApprovalWorkflowDispatcher;
 use App\Services\AssessmentAutoTriggerService;
 use App\Services\NotificationService;
+use App\Support\CrossBorderScope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -28,14 +29,36 @@ class CrossBorderController extends Controller
 
     private const STATUSES = ['draft', 'pending', 'approved', 'rejected', 'expired'];
 
-    public function index(Request $request)
+    /**
+     * Query dasar untuk pemanggil request ini: batas tenant DAN batas divisi.
+     *
+     * Transfer lintas negara tidak punya kolom penugasan sendiri — divisinya
+     * diturunkan dari pihak ketiga penerima dan RoPA yang ditautkannya (lihat
+     * CrossBorderScope). SEMUA jalur di controller ini lewat sini, termasuk
+     * jalur tulis, sehingga transfer divisi lain tidak hanya tak terbaca tapi
+     * juga tak bisa disentuh; kalau tak ketemu jatuhnya 404 yang sama dengan
+     * milik org lain, jadi keberadaannya pun tidak bocor.
+     */
+    private function ruang(Request $request, bool $sampah = false)
     {
         $orgId = $request->user()->org_id;
+
+        $query = $sampah
+            ? CrossBorderTransfer::onlyTrashed()->where('org_id', $orgId)
+            : CrossBorderTransfer::where('org_id', $orgId);
+
+        CrossBorderScope::terapkan($query->getQuery(), $request->user(), $orgId);
+
+        return $query;
+    }
+
+    public function index(Request $request)
+    {
         // Respect ?per_page (clamp 1..200). TIA source picker minta 200 supaya
         // semua CBDT muncul; tanpa ini hardcoded 15 memotong daftar.
         $perPage = (int) $request->query('per_page', 15);
         $perPage = max(1, min($perPage, 200));
-        $transfers = CrossBorderTransfer::where('org_id', $orgId)
+        $transfers = $this->ruang($request)
             ->orderBy('created_at', 'desc')
             ->paginate($perPage);
 
@@ -85,14 +108,14 @@ class CrossBorderController extends Controller
 
     public function show(Request $request, $id)
     {
-        $transfer = CrossBorderTransfer::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $transfer = $this->ruang($request)->findOrFail($id);
 
         return response()->json(['data' => $transfer]);
     }
 
     public function update(Request $request, $id)
     {
-        $transfer = CrossBorderTransfer::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $transfer = $this->ruang($request)->findOrFail($id);
         $oldStatus = $transfer->status;
         $data = $request->validate($this->writeRules(true));
         $data = $this->applyLinkedVendor($request->user()->org_id, $data);
@@ -127,7 +150,7 @@ class CrossBorderController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        $transfer = CrossBorderTransfer::where('org_id', $request->user()->org_id)->findOrFail($id);
+        $transfer = $this->ruang($request)->findOrFail($id);
         $transfer->delete();
 
         return response()->json(['message' => 'Data transfer berhasil dihapus']);
@@ -135,7 +158,7 @@ class CrossBorderController extends Controller
 
     public function trashed(Request $request)
     {
-        $transfers = CrossBorderTransfer::onlyTrashed()->where('org_id', $request->user()->org_id)
+        $transfers = $this->ruang($request, sampah: true)
             ->orderBy('deleted_at', 'desc')->get();
 
         return response()->json($transfers);
@@ -143,7 +166,7 @@ class CrossBorderController extends Controller
 
     public function restore(Request $request, $id)
     {
-        $transfer = CrossBorderTransfer::onlyTrashed()->where('org_id', $request->user()->org_id)->findOrFail($id);
+        $transfer = $this->ruang($request, sampah: true)->findOrFail($id);
         $transfer->restore();
 
         return response()->json(['message' => 'Data transfer berhasil dipulihkan']);
@@ -151,7 +174,7 @@ class CrossBorderController extends Controller
 
     public function forceDelete(Request $request, $id)
     {
-        $transfer = CrossBorderTransfer::onlyTrashed()->where('org_id', $request->user()->org_id)->findOrFail($id);
+        $transfer = $this->ruang($request, sampah: true)->findOrFail($id);
         $transfer->forceDelete();
 
         return response()->json(['message' => 'Data transfer dihapus permanen']);
@@ -172,7 +195,7 @@ class CrossBorderController extends Controller
     public function assessTIA(Request $request, $id)
     {
         $user = $request->user();
-        $transfer = CrossBorderTransfer::where('org_id', $user->org_id)->findOrFail($id);
+        $transfer = $this->ruang($request)->findOrFail($id);
 
         $validated = $request->validate([
             'tia_answers' => 'required|array',

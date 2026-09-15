@@ -15,9 +15,13 @@ use App\Services\AiDocumentAnalyzer;
 use App\Services\AssessmentPdfService;
 use App\Services\CreditService;
 use App\Services\FileUploadValidator;
+use App\Services\NotificationService;
 use App\Services\TenantStorageService;
+use App\Support\TiaScope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use RuntimeException;
 
@@ -58,9 +62,34 @@ class TiaController extends Controller
         'retention_period',
     ];
 
-    public function index(Request $request)
+    /**
+     * Query dasar untuk pemanggil request ini: batas divisi, di atas batas
+     * tenant yang sudah dipasang global scope `org` (BelongsToOrg).
+     *
+     * TIA tidak punya kolom penugasan sendiri — divisinya diturunkan dari RoPA,
+     * pihak ketiga, atau transfer lintas negara yang ditautkannya (lihat
+     * TiaScope). SEMUA jalur di controller ini lewat sini, termasuk jalur tulis
+     * dan alih status (submit/check/approve/reject/unlock), sehingga TIA divisi
+     * lain tidak hanya tak terbaca tapi juga tak bisa digerakkan; kalau tak
+     * ketemu jatuhnya 404 yang sama dengan milik org lain.
+     *
+     * @return Builder<TiaAssessment>
+     */
+    private function ruang(): Builder
     {
         $query = TiaAssessment::query();
+        $user = request()->user();
+
+        if ($user) {
+            TiaScope::terapkan($query->getQuery(), $user, (string) $user->org_id);
+        }
+
+        return $query;
+    }
+
+    public function index(Request $request)
+    {
+        $query = $this->ruang();
         if ($request->boolean('trash')) {
             $query->onlyTrashed();
         }
@@ -72,7 +101,7 @@ class TiaController extends Controller
 
     public function show(string $id)
     {
-        $record = TiaAssessment::query()
+        $record = $this->ruang()
             ->with([
                 'crossBorder:id,destination_country,destination_entity,transfer_purpose,status,risk_level',
                 'ropa:id,custom_number,registration_number,processing_activity,division,risk_level',
@@ -91,7 +120,7 @@ class TiaController extends Controller
         $data = $this->applyCustomMetricScores($data, $request->user()->org_id);
         // Drop net-new columns if their migration has not been applied yet.
         foreach (['description', 'answer_notes'] as $col) {
-            if (array_key_exists($col, $data) && ! \Illuminate\Support\Facades\Schema::hasColumn('tia_assessments', $col)) {
+            if (array_key_exists($col, $data) && ! Schema::hasColumn('tia_assessments', $col)) {
                 unset($data[$col]);
             }
         }
@@ -112,7 +141,11 @@ class TiaController extends Controller
      */
     public function fromRopa(Request $request, string $ropaId)
     {
-        $ropa = Ropa::query()->findOrFail($ropaId);
+        // Batas divisi ikut dipasang: TIA hanya boleh dibuat dari sumber yang
+        // memang terlihat oleh orangnya. Tanpa ini seseorang bisa menarik RoPA
+        // divisi lain ke dalam TIA baru — dan cuplikan isinya ikut tersalin ke
+        // `wizard_data`, jadi datanya benar-benar berpindah tangan.
+        $ropa = Ropa::query()->visibleTo($request->user())->findOrFail($ropaId);
         $orgId = $request->user()->org_id;
         if ($ropa->org_id !== $orgId) {
             abort(403, 'RoPA belongs to another org.');
@@ -162,7 +195,10 @@ class TiaController extends Controller
      */
     public function fromCrossBorder(Request $request, string $cbtId)
     {
-        $cbt = CrossBorderTransfer::query()->with('ropa:id,registration_number,division,processing_activity')->findOrFail($cbtId);
+        $cbt = CrossBorderTransfer::query()
+            ->visibleTo($request->user())
+            ->with('ropa:id,registration_number,division,processing_activity')
+            ->findOrFail($cbtId);
         $orgId = $request->user()->org_id;
         if ($cbt->org_id !== $orgId) {
             abort(403, 'Cross-border transfer belongs to another org.');
@@ -204,7 +240,7 @@ class TiaController extends Controller
      */
     public function fromVendor(Request $request, string $vendorId)
     {
-        $vendor = Vendor::query()->findOrFail($vendorId);
+        $vendor = Vendor::query()->visibleTo($request->user())->findOrFail($vendorId);
         $orgId = $request->user()->org_id;
         if ($vendor->org_id !== $orgId) {
             abort(403, 'Vendor belongs to another org.');
@@ -251,7 +287,7 @@ class TiaController extends Controller
 
     public function update(Request $request, string $id)
     {
-        $record = TiaAssessment::query()->findOrFail($id);
+        $record = $this->ruang()->findOrFail($id);
         if (! $record->isEditableBy($request->user())) {
             return response()->json([
                 'message' => 'TIA is locked (status='.$record->status.'). Use the reject flow or root unlock to edit.',
@@ -262,7 +298,7 @@ class TiaController extends Controller
         $data = $this->applyCustomMetricScores($data, $record->org_id, $record);
         // Drop net-new columns if their migration has not been applied yet.
         foreach (['description', 'answer_notes'] as $col) {
-            if (array_key_exists($col, $data) && ! \Illuminate\Support\Facades\Schema::hasColumn('tia_assessments', $col)) {
+            if (array_key_exists($col, $data) && ! Schema::hasColumn('tia_assessments', $col)) {
                 unset($data[$col]);
             }
         }
@@ -279,7 +315,7 @@ class TiaController extends Controller
 
     public function submit(Request $request, string $id)
     {
-        $record = TiaAssessment::query()->findOrFail($id);
+        $record = $this->ruang()->findOrFail($id);
         if ($record->is_locked || $record->status !== TiaAssessment::STATUS_DRAFT) {
             return response()->json(['message' => "Cannot submit from state '{$record->status}'."], 409);
         }
@@ -312,14 +348,16 @@ class TiaController extends Controller
         ], 'manual');
 
         try {
-            \App\Services\NotificationService::dispatch(
+            NotificationService::dispatch(
                 kind: 'warning', severity: 'medium', module: 'tia',
                 type: 'tia.submitted', recipient: 'role:dpo,admin', orgId: $record->org_id,
                 title: "TIA menunggu review: {$record->tia_code}",
                 body: 'Skor risiko '.round((float) $record->overall_risk_score, 1).' ('.$record->riskLevel().') — perlu Checker/Approver.',
                 actionUrl: "/tia/{$record->id}", metadata: ['record_id' => $record->id],
             );
-        } catch (\Throwable $e) { \Log::warning('tia.submitted notif failed: '.$e->getMessage()); }
+        } catch (\Throwable $e) {
+            \Log::warning('tia.submitted notif failed: '.$e->getMessage());
+        }
 
         return response()->json([
             'message' => 'Submitted to Checker / Approver. Read-only now.',
@@ -334,7 +372,7 @@ class TiaController extends Controller
             'notes' => 'nullable|string|max:2000',
         ]);
 
-        $record = TiaAssessment::query()->findOrFail($id);
+        $record = $this->ruang()->findOrFail($id);
         if (! in_array($record->status, [TiaAssessment::STATUS_SUBMITTED], true)) {
             return response()->json(['message' => "Cannot check from state '{$record->status}'."], 409);
         }
@@ -395,7 +433,7 @@ class TiaController extends Controller
             'reason' => 'required|string|max:1000',
         ]);
 
-        $record = TiaAssessment::query()->findOrFail($id);
+        $record = $this->ruang()->findOrFail($id);
         if (! in_array($record->status, [TiaAssessment::STATUS_SUBMITTED, TiaAssessment::STATUS_CHECKED], true)) {
             return response()->json([
                 'message' => "Penyesuaian skor hanya bisa dilakukan saat review (submitted/checked). Status sekarang: '{$record->status}'.",
@@ -485,7 +523,7 @@ class TiaController extends Controller
             'conclusion_notes' => 'nullable|string|max:5000',
         ]);
 
-        $record = TiaAssessment::query()->findOrFail($id);
+        $record = $this->ruang()->findOrFail($id);
         if (! in_array($record->status, [TiaAssessment::STATUS_SUBMITTED, TiaAssessment::STATUS_CHECKED], true)) {
             return response()->json(['message' => "Cannot approve from state '{$record->status}'."], 409);
         }
@@ -505,14 +543,16 @@ class TiaController extends Controller
         ], 'manual');
 
         try {
-            \App\Services\NotificationService::dispatch(
+            NotificationService::dispatch(
                 kind: 'info', severity: 'medium', module: 'tia',
                 type: 'tia.approved', recipient: 'role:dpo,admin', orgId: $record->org_id,
                 title: "TIA disetujui ({$record->conclusion_verdict}): {$record->tia_code}",
                 body: 'Verdict: '.$record->conclusion_verdict.' · skor risiko '.round((float) $record->overall_risk_score, 1).'.',
                 actionUrl: "/tia/{$record->id}", metadata: ['record_id' => $record->id],
             );
-        } catch (\Throwable $e) { \Log::warning('tia.approved notif failed: '.$e->getMessage()); }
+        } catch (\Throwable $e) {
+            \Log::warning('tia.approved notif failed: '.$e->getMessage());
+        }
 
         return response()->json([
             'message' => 'TIA approved with verdict: '.$record->conclusion_verdict,
@@ -526,7 +566,7 @@ class TiaController extends Controller
             'rejection_reason' => 'required|string|max:5000',
         ]);
 
-        $record = TiaAssessment::query()->findOrFail($id);
+        $record = $this->ruang()->findOrFail($id);
         if (! in_array($record->status, [TiaAssessment::STATUS_SUBMITTED, TiaAssessment::STATUS_CHECKED], true)) {
             return response()->json(['message' => "Cannot reject from state '{$record->status}'."], 409);
         }
@@ -554,7 +594,7 @@ class TiaController extends Controller
             return response()->json(['message' => 'Only root can unlock submitted TIA records.'], 403);
         }
 
-        $record = TiaAssessment::query()->findOrFail($id);
+        $record = $this->ruang()->findOrFail($id);
         if (! $record->is_locked) {
             return response()->json(['message' => 'TIA is not locked.'], 200);
         }
@@ -577,7 +617,7 @@ class TiaController extends Controller
 
     public function destroy(string $id)
     {
-        $record = TiaAssessment::query()->findOrFail($id);
+        $record = $this->ruang()->findOrFail($id);
         $record->delete();
         AuditLog::log('tia', $record->id, 'soft_deleted', [], 'manual');
 
@@ -586,7 +626,7 @@ class TiaController extends Controller
 
     public function restore(string $id)
     {
-        $record = TiaAssessment::onlyTrashed()->findOrFail($id);
+        $record = $this->ruang()->onlyTrashed()->findOrFail($id);
         $record->restore();
         AuditLog::log('tia', $record->id, 'restored', [], 'manual');
 
@@ -595,7 +635,7 @@ class TiaController extends Controller
 
     public function forceDelete(string $id)
     {
-        $record = TiaAssessment::withTrashed()->findOrFail($id);
+        $record = $this->ruang()->withTrashed()->findOrFail($id);
         $record->forceDelete();
         AuditLog::log('tia', $id, 'hard_deleted', [], 'manual');
 
@@ -607,7 +647,7 @@ class TiaController extends Controller
      */
     public function exportPdf(Request $request, AssessmentPdfService $pdf, string $id)
     {
-        $record = TiaAssessment::query()->findOrFail($id);
+        $record = $this->ruang()->findOrFail($id);
         $filename = "TIA_{$record->tia_code}.pdf";
 
         AuditLog::log('tia', $record->id, 'pdf_exported', [
@@ -909,7 +949,7 @@ class TiaController extends Controller
             'file' => 'required|file|max:10240',
         ]);
 
-        $assessment = TiaAssessment::query()
+        $assessment = $this->ruang()
             ->where('org_id', $request->user()->org_id)
             ->findOrFail($id);
 
@@ -947,8 +987,9 @@ class TiaController extends Controller
             );
         } catch (\Throwable $e) {
             report($e);
+
             return response()->json([
-                'message' => 'Gagal menyimpan file ke storage: ' . $e->getMessage(),
+                'message' => 'Gagal menyimpan file ke storage: '.$e->getMessage(),
             ], 500);
         }
 
@@ -960,7 +1001,7 @@ class TiaController extends Controller
 
         $attachments = $assessment->attachments ?? [];
 
-        if (!isset($attachments[$qCode]) || !is_array($attachments[$qCode])) {
+        if (! isset($attachments[$qCode]) || ! is_array($attachments[$qCode])) {
             $attachments[$qCode] = [];
         }
 
@@ -1009,7 +1050,7 @@ class TiaController extends Controller
             'attachment_path' => 'required|string|max:1024',
         ]);
 
-        $assessment = TiaAssessment::query()
+        $assessment = $this->ruang()
             ->where('org_id', $request->user()->org_id)
             ->findOrFail($id);
 
@@ -1027,6 +1068,7 @@ class TiaController extends Controller
         $metricAttachments = $attachments[$qCode] ?? [];
         $matched = collect($metricAttachments)->first(function ($att) use ($request) {
             $path = is_array($att) ? ($att['path'] ?? null) : $att;
+
             return $path === $request->attachment_path;
         });
 
@@ -1049,6 +1091,7 @@ class TiaController extends Controller
             CreditService::resetIfNeeded($orgId);
             if (! CreditService::hasCredit($orgId, 'ai_doc_analyze')) {
                 $cost = CreditService::getCost('ai_doc_analyze');
+
                 return response()->json([
                     'message' => "Kredit AI Anda habis. Dibutuhkan {$cost} kredit untuk analisis ini. Silakan top up kredit melalui menu Konfigurasi Platform.",
                     'credits_exhausted' => true,
@@ -1104,7 +1147,7 @@ class TiaController extends Controller
      */
     public function bulkAnalyzeEvidence(Request $request, string $id, AiDocumentAnalyzer $analyzer)
     {
-        $assessment = TiaAssessment::query()
+        $assessment = $this->ruang()
             ->where('org_id', $request->user()->org_id)
             ->findOrFail($id);
         $orgId = $request->user()->org_id;
@@ -1130,6 +1173,7 @@ class TiaController extends Controller
             $metric = $metricMap->get($qCode);
             if (! $metric) {
                 $stats['skipped'] += is_array($files) ? count($files) : 1;
+
                 continue;
             }
 
@@ -1146,6 +1190,7 @@ class TiaController extends Controller
                 $attachmentPath = is_array($att) ? ($att['path'] ?? null) : $att;
                 if (! $attachmentPath) {
                     $stats['skipped']++;
+
                     continue;
                 }
 
@@ -1154,6 +1199,7 @@ class TiaController extends Controller
                 if ($prev && ! empty($prev['status'])) {
                     $newListForQ[] = $prev;
                     $stats['cached']++;
+
                     continue;
                 }
 
@@ -1169,6 +1215,7 @@ class TiaController extends Controller
                         'attachment_path' => $attachmentPath,
                     ];
                     $stats['skipped']++;
+
                     continue;
                 }
 
@@ -1192,6 +1239,7 @@ class TiaController extends Controller
                         'attachment_path' => $attachmentPath,
                     ];
                     $stats['failed']++;
+
                     continue;
                 }
 
@@ -1272,6 +1320,7 @@ class TiaController extends Controller
         if (isset($value['status'])) {
             return [$value];
         }
+
         // Sudah berupa list (numeric indexed).
         return array_values($value);
     }
@@ -1280,9 +1329,12 @@ class TiaController extends Controller
     private function bytesFromIni(string $val): int
     {
         $val = trim($val);
-        if ($val === '') return 0;
+        if ($val === '') {
+            return 0;
+        }
         $unit = strtolower(substr($val, -1));
         $num = (int) $val;
+
         return match ($unit) {
             'g' => $num * 1024 * 1024 * 1024,
             'm' => $num * 1024 * 1024,
@@ -1294,9 +1346,14 @@ class TiaController extends Controller
     /** Format byte ke MB/KB human-readable. */
     private function humanBytes(int $bytes): string
     {
-        if ($bytes >= 1048576) return number_format($bytes / 1048576, 1) . 'MB';
-        if ($bytes >= 1024) return number_format($bytes / 1024, 1) . 'KB';
-        return $bytes . 'B';
+        if ($bytes >= 1048576) {
+            return number_format($bytes / 1048576, 1).'MB';
+        }
+        if ($bytes >= 1024) {
+            return number_format($bytes / 1024, 1).'KB';
+        }
+
+        return $bytes.'B';
     }
 
     /**
@@ -1340,6 +1397,7 @@ class TiaController extends Controller
             if (file_put_contents($tmpPath, $contents) === false) {
                 return null;
             }
+
             return $tmpPath;
         } catch (\Throwable $e) {
             \Log::warning('[TIA resolveAttachmentPath] tenant disk fetch failed', [
@@ -1347,6 +1405,7 @@ class TiaController extends Controller
                 'path' => $rel,
                 'error' => $e->getMessage(),
             ]);
+
             return null;
         }
     }

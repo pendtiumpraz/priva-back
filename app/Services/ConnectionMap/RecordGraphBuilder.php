@@ -5,6 +5,8 @@ namespace App\Services\ConnectionMap;
 use App\Models\User;
 use App\Support\AssignmentScope;
 use App\Support\ContractReviewScope;
+use App\Support\CrossBorderScope;
+use App\Support\TiaScope;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -113,6 +115,21 @@ class RecordGraphBuilder
         // divisi lain, lengkap dengan tautan ke halaman telaahnya.
         if ($type === 'contract_review') {
             ContractReviewScope::terapkan($q, $this->pengguna, $orgId);
+
+            return;
+        }
+
+        // Transfer lintas negara dan TIA sama halnya: divisinya diturunkan dari
+        // baris yang ditautkannya, bukan dari kolom sendiri. TIA bahkan
+        // meminjam aturan transfer, jadi turunannya dua lapis.
+        if ($type === 'cross_border') {
+            CrossBorderScope::terapkan($q, $this->pengguna, $orgId);
+
+            return;
+        }
+
+        if ($type === 'tia') {
+            TiaScope::terapkan($q, $this->pengguna, $orgId);
 
             return;
         }
