@@ -117,6 +117,13 @@ class DivisiDsrConsentMaturityTest extends TestCase
         $terlihat = $this->dsrTerlihat();
         $this->assertContains($milikKeuangan, $terlihat);
         $this->assertNotContains($milikHr, $terlihat);
+
+        // Chip divisi di layar membaca field ini dari payload DAFTAR, bukan
+        // dari respons create — kalau tidak ikut terkirim, chipnya selalu
+        // kosong walau datanya benar.
+        $baris = $this->getJson('/api/m/dsr')->assertOk()->json('data');
+        $this->assertSame('Keuangan', $baris[0]['assign_group'] ?? null);
+        $this->assertSame('Keuangan', $baris[0]['origin_division'] ?? null);
     }
 
     #[Test]
