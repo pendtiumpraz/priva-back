@@ -41,6 +41,27 @@ final class AssignmentScope
     public const SEMUA = '(All Group)';
 
     /**
+     * Apakah orang ini memegang peran DPO?
+     *
+     * DUA cara menandainya, dan keduanya dipakai di lapangan: kolom `role`
+     * global bernilai `dpo`, ATAU nama tenant role-nya `dpo`. Tenant yang
+     * memakai role kustom bernama "DPO" harus tetap terbaca sebagai DPO —
+     * kalau tidak, pemilih Pejabat PDP di wizard RoPA jadi kosong dan cakupan
+     * DPO-nya salah dihitung.
+     *
+     * @param  User|null  $user
+     */
+    public static function berperanDpo($user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        return ($user->role ?? '') === 'dpo'
+            || strtolower((string) optional($user->tenantRole)->name) === 'dpo';
+    }
+
+    /**
      * Apakah user ini menembus penyaringan divisi?
      *
      * @param  User|null  $user
@@ -51,10 +72,15 @@ final class AssignmentScope
             return false;
         }
 
+        // Pemilik dan staf platform selalu tembus — mereka di atas tenant.
+        if (in_array($user->role ?? '', ['root', 'superadmin'], true)) {
+            return true;
+        }
+
         $tenantRole = $user->tenantRole;
         $izin = $tenantRole?->permissions;
 
-        return in_array($user->role ?? '', ['root', 'superadmin', 'admin', 'dpo'], true)
+        return in_array($user->role ?? '', ['admin', 'dpo'], true)
             || in_array(strtolower((string) optional($tenantRole)->name), ['admin', 'dpo'], true)
             // Admin tenant sering memakai NAMA role kustom tetapi berizin '*'
             // (akses penuh) — itulah cara kanonik aplikasi menandai "boleh lihat

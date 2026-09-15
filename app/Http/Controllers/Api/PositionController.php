@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Position;
 use App\Models\User;
+use App\Support\AssignmentScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -76,7 +77,24 @@ class PositionController extends Controller
     }
 
     /**
-     * Get DPO users for auto-fill in RoPA/DPIA wizards.
+     * Daftar orang untuk pemilih di wizard RoPA/DPIA.
+     *
+     * Namanya menyesatkan dan sengaja dipertahankan demi pemanggil lama: yang
+     * dikembalikan adalah SELURUH user aktif organisasi, bukan hanya DPO. Itu
+     * memang dibutuhkan, karena satu daftar ini memberi makan TIGA pemilih yang
+     * berbeda sifatnya di wizard RoPA:
+     *
+     *   Pejabat PDP (dpo_list)          → HANYA yang benar-benar DPO
+     *   Process Owner / PIC (pic_list)  → siapa pun
+     *   PIC penerima internal           → siapa pun
+     *
+     * Karena itu penyaringannya TIDAK dilakukan di sini — menyaring endpoint
+     * akan mengosongkan dua pemilih yang lain. Yang dikirim adalah penandanya,
+     * `is_dpo`, dan pemilih Pejabat PDP-lah yang memakainya.
+     *
+     * Penandanya memakai predikat yang SAMA dengan AssignmentScope: role global
+     * `dpo` ATAU nama tenant role `dpo`. Tenant yang menandai DPO lewat role
+     * kustom karena itu tidak berakhir dengan pemilih kosong.
      */
     public function dpoUsers(Request $request): JsonResponse
     {
@@ -85,11 +103,16 @@ class PositionController extends Controller
         $users = User::where('org_id', $orgId)
             ->where('is_active', true)
             ->whereNull('deleted_at')
-            ->select('id', 'name', 'email', 'phone', 'position', 'role', 'department_id', 'position_id')
-            ->with('department:id,name')
+            ->select('id', 'name', 'email', 'phone', 'position', 'role', 'department_id', 'position_id', 'tenant_role_id')
+            ->with(['department:id,name', 'tenantRole:id,name'])
             ->orderByRaw("CASE role WHEN 'dpo' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END")
             ->orderBy('name')
-            ->get();
+            ->get()
+            ->map(function (User $u) {
+                $u->setAttribute('is_dpo', AssignmentScope::berperanDpo($u));
+
+                return $u;
+            });
 
         return response()->json(['data' => $users]);
     }
