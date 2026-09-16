@@ -2612,6 +2612,7 @@ Route::prefix('v1/consent')->middleware('consent.api_key')->group(function () {
     // Alur wali (PP 33/2026 Pasal 38) dari sisi server tenant.
     Route::post('/guardian/request', [ConsentApiV1Controller::class, 'guardianRequest']);
     Route::post('/guardian/confirm', [ConsentApiV1Controller::class, 'guardianConfirm']);
+    Route::post('/guardian/assert', [ConsentApiV1Controller::class, 'guardianAssert']);
     Route::get('/guardian/{id}', [ConsentApiV1Controller::class, 'guardianStatus'])->where('id', '[0-9a-fA-F-]{36}');
 });
 

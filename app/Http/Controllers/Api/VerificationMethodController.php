@@ -46,7 +46,7 @@ class VerificationMethodController extends Controller
 
         return response()->json([
             'data' => $daftar->map(fn (VerificationMethod $m) => $this->bentuk($m, $orgId))->values()->all(),
-            'drivers' => RegistriPenyedia::driverKuat(),
+            'drivers' => VerificationMethod::driverDibuatTenant(),
             'confidence_levels' => VerificationMethod::KEYAKINAN,
             'placeholders' => VerificationMethod::PLACEHOLDER_KLAIM,
         ]);
@@ -168,9 +168,9 @@ class VerificationMethodController extends Controller
         return [
             'code' => [$wajib, 'string', 'regex:/^[a-z0-9_]{3,48}$/'],
             'label' => $s.'required|string|max:120',
-            // OTP milik platform; tenant hanya membuat metode KUAT. `mock`
-            // ikut daftar hanya di luar produksi (RegistriPenyedia).
-            'driver' => [$wajib, Rule::in(RegistriPenyedia::driverKuat())],
+            // OTP milik platform; tenant membuat metode KUAT atau pernyataan
+            // tenant. `mock` ikut daftar hanya di luar produksi (RegistriPenyedia).
+            'driver' => [$wajib, Rule::in(VerificationMethod::driverDibuatTenant())],
             'confidence' => ['sometimes', Rule::in(VerificationMethod::KEYAKINAN)],
             'is_active' => 'sometimes|boolean',
             'review_at' => 'sometimes|nullable|date',
@@ -198,8 +198,13 @@ class VerificationMethodController extends Controller
     private function keyakinanBawaan(string $driver): string
     {
         // Dukcapil/e-KYC membuktikan identitas → tinggi. Simulasi tidak
-        // membuktikan apa pun → rendah, supaya data staging jujur.
-        return $driver === VerificationMethod::DRIVER_MOCK ? 'rendah' : 'tinggi';
+        // membuktikan apa pun → rendah, supaya data staging jujur. Pernyataan
+        // tenant → sedang: kami tidak memeriksanya, tenant yang menanggung.
+        return match ($driver) {
+            VerificationMethod::DRIVER_MOCK => 'rendah',
+            VerificationMethod::DRIVER_TENANT => 'sedang',
+            default => 'tinggi',
+        };
     }
 
     /**

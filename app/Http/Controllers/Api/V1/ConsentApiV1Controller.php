@@ -25,6 +25,8 @@ use Illuminate\Http\Request;
  *   GET  /api/v1/consent/items             — list active consent items + categories
  *   POST /api/v1/consent/guardian/request  — ajukan verifikasi wali (Pasal 38)
  *   POST /api/v1/consent/guardian/confirm  — wali menyetujui (jalur kuat, token sesi)
+ *   POST /api/v1/consent/guardian/assert   — tenant menyatakan kewenangan yang sudah
+ *                                            diverifikasinya sendiri (driver tenant_asserted)
  *   GET  /api/v1/consent/guardian/{id}     — status kewenangan wali
  *
  * Consent anak (PP 33/2026 Pasal 38): `capture` dengan `subject_class=anak`
@@ -108,6 +110,51 @@ class ConsentApiV1Controller extends Controller
             'guardian_consent_id' => $log->guardian_consent_id,
             'subject_class' => $log->subject_class,
         ]);
+    }
+
+    /**
+     * Tenant menyatakan kewenangan wali yang sudah diverifikasinya SENDIRI
+     * (KYC internal). Hanya untuk metode ber-driver `tenant_asserted` milik
+     * tenant di katalognya. Kewenangan lahir terverifikasi — lalu dipakai di
+     * `capture` lewat `guardian_consent_id`, yang tetap diperiksa GerbangWali.
+     */
+    public function guardianAssert(Request $request)
+    {
+        $cp = $request->consentCollection;
+        if (! $cp) {
+            return response()->json(['error' => 'Collection not resolved'], 500);
+        }
+
+        $data = $request->validate([
+            'user_identifier' => 'required|string|max:200',
+            'subject_class' => 'required|in:anak,disabilitas',
+            'guardian' => 'required|array',
+            'guardian.name' => 'required|string|max:120',
+            'guardian.contact' => 'required|string|max:200',
+            'guardian.relationship' => 'required|in:'.implode(',', Guardian::HUBUNGAN),
+            'guardian.relationship_note' => 'nullable|string|max:255',
+            'method_code' => 'required|string|max:48',
+            // Rujukan sistem tenant (nomor KYC, nomor akta) — BUKAN NIK.
+            'reference' => 'nullable|string|max:255',
+            'verified_at' => 'nullable|date|before_or_equal:now',
+            'transition_date' => 'nullable|date|after:today',
+            'subject_own_channel' => 'nullable|string|max:200',
+        ]);
+
+        $kw = app(LayananWali::class)->nyatakan($cp, $data, (string) $request->ip(), $request->userAgent(), 'partner_api');
+
+        return response()->json([
+            'message' => 'Kewenangan wali tercatat atas pernyataan tenant.',
+            'guardian_consent_id' => $kw->id,
+            'status' => 'terverifikasi',
+            'verification' => [
+                'method_code' => $kw->verification_method_code,
+                'driver' => $kw->verification_driver,
+                'confidence' => $kw->verification_confidence,
+                'reference' => $kw->verification_reference,
+                'verified_at' => $kw->verified_at?->toIso8601String(),
+            ],
+        ], 201);
     }
 
     public function guardianStatus(Request $request, string $id)

@@ -18,6 +18,7 @@ use App\Services\Verifikasi\KlaimIdentitas;
 use App\Services\Verifikasi\RegistriPenyedia;
 use App\Support\NomorTelepon;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
@@ -269,58 +270,102 @@ final class LayananWali
     }
 
     /**
-     * Bagian yang sama untuk kedua jalur: subjek, wali, kewenangan (dibuat
-     * bila belum ada), dan pilihan yang menunggu — dalam satu transaksi.
-     * Belum ada satu baris pun di ledger setelah ini.
+     * PERNYATAAN tenant — Partner API `guardian/assert`.
+     *
+     * Tenant yang sudah memverifikasi walinya sendiri (KYC internal bank,
+     * akta di sekolah) menyatakannya, dan kewenangan lahir TERVERIFIKASI:
+     * tanpa surel, tanpa Dukcapil lewat kami. Yang tercatat adalah siapa yang
+     * menyatakan — driver `tenant_asserted`, keyakinan yang tenant nyatakan
+     * pada metodenya sendiri, nomor rujukan sistem tenant, dan kapan tenant
+     * memverifikasinya. Tidak ada pilihan consent di sini: tenant lalu
+     * memanggil `capture` dengan guardian_consent_id, dan GerbangWali
+     * memeriksanya seperti kewenangan lain. Tidak pernah lewat widget.
+     *
+     * @param  array<string, mixed>  $data  sudah tervalidasi; memuat `method_code`
+     */
+    public function nyatakan(ConsentCollectionPoint $cp, array $data, string $ip, ?string $userAgent, string $sumber): GuardianConsent
+    {
+        $kontak = trim((string) ($data['guardian']['contact'] ?? ''));
+        if (! str_contains($kontak, '@')) {
+            $this->pastikanNomorValid($kontak);
+        }
+
+        $metode = VerificationMethod::untukOrg($cp->org_id)
+            ->where('code', (string) ($data['method_code'] ?? ''))
+            ->where('is_active', true)
+            ->first();
+
+        if (! $metode || ! $metode->dinyatakanTenant()) {
+            $this->tolak(
+                self::METODE_TIDAK_DIKENAL,
+                'Metode tidak dikenal, tidak aktif, atau bukan metode pernyataan tenant (driver tenant_asserted).',
+                422,
+                'method_code',
+            );
+        }
+
+        $kewenangan = DB::transaction(function () use ($cp, $data, $kontak, $metode, $ip, $userAgent) {
+            $kw = $this->temukanAtauBuatKewenangan($cp, $data, $kontak);
+
+            // Pernyataan tenant tidak menimpa verifikasi yang lebih kuat
+            // (Dukcapil tinggi tetap tinggi); yang setara diperbarui.
+            $peringkatBaru = VerificationMethod::peringkatKeyakinan($metode->confidence);
+            $peringkatLama = VerificationMethod::peringkatKeyakinan($kw->verification_confidence);
+            if ($kw->verified_at === null || $peringkatBaru >= $peringkatLama) {
+                $kw->forceFill([
+                    'collection_point_id' => $cp->id,
+                    // Disamakan ke zona waktu aplikasi SEBELUM disimpan: cast
+                    // datetime menulis jam apa adanya dari zona Carbon-nya, lalu
+                    // membacanya kembali sebagai zona aplikasi — "09:00+07:00"
+                    // yang disimpan mentah akan terbaca 09:00 UTC.
+                    'verified_at' => ! empty($data['verified_at'])
+                        ? Carbon::parse((string) $data['verified_at'])->setTimezone((string) config('app.timezone', 'UTC'))
+                        : now(),
+                    'verification_method_code' => $metode->code,
+                    'verification_driver' => VerificationMethod::DRIVER_TENANT,
+                    'verification_confidence' => $metode->confidence,
+                    'verification_reference' => $data['reference'] ?? null,
+                    'ip_address' => $ip,
+                    'user_agent' => $userAgent ? substr($userAgent, 0, 500) : null,
+                ])->save();
+            }
+
+            return $kw;
+        });
+
+        AuditLog::create([
+            'module' => 'consent',
+            'record_id' => $kewenangan->id,
+            'action' => 'guardian_consent.asserted',
+            'user_name' => 'tenant (partner api)',
+            'user_role' => $sumber,
+            'changes' => [
+                'collection_point_id' => $cp->id,
+                'subject_class' => $data['subject_class'],
+                'relationship' => $data['guardian']['relationship'],
+                'verification_method_code' => $metode->code,
+                'verification_driver' => VerificationMethod::DRIVER_TENANT,
+                'verification_confidence' => $metode->confidence,
+                'verification_reference' => $data['reference'] ?? null,
+                'verified_at' => $kewenangan->verified_at?->toIso8601String(),
+            ],
+            'ip_address' => $ip,
+        ]);
+
+        return $kewenangan;
+    }
+
+    /**
+     * Bagian yang sama untuk jalur surel/telepon dan jalur identitas: subjek,
+     * wali, kewenangan (dibuat bila belum ada), dan pilihan yang MENUNGGU —
+     * dalam satu transaksi. Belum ada satu baris pun di ledger setelah ini.
      *
      * @param  array<string, mixed>  $data
      */
     private function siapkanKewenangan(ConsentCollectionPoint $cp, array $data, string $kontak, string $ip, string $sumber): GuardianConsent
     {
         return DB::transaction(function () use ($cp, $data, $kontak, $ip, $sumber) {
-            $subjek = ConsentSubject::temukanAtauBuat($cp->org_id, (string) $data['user_identifier'], [
-                'subject_class' => $data['subject_class'],
-                'transition_date' => $data['transition_date'] ?? null,
-                'subject_own_channel' => $data['subject_own_channel'] ?? null,
-            ]);
-
-            // Subjek yang sudah ada: lengkapi yang masih kosong, jangan timpa.
-            // Tanggal peralihan yang sudah tercatat adalah fakta yang sudah
-            // dipakai antrean; menimpanya dari pengajuan baru membuka jalan
-            // "memundurkan" kedewasaan seorang anak lewat formulir.
-            $lengkapi = [];
-            if ($subjek->transition_date === null && ! empty($data['transition_date'])) {
-                $lengkapi['transition_date'] = $data['transition_date'];
-            }
-            if ($subjek->subject_own_channel === null && ! empty($data['subject_own_channel'])) {
-                $lengkapi['subject_own_channel'] = $data['subject_own_channel'];
-            }
-            if ($lengkapi !== []) {
-                $subjek->forceFill($lengkapi)->save();
-            }
-
-            $wali = Guardian::temukanAtauBuat($cp->org_id, $kontak, [
-                'name' => $data['guardian']['name'],
-                'relationship' => $data['guardian']['relationship'],
-                'relationship_note' => $data['guardian']['relationship_note'] ?? null,
-            ]);
-
-            $kw = GuardianConsent::withoutGlobalScope('org')
-                ->where('org_id', $cp->org_id)
-                ->where('consent_subject_id', $subjek->id)
-                ->where('guardian_id', $wali->id)
-                ->whereNull('revoked_at')
-                ->orderByDesc('created_at')
-                ->first();
-
-            if (! $kw) {
-                $kw = GuardianConsent::create([
-                    'org_id' => $cp->org_id,
-                    'consent_subject_id' => $subjek->id,
-                    'guardian_id' => $wali->id,
-                    'collection_point_id' => $cp->id,
-                ]);
-            }
+            $kw = $this->temukanAtauBuatKewenangan($cp, $data, $kontak);
 
             $kw->forceFill([
                 'collection_point_id' => $cp->id,
@@ -340,6 +385,64 @@ final class LayananWali
 
             return $kw;
         });
+    }
+
+    /**
+     * Subjek, wali, dan baris kewenangan untuk pasangan (subjek, wali) —
+     * dibuat bila belum ada, tanpa menyentuh verifikasi maupun pilihan yang
+     * menunggu. Harus dipanggil di dalam transaksi.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function temukanAtauBuatKewenangan(ConsentCollectionPoint $cp, array $data, string $kontak): GuardianConsent
+    {
+
+        $subjek = ConsentSubject::temukanAtauBuat($cp->org_id, (string) $data['user_identifier'], [
+            'subject_class' => $data['subject_class'],
+            'transition_date' => $data['transition_date'] ?? null,
+            'subject_own_channel' => $data['subject_own_channel'] ?? null,
+        ]);
+
+        // Subjek yang sudah ada: lengkapi yang masih kosong, jangan timpa.
+        // Tanggal peralihan yang sudah tercatat adalah fakta yang sudah
+        // dipakai antrean; menimpanya dari pengajuan baru membuka jalan
+        // "memundurkan" kedewasaan seorang anak lewat formulir.
+        $lengkapi = [];
+        if ($subjek->transition_date === null && ! empty($data['transition_date'])) {
+            $lengkapi['transition_date'] = $data['transition_date'];
+        }
+        if ($subjek->subject_own_channel === null && ! empty($data['subject_own_channel'])) {
+            $lengkapi['subject_own_channel'] = $data['subject_own_channel'];
+        }
+        if ($lengkapi !== []) {
+            $subjek->forceFill($lengkapi)->save();
+        }
+
+        $wali = Guardian::temukanAtauBuat($cp->org_id, $kontak, [
+            'name' => $data['guardian']['name'],
+            'relationship' => $data['guardian']['relationship'],
+            'relationship_note' => $data['guardian']['relationship_note'] ?? null,
+        ]);
+
+        $kw = GuardianConsent::withoutGlobalScope('org')
+            ->where('org_id', $cp->org_id)
+            ->where('consent_subject_id', $subjek->id)
+            ->where('guardian_id', $wali->id)
+            ->whereNull('revoked_at')
+            ->orderByDesc('created_at')
+            ->first();
+
+        if (! $kw) {
+            $kw = GuardianConsent::create([
+                'org_id' => $cp->org_id,
+                'consent_subject_id' => $subjek->id,
+                'guardian_id' => $wali->id,
+                'collection_point_id' => $cp->id,
+            ]);
+        }
+
+        return $kw;
+
     }
 
     /**

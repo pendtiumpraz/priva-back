@@ -47,7 +47,16 @@ class VerificationMethod extends Model
     /** Simulasi — hanya di luar produksi (lihat RegistriPenyedia). */
     public const DRIVER_MOCK = 'mock';
 
-    public const DRIVERS = [self::DRIVER_OTP, self::DRIVER_DUKCAPIL, self::DRIVER_EKYC, self::DRIVER_MOCK];
+    /**
+     * PERNYATAAN tenant: tenant sudah memverifikasi walinya sendiri (KYC
+     * internal bank, akta di sekolah) dan menyatakannya lewat Partner API.
+     * Kami tidak memeriksa apa pun — yang tercatat adalah siapa yang
+     * menyatakan, dengan keyakinan yang ia nyatakan pada metodenya sendiri.
+     * Tidak pernah ditawarkan widget.
+     */
+    public const DRIVER_TENANT = 'tenant_asserted';
+
+    public const DRIVERS = [self::DRIVER_OTP, self::DRIVER_DUKCAPIL, self::DRIVER_EKYC, self::DRIVER_MOCK, self::DRIVER_TENANT];
 
     /**
      * Driver KUAT membuktikan IDENTITAS wali lewat penyedia (Dukcapil, e-KYC);
@@ -141,6 +150,23 @@ class VerificationMethod extends Model
     public function kuat(): bool
     {
         return in_array($this->driver, self::DRIVER_KUAT, true);
+    }
+
+    /** Metode pernyataan tenant — hanya lewat Partner API `guardian/assert`. */
+    public function dinyatakanTenant(): bool
+    {
+        return $this->driver === self::DRIVER_TENANT;
+    }
+
+    /**
+     * Driver yang boleh dibuat tenant di katalognya: metode kuat (sesuai
+     * lingkungan) + pernyataan tenant. OTP milik platform.
+     *
+     * @return list<string>
+     */
+    public static function driverDibuatTenant(): array
+    {
+        return [...RegistriPenyedia::driverKuat(), self::DRIVER_TENANT];
     }
 
     /** Baris `org_id` NULL: milik platform, terlihat semua tenant, hanya bisa dibaca tenant. */
