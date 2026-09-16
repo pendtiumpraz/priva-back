@@ -351,6 +351,13 @@ class ModuleCrudController extends Controller
             $query->where('status', $request->get('status'));
         }
 
+        // Titik milik modul subjek (Consent Wali / Consent Aksesibilitas)
+        // dikelola dari modulnya sendiri — daftar Consent umum hanya
+        // menampilkan titik dewasa. Detail/ubah lewat id tetap bisa.
+        if ($module === 'consent') {
+            $query->whereNull('owner_module');
+        }
+
         $this->applyRopaUserScope($query, $request, $module);
 
         // Basic search if 'q' is provided

@@ -44,6 +44,9 @@ class MenuRegistryService
         'cross-border' => 'cross_border',
         'dsr' => 'dsr',
         'consent' => 'consent',
+        // Dua modul per subjek (PP 33/2026 Ps 38 & 39) — izin sendiri, bukan `consent`.
+        'consent-guardian' => 'consent_guardian',
+        'consent-accessibility' => 'consent_accessibility',
         'cookie' => 'cookie',
         'breach' => 'breach',
         'security' => 'security',

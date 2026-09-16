@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AccessibilityAdminController;
 use App\Http\Controllers\Api\Admin\ConsentExtractController;
 use App\Http\Controllers\Api\Admin\CookieLogAdminController;
 use App\Http\Controllers\Api\Admin\CrmCredentialController;
@@ -29,8 +30,6 @@ use App\Http\Controllers\Api\ConnectionMapController;
 use App\Http\Controllers\Api\ConsentCollectionController;
 use App\Http\Controllers\Api\ConsentItemController;
 use App\Http\Controllers\Api\ConsentLogController;
-use App\Http\Controllers\Api\GuardianConsentPublicController;
-use App\Http\Controllers\Api\TransitionPublicController;
 use App\Http\Controllers\Api\ConsentRuleSetController;
 use App\Http\Controllers\Api\ContainmentController;
 use App\Http\Controllers\Api\ContractReviewCrudController;
@@ -58,9 +57,6 @@ use App\Http\Controllers\Api\DpiaThirdPartyController;
 use App\Http\Controllers\Api\DpoScopeController;
 use App\Http\Controllers\Api\DsrAppController;
 use App\Http\Controllers\Api\DsrAutomatedDecisionController;
-use App\Http\Controllers\Api\GuardianConsentAdminController;
-use App\Http\Controllers\Api\AccessibilityAdminController;
-use App\Http\Controllers\Api\VerificationMethodController;
 use App\Http\Controllers\Api\DsrChannelController;
 use App\Http\Controllers\Api\DsrExecutionController;
 use App\Http\Controllers\Api\DsrInboundPublicController;
@@ -73,6 +69,8 @@ use App\Http\Controllers\Api\EmbedTokenController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\FeatureRequestController;
 use App\Http\Controllers\Api\GapAssessmentController;
+use App\Http\Controllers\Api\GuardianConsentAdminController;
+use App\Http\Controllers\Api\GuardianConsentPublicController;
 use App\Http\Controllers\Api\HoldingAssessmentController;
 use App\Http\Controllers\Api\HoldingAssessmentReviewController;
 use App\Http\Controllers\Api\HoldingDashboardController;
@@ -87,6 +85,7 @@ use App\Http\Controllers\Api\MaturityController;
 use App\Http\Controllers\Api\MenuRegistryController;
 use App\Http\Controllers\Api\ModuleCommentController;
 use App\Http\Controllers\Api\ModuleCrudController;
+use App\Http\Controllers\Api\ModulSubjekController;
 use App\Http\Controllers\Api\NotificationPreferenceController;
 use App\Http\Controllers\Api\OrganizationAppController;
 use App\Http\Controllers\Api\OrganizationController;
@@ -146,6 +145,7 @@ use App\Http\Controllers\Api\TprmIncidentController;
 use App\Http\Controllers\Api\TprmLibraryController;
 use App\Http\Controllers\Api\TprmMonitoringController;
 use App\Http\Controllers\Api\TprmReviewController;
+use App\Http\Controllers\Api\TransitionPublicController;
 use App\Http\Controllers\Api\TriageQuestionController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\V1\BreachApiController;
@@ -162,6 +162,7 @@ use App\Http\Controllers\Api\VendorPreAssessmentController;
 use App\Http\Controllers\Api\VendorRiskController;
 use App\Http\Controllers\Api\VendorRopaController;
 use App\Http\Controllers\Api\VendorScreeningController;
+use App\Http\Controllers\Api\VerificationMethodController;
 use App\Http\Controllers\Api\VoiceTtsController;
 use App\Http\Controllers\Api\WizardSchemaController;
 use App\Http\Controllers\GapComparisonController;
@@ -1531,59 +1532,81 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
 
     Route::get('/consent-logs', [ConsentLogController::class, 'index'])->middleware('permission:consent,read');
 
-    // Kewenangan wali — PP 33/2026 Pasal 38 & 39. Sub-fitur Consent (izin
-    // `consent`); nama modul tampilannya menunggu keputusan CEO.
-    Route::prefix('guardian-consents')->group(function () {
-        Route::get('/stats', [GuardianConsentAdminController::class, 'stats'])->middleware('permission:consent,read');
-        Route::get('/', [GuardianConsentAdminController::class, 'index'])->middleware('permission:consent,read');
-        Route::get('/{id}', [GuardianConsentAdminController::class, 'show'])
-            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,read');
-        Route::post('/{id}/revoke', [GuardianConsentAdminController::class, 'revoke'])
-            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
-        Route::post('/{id}/resend', [GuardianConsentAdminController::class, 'resend'])
-            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
-        // Peralihan anak → dewasa (Pasal 38 ayat 8): kirim ulang tautan keputusan
-        // ke kanal milik subjek — untuk antrean kerja yang belum ditanggapi.
-        Route::post('/subjects/{id}/transition-resend', [GuardianConsentAdminController::class, 'transitionResend'])
-            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
-    });
+    // ─── Dua modul per SUBJEK — PP 33/2026 Pasal 38 (anak) & 39 (disabilitas) ───
+    // Consent Wali (/consent-guardian, izin consent_guardian) dan Consent
+    // Aksesibilitas (/consent-accessibility, izin consent_accessibility). Tiap
+    // modul LENGKAP: titik pengumpulan (CRUD), kewenangan wali, metode
+    // verifikasi, DSR atas nama subjek kelasnya; modul aksesibilitas juga
+    // memuat prasarana, ragam, dan penilaian kapasitas. Datanya tetap satu
+    // dengan Consent — yang dipisah pintu, izin, dan pandangannya. Default rute
+    // `modul` dan `kelas` dibaca controller (ModulSubjek::dariRequest;
+    // GuardianConsentAdminController::dasar menyaring kelas dari sana).
+    foreach ([
+        ['consent-guardian', 'consent_guardian', 'anak'],
+        ['consent-accessibility', 'consent_accessibility', 'disabilitas'],
+    ] as [$awalan, $modul, $kelas]) {
+        Route::prefix($awalan)->group(function () use ($modul, $kelas) {
+            $baca = "permission:{$modul},read";
+            $tulis = "permission:{$modul},write";
+            $uuid = '[0-9a-fA-F-]{36}';
+            $r = fn ($rute) => $rute->defaults('modul', $modul)->defaults('kelas', $kelas);
 
-    // Aksesibilitas — PP 33/2026 Pasal 39: prasarana per kanal, ragam yang
-    // dilayani, penilaian kapasitas. Sub-fitur Consent (izin `consent`).
-    Route::prefix('accessibility')->group(function () {
-        Route::get('/summary', [AccessibilityAdminController::class, 'summary'])->middleware('permission:consent,read');
+            $r(Route::get('/summary', [ModulSubjekController::class, 'summary'])->middleware($baca));
 
-        Route::get('/provisions', [AccessibilityAdminController::class, 'provisions'])->middleware('permission:consent,read');
-        Route::post('/provisions', [AccessibilityAdminController::class, 'storeProvision'])->middleware('permission:consent,write');
-        Route::put('/provisions/{id}', [AccessibilityAdminController::class, 'updateProvision'])
-            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
-        Route::delete('/provisions/{id}', [AccessibilityAdminController::class, 'destroyProvision'])
-            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+            // Titik pengumpulan — CRUD penuh + item + kunci API + embed + konfigurasi widget.
+            $r(Route::get('/collection-points', [ModulSubjekController::class, 'collectionPoints'])->middleware($baca));
+            $r(Route::post('/collection-points', [ModulSubjekController::class, 'storeCollectionPoint'])->middleware($tulis));
+            $r(Route::get('/collection-points/{id}', [ModulSubjekController::class, 'showCollectionPoint'])->where('id', $uuid)->middleware($baca));
+            $r(Route::put('/collection-points/{id}', [ModulSubjekController::class, 'updateCollectionPoint'])->where('id', $uuid)->middleware($tulis));
+            $r(Route::delete('/collection-points/{id}', [ModulSubjekController::class, 'destroyCollectionPoint'])->where('id', $uuid)->middleware($tulis));
+            $r(Route::post('/collection-points/{id}/items', [ModulSubjekController::class, 'storeItem'])->where('id', $uuid)->middleware($tulis));
+            $r(Route::put('/collection-points/{id}/items/{itemId}', [ModulSubjekController::class, 'updateItem'])->where(['id' => $uuid, 'itemId' => $uuid])->middleware($tulis));
+            $r(Route::delete('/collection-points/{id}/items/{itemId}', [ModulSubjekController::class, 'destroyItem'])->where(['id' => $uuid, 'itemId' => $uuid])->middleware($tulis));
+            $r(Route::post('/collection-points/{id}/regenerate-api-keys', [ModulSubjekController::class, 'regenerateApiKeys'])->where('id', $uuid)->middleware($tulis));
+            $r(Route::post('/collection-points/{id}/regenerate-embed-token', [ModulSubjekController::class, 'regenerateEmbedToken'])->where('id', $uuid)->middleware($tulis));
+            $r(Route::get('/collection-points/{id}/embed-snippet', [ModulSubjekController::class, 'embedSnippet'])->where('id', $uuid)->middleware($baca));
+            $r(Route::get('/collection-points/{id}/widget-config', [ModulSubjekController::class, 'widgetConfig'])->where('id', $uuid)->middleware($baca));
+            $r(Route::put('/collection-points/{id}/widget-config', [ModulSubjekController::class, 'saveWidgetConfig'])->where('id', $uuid)->middleware($tulis));
 
-        Route::get('/scopes', [AccessibilityAdminController::class, 'scopes'])->middleware('permission:consent,read');
-        Route::post('/scopes', [AccessibilityAdminController::class, 'storeScope'])->middleware('permission:consent,write');
-        Route::put('/scopes/{id}', [AccessibilityAdminController::class, 'updateScope'])
-            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
-        Route::delete('/scopes/{id}', [AccessibilityAdminController::class, 'destroyScope'])
-            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+            // Kewenangan wali — hanya subjek kelas modul ini (default `kelas`).
+            $r(Route::get('/guardian-consents/stats', [GuardianConsentAdminController::class, 'stats'])->middleware($baca));
+            $r(Route::get('/guardian-consents', [GuardianConsentAdminController::class, 'index'])->middleware($baca));
+            $r(Route::get('/guardian-consents/{id}', [GuardianConsentAdminController::class, 'show'])->where('id', $uuid)->middleware($baca));
+            $r(Route::post('/guardian-consents/{id}/revoke', [GuardianConsentAdminController::class, 'revoke'])->where('id', $uuid)->middleware($tulis));
+            $r(Route::post('/guardian-consents/{id}/resend', [GuardianConsentAdminController::class, 'resend'])->where('id', $uuid)->middleware($tulis));
+            // Peralihan anak → dewasa (Pasal 38 ayat 8): kirim ulang tautan keputusan.
+            $r(Route::post('/guardian-consents/subjects/{id}/transition-resend', [GuardianConsentAdminController::class, 'transitionResend'])->where('id', $uuid)->middleware($tulis));
 
-        Route::get('/assessments', [AccessibilityAdminController::class, 'assessments'])->middleware('permission:consent,read');
-        Route::post('/assessments', [AccessibilityAdminController::class, 'storeAssessment'])->middleware('permission:consent,write');
-    });
+            // Metode verifikasi wali — katalog seluruh tenant (Pasal 38 ayat 4).
+            $r(Route::get('/verification-methods', [VerificationMethodController::class, 'index'])->middleware($baca));
+            $r(Route::post('/verification-methods', [VerificationMethodController::class, 'store'])->middleware($tulis));
+            $r(Route::put('/verification-methods/{id}', [VerificationMethodController::class, 'update'])->where('id', $uuid)->middleware($tulis));
+            $r(Route::delete('/verification-methods/{id}', [VerificationMethodController::class, 'destroy'])->where('id', $uuid)->middleware($tulis));
+            $r(Route::post('/verification-methods/{id}/test', [VerificationMethodController::class, 'test'])->where('id', $uuid)->middleware($tulis));
 
-    // Metode verifikasi wali — PP 33/2026 Pasal 38 ayat (4). Katalog: bawaan
-    // platform (hanya baca) + milik tenant dengan kredensialnya sendiri
-    // (Dukcapil / e-KYC). Sub-fitur Consent (izin `consent`).
-    Route::prefix('verification-methods')->group(function () {
-        Route::get('/', [VerificationMethodController::class, 'index'])->middleware('permission:consent,read');
-        Route::post('/', [VerificationMethodController::class, 'store'])->middleware('permission:consent,write');
-        Route::put('/{id}', [VerificationMethodController::class, 'update'])
-            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
-        Route::delete('/{id}', [VerificationMethodController::class, 'destroy'])
-            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
-        Route::post('/{id}/test', [VerificationMethodController::class, 'test'])
-            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
-    });
+            // DSR atas nama subjek kelas modul ini.
+            $r(Route::get('/dsr', [ModulSubjekController::class, 'dsrIndex'])->middleware($baca));
+            $r(Route::post('/dsr', [ModulSubjekController::class, 'dsrStore'])->middleware($tulis));
+            $r(Route::get('/dsr/{id}', [ModulSubjekController::class, 'dsrShow'])->where('id', $uuid)->middleware($baca));
+            $r(Route::put('/dsr/{id}', [ModulSubjekController::class, 'dsrUpdate'])->where('id', $uuid)->middleware($tulis));
+            $r(Route::post('/dsr/{id}/guardian-proof', [ModulSubjekController::class, 'dsrGuardianProof'])->where('id', $uuid)->middleware($tulis));
+
+            if ($modul === 'consent_accessibility') {
+                // Aksesibilitas — Pasal 39: prasarana per kanal, ragam dilayani, penilaian kapasitas.
+                Route::get('/accessibility/summary', [AccessibilityAdminController::class, 'summary'])->middleware($baca);
+                Route::get('/accessibility/provisions', [AccessibilityAdminController::class, 'provisions'])->middleware($baca);
+                Route::post('/accessibility/provisions', [AccessibilityAdminController::class, 'storeProvision'])->middleware($tulis);
+                Route::put('/accessibility/provisions/{id}', [AccessibilityAdminController::class, 'updateProvision'])->where('id', $uuid)->middleware($tulis);
+                Route::delete('/accessibility/provisions/{id}', [AccessibilityAdminController::class, 'destroyProvision'])->where('id', $uuid)->middleware($tulis);
+                Route::get('/accessibility/scopes', [AccessibilityAdminController::class, 'scopes'])->middleware($baca);
+                Route::post('/accessibility/scopes', [AccessibilityAdminController::class, 'storeScope'])->middleware($tulis);
+                Route::put('/accessibility/scopes/{id}', [AccessibilityAdminController::class, 'updateScope'])->where('id', $uuid)->middleware($tulis);
+                Route::delete('/accessibility/scopes/{id}', [AccessibilityAdminController::class, 'destroyScope'])->where('id', $uuid)->middleware($tulis);
+                Route::get('/accessibility/assessments', [AccessibilityAdminController::class, 'assessments'])->middleware($baca);
+                Route::post('/accessibility/assessments', [AccessibilityAdminController::class, 'storeAssessment'])->middleware($tulis);
+            }
+        });
+    }
 
     // Phase B — Cookie Logs admin (tenant-scoped, separate from consent_logs)
     Route::get('/cookie-logs', [CookieLogAdminController::class, 'index'])->middleware('permission:consent,read');

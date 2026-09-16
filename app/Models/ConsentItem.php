@@ -1,10 +1,22 @@
 <?php
+
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * @property string|null $collection_point_id
+ * @property string|null $title
+ * @property string|null $description
+ * @property string|null $specific_purpose
+ * @property string|null $full_text
+ * @property string|null $category
+ * @property string|null $version
+ * @property bool $is_required
+ * @property bool $is_active
+ */
 class ConsentItem extends Model
 {
     use HasUuids, SoftDeletes;
@@ -60,7 +72,7 @@ class ConsentItem extends Model
 
     public function collectionPoint()
     {
-        return $this->belongsTo(ConsentCollectionPoint::class , 'collection_point_id');
+        return $this->belongsTo(ConsentCollectionPoint::class, 'collection_point_id');
     }
 
     /**

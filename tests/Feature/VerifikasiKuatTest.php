@@ -455,7 +455,7 @@ class VerifikasiKuatTest extends TestCase
         $this->assertNotContains('simulasi', $kode());
 
         Sanctum::actingAs($this->pengguna());
-        $this->postJson('/api/verification-methods', ['code' => 'simulasi2', 'label' => 'Simulasi', 'driver' => 'mock'])
+        $this->postJson('/api/consent-guardian/verification-methods', ['code' => 'simulasi2', 'label' => 'Simulasi', 'driver' => 'mock'])
             ->assertStatus(422)->assertJsonValidationErrors(['driver']);
     }
 
@@ -466,7 +466,7 @@ class VerifikasiKuatTest extends TestCase
     {
         Sanctum::actingAs($this->pengguna());
 
-        $r = $this->postJson('/api/verification-methods', [
+        $r = $this->postJson('/api/consent-guardian/verification-methods', [
             'code' => 'dukcapil_bank',
             'label' => 'Verifikasi Dukcapil',
             'driver' => 'dukcapil',
@@ -489,7 +489,7 @@ class VerifikasiKuatTest extends TestCase
             ->assertJsonPath('data.config.body.password', VerificationMethod::TERSAMAR)
             ->assertJsonPath('data.config.body.user_id', VerificationMethod::TERSAMAR);
 
-        $index = $this->getJson('/api/verification-methods')->assertOk();
+        $index = $this->getJson('/api/consent-guardian/verification-methods')->assertOk();
         foreach (['RAHASIA-TENANT', 'sandi-rahasia', 'bankuji'] as $rahasia) {
             $this->assertStringNotContainsString($rahasia, (string) $r->getContent());
             $this->assertStringNotContainsString($rahasia, (string) $index->getContent());
@@ -506,7 +506,7 @@ class VerifikasiKuatTest extends TestCase
         $this->assertSame('Bearer RAHASIA-TENANT', VerificationMethod::where('code', 'dukcapil_bank')->sole()->config['headers']['Authorization']);
 
         // Duplikat kode sendiri → 409.
-        $this->postJson('/api/verification-methods', ['code' => 'dukcapil_bank', 'label' => 'Lagi', 'driver' => 'dukcapil'])
+        $this->postJson('/api/consent-guardian/verification-methods', ['code' => 'dukcapil_bank', 'label' => 'Lagi', 'driver' => 'dukcapil'])
             ->assertStatus(409)->assertJsonPath('code', 'SUDAH_ADA');
     }
 
@@ -516,16 +516,16 @@ class VerifikasiKuatTest extends TestCase
         Sanctum::actingAs($this->pengguna());
         $otp = VerificationMethod::whereNull('org_id')->where('code', 'otp_email')->sole();
 
-        $this->putJson('/api/verification-methods/'.$otp->id, ['label' => 'Diubah'])
+        $this->putJson('/api/consent-guardian/verification-methods/'.$otp->id, ['label' => 'Diubah'])
             ->assertStatus(403)->assertJsonPath('code', 'BAWAAN_PLATFORM');
-        $this->deleteJson('/api/verification-methods/'.$otp->id)
+        $this->deleteJson('/api/consent-guardian/verification-methods/'.$otp->id)
             ->assertStatus(403)->assertJsonPath('code', 'BAWAAN_PLATFORM');
-        $this->postJson('/api/verification-methods/'.$otp->id.'/test', ['nik' => self::NIK, 'name' => 'Siti', 'birth_date' => self::LAHIR])
+        $this->postJson('/api/consent-guardian/verification-methods/'.$otp->id.'/test', ['nik' => self::NIK, 'name' => 'Siti', 'birth_date' => self::LAHIR])
             ->assertStatus(422)->assertJsonPath('code', 'BUKAN_METODE_KUAT');
 
         // Tenant tidak bisa membuat `otp_email` versinya sendiri — untukOrg()
         // akan mengembalikan dua baris berkode sama.
-        $this->postJson('/api/verification-methods', [
+        $this->postJson('/api/consent-guardian/verification-methods', [
             'code' => 'otp_email', 'label' => 'Palsu', 'driver' => 'dukcapil',
             'config' => ['endpoint' => 'https://x.contoh.id', 'match_all' => [['path' => 'ok', 'equals' => true]]],
         ])->assertStatus(409)->assertJsonPath('code', 'SUDAH_ADA');
@@ -538,7 +538,7 @@ class VerifikasiKuatTest extends TestCase
     {
         Sanctum::actingAs($this->pengguna());
         $m = $this->metodeDukcapil();
-        $url = '/api/verification-methods/'.$m->id;
+        $url = '/api/consent-guardian/verification-methods/'.$m->id;
 
         // UI mengirim balik badan dengan nilai samaran + timeout baru, tanpa headers.
         $this->putJson($url, [
@@ -583,7 +583,7 @@ class VerifikasiKuatTest extends TestCase
             return $jawab();
         });
 
-        $this->postJson('/api/verification-methods/'.$m->id.'/test', ['nik' => self::NIK, 'name' => 'Siti Rahayu', 'birth_date' => self::LAHIR])
+        $this->postJson('/api/consent-guardian/verification-methods/'.$m->id.'/test', ['nik' => self::NIK, 'name' => 'Siti Rahayu', 'birth_date' => self::LAHIR])
             ->assertOk()
             ->assertJsonPath('data.status', 'cocok')
             ->assertJsonPath('data.reference', 'TRX-2026-0001')
@@ -598,7 +598,7 @@ class VerifikasiKuatTest extends TestCase
 
         // Kegagalan dilaporkan apa adanya kepada admin — inilah gunanya uji.
         $jawab = fn () => Http::response(['message' => 'unauthorized'], 401);
-        $gagal = $this->postJson('/api/verification-methods/'.$m->id.'/test', ['nik' => self::NIK, 'name' => 'Siti Rahayu', 'birth_date' => self::LAHIR])
+        $gagal = $this->postJson('/api/consent-guardian/verification-methods/'.$m->id.'/test', ['nik' => self::NIK, 'name' => 'Siti Rahayu', 'birth_date' => self::LAHIR])
             ->assertOk()
             ->assertJsonPath('data.status', 'gagal')
             ->assertJsonPath('data.http_status', 401);
@@ -620,7 +620,7 @@ class VerifikasiKuatTest extends TestCase
 
         // Admin membuat metode kuat → segera terlihat (cache disegarkan).
         Sanctum::actingAs($this->pengguna());
-        $id = $this->postJson('/api/verification-methods', [
+        $id = $this->postJson('/api/consent-guardian/verification-methods', [
             'code' => 'dukcapil_bank', 'label' => 'Verifikasi Dukcapil', 'driver' => 'dukcapil',
             'config' => ['endpoint' => 'https://dukcapil.contoh.go.id/verify', 'match_all' => [['path' => 'ok', 'equals' => true]]],
         ])->assertStatus(201)->json('data.id');
@@ -630,7 +630,7 @@ class VerifikasiKuatTest extends TestCase
         $this->assertSame('tinggi', $metode()->firstWhere('code', 'dukcapil_bank')['confidence']);
 
         // Dinonaktifkan → hilang seketika.
-        $this->putJson('/api/verification-methods/'.$id, ['is_active' => false])->assertOk()->assertJsonPath('data.runnable', false);
+        $this->putJson('/api/consent-guardian/verification-methods/'.$id, ['is_active' => false])->assertOk()->assertJsonPath('data.runnable', false);
         $this->assertSame(['otp_email'], $metode()->pluck('code')->all());
 
         // Aktif tetapi belum lengkap (tanpa endpoint) → tidak dijanjikan.
@@ -651,11 +651,11 @@ class VerifikasiKuatTest extends TestCase
 
         $this->assertSame(
             ['otp_email', 'otp_phone'],
-            collect($this->getJson('/api/verification-methods')->assertOk()->json('data'))->pluck('code')->sort()->values()->all(),
+            collect($this->getJson('/api/consent-guardian/verification-methods')->assertOk()->json('data'))->pluck('code')->sort()->values()->all(),
         );
-        $this->putJson('/api/verification-methods/'.$m->id, ['label' => 'Bajak'])->assertStatus(404);
-        $this->deleteJson('/api/verification-methods/'.$m->id)->assertStatus(404);
-        $this->postJson('/api/verification-methods/'.$m->id.'/test', ['nik' => self::NIK, 'name' => 'X', 'birth_date' => self::LAHIR])->assertStatus(404);
+        $this->putJson('/api/consent-guardian/verification-methods/'.$m->id, ['label' => 'Bajak'])->assertStatus(404);
+        $this->deleteJson('/api/consent-guardian/verification-methods/'.$m->id)->assertStatus(404);
+        $this->postJson('/api/consent-guardian/verification-methods/'.$m->id.'/test', ['nik' => self::NIK, 'name' => 'X', 'birth_date' => self::LAHIR])->assertStatus(404);
 
         $this->assertSame('Verifikasi Dukcapil (Bank Uji)', $m->fresh()->label);
     }
@@ -664,13 +664,13 @@ class VerifikasiKuatTest extends TestCase
     public function izin_baca_tidak_cukup_untuk_menulis_atau_menguji(): void
     {
         $m = $this->metodeDukcapil();
-        Sanctum::actingAs($this->pengguna(['consent:read']));
+        Sanctum::actingAs($this->pengguna(['consent_guardian:read']));
 
-        $this->getJson('/api/verification-methods')->assertOk();
-        $this->postJson('/api/verification-methods', ['code' => 'x_baru', 'label' => 'x', 'driver' => 'dukcapil'])->assertStatus(403);
-        $this->putJson('/api/verification-methods/'.$m->id, ['label' => 'x'])->assertStatus(403);
-        $this->deleteJson('/api/verification-methods/'.$m->id)->assertStatus(403);
-        $this->postJson('/api/verification-methods/'.$m->id.'/test', ['nik' => self::NIK, 'name' => 'X', 'birth_date' => self::LAHIR])->assertStatus(403);
+        $this->getJson('/api/consent-guardian/verification-methods')->assertOk();
+        $this->postJson('/api/consent-guardian/verification-methods', ['code' => 'x_baru', 'label' => 'x', 'driver' => 'dukcapil'])->assertStatus(403);
+        $this->putJson('/api/consent-guardian/verification-methods/'.$m->id, ['label' => 'x'])->assertStatus(403);
+        $this->deleteJson('/api/consent-guardian/verification-methods/'.$m->id)->assertStatus(403);
+        $this->postJson('/api/consent-guardian/verification-methods/'.$m->id.'/test', ['nik' => self::NIK, 'name' => 'X', 'birth_date' => self::LAHIR])->assertStatus(403);
     }
 
     // ───────────────────────── bantu ─────────────────────────
@@ -729,7 +729,7 @@ class VerifikasiKuatTest extends TestCase
     }
 
     /** @param  list<string>  $izin */
-    private function pengguna(array $izin = ['consent:read', 'consent:write'], ?Organization $org = null): User
+    private function pengguna(array $izin = ['consent_guardian:read', 'consent_guardian:write'], ?Organization $org = null): User
     {
         $org ??= $this->org;
 

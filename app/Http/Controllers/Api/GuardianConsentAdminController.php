@@ -217,6 +217,14 @@ class GuardianConsentAdminController extends Controller
 
         $q = GuardianConsent::withoutGlobalScope('org')->where('org_id', $user->org_id);
 
+        // Rute modul subjek (/consent-guardian → anak, /consent-accessibility →
+        // disabilitas) membawa default `kelas`: pengguna modul yang satu tidak
+        // melihat kewenangan atas subjek kelas modul yang lain.
+        $kelas = $request->route('kelas');
+        if (is_string($kelas) && $kelas !== '') {
+            $q->whereHas('consentSubject', fn ($s) => $s->where('subject_class', $kelas));
+        }
+
         if (! AssignmentScope::melihatSeluruhTenant($user)) {
             $terlihat = ConsentCollectionPoint::query()
                 ->where('org_id', $user->org_id)

@@ -233,7 +233,7 @@ class KewenanganDinyatakanTenantTest extends TestCase
     {
         Sanctum::actingAs($this->pengguna());
 
-        $r = $this->postJson('/api/verification-methods', ['code' => 'kyc_bank', 'label' => 'KYC internal Bank Uji', 'driver' => 'tenant_asserted']);
+        $r = $this->postJson('/api/consent-guardian/verification-methods', ['code' => 'kyc_bank', 'label' => 'KYC internal Bank Uji', 'driver' => 'tenant_asserted']);
         $r->assertStatus(201)
             ->assertJsonPath('data.confidence', 'sedang')
             ->assertJsonPath('data.strong', false)
@@ -241,10 +241,10 @@ class KewenanganDinyatakanTenantTest extends TestCase
             ->assertJsonPath('data.config', null);
         $id = $r->json('data.id');
 
-        $this->assertContains('tenant_asserted', $this->getJson('/api/verification-methods')->json('drivers'));
+        $this->assertContains('tenant_asserted', $this->getJson('/api/consent-guardian/verification-methods')->json('drivers'));
 
         // Tidak ada yang bisa diuji: kami tidak memeriksa apa pun.
-        $this->postJson('/api/verification-methods/'.$id.'/test', ['nik' => '3175012001900004', 'name' => 'Siti', 'birth_date' => '1990-01-20'])
+        $this->postJson('/api/consent-guardian/verification-methods/'.$id.'/test', ['nik' => '3175012001900004', 'name' => 'Siti', 'birth_date' => '1990-01-20'])
             ->assertStatus(422)->assertJsonPath('code', 'BUKAN_METODE_KUAT');
     }
 
@@ -298,7 +298,7 @@ class KewenanganDinyatakanTenantTest extends TestCase
                 'org_id' => $this->org->id,
                 'name' => 'peran-'.Str::random(6),
                 'slug' => 'role-'.Str::random(6),
-                'permissions' => ['consent:read', 'consent:write'],
+                'permissions' => ['consent_guardian:read', 'consent_guardian:write'],
             ])->id,
         ]);
     }

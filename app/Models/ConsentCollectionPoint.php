@@ -4,9 +4,12 @@ namespace App\Models;
 
 use App\Casts\EncryptedString;
 use App\Models\Concerns\AssignmentVisibility;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
@@ -21,6 +24,20 @@ use Illuminate\Support\Str;
  * @property string|null $captcha_site_key
  * @property string|null $consent_rule_set_id
  * @property string|null $embed_token
+ * @property string|null $domain
+ * @property string|null $redirect_url
+ * @property string|null $locale
+ * @property string|null $display_mode
+ * @property string|null $display_frequency
+ * @property string|null $audience
+ * @property string|null $client_key
+ * @property string|null $owner_module
+ * @property array<string, bool>|null $auth_methods
+ * @property list<string>|null $allowed_domains
+ * @property Carbon|null $api_keys_last_rotated_at
+ * @property-read int|null $items_count
+ * @property-read int|null $records_count
+ * @property-read Collection<int, ConsentItem> $items
  */
 class ConsentCollectionPoint extends Model
 {
@@ -28,7 +45,7 @@ class ConsentCollectionPoint extends Model
 
     protected $fillable = [
         'org_id', 'collection_id', 'name', 'kind', 'domain', 'redirect_url',
-        'settings', 'webhook_url', 'created_by',
+        'settings', 'webhook_url', 'created_by', 'owner_module',
         'assign_group', 'assignees', 'origin_division',
         'embed_token', 'client_key', 'server_key', 'auth_methods', 'allowed_domains',
         'display_mode', 'display_frequency', 'audience', 'locale',
@@ -93,6 +110,16 @@ class ConsentCollectionPoint extends Model
         };
         static::saved($bust);
         static::deleted($bust);
+    }
+
+    /**
+     * Titik milik satu modul subjek (`consent_guardian` / `consent_accessibility`).
+     * NULL = milik modul Consent umum. Tiap titik milik tepat satu modul;
+     * tabelnya tetap satu — yang dipisah hanya siapa yang mengelolanya.
+     */
+    public function scopeMilikModul($query, string $modul)
+    {
+        return $query->where('owner_module', $modul);
     }
 
     public static function generateUniqueToken(): string
@@ -169,7 +196,8 @@ class ConsentCollectionPoint extends Model
         return $this->belongsTo(Organization::class, 'org_id');
     }
 
-    public function items()
+    /** @return HasMany<ConsentItem, $this> */
+    public function items(): HasMany
     {
         return $this->hasMany(ConsentItem::class, 'collection_point_id');
     }

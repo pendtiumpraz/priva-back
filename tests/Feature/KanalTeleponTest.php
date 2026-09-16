@@ -165,7 +165,7 @@ class KanalTeleponTest extends TestCase
         // mengaku "terkirim".
         config(['messaging.sms.driver' => 'off']);
         Sanctum::actingAs($this->pengguna());
-        $this->postJson('/api/guardian-consents/'.$id.'/resend')
+        $this->postJson('/api/consent-guardian/guardian-consents/'.$id.'/resend')
             ->assertStatus(422)->assertJsonPath('code', LayananWali::KANAL_BELUM_DIDUKUNG);
     }
 
@@ -452,7 +452,7 @@ class KanalTeleponTest extends TestCase
                 'org_id' => $this->org->id,
                 'name' => 'peran-'.uniqid(),
                 'slug' => 'role-'.uniqid(),
-                'permissions' => ['consent:read', 'consent:write', 'settings:write'],
+                'permissions' => ['consent_guardian:read', 'consent_guardian:write', 'settings:write'],
             ])->id,
         ]);
     }

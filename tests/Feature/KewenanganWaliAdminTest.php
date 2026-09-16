@@ -45,7 +45,7 @@ class KewenanganWaliAdminTest extends TestCase
 
     // ───────────────────────── bantu ─────────────────────────
 
-    private function pengguna(string $role, ?string $divisi, array $izin = ['consent:read', 'consent:write'], ?Organization $org = null): User
+    private function pengguna(string $role, ?string $divisi, array $izin = ['consent_guardian:read', 'consent_guardian:write'], ?Organization $org = null): User
     {
         $org ??= $this->org;
         $departemen = $divisi ? Department::create(['org_id' => $org->id, 'name' => $divisi]) : null;
@@ -121,7 +121,7 @@ class KewenanganWaliAdminTest extends TestCase
 
         Sanctum::actingAs($this->pengguna('admin', null));
 
-        $this->getJson('/api/guardian-consents')
+        $this->getJson('/api/consent-guardian/guardian-consents')
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.subject.label', 'anak@contoh.id')
@@ -137,7 +137,7 @@ class KewenanganWaliAdminTest extends TestCase
         $this->kewenangan($keuangan, 'b@contoh.id', 'menunggu', 'wali-b@contoh.id');
 
         Sanctum::actingAs($this->pengguna('maker', 'HR'));
-        $this->getJson('/api/guardian-consents')
+        $this->getJson('/api/consent-guardian/guardian-consents')
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.collection_point.name', 'Formulir HR');
@@ -145,10 +145,10 @@ class KewenanganWaliAdminTest extends TestCase
         // Detail milik divisi lain pun tidak ditemukan — bukan 403 yang
         // membocorkan bahwa id-nya ada.
         $milikKeuangan = GuardianConsent::whereHas('collectionPoint', fn ($q) => $q->where('name', 'Formulir Keuangan'))->first();
-        $this->getJson('/api/guardian-consents/'.$milikKeuangan->id)->assertStatus(404);
+        $this->getJson('/api/consent-guardian/guardian-consents/'.$milikKeuangan->id)->assertStatus(404);
 
         Sanctum::actingAs($this->pengguna('admin', null));
-        $this->getJson('/api/guardian-consents')->assertOk()->assertJsonCount(2, 'data');
+        $this->getJson('/api/consent-guardian/guardian-consents')->assertOk()->assertJsonCount(2, 'data');
     }
 
     #[Test]
@@ -161,10 +161,10 @@ class KewenanganWaliAdminTest extends TestCase
 
         Sanctum::actingAs($this->pengguna('admin', null));
 
-        $this->getJson('/api/guardian-consents?status=menunggu_wali')->assertJsonCount(1, 'data')->assertJsonPath('data.0.subject.label', 'a@contoh.id');
-        $this->getJson('/api/guardian-consents?status=terverifikasi')->assertJsonCount(1, 'data')->assertJsonPath('data.0.subject.label', 'b@contoh.id');
-        $this->getJson('/api/guardian-consents?status=dicabut')->assertJsonCount(1, 'data')->assertJsonPath('data.0.subject.label', 'c@contoh.id');
-        $this->getJson('/api/guardian-consents')->assertJsonCount(3, 'data');
+        $this->getJson('/api/consent-guardian/guardian-consents?status=menunggu_wali')->assertJsonCount(1, 'data')->assertJsonPath('data.0.subject.label', 'a@contoh.id');
+        $this->getJson('/api/consent-guardian/guardian-consents?status=terverifikasi')->assertJsonCount(1, 'data')->assertJsonPath('data.0.subject.label', 'b@contoh.id');
+        $this->getJson('/api/consent-guardian/guardian-consents?status=dicabut')->assertJsonCount(1, 'data')->assertJsonPath('data.0.subject.label', 'c@contoh.id');
+        $this->getJson('/api/consent-guardian/guardian-consents')->assertJsonCount(3, 'data');
     }
 
     #[Test]
@@ -177,11 +177,11 @@ class KewenanganWaliAdminTest extends TestCase
         Sanctum::actingAs($this->pengguna('admin', null));
 
         // Kolomnya tersandi — pencarian lewat hash ternormalkan, bukan LIKE.
-        $this->getJson('/api/guardian-consents?search='.urlencode(' Siti@Contoh.ID '))
+        $this->getJson('/api/consent-guardian/guardian-consents?search='.urlencode(' Siti@Contoh.ID '))
             ->assertJsonCount(1, 'data')->assertJsonPath('data.0.guardian.contact', 'siti@contoh.id');
-        $this->getJson('/api/guardian-consents?search='.urlencode('LAIN@contoh.id'))
+        $this->getJson('/api/consent-guardian/guardian-consents?search='.urlencode('LAIN@contoh.id'))
             ->assertJsonCount(1, 'data')->assertJsonPath('data.0.subject.label', 'lain@contoh.id');
-        $this->getJson('/api/guardian-consents?search=tidakada@contoh.id')->assertJsonCount(0, 'data');
+        $this->getJson('/api/consent-guardian/guardian-consents?search=tidakada@contoh.id')->assertJsonCount(0, 'data');
     }
 
     // ───────────────────────── detail ─────────────────────────
@@ -202,7 +202,7 @@ class KewenanganWaliAdminTest extends TestCase
 
         Sanctum::actingAs($this->pengguna('admin', null));
 
-        $r = $this->getJson('/api/guardian-consents/'.$kw->id)->assertOk()
+        $r = $this->getJson('/api/consent-guardian/guardian-consents/'.$kw->id)->assertOk()
             ->assertJsonPath('data.status', 'terverifikasi')
             ->assertJsonPath('data.verification.method_code', 'otp_email')
             ->assertJsonPath('data.verification.confidence', 'rendah')
@@ -224,7 +224,7 @@ class KewenanganWaliAdminTest extends TestCase
         $admin = $this->pengguna('admin', null);
         Sanctum::actingAs($admin);
 
-        $this->postJson('/api/guardian-consents/'.$kw->id.'/revoke', ['note' => 'Hak asuh berpindah ke ayah.'])
+        $this->postJson('/api/consent-guardian/guardian-consents/'.$kw->id.'/revoke', ['note' => 'Hak asuh berpindah ke ayah.'])
             ->assertOk()
             ->assertJsonPath('data.status', 'dicabut')
             ->assertJsonPath('data.revoke_reason', 'manual')
@@ -234,7 +234,7 @@ class KewenanganWaliAdminTest extends TestCase
         $this->assertSame(1, AuditLog::where('action', 'guardian_consent.revoke')->where('record_id', $kw->id)->count());
 
         // Pencabutan kedua ditolak supaya alasan pertama tidak tertimpa.
-        $this->postJson('/api/guardian-consents/'.$kw->id.'/revoke', ['note' => 'lain'])
+        $this->postJson('/api/consent-guardian/guardian-consents/'.$kw->id.'/revoke', ['note' => 'lain'])
             ->assertStatus(409)
             ->assertJsonPath('code', 'SUDAH_DICABUT');
         $this->assertSame('Hak asuh berpindah ke ayah.', $kw->fresh()->revoke_note);
@@ -251,7 +251,7 @@ class KewenanganWaliAdminTest extends TestCase
 
         Sanctum::actingAs($this->pengguna('admin', null));
 
-        $this->postJson('/api/guardian-consents/'.$kw->id.'/resend')->assertOk()->assertJsonStructure(['expires_at']);
+        $this->postJson('/api/consent-guardian/guardian-consents/'.$kw->id.'/resend')->assertOk()->assertJsonStructure(['expires_at']);
 
         $this->assertNotSame($hashLama, $kw->fresh()->verification_token_hash);
         Mail::assertQueued(GuardianVerificationMail::class, fn ($m) => $m->hasTo('siti@contoh.id'));
@@ -267,9 +267,9 @@ class KewenanganWaliAdminTest extends TestCase
 
         Sanctum::actingAs($this->pengguna('admin', null));
 
-        $this->postJson('/api/guardian-consents/'.$dicabut->id.'/resend')
+        $this->postJson('/api/consent-guardian/guardian-consents/'.$dicabut->id.'/resend')
             ->assertStatus(422)->assertJsonPath('code', LayananWali::KEWENANGAN_DICABUT);
-        $this->postJson('/api/guardian-consents/'.$selesai->id.'/resend')
+        $this->postJson('/api/consent-guardian/guardian-consents/'.$selesai->id.'/resend')
             ->assertStatus(409)->assertJsonPath('code', LayananWali::TIDAK_ADA_YANG_MENUNGGU);
 
         Mail::assertNothingQueued();
@@ -290,7 +290,7 @@ class KewenanganWaliAdminTest extends TestCase
         Sanctum::actingAs($this->pengguna('admin', null));
 
         // Belum masuk antrean → bukan menunggu → ditolak terbuka.
-        $this->postJson('/api/guardian-consents/subjects/'.$subjek->id.'/transition-resend')
+        $this->postJson('/api/consent-guardian/guardian-consents/subjects/'.$subjek->id.'/transition-resend')
             ->assertStatus(409)->assertJsonPath('code', LayananPeralihan::BUKAN_MENUNGGU);
 
         $this->artisan('consent:peralihan-anak')->assertSuccessful();
@@ -299,14 +299,14 @@ class KewenanganWaliAdminTest extends TestCase
 
         // Jeda kirim ulang dihormati — dua menit — lalu token baru diterbitkan.
         $this->travel(LayananPeralihan::JEDA_KIRIM_ULANG_DETIK + 1)->seconds();
-        $this->postJson('/api/guardian-consents/subjects/'.$subjek->id.'/transition-resend')
+        $this->postJson('/api/consent-guardian/guardian-consents/subjects/'.$subjek->id.'/transition-resend')
             ->assertOk()->assertJsonStructure(['expires_at']);
         $this->assertNotSame($hashLama, $subjek->fresh()->transition_token_hash);
         Mail::assertQueuedCount(2);
         $this->assertSame(1, AuditLog::where('action', 'consent_subject.transition_resend')->count());
 
         // Daftar memuat keadaan peralihannya.
-        $this->getJson('/api/guardian-consents')->assertOk()
+        $this->getJson('/api/consent-guardian/guardian-consents')->assertOk()
             ->assertJsonPath('data.0.subject.transition_state', KelasSubjek::TRANSISI_MENUNGGU)
             ->assertJsonPath('data.0.subject.has_own_channel', true);
 
@@ -315,7 +315,7 @@ class KewenanganWaliAdminTest extends TestCase
             'transition_date' => now()->subDay()->toDateString(),
         ])->consentSubject;
         $this->artisan('consent:peralihan-anak')->assertSuccessful();
-        $this->postJson('/api/guardian-consents/subjects/'.$tanpa->id.'/transition-resend')
+        $this->postJson('/api/consent-guardian/guardian-consents/subjects/'.$tanpa->id.'/transition-resend')
             ->assertStatus(422)->assertJsonPath('code', LayananPeralihan::TANPA_KANAL);
     }
 
@@ -328,12 +328,12 @@ class KewenanganWaliAdminTest extends TestCase
         $kw = $this->kewenangan($cp, 'anak@contoh.id', 'terverifikasi');
 
         Sanctum::actingAs($this->pengguna('maker', null, ['ropa:read']));
-        $this->getJson('/api/guardian-consents')->assertStatus(403);
+        $this->getJson('/api/consent-guardian/guardian-consents')->assertStatus(403);
 
         // Baca saja tidak cukup untuk mencabut.
-        Sanctum::actingAs($this->pengguna('maker', null, ['consent:read']));
-        $this->getJson('/api/guardian-consents')->assertOk();
-        $this->postJson('/api/guardian-consents/'.$kw->id.'/revoke')->assertStatus(403);
+        Sanctum::actingAs($this->pengguna('maker', null, ['consent_guardian:read']));
+        $this->getJson('/api/consent-guardian/guardian-consents')->assertOk();
+        $this->postJson('/api/consent-guardian/guardian-consents/'.$kw->id.'/revoke')->assertStatus(403);
         $this->assertNull($kw->fresh()->revoked_at);
     }
 
@@ -350,7 +350,7 @@ class KewenanganWaliAdminTest extends TestCase
 
         Sanctum::actingAs($this->pengguna('admin', null));
 
-        $this->getJson('/api/guardian-consents/stats')
+        $this->getJson('/api/consent-guardian/guardian-consents/stats')
             ->assertOk()
             ->assertJsonPath('data.menunggu_wali', 1)
             ->assertJsonPath('data.terverifikasi', 2)

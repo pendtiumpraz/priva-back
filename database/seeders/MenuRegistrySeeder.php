@@ -88,6 +88,10 @@ class MenuRegistrySeeder extends Seeder
             // Subject Rights
             ['menu_key' => 'dsr', 'label' => 'DSR Request', 'href' => '/dsr', 'icon' => 'UserCheck', 'section' => 'Subject Rights', 'sort' => 310, 'roles' => array_merge(['root'], self::EDITOR)],
             ['menu_key' => 'consent', 'label' => 'Consent Mgmt', 'href' => '/consent', 'icon' => 'FolderLock', 'section' => 'Subject Rights', 'sort' => 320, 'roles' => array_merge(['root'], self::EDITOR)],
+            // Dua modul per SUBJEK — PP 33/2026 Ps 38 (anak) & 39 (disabilitas); masing-masing
+            // lengkap: titik pengumpulan, kewenangan wali, DSR. Data tetap satu dengan Consent.
+            ['menu_key' => 'consent-guardian', 'label' => 'Consent Wali (Anak)', 'href' => '/consent-guardian', 'icon' => 'Baby', 'section' => 'Subject Rights', 'sort' => 321, 'roles' => array_merge(['root'], self::EDITOR)],
+            ['menu_key' => 'consent-accessibility', 'label' => 'Consent Aksesibilitas (Disabilitas)', 'href' => '/consent-accessibility', 'icon' => 'Accessibility', 'section' => 'Subject Rights', 'sort' => 322, 'roles' => array_merge(['root'], self::EDITOR)],
             ['menu_key' => 'cookie', 'label' => 'Cookie Mgmt', 'href' => '/cookie', 'icon' => 'Cookie', 'section' => 'Subject Rights', 'sort' => 330, 'roles' => array_merge(['root'], self::EDITOR)],
 
             // AI Enterprise (license-gated)

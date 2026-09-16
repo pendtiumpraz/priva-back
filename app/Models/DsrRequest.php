@@ -142,7 +142,8 @@ class DsrRequest extends Model
         return $this->belongsTo(Organization::class, 'org_id');
     }
 
-    public function app()
+    /** @return BelongsTo<DsrApp, $this> */
+    public function app(): BelongsTo
     {
         return $this->belongsTo(DsrApp::class, 'app_id');
     }
