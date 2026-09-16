@@ -1533,8 +1533,8 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     Route::get('/consent-logs', [ConsentLogController::class, 'index'])->middleware('permission:consent,read');
 
     // ─── Dua modul per SUBJEK — PP 33/2026 Pasal 38 (anak) & 39 (disabilitas) ───
-    // Consent Wali (/consent-guardian, izin consent_guardian) dan Consent
-    // Aksesibilitas (/consent-accessibility, izin consent_accessibility). Tiap
+    // Children Pro (/consent-guardian, izin consent_guardian) dan Inclusive
+    // Privacy (/consent-accessibility, izin consent_accessibility). Tiap
     // modul LENGKAP: titik pengumpulan (CRUD), kewenangan wali, metode
     // verifikasi, DSR atas nama subjek kelasnya; modul aksesibilitas juga
     // memuat prasarana, ragam, dan penilaian kapasitas. Datanya tetap satu

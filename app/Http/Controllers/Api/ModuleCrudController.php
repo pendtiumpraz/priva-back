@@ -351,7 +351,7 @@ class ModuleCrudController extends Controller
             $query->where('status', $request->get('status'));
         }
 
-        // Titik milik modul subjek (Consent Wali / Consent Aksesibilitas)
+        // Titik milik modul subjek (Children Pro / Inclusive Privacy)
         // dikelola dari modulnya sendiri — daftar Consent umum hanya
         // menampilkan titik dewasa. Detail/ubah lewat id tetap bisa.
         if ($module === 'consent') {

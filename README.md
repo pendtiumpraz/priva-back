@@ -392,7 +392,7 @@ Enable cron: `* * * * * cd /path && php artisan schedule:run >> /dev/null 2>&1`.
 
 ## Consent Anak & Disabilitas (PP 33/2026 Pasal 38 & 39)
 
-Dua MODUL sidebar per SUBJEK, tepat setelah Consent dan bukan sub-fiturnya: **Consent Wali (Anak)** di `/consent-guardian` (izin `consent_guardian`) dan **Consent Aksesibilitas (Disabilitas)** di `/consent-accessibility` (izin `consent_accessibility`). Masing-masing lengkap — titik pengumpulan per aplikasi (CRUD), kewenangan wali, DSR per kelas subjek; katalog metode verifikasi di modul wali, prasarana/ragam/penilaian di modul disabilitas. Tetapi **SATU ledger** (`consent_logs`), satu antrean DSR, satu widget, satu kontrak `/v1/consent` — yang dipisah adalah pintu, izin, dan pandangan (`owner_module` titik, kelas subjek), bukan datanya. Rincian rute di **Endpoint → Dashboard** di bawah.
+Dua MODUL sidebar per SUBJEK, tepat setelah Consent dan bukan sub-fiturnya — nama tampilan resmi (keputusan produk; nama teknis di kode/URL/izin tidak berubah): **Children Pro** (consent anak) di `/consent-guardian` (izin `consent_guardian`) dan **Inclusive Privacy** (consent disabilitas) di `/consent-accessibility` (izin `consent_accessibility`). Label menu dipasang migrasi 000005 (instalasi baru) dan diganti migrasi 000009 (instalasi yang sempat memakai nama kerja). Masing-masing lengkap — titik pengumpulan per aplikasi (CRUD), kewenangan wali, DSR per kelas subjek; katalog metode verifikasi di modul wali, prasarana/ragam/penilaian di modul disabilitas. Tetapi **SATU ledger** (`consent_logs`), satu antrean DSR, satu widget, satu kontrak `/v1/consent` — yang dipisah adalah pintu, izin, dan pandangan (`owner_module` titik, kelas subjek), bukan datanya. Rincian rute di **Endpoint → Dashboard** di bawah.
 
 ### Tabel
 
@@ -439,8 +439,8 @@ Dashboard — DUA MODUL per subjek, bukan sub-fitur Consent (`ModulSubjekControl
 
 | Modul | Awalan API | Izin | Kelas subjek | Menu |
 |---|---|---|---|---|
-| Consent Wali (Anak) | `/api/consent-guardian/*` | `consent_guardian` | `anak` | `consent-guardian` → `/consent-guardian` (sort 321) |
-| Consent Aksesibilitas (Disabilitas) | `/api/consent-accessibility/*` | `consent_accessibility` | `disabilitas` | `consent-accessibility` → `/consent-accessibility` (sort 322) |
+| Children Pro (consent anak) | `/api/consent-guardian/*` | `consent_guardian` | `anak` | `consent-guardian` → `/consent-guardian` (sort 321) |
+| Inclusive Privacy (consent disabilitas) | `/api/consent-accessibility/*` | `consent_accessibility` | `disabilitas` | `consent-accessibility` → `/consent-accessibility` (sort 322) |
 
 Di bawah tiap awalan: `summary`; `collection-points` (CRUD penuh + `{id}/items`, `regenerate-api-keys`, `regenerate-embed-token`, `embed-snippet`, `widget-config`) — tiap titik = SATU aplikasi enterprise dengan whitelist domain, embed token, pasangan kunci API, dan webhook sendiri, lahir dengan `settings.guardian_mode=true` + `subject_class_default` = kelas modul dan `owner_module` = modul itu (Consent umum hanya memuat titik tanpa pemilik); server key kembali SEKALI (saat dibuat dengan `api_key_enabled` atau `regenerate-api-keys`); `guardian-consents/*` (stats, show, revoke, resend, `subjects/{id}/transition-resend`) dan `dsr/*` (index, store manual, show, update, `{id}/guardian-proof`) disaring per kelas subjek modul; `verification-methods/*` (bawaan platform hanya baca; kredensial tulis-saja, `••••` = pertahankan; `POST {id}/test`) hidup di kedua awalan; `accessibility/*` (summary, provisions, scopes, assessments) hanya di modul disabilitas. Nomor `CNT`/`DSR` lewat `RegistrationCodeService::nextGlobal` + percobaan ulang. Rute lama `/guardian-consents`, `/accessibility`, `/verification-methods` sudah tidak ada.
 
@@ -448,8 +448,8 @@ Di bawah tiap awalan: `summary`; `collection-points` (CRUD penuh + `{id}/items`,
 
 | Modul | Skrip (host frontend) | Halaman iframe | Data yang dikumpulkan | Endpoint publik yang dipanggil |
 |---|---|---|---|---|
-| Consent Wali (Anak) | `consent-guardian.js` — mount `[data-privasimu-consent-guardian]` | `/embed/consent-guardian` | penanda anak, `transition_date` (dihitung di peramban), nama/kontak/hubungan wali, cara verifikasi (NIK+tgl lahir hanya di jalur kuat) | `guardian/request` → (`preview.statement`) → `guardian/verify/{token}`; TIDAK PERNAH `capture` |
-| Consent Aksesibilitas (Disabilitas) | `consent-accessibility.js` — mount `[data-privasimu-consent-accessibility]` | `/embed/consent-accessibility` | penanda subjek, pilihan poin, alat tampilan dari format TERBUKTI (teks besar / kontras / TTS), `accessibility{formats_used, assisted, companion_relationship}` | `capture` kelas `disabilitas` (+ `accessibility`); beralih ke `guardian/request` hanya bila server menjawab `422 KEWENANGAN_WALI_WAJIB` |
+| Children Pro (consent anak) | `consent-guardian.js` — mount `[data-privasimu-consent-guardian]` | `/embed/consent-guardian` | penanda anak, `transition_date` (dihitung di peramban), nama/kontak/hubungan wali, cara verifikasi (NIK+tgl lahir hanya di jalur kuat) | `guardian/request` → (`preview.statement`) → `guardian/verify/{token}`; TIDAK PERNAH `capture` |
+| Inclusive Privacy (consent disabilitas) | `consent-accessibility.js` — mount `[data-privasimu-consent-accessibility]` | `/embed/consent-accessibility` | penanda subjek, pilihan poin, alat tampilan dari format TERBUKTI (teks besar / kontras / TTS), `accessibility{formats_used, assisted, companion_relationship}` | `capture` kelas `disabilitas` (+ `accessibility`); beralih ke `guardian/request` hanya bila server menjawab `422 KEWENANGAN_WALI_WAJIB` |
 
 `accessibility` diterima kedua jalur tangkap (`ConsentLogController::capture`, `V1\ConsentApiV1Controller::capture`), disimpan hanya bila kelas hasil gerbang = `disabilitas`, dan ikut ke payload webhook (`accessibility`, `subject_class`). Pratinjau skrip: `/embed/subjek-preview?modul=guardian|accessibility&collection_id=…`.
 

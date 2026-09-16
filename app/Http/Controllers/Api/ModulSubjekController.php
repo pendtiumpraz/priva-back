@@ -19,8 +19,8 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 /**
- * Dua modul per SUBJEK — Consent Wali (anak) dan Consent Aksesibilitas
- * (disabilitas) — masing-masing LENGKAP: titik pengumpulan (CRUD penuh),
+ * Dua modul per SUBJEK — Children Pro (consent anak) dan Inclusive Privacy
+ * (consent disabilitas) — masing-masing LENGKAP: titik pengumpulan (CRUD penuh),
  * kewenangan wali, dan DSR atas nama subjek kelas itu.
  *
  * Satu controller, dua awalan rute; modulnya dibaca dari default rute

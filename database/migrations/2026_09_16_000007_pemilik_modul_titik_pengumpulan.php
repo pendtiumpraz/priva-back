@@ -11,13 +11,13 @@ use Illuminate\Support\Facades\Schema;
  * Fase 10 — tiap titik pengumpulan milik TEPAT SATU modul.
  *
  *   NULL                    modul Consent umum (dewasa)
- *   consent_guardian        Consent Wali — dibuat dari /consent-guardian
- *   consent_accessibility   Consent Aksesibilitas — dibuat dari /consent-accessibility
+ *   consent_guardian        Children Pro (consent anak) — dibuat dari /consent-guardian
+ *   consent_accessibility   Inclusive Privacy (consent disabilitas) — dibuat dari /consent-accessibility
  *
  * Satu tabel tetap (widget, embed, item, webhook, /v1/consent tidak difork);
  * yang dipisah hanya siapa yang mengelolanya. Titik yang sudah menyalakan
  * `settings.guardian_mode` — selama ini satu-satunya cara membuat titik anak —
- * dipindahkan ke Consent Wali. Dilakukan lewat PHP, bukan kueri JSON, supaya
+ * dipindahkan ke Children Pro. Dilakukan lewat PHP, bukan kueri JSON, supaya
  * sama di SQLite, Postgres, dan MySQL.
  */
 return new class extends Migration

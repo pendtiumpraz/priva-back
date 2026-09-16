@@ -22,8 +22,8 @@ use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
 /**
- * Fase 10 — dua modul per SUBJEK: Consent Wali (/consent-guardian, anak) dan
- * Consent Aksesibilitas (/consent-accessibility, disabilitas), masing-masing
+ * Fase 10 — dua modul per SUBJEK: Children Pro (/consent-guardian, anak) dan
+ * Inclusive Privacy (/consent-accessibility, disabilitas), masing-masing
  * lengkap: titik pengumpulan (CRUD), kewenangan wali, DSR.
  *
  * Yang dijaga: keduanya modul sidebar sendiri tepat setelah Consent dengan
@@ -65,6 +65,20 @@ class ModulSubjekTest extends TestCase
         $this->assertNull($wali->parent_menu_id, 'modul sendiri, bukan anak menu Consent');
         $this->assertSame('Baby', $wali->icon);
         $this->assertSame('Accessibility', $aks->icon);
+        // Nama tampilan resmi (keputusan produk); nama teknis tidak ikut berubah.
+        $this->assertSame('Children Pro', $wali->label);
+        $this->assertSame('Inclusive Privacy', $aks->label);
+
+        // Instalasi lama masih menyimpan nama kerja: migrasi 000009 hanya
+        // mengganti labelnya, tanpa menyentuh id/menu_key/href.
+        DB::table('menu_items')->where('menu_key', 'consent-guardian')->update(['label' => 'Consent Wali (Anak)']);
+        DB::table('menu_items')->where('menu_key', 'consent-accessibility')->update(['label' => 'Consent Aksesibilitas (Disabilitas)']);
+        $migrasi = include database_path('migrations/2026_09_16_000009_nama_modul_children_pro_inclusive_privacy.php');
+        $migrasi->up();
+        $this->assertSame('Children Pro', DB::table('menu_items')->where('menu_key', 'consent-guardian')->value('label'));
+        $this->assertSame('Inclusive Privacy', DB::table('menu_items')->where('menu_key', 'consent-accessibility')->value('label'));
+        $this->assertSame($wali->id, DB::table('menu_items')->where('menu_key', 'consent-guardian')->value('id'));
+        $this->assertSame('/consent-guardian', DB::table('menu_items')->where('menu_key', 'consent-guardian')->value('href'));
 
         // Whitelist peran mengikuti consent: root, admin, dpo, maker.
         foreach ([$wali, $aks] as $menu) {

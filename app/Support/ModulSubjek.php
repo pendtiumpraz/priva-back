@@ -8,8 +8,12 @@ use Illuminate\Http\Request;
 /**
  * Dua modul per SUBJEK — PP 33/2026 Pasal 38 (anak) & 39 (disabilitas).
  *
- *   consent_guardian       Consent Wali          /consent-guardian       kelas `anak`
- *   consent_accessibility  Consent Aksesibilitas /consent-accessibility  kelas `disabilitas`
+ *   consent_guardian       Children Pro        /consent-guardian       kelas `anak`
+ *   consent_accessibility  Inclusive Privacy   /consent-accessibility  kelas `disabilitas`
+ *
+ * Nama tampilan resmi: Children Pro (consent anak) dan Inclusive Privacy
+ * (consent disabilitas) — label `menu_items` (migrasi 000009) dan i18n
+ * frontend; id modul, menu_key, dan href tetap memakai nama teknis.
  *
  * Id modul = id izin (`permission:consent_guardian,read`) = pemilik titik
  * pengumpulan (`consent_collection_points.owner_module`). Menu key-nya
@@ -89,7 +93,7 @@ final class ModulSubjek
 
         $snippet = $modul === self::GUARDIAN
             ? <<<HTML
-<!-- Privasimu Consent Wali (Anak) — {$nama} -->
+<!-- Privasimu Children Pro (consent anak) — {$nama} -->
 <form id="daftar-anak">
   <input name="email" type="email" required>   <!-- penanda anak (surel / ID akun) -->
   <div {$mount}></div>                <!-- blok persetujuan wali muncul di sini -->
@@ -103,7 +107,7 @@ final class ModulSubjek
         defer></script>
 HTML
             : <<<HTML
-<!-- Privasimu Consent Aksesibilitas (Disabilitas) — {$nama} -->
+<!-- Privasimu Inclusive Privacy (consent disabilitas) — {$nama} -->
 <div {$mount}></div>   <!-- widget berdiri sendiri: penanda subjek, format aksesibel, tombol setuju -->
 <script src="{$skrip}"
         data-collection-id="{$token}"

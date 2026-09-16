@@ -8,8 +8,11 @@ use Illuminate\Support\Str;
 /**
  * Fase 10 — dua modul sidebar per SUBJEK, tepat setelah Consent:
  *
- *   consent-guardian       Consent Wali (anak)             /consent-guardian
- *   consent-accessibility  Consent Aksesibilitas (disabilitas) /consent-accessibility
+ *   consent-guardian       Children Pro (consent anak)              /consent-guardian
+ *   consent-accessibility  Inclusive Privacy (consent disabilitas)  /consent-accessibility
+ *
+ * Label = nama tampilan resmi (keputusan produk). Instalasi yang sempat
+ * memakai nama kerja diganti labelnya oleh migrasi 000009.
  *
  * Masing-masing LENGKAP: titik pengumpulan sendiri (CRUD), kewenangan wali,
  * dan DSR atas nama subjek kelas itu. Sampai fase ini semuanya diparkir di
@@ -27,14 +30,14 @@ return new class extends Migration
     private const MENU = [
         [
             'menu_key' => 'consent-guardian',
-            'label' => 'Consent Wali (Anak)',
+            'label' => 'Children Pro',
             'href' => '/consent-guardian',
             'icon' => 'Baby',
             'sort_order' => 321,
         ],
         [
             'menu_key' => 'consent-accessibility',
-            'label' => 'Consent Aksesibilitas (Disabilitas)',
+            'label' => 'Inclusive Privacy',
             'href' => '/consent-accessibility',
             'icon' => 'Accessibility',
             'sort_order' => 322,
