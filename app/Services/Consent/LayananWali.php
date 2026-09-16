@@ -322,6 +322,25 @@ final class LayananWali
         return $log;
     }
 
+    /**
+     * Kirim ulang tautan dari dashboard.
+     *
+     * Hanya untuk kewenangan yang masih punya pilihan menunggu. Yang sudah
+     * dicabut, atau yang tidak menunggu apa pun (sudah disetujui, atau belum
+     * pernah diajukan pilihan), ditolak TERBUKA — bukan "terkirim" palsu.
+     */
+    public function kirimUlang(GuardianConsent $kw): void
+    {
+        if ($kw->revoked_at !== null) {
+            $this->tolak(self::KEWENANGAN_DICABUT, 'Kewenangan wali ini sudah dicabut.', 422);
+        }
+        if (($kw->pending_capture ?? []) === []) {
+            $this->tolak(self::TIDAK_ADA_YANG_MENUNGGU, 'Tidak ada pilihan consent yang menunggu wali pada kewenangan ini.', 409);
+        }
+
+        $this->kirimTautan($kw);
+    }
+
     // ───────────────────────── internal ─────────────────────────
 
     private function kirimTautan(GuardianConsent $kw): void

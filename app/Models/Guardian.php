@@ -21,8 +21,11 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * itu dicatat di GuardianConsent — bukan di sini.
  *
  * @property string|null $org_id
+ * @property string|null $name
  * @property string|null $contact
  * @property string|null $contact_type
+ * @property string|null $relationship
+ * @property string|null $relationship_note
  */
 class Guardian extends Model
 {

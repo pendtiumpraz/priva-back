@@ -35,7 +35,10 @@ use Illuminate\Support\Carbon;
  * punya dua baris subjek.
  *
  * @property string|null $org_id
+ * @property string|null $subject_hash
+ * @property string|null $subject_label
  * @property string|null $subject_class
+ * @property string|null $subject_own_channel
  * @property string|null $transition_state
  * @property Carbon|null $transition_date
  */

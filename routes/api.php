@@ -57,6 +57,7 @@ use App\Http\Controllers\Api\DpiaThirdPartyController;
 use App\Http\Controllers\Api\DpoScopeController;
 use App\Http\Controllers\Api\DsrAppController;
 use App\Http\Controllers\Api\DsrAutomatedDecisionController;
+use App\Http\Controllers\Api\GuardianConsentAdminController;
 use App\Http\Controllers\Api\DsrChannelController;
 use App\Http\Controllers\Api\DsrExecutionController;
 use App\Http\Controllers\Api\DsrInboundPublicController;
@@ -1515,6 +1516,19 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
     });
 
     Route::get('/consent-logs', [ConsentLogController::class, 'index'])->middleware('permission:consent,read');
+
+    // Kewenangan wali — PP 33/2026 Pasal 38 & 39. Sub-fitur Consent (izin
+    // `consent`); nama modul tampilannya menunggu keputusan CEO.
+    Route::prefix('guardian-consents')->group(function () {
+        Route::get('/stats', [GuardianConsentAdminController::class, 'stats'])->middleware('permission:consent,read');
+        Route::get('/', [GuardianConsentAdminController::class, 'index'])->middleware('permission:consent,read');
+        Route::get('/{id}', [GuardianConsentAdminController::class, 'show'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,read');
+        Route::post('/{id}/revoke', [GuardianConsentAdminController::class, 'revoke'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+        Route::post('/{id}/resend', [GuardianConsentAdminController::class, 'resend'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+    });
 
     // Phase B — Cookie Logs admin (tenant-scoped, separate from consent_logs)
     Route::get('/cookie-logs', [CookieLogAdminController::class, 'index'])->middleware('permission:consent,read');

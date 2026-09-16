@@ -15,6 +15,19 @@ use Illuminate\Database\Eloquent\Model;
  *
  * `user_identifier` is preserved for backwards-compat with embed v1; new code
  * should write to `email` directly.
+ *
+ * @property string|null $org_id
+ * @property string|null $collection_id
+ * @property string|null $user_identifier
+ * @property string|null $email
+ * @property array<int|string, mixed>|null $consented_items
+ * @property array<int|string, string>|null $purpose_keys
+ * @property string|null $policy_version
+ * @property string|null $source_form
+ * @property string|null $ip_address
+ * @property string|null $user_agent
+ * @property string|null $subject_class
+ * @property string|null $guardian_consent_id
  */
 class ConsentLog extends Model
 {

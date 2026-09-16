@@ -32,6 +32,14 @@ use Illuminate\Support\Str;
  * @property Carbon|null $verification_expires_at
  * @property Carbon|null $revoked_at
  * @property string|null $revoke_reason
+ * @property string|null $revoke_note
+ * @property string|null $revoked_by
+ * @property string|null $verification_method_code
+ * @property string|null $verification_driver
+ * @property string|null $verification_confidence
+ * @property string|null $verification_token_hash
+ * @property string|null $statement_shown
+ * @property string|null $ip_address
  * @property array<string, mixed>|null $pending_capture
  */
 class GuardianConsent extends Model
@@ -47,7 +55,7 @@ class GuardianConsent extends Model
         'verified_at', 'verification_reference', 'statement_shown',
         'verification_token_hash', 'verification_expires_at', 'pending_capture',
         'ip_address', 'user_agent',
-        'revoked_at', 'revoke_reason',
+        'revoked_at', 'revoke_reason', 'revoke_note', 'revoked_by',
     ];
 
     protected $casts = [
@@ -162,7 +170,7 @@ class GuardianConsent extends Model
      * pemutusan manual oleh pengendali — wali meninggal, hak asuh dicabut, anak
      * pindah wali. PP tidak mengatur yang kedua, tapi pasti terjadi.
      */
-    public function cabut(string $alasan): bool
+    public function cabut(string $alasan, ?string $catatan = null, ?string $olehUserId = null): bool
     {
         if ($this->revoked_at !== null) {
             return false;
@@ -171,6 +179,10 @@ class GuardianConsent extends Model
         return $this->forceFill([
             'revoked_at' => now(),
             'revoke_reason' => $alasan,
+            // Alasan manusianya dan pelakunya — supaya saat diaudit pencabutan
+            // tidak hanya terbaca "manual".
+            'revoke_note' => $catatan !== null && trim($catatan) !== '' ? trim($catatan) : null,
+            'revoked_by' => $olehUserId,
         ])->save();
     }
 }
