@@ -1,5 +1,5 @@
 /*!
- * DSR Widget v1.0 — embed at klien web for subject DSR submission.
+ * DSR Widget v1.1 — embed at klien web for subject DSR submission.
  * White-label safe: serves from any host (klien on-prem, custom domain, localhost).
  *
  * Embed (replace YOUR-HOST with the actual Privasimu deployment URL —
@@ -12,6 +12,13 @@
  *   data-button-text="🔒 Privacy Request"   (default)
  *   data-button-position="bottom-right"     (bottom-right|bottom-left|top-right|top-left)
  *   data-api-base="https://YOUR-HOST/api"   (override API base — defaults to script.src origin + /api)
+ *
+ * v1.1 — PP 33/2026 Pasal 38 ayat (5)–(7) & Pasal 39 ayat (5): pemohon dapat
+ * mengajukan sebagai diri sendiri (bawaan, tanpa pertanyaan tambahan), sebagai
+ * orang tua / wali sah atas nama anak atau penyandang disabilitas, atau sebagai
+ * pendamping. Jalur wali menyebut subjek yang diwakili; bukti kewenangannya
+ * diperiksa petugas (otomatis bila wali yang sama pernah terverifikasi di
+ * modul consent layanan ini).
  */
 (function () {
     'use strict';
@@ -51,6 +58,19 @@
             captchaAuto: 'Verifikasi otomatis (reCAPTCHA v3)',
             poweredBy: 'Powered by',
             networkErr: 'Network error: ',
+            // Pasal 38 & 39
+            requesterAs: 'Saya mengajukan sebagai',
+            asSubject: 'Diri sendiri (subjek data)',
+            asGuardian: 'Orang tua / wali sah — atas nama anak atau penyandang disabilitas',
+            asCompanion: 'Pendamping — membantu subjek mengajukan',
+            subjectClass: 'Subjek yang diwakili',
+            classChild: 'Anak (di bawah 18 tahun)',
+            classDisability: 'Penyandang disabilitas',
+            relation: 'Hubungan dengan subjek',
+            relOrangTua: 'Orang tua', relWaliSah: 'Wali sah', relPendamping: 'Pendamping', relLainnya: 'Lainnya',
+            subjectIdentifier: 'Email / ID subjek yang diwakili',
+            guardianNote: 'Bukti kewenangan wali akan diperiksa petugas. Bila Anda pernah memberikan persetujuan sebagai wali di layanan ini dengan email yang sama, pemeriksaan berlangsung otomatis. Permintaan yang berdampak (hapus, tarik persetujuan) menunggu bukti diterima.',
+            companionNote: 'Pendamping membantu subjek memahami; subjek sendiri yang memutuskan dan menerima jawaban. Isi nama dan email SUBJEK di atas.',
             REQUEST_TYPE_LABELS: {
                 access: 'Akses Data Saya', correction: 'Koreksi Data', rectification: 'Koreksi Data',
                 deletion: 'Hapus Data Saya', erasure: 'Hapus Data Saya', portability: 'Portabilitas Data',
@@ -79,6 +99,18 @@
             captchaAuto: 'Automatic verification (reCAPTCHA v3)',
             poweredBy: 'Powered by',
             networkErr: 'Network error: ',
+            requesterAs: 'I am submitting as',
+            asSubject: 'Myself (the data subject)',
+            asGuardian: 'Parent / legal guardian — on behalf of a child or a person with a disability',
+            asCompanion: 'Companion — helping the subject submit',
+            subjectClass: 'Person represented',
+            classChild: 'A child (under 18)',
+            classDisability: 'A person with a disability',
+            relation: 'Relationship to the subject',
+            relOrangTua: 'Parent', relWaliSah: 'Legal guardian', relPendamping: 'Companion', relLainnya: 'Other',
+            subjectIdentifier: 'Email / ID of the person represented',
+            guardianNote: 'Proof of guardianship is reviewed by staff. If you have previously given consent as a guardian in this service with the same email, the check is automatic. Impactful requests (deletion, consent withdrawal) wait until proof is accepted.',
+            companionNote: 'A companion helps the subject understand; the subject decides and receives the reply. Fill in the SUBJECT\'s name and email above.',
             REQUEST_TYPE_LABELS: {
                 access: 'Access My Data', correction: 'Correct Data', rectification: 'Correct Data',
                 deletion: 'Delete My Data', erasure: 'Delete My Data', portability: 'Data Portability',
@@ -122,6 +154,9 @@
         + '#pp-dsr-modal input,#pp-dsr-modal select,#pp-dsr-modal textarea{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:14px;font-family:inherit;box-sizing:border-box}'
         + '#pp-dsr-modal textarea{min-height:80px;resize:vertical}'
         + '#pp-dsr-modal .pp-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}'
+        + '#pp-dsr-modal .pp-guardian{margin-top:10px;padding:10px 12px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px}'
+        + '#pp-dsr-modal .pp-guardian label:first-child{margin-top:0}'
+        + '#pp-dsr-modal .pp-note{font-size:11px;color:#64748b;line-height:1.5;margin-top:8px}'
         + '#pp-dsr-modal .pp-actions{margin-top:18px;display:flex;justify-content:flex-end;gap:8px}'
         + '#pp-dsr-modal button.pp-btn{padding:10px 18px;border-radius:6px;font-weight:700;font-size:14px;cursor:pointer;border:0}'
         + '#pp-dsr-modal button.pp-cancel{background:#e2e8f0;color:#334155}'
@@ -190,6 +225,29 @@
             +   '<form id="pp-dsr-form" novalidate>'
             +     '<label>' + t.requestType + '</label>'
             +     '<select name="request_type" required>' + typeOptions + '</select>'
+            // Pasal 38 & 39 — bawaannya diri sendiri; jalur itu tidak ditanyai apa pun.
+            +     '<label>' + t.requesterAs + '</label>'
+            +     '<select name="requester_type" id="pp-dsr-rt">'
+            +       '<option value="subjek">' + t.asSubject + '</option>'
+            +       '<option value="wali">' + t.asGuardian + '</option>'
+            +       '<option value="pendamping">' + t.asCompanion + '</option>'
+            +     '</select>'
+            +     '<div class="pp-guardian" id="pp-dsr-guardian" style="display:none">'
+            +       '<div class="pp-row">'
+            +         '<div><label>' + t.subjectClass + '</label><select name="subject_class">'
+            +           '<option value="anak">' + t.classChild + '</option>'
+            +           '<option value="disabilitas">' + t.classDisability + '</option>'
+            +         '</select></div>'
+            +         '<div><label>' + t.relation + '</label><select name="requester_relation">'
+            +           '<option value="orang_tua">' + t.relOrangTua + '</option>'
+            +           '<option value="wali_sah">' + t.relWaliSah + '</option>'
+            +           '<option value="pendamping">' + t.relPendamping + '</option>'
+            +           '<option value="lainnya">' + t.relLainnya + '</option>'
+            +         '</select></div>'
+            +       '</div>'
+            +       '<div id="pp-dsr-subject-id"><label>' + t.subjectIdentifier + '</label><input name="subject_identifier" maxlength="200"></div>'
+            +       '<div class="pp-note" id="pp-dsr-guardian-note"></div>'
+            +     '</div>'
             +     '<div class="pp-row">'
             +       '<div><label>' + t.fullName + '</label><input name="requester_name" required maxlength="200"></div>'
             +       '<div><label>' + t.email + '</label><input name="requester_email" type="email" required maxlength="200"></div>'
@@ -216,8 +274,28 @@
         modal.querySelector('.pp-x').addEventListener('click', closeModal);
         modal.querySelector('.pp-cancel').addEventListener('click', closeModal);
         modal.querySelector('#pp-dsr-form').addEventListener('submit', onSubmit);
+        modal.querySelector('#pp-dsr-rt').addEventListener('change', syncRequesterType);
+        syncRequesterType();
 
         if (config.captcha) renderCaptcha(config.captcha);
+    }
+
+    /** Jalur wali/pendamping membuka blok tambahan; jalur diri sendiri tidak menampilkan apa pun. */
+    function syncRequesterType() {
+        var rt = document.getElementById('pp-dsr-rt');
+        var block = document.getElementById('pp-dsr-guardian');
+        var subj = document.getElementById('pp-dsr-subject-id');
+        var note = document.getElementById('pp-dsr-guardian-note');
+        if (!rt || !block) return;
+        var v = rt.value;
+        block.style.display = v === 'subjek' ? 'none' : 'block';
+        // Hanya wali yang menyebut subjek yang diwakili; pendamping mengisi data subjek di kolom utama.
+        subj.style.display = v === 'wali' ? 'block' : 'none';
+        subj.querySelector('input').required = v === 'wali';
+        var rel = block.querySelector('select[name="requester_relation"]');
+        if (v === 'pendamping') rel.value = 'pendamping';
+        else if (rel.value === 'pendamping') rel.value = 'orang_tua';
+        note.textContent = v === 'wali' ? t.guardianNote : (v === 'pendamping' ? t.companionNote : '');
     }
 
     /**
@@ -332,6 +410,7 @@
 
         fetchCaptchaTokenIfNeeded(state.config && state.config.captcha).then(function (captchaToken) {
             var fd = new FormData(form);
+            var rt = fd.get('requester_type') || 'subjek';
             var payload = {
                 request_type: fd.get('request_type'),
                 requester_name: fd.get('requester_name'),
@@ -340,7 +419,17 @@
                 description: fd.get('description') || null,
                 subject_data: { nik: fd.get('subject_data[nik]') || null },
                 captcha_token: captchaToken || null,
+                requester_type: rt,
             };
+            // Jalur diri sendiri tidak mengirim apa pun tambahan — tetap persis
+            // seperti sebelum v1.1.
+            if (rt !== 'subjek') {
+                payload.subject_class = fd.get('subject_class') || 'anak';
+                payload.requester_relation = fd.get('requester_relation') || (rt === 'pendamping' ? 'pendamping' : 'orang_tua');
+            }
+            if (rt === 'wali') {
+                payload.subject_identifier = (fd.get('subject_identifier') || '').trim() || null;
+            }
 
             return fetch(apiBase + '/public/dsr/submit/' + encodeURIComponent(token), {
                 method: 'POST',
@@ -357,7 +446,8 @@
             } else if (resp.status === 429) {
                 showMsg(resp.body.error || t.tooMany, 'err');
             } else {
-                showMsg(resp.body.error || resp.body.message || t.failGeneric, 'err');
+                var errs = resp.body && resp.body.errors ? Object.keys(resp.body.errors).map(function (k) { return resp.body.errors[k][0]; }).join(' ') : '';
+                showMsg(resp.body.error || resp.body.message || errs || t.failGeneric, 'err');
                 resetCaptcha();
             }
         }).catch(function (err) {

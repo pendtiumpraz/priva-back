@@ -12,6 +12,7 @@ use App\Models\DsrRequestScope;
 use App\Models\InformationSystem;
 use App\Models\Organization;
 use App\Services\CaptchaVerifier;
+use App\Services\Dsr\BuktiWali;
 use App\Services\DsrEventBroadcaster;
 use App\Services\TenantStorageService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -101,6 +102,12 @@ class DsrPublicController extends Controller
             'subject_data.nik' => 'nullable|string|max:20',
             'subject_data.customer_id' => 'nullable|string|max:100',
             'captcha_token' => 'nullable|string|max:4000',
+            // PP 33/2026 Pasal 38 ayat (5)–(7) & Pasal 39 ayat (5): bawaannya
+            // SUBJEK — jalur diri-sendiri tidak boleh ditanyai apa pun.
+            'requester_type' => 'nullable|in:'.implode(',', DsrRequest::PEMOHON),
+            'requester_relation' => 'nullable|string|max:64',
+            'subject_class' => 'nullable|in:anak,disabilitas',
+            'subject_identifier' => 'nullable|string|max:200|required_if:requester_type,wali',
         ]);
 
         // Captcha — only enforced if provider configured
@@ -146,6 +153,11 @@ class DsrPublicController extends Controller
             'requester_phone' => $data['requester_phone'] ?? null,
             'description' => $data['description'] ?? null,
             'subject_data' => $data['subject_data'] ?? null,
+            // Pasal 38 & 39 — bawaannya subjek; wali menyebut siapa yang diwakili.
+            'requester_type' => $data['requester_type'] ?? DsrRequest::PEMOHON_SUBJEK,
+            'requester_relation' => $data['requester_relation'] ?? null,
+            'subject_class' => $data['subject_class'] ?? 'dewasa',
+            'subject_identifier' => $data['subject_identifier'] ?? null,
             'status' => 'pending_verification',
             'verification_status' => 'pending',
             'verification_token' => $verificationToken,
@@ -179,6 +191,11 @@ class DsrPublicController extends Controller
         ]);
 
         $verifyUrl = url("/public/dsr/verify/{$verificationToken}");
+
+        // Bukti kewenangan wali (Pasal 38 ayat 5–7): otomatis bila pasangan
+        // surel wali × subjek sudah terverifikasi di modul consent; kalau tidak,
+        // menunggu keputusan DPO. Diri sendiri / pendamping → tidak perlu.
+        app(BuktiWali::class)->tentukan($dsr);
 
         // Auto-seed scopes from app's default Information Systems (so DPO doesn't
         // need to manually pick at Scope tab — already pre-populated when they open).

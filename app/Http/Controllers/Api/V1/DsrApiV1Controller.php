@@ -9,6 +9,7 @@ use App\Models\DsrApp;
 use App\Models\DsrRequest;
 use App\Models\DsrRequestScope;
 use App\Models\InformationSystem;
+use App\Services\Dsr\BuktiWali;
 use App\Services\DsrEventBroadcaster;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -103,6 +104,11 @@ class DsrApiV1Controller extends Controller
             'subject_data.nik' => 'nullable|string|max:20',
             'subject_data.customer_id' => 'nullable|string|max:100',
             'external_reference' => 'nullable|string|max:100', // klien's internal ticket id
+            // PP 33/2026 Pasal 38 ayat (5)–(7) & Pasal 39 ayat (5) — sama dengan jalur widget.
+            'requester_type' => 'nullable|in:'.implode(',', DsrRequest::PEMOHON),
+            'requester_relation' => 'nullable|string|max:64',
+            'subject_class' => 'nullable|in:anak,disabilitas',
+            'subject_identifier' => 'nullable|string|max:200|required_if:requester_type,wali',
         ];
         if ($autoVerify) {
             $rules['verified_via'] = 'required|string|max:64'; // 'kyc_login' | 'cs_call' | 'in_person' | etc
@@ -146,6 +152,11 @@ class DsrApiV1Controller extends Controller
                 'customer_id' => $data['subject_data']['customer_id'] ?? null,
                 'external_reference' => $data['external_reference'] ?? null,
             ]),
+            // Pasal 38 & 39 — sama dengan jalur widget.
+            'requester_type' => $data['requester_type'] ?? DsrRequest::PEMOHON_SUBJEK,
+            'requester_relation' => $data['requester_relation'] ?? null,
+            'subject_class' => $data['subject_class'] ?? 'dewasa',
+            'subject_identifier' => $data['subject_identifier'] ?? null,
             'status' => $autoVerify ? 'pending_review' : 'pending_verification',
             'verification_status' => $autoVerify ? 'verified' : 'pending',
             'verification_token' => $verificationToken,
@@ -160,6 +171,9 @@ class DsrApiV1Controller extends Controller
             // terlihat semua orang sampai ditriase, bukan tersembunyi.
             'assign_group' => $app->default_division,
         ]);
+
+        // Bukti kewenangan wali (Pasal 38 ayat 5–7) — sama dengan jalur widget.
+        app(BuktiWali::class)->tentukan($dsr);
 
         // Auto-seed scopes from app defaults
         $this->seedScopesFromApp($dsr, $app);

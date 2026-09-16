@@ -43,7 +43,11 @@ class DsrSqlGeneratorService
      * Generate full SQL pack untuk DSR. Creates DsrExecution placeholder rows
      * (status=pending) untuk setiap shard×type — admin klien fill in nanti.
      *
-     * @return array{url: string, manifest: array, file_count: int, total_size: int}
+     * Docblock ini dulu menjanjikan kunci `url`, padahal yang dikembalikan
+     * sejak awal adalah `storage_path` — baru tertangkap analisis statis
+     * setelah tipe properti DsrRequest dinyatakan. Disamakan dengan kenyataan.
+     *
+     * @return array{storage_path: string, manifest: array<string, mixed>, file_count: int, total_size: int}
      */
     public function generatePack(DsrRequest $dsr): array
     {

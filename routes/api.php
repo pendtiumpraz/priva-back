@@ -1465,6 +1465,8 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         // Verification helpers — DPO actions saat subject tidak bisa verify via email
         Route::post('/resend-verification', [DsrVerificationController::class, 'resend'])->middleware('permission:dsr,write');
         Route::post('/manual-verify', [DsrVerificationController::class, 'manualVerify'])->middleware('permission:dsr,write');
+        // Bukti kewenangan wali — PP 33/2026 Pasal 38 ayat (5)–(7), Pasal 39 ayat (5).
+        Route::post('/guardian-proof', [DsrVerificationController::class, 'guardianProof'])->middleware('permission:dsr,write');
         // Keberatan keputusan otomatis — campur tangan manusia / penolakan (PP 33 Pasal 94-95).
         Route::post('/automated-decision-review', [DsrAutomatedDecisionController::class, 'review'])->middleware('permission:dsr,write');
 

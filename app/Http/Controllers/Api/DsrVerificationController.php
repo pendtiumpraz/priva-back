@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Mail\DsrVerificationMail;
 use App\Models\AuditLog;
 use App\Models\DsrRequest;
+use App\Services\Dsr\BuktiWali;
 use App\Services\DsrEventBroadcaster;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -57,7 +58,7 @@ class DsrVerificationController extends Controller
                 Mail::to($dsr->requester_email)->queue(new DsrVerificationMail($dsr, $verifyUrl, $dsr->app));
                 $emailDispatched = true;
             } catch (\Throwable $e) {
-                Log::warning("DSR resend mail failed for {$dsr->request_id}: " . $e->getMessage());
+                Log::warning("DSR resend mail failed for {$dsr->request_id}: ".$e->getMessage());
             }
         }
 
@@ -78,6 +79,58 @@ class DsrVerificationController extends Controller
             'verify_url' => $verifyUrl,
             'expires_at' => $dsr->verification_expires_at,
             'email_dispatched' => $emailDispatched,
+        ]);
+    }
+
+    /**
+     * POST /api/dsr/{id}/guardian-proof
+     * DPO memutuskan bukti kewenangan WALI — PP 33/2026 Pasal 38 ayat (5)–(7)
+     * & Pasal 39 ayat (5).
+     *
+     * Hanya untuk permohonan yang diajukan wali. Permohonan yang buktinya
+     * sudah cocok otomatis (pasangan surel wali × subjek punya kewenangan
+     * terverifikasi di modul consent) tetap boleh diputuskan ulang — DPO
+     * bisa menolak bila ada alasan. Alasan wajib, masuk audit.
+     */
+    public function guardianProof(Request $request, string $id)
+    {
+        $user = $request->user();
+        $dsr = DsrRequest::where('org_id', $user->org_id)->findOrFail($id);
+
+        if (! $dsr->butuhBuktiWali()) {
+            return response()->json([
+                'error' => 'Permohonan ini tidak diajukan oleh wali — tidak ada bukti kewenangan yang perlu diputuskan.',
+                'code' => 'BUKAN_PERMOHONAN_WALI',
+            ], 422);
+        }
+
+        $data = $request->validate([
+            'decision' => 'required|in:'.DsrRequest::BUKTI_DITERIMA.','.DsrRequest::BUKTI_DITOLAK,
+            'reason' => 'required|string|min:10|max:1000',
+        ]);
+
+        app(BuktiWali::class)->putuskan($dsr, $data['decision'], $data['reason'], $user->id);
+
+        AuditLog::create([
+            'module' => 'dsr',
+            'record_id' => $dsr->id,
+            'action' => 'dsr.guardian_proof',
+            'user_id' => $user->id,
+            'user_name' => $user->name ?? null,
+            'user_role' => $user->role ?? null,
+            'changes' => [
+                'decision' => $data['decision'],
+                'reason' => $data['reason'],
+                'request_type' => $dsr->request_type,
+            ],
+            'ip_address' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => $data['decision'] === DsrRequest::BUKTI_DITERIMA
+                ? 'Bukti kewenangan wali diterima. Permohonan boleh dijalankan.'
+                : 'Bukti kewenangan wali ditolak. Permohonan atas hak yang merusak tetap terkunci.',
+            'data' => $dsr->fresh(),
         ]);
     }
 
@@ -110,7 +163,7 @@ class DsrVerificationController extends Controller
             'verified_at' => now(),
             'status' => 'pending_review',
             'verification_token' => null,
-            'verification_method' => 'dpo_manual:' . ($data['verified_via'] ?? 'other'),
+            'verification_method' => 'dpo_manual:'.($data['verified_via'] ?? 'other'),
         ]);
 
         AuditLog::create([
