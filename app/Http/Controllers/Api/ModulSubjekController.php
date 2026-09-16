@@ -115,16 +115,21 @@ class ModulSubjekController extends Controller
 
         $cp = $this->buatDenganNomor(ConsentCollectionPoint::class, 'CNT', 'collection_id', $isi);
 
+        // Kunci API diminta sejak awal: terbitkan sekarang. Server key kembali
+        // SEKALI — di respons ini — sama seperti regenerate; setelah itu server
+        // hanya menyimpan hash-nya dan tidak bisa menampilkannya lagi.
+        $serverKeyBaru = null;
         if ($cp->isApiKeyEnabled() === false && ($data['api_key_enabled'] ?? false)) {
-            // Kunci API diminta sejak awal: terbitkan, tetapi server key hanya
-            // ditampilkan sekali lewat regenerate — di sini cukup ditandai.
-            [$clientKey, $serverKey] = ConsentCollectionPoint::generateApiKeyPair();
-            $cp->update(['client_key' => $clientKey, 'server_key' => $serverKey, 'api_keys_last_rotated_at' => now()]);
+            [$clientKey, $serverKeyBaru] = ConsentCollectionPoint::generateApiKeyPair();
+            $cp->update(['client_key' => $clientKey, 'server_key' => $serverKeyBaru, 'api_keys_last_rotated_at' => now()]);
         }
 
         $this->audit($request, 'collection_point.create', $cp->id, ['module' => $modul, 'collection_id' => $cp->collection_id, 'name' => $cp->name]);
 
-        return response()->json(['data' => $this->bentukTitik($cp->fresh()->loadCount(['items', 'logs as records_count']))], 201);
+        return response()->json([
+            'data' => $this->bentukTitik($cp->fresh()->loadCount(['items', 'logs as records_count'])),
+            'server_key' => $serverKeyBaru,
+        ], 201);
     }
 
     public function showCollectionPoint(Request $request, string $id)

@@ -175,6 +175,14 @@ class ModulSubjekTest extends TestCase
             ->assertJsonPath('data.items_count', 0);
         $this->assertMatchesRegularExpression('/^CNT-\d{4}-\d{3,}$/', $r->json('data.collection_id'));
         $this->assertMatchesRegularExpression('/^[A-Za-z0-9]{64}$/', $r->json('data.embed_token'));
+        // Kunci diterbitkan bersama titiknya: server key kembali SEKALI, di sini;
+        // detail/daftar tidak pernah memuatnya lagi.
+        $this->assertMatchesRegularExpression('/^pk_consent_/', $r->json('data.client_key'));
+        $this->assertMatchesRegularExpression('/^sk_consent_/', $r->json('server_key'));
+        $this->getJson('/api/consent-guardian/collection-points/'.$r->json('data.id'))
+            ->assertOk()
+            ->assertJsonMissingPath('data.server_key')
+            ->assertJsonMissingPath('server_key');
         $this->assertStringStartsWith('pk_consent_', $r->json('data.client_key'));
         $this->assertArrayNotHasKey('server_key', $r->json('data'));
 

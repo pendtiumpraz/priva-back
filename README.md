@@ -432,7 +432,14 @@ Publik (widget; CORS `*`, throttle):
 
 Partner API v1 (`consent.api_key`, HMAC per titik pengumpulan): `POST /v1/consent/guardian/request`, `POST …/guardian/confirm`, `POST …/guardian/assert`, `GET …/guardian/{id}`, plus `capture` dengan `subject_class` + `guardian_consent_id`.
 
-Dashboard (izin `consent`): `/guardian-consents/*` (stats, show, revoke, resend, `subjects/{id}/transition-resend`), `/accessibility/*`, `/verification-methods/*` (bawaan platform hanya baca; kredensial tulis-saja, `••••` = pertahankan; `POST {id}/test`).
+Dashboard — DUA MODUL per subjek, bukan sub-fitur Consent (`ModulSubjekController`, `App\Support\ModulSubjek`):
+
+| Modul | Awalan API | Izin | Kelas subjek | Menu |
+|---|---|---|---|---|
+| Consent Wali (Anak) | `/api/consent-guardian/*` | `consent_guardian` | `anak` | `consent-guardian` → `/consent-guardian` (sort 321) |
+| Consent Aksesibilitas (Disabilitas) | `/api/consent-accessibility/*` | `consent_accessibility` | `disabilitas` | `consent-accessibility` → `/consent-accessibility` (sort 322) |
+
+Di bawah tiap awalan: `summary`; `collection-points` (CRUD penuh + `{id}/items`, `regenerate-api-keys`, `regenerate-embed-token`, `embed-snippet`, `widget-config`) — tiap titik = SATU aplikasi enterprise dengan whitelist domain, embed token, pasangan kunci API, dan webhook sendiri, lahir dengan `settings.guardian_mode=true` + `subject_class_default` = kelas modul dan `owner_module` = modul itu (Consent umum hanya memuat titik tanpa pemilik); server key kembali SEKALI (saat dibuat dengan `api_key_enabled` atau `regenerate-api-keys`); `guardian-consents/*` (stats, show, revoke, resend, `subjects/{id}/transition-resend`) dan `dsr/*` (index, store manual, show, update, `{id}/guardian-proof`) disaring per kelas subjek modul; `verification-methods/*` (bawaan platform hanya baca; kredensial tulis-saja, `••••` = pertahankan; `POST {id}/test`) hidup di kedua awalan; `accessibility/*` (summary, provisions, scopes, assessments) hanya di modul disabilitas. Nomor `CNT`/`DSR` lewat `RegistrationCodeService::nextGlobal` + percobaan ulang. Rute lama `/guardian-consents`, `/accessibility`, `/verification-methods` sudah tidak ada.
 
 DSR oleh wali/pendamping: `requester_type`, `subject_identifier`; bukti kewenangan (`App\Services\Dsr\BuktiWali`) `otomatis` bila cocok, atau keputusan DPO lewat `POST /dsr/{id}/guardian-proof`; hak yang merusak terkunci sampai bukti diterima (hook `saving` di `DsrRequest`, semua pintu).
 
