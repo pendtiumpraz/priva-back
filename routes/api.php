@@ -60,6 +60,7 @@ use App\Http\Controllers\Api\DsrAppController;
 use App\Http\Controllers\Api\DsrAutomatedDecisionController;
 use App\Http\Controllers\Api\GuardianConsentAdminController;
 use App\Http\Controllers\Api\AccessibilityAdminController;
+use App\Http\Controllers\Api\VerificationMethodController;
 use App\Http\Controllers\Api\DsrChannelController;
 use App\Http\Controllers\Api\DsrExecutionController;
 use App\Http\Controllers\Api\DsrInboundPublicController;
@@ -1570,6 +1571,20 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::post('/assessments', [AccessibilityAdminController::class, 'storeAssessment'])->middleware('permission:consent,write');
     });
 
+    // Metode verifikasi wali — PP 33/2026 Pasal 38 ayat (4). Katalog: bawaan
+    // platform (hanya baca) + milik tenant dengan kredensialnya sendiri
+    // (Dukcapil / e-KYC). Sub-fitur Consent (izin `consent`).
+    Route::prefix('verification-methods')->group(function () {
+        Route::get('/', [VerificationMethodController::class, 'index'])->middleware('permission:consent,read');
+        Route::post('/', [VerificationMethodController::class, 'store'])->middleware('permission:consent,write');
+        Route::put('/{id}', [VerificationMethodController::class, 'update'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+        Route::delete('/{id}', [VerificationMethodController::class, 'destroy'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+        Route::post('/{id}/test', [VerificationMethodController::class, 'test'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+    });
+
     // Phase B — Cookie Logs admin (tenant-scoped, separate from consent_logs)
     Route::get('/cookie-logs', [CookieLogAdminController::class, 'index'])->middleware('permission:consent,read');
     Route::get('/cookie-logs/stats', [CookieLogAdminController::class, 'stats'])->middleware('permission:consent,read');
@@ -2596,6 +2611,7 @@ Route::prefix('v1/consent')->middleware('consent.api_key')->group(function () {
     Route::get('/items', [ConsentApiV1Controller::class, 'items']);
     // Alur wali (PP 33/2026 Pasal 38) dari sisi server tenant.
     Route::post('/guardian/request', [ConsentApiV1Controller::class, 'guardianRequest']);
+    Route::post('/guardian/confirm', [ConsentApiV1Controller::class, 'guardianConfirm']);
     Route::get('/guardian/{id}', [ConsentApiV1Controller::class, 'guardianStatus'])->where('id', '[0-9a-fA-F-]{36}');
 });
 

@@ -12,6 +12,8 @@ use App\Models\Guardian;
 use App\Models\GuardianConsent;
 use App\Models\Organization;
 use App\Models\VerificationMethod;
+use App\Services\Verifikasi\KlaimIdentitas;
+use App\Services\Verifikasi\RegistriPenyedia;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -40,12 +42,26 @@ use Illuminate\Support\Facades\RateLimiter;
  *
  * Yang dicatat dari verifikasi adalah HASILNYA — `otp_email`, keyakinan
  * `rendah`, waktu, IP. Bukan salinan surel, bukan identitas apa pun.
+ *
+ * JALUR KUAT (ajukanDenganIdentitas) — Pasal 38 ayat (4) "teknologi yang
+ * tersedia": wali membuktikan identitasnya lewat metode milik tenant
+ * (Dukcapil / e-KYC), kewenangan terverifikasi seketika tanpa surel, tetapi
+ * TINDAKAN menyetujui tetap langkah terpisah lewat token sesi 15 menit.
+ * Identitas yang terbukti bukan persetujuan.
  */
 final class LayananWali
 {
     public const MASA_BERLAKU_JAM = 24;
 
+    /** Token sesi jalur kuat: wali sedang di depan layar, bukan di kotak surel. */
+    public const MASA_BERLAKU_SESI_MENIT = 15;
+
     public const JEDA_KIRIM_ULANG_DETIK = 120;
+
+    /** Percobaan verifikasi identitas per (titik pengumpulan, IP) dalam satu jendela. */
+    public const BATAS_PERCOBAAN_IDENTITAS = 5;
+
+    public const JENDELA_PERCOBAAN_DETIK = 600;
 
     public const KANAL_BELUM_DIDUKUNG = 'KANAL_WALI_BELUM_DIDUKUNG';
 
@@ -59,12 +75,22 @@ final class LayananWali
 
     public const KEWENANGAN_DICABUT = 'KEWENANGAN_DICABUT';
 
+    public const METODE_TIDAK_DIKENAL = 'METODE_VERIFIKASI_TIDAK_DIKENAL';
+
+    public const IDENTITAS_TIDAK_COCOK = 'IDENTITAS_TIDAK_COCOK';
+
+    public const PENYEDIA_GAGAL = 'PENYEDIA_VERIFIKASI_GAGAL';
+
+    public const TERLALU_BANYAK_PERCOBAAN = 'TERLALU_BANYAK_PERCOBAAN';
+
     public const HUBUNGAN_LABEL = [
         'orang_tua' => 'orang tua',
         'wali_sah' => 'wali sah',
         'pendamping' => 'pendamping',
         'lainnya' => 'wali',
     ];
+
+    public function __construct(private readonly RegistriPenyedia $penyedia) {}
 
     /**
      * Langkah 1 — catat niat, kirim tautan ke wali.
@@ -86,7 +112,154 @@ final class LayananWali
             );
         }
 
-        $kewenangan = DB::transaction(function () use ($cp, $data, $kontak, $ip, $sumber) {
+        $kewenangan = $this->siapkanKewenangan($cp, $data, $kontak, $ip, $sumber);
+
+        $this->kirimTautan($kewenangan);
+
+        AuditLog::create([
+            'module' => 'consent',
+            'record_id' => $kewenangan->id,
+            'action' => 'guardian_consent.request',
+            'user_name' => 'publik',
+            'user_role' => $sumber,
+            'changes' => [
+                'collection_point_id' => $cp->id,
+                'subject_class' => $data['subject_class'],
+                'relationship' => $data['guardian']['relationship'],
+            ],
+            'ip_address' => $ip,
+        ]);
+
+        return $kewenangan;
+    }
+
+    /**
+     * Jalur verifikasi KUAT — Pasal 38 ayat (4).
+     *
+     * Wali ada di depan widget (atau di hadapan aplikasi tenant) dan
+     * membuktikan identitasnya lewat metode milik tenant. Bila cocok,
+     * kewenangan terverifikasi SEKETIKA dengan keyakinan metode itu — tanpa
+     * surel. Tetapi ledger belum ditulis: wali masih harus membaca
+     * pernyataannya dan menekan "Saya menyetujui" (konfirmasi()) dengan token
+     * sesi yang dikembalikan di respons, berumur 15 menit, sekali pakai.
+     *
+     * Klaim identitas (NIK, tanggal lahir; nama = nama wali) hanya dikirim ke
+     * penyedia dan TIDAK disimpan di mana pun. Yang tinggal: nomor rujukan.
+     *
+     * @param  array<string, mixed>  $data  sudah tervalidasi; memuat `verification`
+     */
+    public function ajukanDenganIdentitas(ConsentCollectionPoint $cp, array $data, string $ip, ?string $userAgent, string $sumber): PengajuanTerverifikasi
+    {
+        $klaimMentah = (array) ($data['verification'] ?? []);
+        $kontak = trim((string) ($data['guardian']['contact'] ?? ''));
+
+        $metode = VerificationMethod::untukOrg($cp->org_id)
+            ->where('code', (string) ($klaimMentah['method_code'] ?? ''))
+            ->where('is_active', true)
+            ->first();
+
+        if (! $metode || ! $metode->kuat() || ! $metode->dapatDijalankan()) {
+            $this->tolak(
+                self::METODE_TIDAK_DIKENAL,
+                'Metode verifikasi tidak dikenal, tidak aktif, atau bukan metode verifikasi identitas.',
+                422,
+                'verification.method_code',
+            );
+        }
+
+        // Batas percobaan per (titik, IP): kredensial Dukcapil milik tenant
+        // bukan alat menebak NIK, dan tiap panggilan berbayar bagi tenant.
+        // Dihitung SEBELUM memanggil penyedia, apa pun hasilnya.
+        $kunci = 'guardian-idv:'.$cp->id.':'.$ip;
+        if (RateLimiter::tooManyAttempts($kunci, self::BATAS_PERCOBAAN_IDENTITAS)) {
+            $this->tolak(
+                self::TERLALU_BANYAK_PERCOBAAN,
+                'Terlalu banyak percobaan verifikasi identitas. Coba lagi dalam '.RateLimiter::availableIn($kunci).' detik, atau gunakan verifikasi lewat surel wali.',
+                429,
+            );
+        }
+        RateLimiter::hit($kunci, self::JENDELA_PERCOBAAN_DETIK);
+
+        // Nama di klaim = nama wali yang tercatat. Yang diverifikasi adalah
+        // wali yang akan tercatat, bukan orang ketiga yang kebetulan valid.
+        $klaim = new KlaimIdentitas(
+            (string) ($klaimMentah['nik'] ?? ''),
+            (string) ($data['guardian']['name'] ?? ''),
+            (string) ($klaimMentah['birth_date'] ?? ''),
+        );
+
+        // Di LUAR transaksi: panggilan ke penyedia tidak boleh menggantung
+        // kunci basis data, dan yang gagal tidak boleh meninggalkan subjek
+        // dan wali setengah jadi.
+        $hasil = $this->penyedia->periksa($metode, $klaim);
+
+        if ($hasil->gagal()) {
+            $this->tolak(
+                self::PENYEDIA_GAGAL,
+                'Layanan verifikasi identitas sedang tidak dapat dihubungi. Coba lagi, atau gunakan verifikasi lewat surel wali.',
+                503,
+            );
+        }
+        if (! $hasil->cocok()) {
+            $this->tolak(
+                self::IDENTITAS_TIDAK_COCOK,
+                'Data identitas wali tidak sesuai dengan catatan penyedia verifikasi.',
+                422,
+                'verification.nik',
+            );
+        }
+
+        $kewenangan = $this->siapkanKewenangan($cp, $data, $kontak, $ip, $sumber);
+
+        // Verifikasi kuat menimpa yang lebih lemah (surel → Dukcapil), bukan
+        // sebaliknya; yang setara diperbarui dengan hasil terbaru.
+        $peringkatBaru = VerificationMethod::peringkatKeyakinan($metode->confidence);
+        $peringkatLama = VerificationMethod::peringkatKeyakinan($kewenangan->verification_confidence);
+        if ($kewenangan->verified_at === null || $peringkatBaru >= $peringkatLama) {
+            $kewenangan->forceFill([
+                'verified_at' => now(),
+                'verification_method_code' => $metode->code,
+                'verification_driver' => $metode->driver,
+                'verification_confidence' => $metode->confidence,
+                'verification_reference' => $hasil->referensi,
+                'ip_address' => $ip,
+                'user_agent' => $userAgent ? substr($userAgent, 0, 500) : null,
+            ])->save();
+        }
+
+        $token = $kewenangan->terbitkanTokenSampai(now()->addMinutes(self::MASA_BERLAKU_SESI_MENIT));
+
+        AuditLog::create([
+            'module' => 'consent',
+            'record_id' => $kewenangan->id,
+            'action' => 'guardian_consent.identity_verified',
+            'user_name' => 'publik',
+            'user_role' => $sumber,
+            'changes' => [
+                'collection_point_id' => $cp->id,
+                'subject_class' => $data['subject_class'],
+                'relationship' => $data['guardian']['relationship'],
+                'verification_method_code' => $metode->code,
+                'verification_driver' => $metode->driver,
+                'verification_confidence' => $metode->confidence,
+                'verification_reference' => $hasil->referensi,
+            ],
+            'ip_address' => $ip,
+        ]);
+
+        return new PengajuanTerverifikasi($kewenangan, $token, $this->pratinjau($kewenangan));
+    }
+
+    /**
+     * Bagian yang sama untuk kedua jalur: subjek, wali, kewenangan (dibuat
+     * bila belum ada), dan pilihan yang menunggu — dalam satu transaksi.
+     * Belum ada satu baris pun di ledger setelah ini.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function siapkanKewenangan(ConsentCollectionPoint $cp, array $data, string $kontak, string $ip, string $sumber): GuardianConsent
+    {
+        return DB::transaction(function () use ($cp, $data, $kontak, $ip, $sumber) {
             $subjek = ConsentSubject::temukanAtauBuat($cp->org_id, (string) $data['user_identifier'], [
                 'subject_class' => $data['subject_class'],
                 'transition_date' => $data['transition_date'] ?? null,
@@ -149,24 +322,6 @@ final class LayananWali
 
             return $kw;
         });
-
-        $this->kirimTautan($kewenangan);
-
-        AuditLog::create([
-            'module' => 'consent',
-            'record_id' => $kewenangan->id,
-            'action' => 'guardian_consent.request',
-            'user_name' => 'publik',
-            'user_role' => $sumber,
-            'changes' => [
-                'collection_point_id' => $cp->id,
-                'subject_class' => $data['subject_class'],
-                'relationship' => $data['guardian']['relationship'],
-            ],
-            'ip_address' => $ip,
-        ]);
-
-        return $kewenangan;
     }
 
     /**
@@ -214,12 +369,17 @@ final class LayananWali
 
     /**
      * Langkah 3 — wali menyetujui. Di sinilah ledger ditulis.
+     *
+     * Token bisa datang dari surel (jalur ringan) atau dari respons pengajuan
+     * (jalur kuat) — mekanismenya satu. `$pembatas` dipakai partner API:
+     * token yang dikirim lewat kunci tenant A tidak boleh mengonfirmasi
+     * kewenangan milik tenant B, sekalipun tokennya sah.
      */
-    public function konfirmasi(string $tokenMentah, string $ip, ?string $userAgent): ConsentLog
+    public function konfirmasi(string $tokenMentah, string $ip, ?string $userAgent, ?ConsentCollectionPoint $pembatas = null): ConsentLog
     {
         $kw = GuardianConsent::denganToken($tokenMentah);
 
-        if (! $kw) {
+        if (! $kw || ($pembatas !== null && $kw->org_id !== $pembatas->org_id)) {
             $this->tolak(self::TOKEN_TIDAK_DIKENAL, 'Tautan tidak dikenal atau sudah pernah dipakai.', 404);
         }
         if ($kw->tokenKedaluwarsa()) {
@@ -305,12 +465,15 @@ final class LayananWali
             'module' => 'consent',
             'record_id' => $log->id,
             'action' => 'guardian_consent.confirm',
-            'user_name' => 'wali (tautan surel)',
+            'user_name' => $kw->verification_driver === VerificationMethod::DRIVER_OTP
+                ? 'wali (tautan surel)'
+                : 'wali (identitas terverifikasi)',
             'user_role' => 'guardian',
             'changes' => [
                 'guardian_consent_id' => $kw->id,
                 'subject_class' => $log->subject_class,
-                'verification_method_code' => 'otp_email',
+                'verification_method_code' => $kw->verification_method_code,
+                'verification_confidence' => $kw->verification_confidence,
             ],
             'ip_address' => $ip,
         ]);

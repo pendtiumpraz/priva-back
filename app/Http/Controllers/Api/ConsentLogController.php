@@ -10,6 +10,7 @@ use App\Models\ConsentCollectionPoint;
 use App\Models\ConsentLog;
 use App\Models\DisabilityServiceScope;
 use App\Models\Organization;
+use App\Models\VerificationMethod;
 use App\Services\CaptchaVerifier;
 use App\Services\Consent\ConsentOutboundGate;
 use App\Services\Consent\GerbangWali;
@@ -164,6 +165,25 @@ class ConsentLogController extends Controller
                         ->where('is_served', true)
                         ->orderBy('ragam')
                         ->pluck('ragam')
+                        ->values()->all(),
+                ],
+                // PP 33/2026 Pasal 38 ayat (4). Hanya metode yang benar-benar
+                // BISA dijalankan sistem: tautan surel (bawaan platform) dan
+                // metode kuat milik tenant yang aktif dan lengkap. `otp_phone`
+                // belum punya driver, jadi tidak dijanjikan kepada widget.
+                'guardian_verification' => [
+                    'methods' => VerificationMethod::untukOrg($collection->org_id)
+                        ->where('is_active', true)
+                        ->orderBy('label')
+                        ->get()
+                        ->filter(fn (VerificationMethod $m) => $m->dapatDijalankan())
+                        ->map(fn (VerificationMethod $m) => [
+                            'code' => $m->code,
+                            'label' => $m->label,
+                            'driver' => $m->driver,
+                            'confidence' => $m->confidence,
+                            'strong' => $m->kuat(),
+                        ])
                         ->values()->all(),
                 ],
                 'items' => $items->map(fn ($item) => [

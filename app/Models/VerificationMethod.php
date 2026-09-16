@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use App\Services\Verifikasi\RegistriPenyedia;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Crypt;
 
 /**
@@ -21,6 +23,13 @@ use Illuminate\Support\Facades\Crypt;
  * dilakukan lewat scope `untukOrg()` di bawah, yang menggabungkan bawaan
  * platform dengan milik tenant sendiri.
  *
+ * @property string|null $org_id
+ * @property string $code
+ * @property string $label
+ * @property string $driver
+ * @property string $confidence
+ * @property bool $is_active
+ * @property Carbon|null $review_at
  * @property array<string, mixed>|null $config
  */
 class VerificationMethod extends Model
@@ -34,7 +43,26 @@ class VerificationMethod extends Model
 
     public const DRIVER_EKYC = 'ekyc';
 
-    public const DRIVERS = [self::DRIVER_OTP, self::DRIVER_DUKCAPIL, self::DRIVER_EKYC];
+    /** Simulasi — hanya di luar produksi (lihat RegistriPenyedia). */
+    public const DRIVER_MOCK = 'mock';
+
+    public const DRIVERS = [self::DRIVER_OTP, self::DRIVER_DUKCAPIL, self::DRIVER_EKYC, self::DRIVER_MOCK];
+
+    /**
+     * Driver KUAT membuktikan IDENTITAS wali lewat penyedia (Dukcapil, e-KYC);
+     * OTP hanya membuktikan penguasaan kanal. Bedanya adalah beda keyakinan.
+     */
+    public const DRIVER_KUAT = [self::DRIVER_DUKCAPIL, self::DRIVER_EKYC, self::DRIVER_MOCK];
+
+    /** Placeholder klaim di templat badan permintaan driver HTTP. */
+    public const PLACEHOLDER_KLAIM = ['{nik}', '{name}', '{birth_date}'];
+
+    public const TIMEOUT_BAWAAN = 10;
+
+    public const TIMEOUT_MAKS = 30;
+
+    /** Nilai pengganti kredensial di respons API; bila dikirim balik, nilai lama dipertahankan. */
+    public const TERSAMAR = '••••';
 
     /**
      * Tingkat keyakinan — dinyatakan apa adanya, dan ini penting.
@@ -99,5 +127,80 @@ class VerificationMethod extends Model
                 $w->orWhere('org_id', $orgId);
             }
         });
+    }
+
+    /** rendah → 0, sedang → 1, tinggi → 2; tak dikenal → 0. Untuk membandingkan dua verifikasi. */
+    public static function peringkatKeyakinan(?string $keyakinan): int
+    {
+        $i = array_search($keyakinan, self::KEYAKINAN, true);
+
+        return $i === false ? 0 : (int) $i;
+    }
+
+    public function kuat(): bool
+    {
+        return in_array($this->driver, self::DRIVER_KUAT, true);
+    }
+
+    /** Baris `org_id` NULL: milik platform, terlihat semua tenant, hanya bisa dibaca tenant. */
+    public function bawaanPlatform(): bool
+    {
+        return $this->org_id === null;
+    }
+
+    /**
+     * Bisa benar-benar dijalankan sistem SAAT INI — bukan sekadar terdaftar.
+     *
+     * Config publik widget hanya menawarkan yang lolos di sini: `otp_phone`
+     * belum punya driver, metode Dukcapil tanpa endpoint belum bisa memeriksa
+     * apa pun, dan `mock` tidak ada di produksi. Menawarkan metode yang tidak
+     * bisa dijalankan sama dengan `guardian_mode` versi lama: sakelar yang
+     * tersimpan tanpa mengubah apa pun.
+     */
+    public function dapatDijalankan(): bool
+    {
+        if (! $this->is_active) {
+            return false;
+        }
+
+        return match ($this->driver) {
+            self::DRIVER_OTP => $this->code === 'otp_email',
+            self::DRIVER_DUKCAPIL, self::DRIVER_EKYC => trim((string) ($this->config['endpoint'] ?? '')) !== ''
+                && ! empty($this->config['match_all']),
+            self::DRIVER_MOCK => ! RegistriPenyedia::produksi(),
+            default => false,
+        };
+    }
+
+    /**
+     * Bentuk config yang boleh keluar lewat API: pemetaan kontrak penyedia,
+     * TANPA kredensial. Header selalu disamarkan; nilai badan hanya ditampilkan
+     * bila ia placeholder klaim — selebihnya (user_id, password) disamarkan.
+     * Daftar NIK simulasi tidak pernah keluar, hanya jumlahnya.
+     *
+     * @return array<string, mixed>
+     */
+    public function configPublik(): array
+    {
+        $c = $this->config ?? [];
+
+        $badan = [];
+        foreach ((array) ($c['body'] ?? []) as $k => $v) {
+            $badan[(string) $k] = is_string($v) && in_array($v, self::PLACEHOLDER_KLAIM, true) ? $v : self::TERSAMAR;
+        }
+
+        return [
+            'endpoint' => $c['endpoint'] ?? null,
+            'method' => strtoupper((string) ($c['method'] ?? 'POST')),
+            'timeout' => (int) ($c['timeout'] ?? self::TIMEOUT_BAWAAN),
+            'birth_date_format' => $c['birth_date_format'] ?? 'Y-m-d',
+            'match_all' => array_values((array) ($c['match_all'] ?? [])),
+            'mismatch_any' => array_values((array) ($c['mismatch_any'] ?? [])),
+            'reference_path' => $c['reference_path'] ?? null,
+            'reason_path' => $c['reason_path'] ?? null,
+            'header_keys' => array_map('strval', array_keys((array) ($c['headers'] ?? []))),
+            'body' => $badan,
+            'accept_nik_count' => count((array) ($c['accept_nik'] ?? [])),
+        ];
     }
 }

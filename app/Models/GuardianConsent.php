@@ -37,6 +37,8 @@ use Illuminate\Support\Str;
  * @property string|null $verification_method_code
  * @property string|null $verification_driver
  * @property string|null $verification_confidence
+ * @property string|null $verification_reference
+ * @property string|null $user_agent
  * @property string|null $verification_token_hash
  * @property string|null $statement_shown
  * @property string|null $ip_address
@@ -103,11 +105,21 @@ class GuardianConsent extends Model
      */
     public function terbitkanToken(int $berlakuJam = 24): string
     {
+        return $this->terbitkanTokenSampai(now()->addHours($berlakuJam));
+    }
+
+    /**
+     * Token sesi jalur verifikasi kuat berumur MENIT, bukan jam: wali sedang
+     * di depan layar yang baru saja membuktikan identitasnya, bukan di kotak
+     * surel yang dibuka entah kapan. Mekanismenya sama — hash, sekali pakai.
+     */
+    public function terbitkanTokenSampai(Carbon $sampai): string
+    {
         $mentah = Str::random(64);
 
         $this->forceFill([
             'verification_token_hash' => self::hashToken($mentah),
-            'verification_expires_at' => now()->addHours($berlakuJam),
+            'verification_expires_at' => $sampai,
         ])->save();
 
         return $mentah;

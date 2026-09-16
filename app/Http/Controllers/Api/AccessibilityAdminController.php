@@ -9,12 +9,12 @@ use App\Models\CapacityAssessment;
 use App\Models\ConsentCollectionPoint;
 use App\Models\ConsentSubject;
 use App\Models\DisabilityServiceScope;
+use App\Services\Consent\CacheConfigPublik;
 use App\Support\AssignmentScope;
 use App\Support\KelasSubjek;
 use App\Support\KunciPencarian;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 
 /**
@@ -416,16 +416,7 @@ class AccessibilityAdminController extends Controller
      */
     private function segarkanConfig(?ConsentCollectionPoint $cp): void
     {
-        if (! $cp) {
-            return;
-        }
-
-        foreach (array_filter([$cp->collection_id, $cp->id, $cp->embed_token]) as $kunci) {
-            Cache::forget('consent:config:'.sha1((string) $kunci));
-            foreach (['all', 'app', 'cookie'] as $filter) {
-                Cache::forget('consent:config:'.sha1($kunci.'|'.$filter));
-            }
-        }
+        CacheConfigPublik::segarkan($cp);
     }
 
     /** @param  array<string, mixed>  $perubahan */

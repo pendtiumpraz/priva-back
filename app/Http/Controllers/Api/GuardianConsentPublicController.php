@@ -59,6 +59,13 @@ class GuardianConsentPublicController extends Controller
             'external_user_ref' => 'nullable|string|max:120',
             'source_form' => 'nullable|string|max:120',
             'captcha_token' => 'nullable|string|max:4000',
+            // Jalur verifikasi KUAT (Pasal 38 ayat 4): klaim identitas wali
+            // untuk metode milik tenant. Diteruskan ke penyedia, tidak disimpan.
+            // Nama yang diperiksa = guardian.name; tidak ada bidang nama kedua.
+            'verification' => 'nullable|array',
+            'verification.method_code' => 'required_with:verification|string|max:48',
+            'verification.nik' => 'required_with:verification|digits:16',
+            'verification.birth_date' => 'required_with:verification|date_format:Y-m-d|before:today',
         ]);
 
         $collection = ConsentCollectionPoint::where('embed_token', $data['collection_id'])
@@ -73,6 +80,15 @@ class GuardianConsentPublicController extends Controller
         if ($collection->captcha_provider
             && ! $this->captcha->verifyForCollection($collection, $request->input('captcha_token'), $request->ip())) {
             return $this->json(['error' => 'Verifikasi captcha gagal.'], 422);
+        }
+
+        if (! empty($data['verification'])) {
+            $hasil = $this->layanan->ajukanDenganIdentitas($collection, $data, (string) $request->ip(), $request->userAgent(), 'widget');
+
+            // Token sesi kembali ke widget yang baru saja membuktikan identitas
+            // walinya; widget menampilkan `preview.statement` lalu memanggil
+            // `confirm_url` (POST) saat wali menekan "Saya menyetujui".
+            return $this->json($hasil->toArray(url('/api/public/consent/guardian/verify/'.$hasil->token)));
         }
 
         $kw = $this->layanan->ajukan($collection, $data, (string) $request->ip(), $request->userAgent(), 'widget');

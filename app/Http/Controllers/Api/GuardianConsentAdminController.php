@@ -286,6 +286,9 @@ class GuardianConsentAdminController extends Controller
                 'method_code' => $kw->verification_method_code,
                 'driver' => $kw->verification_driver,
                 'confidence' => $kw->verification_confidence,
+                // Nomor rujukan penyedia (Dukcapil/e-KYC) — satu-satunya jejak
+                // verifikasi kuat yang disimpan. Bukan NIK.
+                'reference' => $kw->verification_reference,
                 'verified_at' => $kw->verified_at?->toIso8601String(),
                 'expires_at' => $kw->verification_expires_at?->toIso8601String(),
                 'has_pending' => ($kw->pending_capture ?? []) !== [],

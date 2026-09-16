@@ -24,6 +24,7 @@ use Illuminate\Http\Request;
  *   GET  /api/v1/consent/state             — query latest consent state for user
  *   GET  /api/v1/consent/items             — list active consent items + categories
  *   POST /api/v1/consent/guardian/request  — ajukan verifikasi wali (Pasal 38)
+ *   POST /api/v1/consent/guardian/confirm  — wali menyetujui (jalur kuat, token sesi)
  *   GET  /api/v1/consent/guardian/{id}     — status kewenangan wali
  *
  * Consent anak (PP 33/2026 Pasal 38): `capture` dengan `subject_class=anak`
@@ -59,7 +60,21 @@ class ConsentApiV1Controller extends Controller
             'subject_own_channel' => 'nullable|string|max:200',
             'external_user_ref' => 'nullable|string|max:120',
             'source_form' => 'nullable|string|max:120',
+            // Jalur verifikasi KUAT (Pasal 38 ayat 4) — klaim identitas wali
+            // untuk metode milik tenant; diteruskan ke penyedia, tidak disimpan.
+            'verification' => 'nullable|array',
+            'verification.method_code' => 'required_with:verification|string|max:48',
+            'verification.nik' => 'required_with:verification|digits:16',
+            'verification.birth_date' => 'required_with:verification|date_format:Y-m-d|before:today',
         ]);
+
+        if (! empty($data['verification'])) {
+            $hasil = app(LayananWali::class)->ajukanDenganIdentitas($cp, $data, (string) $request->ip(), $request->userAgent(), 'partner_api');
+
+            // Tenant menampilkan `preview.statement` di layarnya sendiri, lalu
+            // memanggil guardian/confirm dengan `confirm_token` (15 menit).
+            return response()->json($hasil->toArray());
+        }
 
         $kw = app(LayananWali::class)->ajukan($cp, $data, (string) $request->ip(), $request->userAgent(), 'partner_api');
 
@@ -69,6 +84,30 @@ class ConsentApiV1Controller extends Controller
             'guardian_consent_id' => $kw->id,
             'expires_at' => $kw->verification_expires_at?->toIso8601String(),
         ], 202);
+    }
+
+    /**
+     * Wali menyetujui — jalur kuat, dari sisi server tenant. Token sesi dari
+     * guardian/request; dibatasi ke tenant pemilik kunci (token tenant lain
+     * → 404, bukan ledger tenant lain).
+     */
+    public function guardianConfirm(Request $request)
+    {
+        $cp = $request->consentCollection;
+        if (! $cp) {
+            return response()->json(['error' => 'Collection not resolved'], 500);
+        }
+
+        $data = $request->validate(['token' => 'required|string|size:64']);
+
+        $log = app(LayananWali::class)->konfirmasi($data['token'], (string) $request->ip(), $request->userAgent(), $cp);
+
+        return response()->json([
+            'message' => 'Persetujuan wali tercatat.',
+            'log_id' => $log->id,
+            'guardian_consent_id' => $log->guardian_consent_id,
+            'subject_class' => $log->subject_class,
+        ]);
     }
 
     public function guardianStatus(Request $request, string $id)
