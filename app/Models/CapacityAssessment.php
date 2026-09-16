@@ -6,6 +6,7 @@ use App\Models\Concerns\BelongsToOrg;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * Penilaian kapasitas subjek — PP 33/2026 Pasal 38 ayat (5)–(6).
@@ -21,6 +22,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * subjeknya, dan tidak bisa dipertanggungjawabkan saat diaudit.
  *
  * @property string|null $org_id
+ * @property string|null $consent_subject_id
+ * @property string|null $dsr_request_id
+ * @property string|null $subject_class
+ * @property string|null $result
+ * @property string|null $reason
+ * @property string|null $assessed_by
+ * @property string|null $dpia_id
+ * @property Carbon|null $assessed_at
  */
 class CapacityAssessment extends Model
 {
@@ -69,6 +78,29 @@ class CapacityAssessment extends Model
     public function dpia(): BelongsTo
     {
         return $this->belongsTo(Dpia::class);
+    }
+
+    /** @return BelongsTo<ConsentSubject, $this> */
+    public function consentSubject(): BelongsTo
+    {
+        return $this->belongsTo(ConsentSubject::class);
+    }
+
+    /**
+     * Penilaian TERBARU atas seorang subjek — satu-satunya yang berlaku.
+     *
+     * Penilaian tidak ditimpa, ditambah: yang lama tetap ada sebagai riwayat
+     * yang bisa ditinjau ulang. Karena itu "yang berlaku" harus dicari, bukan
+     * diambil sembarang. Tanpa scope org — dipanggil dari gerbang publik.
+     */
+    public static function terbaruUntuk(string $orgId, string $consentSubjectId): ?self
+    {
+        return self::withoutGlobalScope('org')
+            ->where('org_id', $orgId)
+            ->where('consent_subject_id', $consentSubjectId)
+            ->orderByDesc('assessed_at')
+            ->orderByDesc('created_at')
+            ->first();
     }
 
     /** @return BelongsTo<User, $this> */

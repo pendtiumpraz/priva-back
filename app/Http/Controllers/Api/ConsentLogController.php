@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Jobs\FireConsentWebhookJob;
 use App\Jobs\PushConsentToCrmJob;
+use App\Models\AccessibilityProvision;
 use App\Models\ConsentCollectionPoint;
 use App\Models\ConsentLog;
+use App\Models\DisabilityServiceScope;
 use App\Models\Organization;
 use App\Services\CaptchaVerifier;
 use App\Services\Consent\ConsentOutboundGate;
@@ -138,6 +140,32 @@ class ConsentLogController extends Controller
                     'provider' => $collection->captcha_provider,
                     'site_key' => $collection->captcha_site_key,
                 ] : null,
+                // PP 33/2026 Pasal 39 ayat (3). Hanya prasarana yang TERBUKTI
+                // — tersedia DAN pernah diuji — yang ditawarkan widget. Centang
+                // tanpa tanggal uji adalah klaim, bukan fakta, dan klaim itu
+                // tidak boleh dijanjikan kepada penyandang disabilitas.
+                'accessibility' => [
+                    'formats' => AccessibilityProvision::withoutGlobalScope('org')
+                        ->where('org_id', $collection->org_id)
+                        ->where('collection_point_id', $collection->id)
+                        ->where('is_available', true)
+                        ->whereNotNull('last_tested_at')
+                        ->orderBy('format')
+                        ->get()
+                        ->map(fn ($p) => [
+                            'format' => $p->format,
+                            'label' => AccessibilityProvision::LABEL[$p->format] ?? $p->format,
+                            'note' => $p->format_note,
+                        ])
+                        ->values()->all(),
+                    'ragam' => DisabilityServiceScope::withoutGlobalScope('org')
+                        ->where('org_id', $collection->org_id)
+                        ->where('collection_point_id', $collection->id)
+                        ->where('is_served', true)
+                        ->orderBy('ragam')
+                        ->pluck('ragam')
+                        ->values()->all(),
+                ],
                 'items' => $items->map(fn ($item) => [
                     'id' => $item->id,
                     'title' => $item->title,

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Jobs\FireConsentWebhookJob;
 use App\Mail\GuardianVerificationMail;
 use App\Models\AuditLog;
+use App\Models\CapacityAssessment;
 use App\Models\ConsentCollectionPoint;
 use App\Models\ConsentItem;
 use App\Models\ConsentLog;
@@ -16,6 +17,7 @@ use App\Services\Consent\GerbangWali;
 use App\Services\Consent\LayananWali;
 use App\Support\KelasSubjek;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
@@ -134,6 +136,51 @@ class AlurWaliTest extends TestCase
         $log = ConsentLog::first();
         $this->assertSame(KelasSubjek::DISABILITAS, $log->subject_class);
         $this->assertNull($log->guardian_consent_id);
+    }
+
+    #[Test]
+    public function disabilitas_dengan_penilaian_diwakili_wali_wajib_lewat_wali(): void
+    {
+        // Pasal 39: hanya hasil "diwakili wali" yang memindahkan keputusan.
+        $this->penilaian('anak@contoh.id', CapacityAssessment::HASIL_WALI);
+
+        $this->tangkap(['subject_class' => 'disabilitas'])
+            ->assertStatus(422)
+            ->assertJsonPath('code', GerbangWali::WALI_WAJIB);
+        $this->assertSame(0, ConsentLog::count());
+
+        // Dengan kewenangan wali yang sah, penangkapan berjalan.
+        $kw = $this->kewenanganSah('anak@contoh.id');
+        $this->tangkap(['subject_class' => 'disabilitas', 'guardian_consent_id' => $kw->id])->assertStatus(201);
+        $this->assertSame($kw->id, ConsentLog::first()->guardian_consent_id);
+    }
+
+    #[Test]
+    public function disabilitas_yang_perlu_pendampingan_tetap_menyetujui_sendiri_dan_penilaian_terbaru_yang_berlaku(): void
+    {
+        // Penilaian lama: diwakili wali. Penilaian baru: cukup didampingi.
+        // Yang berlaku adalah yang TERBARU — pendamping membantu memahami,
+        // subjeknya tetap yang memutuskan.
+        $this->penilaian('anak@contoh.id', CapacityAssessment::HASIL_WALI, now()->subDay());
+        $this->penilaian('anak@contoh.id', CapacityAssessment::HASIL_PENDAMPINGAN, now());
+
+        $this->tangkap(['subject_class' => 'disabilitas'])->assertStatus(201);
+        $this->assertNull(ConsentLog::first()->guardian_consent_id);
+    }
+
+    /** Penilaian kapasitas atas subjek disabilitas — untuk uji gerbang. */
+    private function penilaian(string $penanda, string $hasil, ?Carbon $pada = null): void
+    {
+        $subjek = ConsentSubject::temukanAtauBuat($this->org->id, $penanda, ['subject_class' => KelasSubjek::DISABILITAS]);
+
+        CapacityAssessment::create([
+            'org_id' => $this->org->id,
+            'consent_subject_id' => $subjek->id,
+            'subject_class' => KelasSubjek::DISABILITAS,
+            'result' => $hasil,
+            'reason' => 'Dinilai oleh petugas layanan pada saat pendaftaran.',
+            'assessed_at' => $pada ?? now(),
+        ]);
     }
 
     #[Test]

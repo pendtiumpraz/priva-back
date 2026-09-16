@@ -58,6 +58,7 @@ use App\Http\Controllers\Api\DpoScopeController;
 use App\Http\Controllers\Api\DsrAppController;
 use App\Http\Controllers\Api\DsrAutomatedDecisionController;
 use App\Http\Controllers\Api\GuardianConsentAdminController;
+use App\Http\Controllers\Api\AccessibilityAdminController;
 use App\Http\Controllers\Api\DsrChannelController;
 use App\Http\Controllers\Api\DsrExecutionController;
 use App\Http\Controllers\Api\DsrInboundPublicController;
@@ -1528,6 +1529,29 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
             ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
         Route::post('/{id}/resend', [GuardianConsentAdminController::class, 'resend'])
             ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+    });
+
+    // Aksesibilitas — PP 33/2026 Pasal 39: prasarana per kanal, ragam yang
+    // dilayani, penilaian kapasitas. Sub-fitur Consent (izin `consent`).
+    Route::prefix('accessibility')->group(function () {
+        Route::get('/summary', [AccessibilityAdminController::class, 'summary'])->middleware('permission:consent,read');
+
+        Route::get('/provisions', [AccessibilityAdminController::class, 'provisions'])->middleware('permission:consent,read');
+        Route::post('/provisions', [AccessibilityAdminController::class, 'storeProvision'])->middleware('permission:consent,write');
+        Route::put('/provisions/{id}', [AccessibilityAdminController::class, 'updateProvision'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+        Route::delete('/provisions/{id}', [AccessibilityAdminController::class, 'destroyProvision'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+
+        Route::get('/scopes', [AccessibilityAdminController::class, 'scopes'])->middleware('permission:consent,read');
+        Route::post('/scopes', [AccessibilityAdminController::class, 'storeScope'])->middleware('permission:consent,write');
+        Route::put('/scopes/{id}', [AccessibilityAdminController::class, 'updateScope'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+        Route::delete('/scopes/{id}', [AccessibilityAdminController::class, 'destroyScope'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+
+        Route::get('/assessments', [AccessibilityAdminController::class, 'assessments'])->middleware('permission:consent,read');
+        Route::post('/assessments', [AccessibilityAdminController::class, 'storeAssessment'])->middleware('permission:consent,write');
     });
 
     // Phase B — Cookie Logs admin (tenant-scoped, separate from consent_logs)

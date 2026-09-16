@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\BelongsToOrg;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Ragam disabilitas yang DILAYANI sebuah kanal — PP 33/2026 Pasal 39 ayat (1)–(2).
@@ -21,6 +22,11 @@ use Illuminate\Database\Eloquent\Model;
  * SENDIRI memilih jalur pendampingan.
  *
  * @property string|null $org_id
+ * @property string|null $channel
+ * @property string|null $collection_point_id
+ * @property string|null $ragam
+ * @property bool $is_served
+ * @property string|null $notes
  */
 class DisabilityServiceScope extends Model
 {
@@ -68,6 +74,12 @@ class DisabilityServiceScope extends Model
     ];
 
     protected $casts = ['is_served' => 'boolean'];
+
+    /** @return BelongsTo<ConsentCollectionPoint, $this> */
+    public function collectionPoint(): BelongsTo
+    {
+        return $this->belongsTo(ConsentCollectionPoint::class, 'collection_point_id');
+    }
 
     /**
      * Bolehkah subjek dengan ragam ini memberi persetujuan SENDIRI?

@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\BelongsToOrg;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
@@ -20,7 +21,15 @@ use Illuminate\Support\Carbon;
  * `sudahTerbukti()` menolak menganggap centang tanpa tanggal uji sebagai bukti.
  *
  * @property string|null $org_id
+ * @property string|null $channel
+ * @property string|null $collection_point_id
+ * @property string|null $format
+ * @property string|null $format_note
+ * @property bool $is_available
+ * @property string|null $evidence_ref
+ * @property string|null $notes
  * @property Carbon|null $last_tested_at
+ * @property Carbon|null $next_review_at
  */
 class AccessibilityProvision extends Model
 {
@@ -78,6 +87,12 @@ class AccessibilityProvision extends Model
         'last_tested_at' => 'date',
         'next_review_at' => 'date',
     ];
+
+    /** @return BelongsTo<ConsentCollectionPoint, $this> */
+    public function collectionPoint(): BelongsTo
+    {
+        return $this->belongsTo(ConsentCollectionPoint::class, 'collection_point_id');
+    }
 
     /**
      * Prasarana ini TERBUKTI, bukan sekadar dicentang?

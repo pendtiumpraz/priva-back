@@ -2,7 +2,9 @@
 
 namespace App\Services\Consent;
 
+use App\Models\CapacityAssessment;
 use App\Models\ConsentCollectionPoint;
+use App\Models\ConsentSubject;
 use App\Models\GuardianConsent;
 use App\Support\KelasSubjek;
 use App\Support\KunciPencarian;
@@ -85,10 +87,50 @@ final class GerbangWali
             );
         }
 
+        // Pasal 39: penyandang disabilitas menyetujui SENDIRI — kecuali penilaian
+        // kapasitas TERBARU atas orang ini menyatakan "diwakili wali". Hanya
+        // hasil itu yang memindahkan keputusan; "perlu pendampingan" tetap
+        // keputusan subjeknya sendiri, pendamping hanya membantu memahami.
+        if ($kelas === KelasSubjek::DISABILITAS && $kewenangan === null && $this->diwakiliWali($cp, $userIdentifier)) {
+            $this->tolak(
+                self::WALI_WAJIB,
+                'Penilaian kapasitas terbaru menyatakan subjek ini diwakili wali (PP 33/2026 Pasal 39). Ajukan verifikasi wali lebih dulu, lalu sertakan guardian_consent_id.',
+                'guardian_consent_id',
+            );
+        }
+
         return [
             'subject_class' => $kelas,
             'guardian_consent_id' => $kewenangan?->id,
         ];
+    }
+
+    /**
+     * Penilaian kapasitas terbaru atas subjek ini memindahkan keputusan ke wali?
+     *
+     * Tanpa baris subjek atau tanpa penilaian → TIDAK: bawaannya orang
+     * memutuskan sendiri. Membalik bawaan ini ("dianggap tak mampu sampai
+     * dinilai") berarti mencabut kapasitas hukum semua orang yang belum
+     * sempat dinilai.
+     */
+    private function diwakiliWali(ConsentCollectionPoint $cp, string $userIdentifier): bool
+    {
+        $hash = KunciPencarian::hash($userIdentifier);
+        if ($hash === null) {
+            return false;
+        }
+
+        $subjek = ConsentSubject::withoutGlobalScope('org')
+            ->where('org_id', $cp->org_id)
+            ->where('subject_hash', $hash)
+            ->first();
+        if (! $subjek) {
+            return false;
+        }
+
+        $terbaru = CapacityAssessment::terbaruUntuk((string) $cp->org_id, $subjek->id);
+
+        return $terbaru !== null && $terbaru->result === CapacityAssessment::HASIL_WALI;
     }
 
     /**

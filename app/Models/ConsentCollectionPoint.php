@@ -20,6 +20,7 @@ use Illuminate\Support\Str;
  * @property string|null $captcha_provider
  * @property string|null $captcha_site_key
  * @property string|null $consent_rule_set_id
+ * @property string|null $embed_token
  */
 class ConsentCollectionPoint extends Model
 {
