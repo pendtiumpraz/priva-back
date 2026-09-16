@@ -382,6 +382,7 @@ Registered in `app/Console/Kernel.php`:
 
 - `CleanupExpiredEntitlements` — daily 02:00. Auto-revokes `tenant_module_entitlements` past `valid_until`.
 - `CleanupArchivedTenants` — daily 03:00. Hard-deletes tenants past their retention.
+- `consent:peralihan-anak` — daily 03:15 (registered in `routes/console.php`). Anak yang genap 18 tahun: kewenangan wali dicabut, subjek diminta memutuskan sendiri lewat tautan. See **Consent Anak & Disabilitas** above.
 
 Enable cron: `* * * * * cd /path && php artisan schedule:run >> /dev/null 2>&1`.
 
@@ -389,13 +390,80 @@ Enable cron: `* * * * * cd /path && php artisan schedule:run >> /dev/null 2>&1`.
 
 `tenant_themes` holds palette JSON, logo URL, favicon URL, layout preset, font family, `is_active`. Isolation: tenant A's query never sees tenant B's rows — `TenantThemeController::scope()` narrows by `org_id` or `NULL` (platform-owned themes for root/superadmin). Asset uploads write under `storage/app/public/themes/{org_id|platform}/` — run `php artisan storage:link` once on deploy.
 
+## Consent Anak & Disabilitas (PP 33/2026 Pasal 38 & 39)
+
+Dua fitur di menu (nama tampilan menunggu keputusan produk), tetapi **SATU ledger** (`consent_logs`), satu antrean DSR, satu widget, satu kontrak `/v1/consent`. Semua halaman dashboard-nya di bawah `/consent/*`: `guardian`, `accessibility`, `verification-methods`.
+
+### Tabel
+
+| Tabel | Isi | Satuan |
+|---|---|---|
+| `consent_subjects` | siapa yang dilindungi, kelas (`anak` / `disabilitas`), tanggal peralihan 18 tahun, kanal miliknya | satu per ORANG |
+| `guardians` | wali — nama & kontak tersandi, `contact_hash` untuk dicari | tetap |
+| `guardian_consents` | wali boleh bertindak untuk siapa, terverifikasi bagaimana (metode, driver, keyakinan, rujukan penyedia), dicabut kapan | bisa dicabut |
+| `consent_logs` | apa yang disetujui (+ `guardian_consent_id`, `subject_class`) | satu per KEJADIAN |
+| `verification_methods` | katalog cara verifikasi: bawaan platform (`org_id` NULL, hanya baca) + milik tenant, `config` tersandi | — |
+| `accessibility_provisions`, `disability_service_scopes`, `capacity_assessments` | prasarana per kanal, ragam yang dilayani, penilaian kapasitas | — |
+
+`consent_records` adalah tabel MATI (nol penulis). Jangan tempelkan apa pun ke sana.
+
+### Gerbang
+
+`App\Services\Consent\GerbangWali::periksa()` dipanggil kedua jalur tangkap (widget publik & Partner API) SEBELUM `ConsentLog::create`: `anak` wajib `guardian_consent_id` yang sah (tenant sama, terverifikasi, belum dicabut, subjek sama); `disabilitas` menyetujui sendiri kecuali penilaian kapasitas terbaru = `diwakili_wali`; `settings.guardian_mode` pada titik pengumpulan berarti kelas subjek wajib dinyatakan.
+
+### Empat cara memverifikasi wali
+
+| Cara | Metode | Keyakinan | Alur |
+|---|---|---|---|
+| Tautan surel | `otp_email` (bawaan) | rendah | `guardian/request` → wali membuka `/wali/{token}` → POST menyetujui |
+| Tautan SMS/WhatsApp | `otp_phone` (bawaan) | rendah | sama; hanya diterima bila kanal pesan platform hidup (lihat Messaging) |
+| Verifikasi identitas | driver `dukcapil` / `ekyc` milik tenant | tinggi | `verification{method_code, nik, birth_date}` → cocok → token sesi 15 menit → wali membaca pernyataan → POST. Klaim TIDAK disimpan, hanya rujukan penyedia |
+| Pernyataan tenant | driver `tenant_asserted` milik tenant | yang tenant nyatakan (bawaan sedang) | `POST /v1/consent/guardian/assert` → kewenangan terverifikasi → `capture` dengan `guardian_consent_id` |
+
+Kewenangan yang berdiri ≠ persetujuan yang berdiri: tiap penangkapan tetap butuh tindakan wali, kecuali tenant menangkapnya sendiri lewat v1 dengan `guardian_consent_id`. Verifikasi yang lebih kuat menimpa yang lemah, tidak sebaliknya. Driver `mock` hanya di luar produksi (dibaca dari `config('app.env')`).
+
+### Endpoint
+
+Publik (widget; CORS `*`, throttle):
+- `POST /api/public/consent/guardian/request` — surel/telepon, atau + `verification` (kuat)
+- `GET|POST /api/public/consent/guardian/verify/{token}` — lihat / setujui
+- `GET /api/public/consent/transition/{token}`, `POST …/confirm`, `POST …/withdraw`
+- `GET /api/public/consent/config` memuat `guardian_verification.methods` (hanya yang BISA dijalankan) dan `accessibility.formats` (hanya yang terbukti: tersedia DAN pernah diuji)
+
+Partner API v1 (`consent.api_key`, HMAC per titik pengumpulan): `POST /v1/consent/guardian/request`, `POST …/guardian/confirm`, `POST …/guardian/assert`, `GET …/guardian/{id}`, plus `capture` dengan `subject_class` + `guardian_consent_id`.
+
+Dashboard (izin `consent`): `/guardian-consents/*` (stats, show, revoke, resend, `subjects/{id}/transition-resend`), `/accessibility/*`, `/verification-methods/*` (bawaan platform hanya baca; kredensial tulis-saja, `••••` = pertahankan; `POST {id}/test`).
+
+DSR oleh wali/pendamping: `requester_type`, `subject_identifier`; bukti kewenangan (`App\Services\Dsr\BuktiWali`) `otomatis` bila cocok, atau keputusan DPO lewat `POST /dsr/{id}/guardian-proof`; hak yang merusak terkunci sampai bukti diterima (hook `saving` di `DsrRequest`, semua pintu).
+
+### Tautan yang dibuka manusia
+
+`App\Services\Consent\TautanPublik` → `FRONTEND_URL/wali/{token}` dan `FRONTEND_URL/peralihan/{token}` (halaman Next.js). **`FRONTEND_URL` di `.env` wajib menunjuk frontend**, bukan host API — kalau tidak, wali mendapat 404 tanpa satu pun galat di sisi kita (`App\Support\FrontendUrl::peringatan()`). Blade di `resources/views/consent/*` tetap ada sebagai cadangan bila endpoint dibuka langsung.
+
+### Messaging (SMS/WhatsApp)
+
+`config/messaging.php` ← env `MESSAGING_SMS_*` ← ditimpa Pengaturan Sistem → **Messaging** (superadmin). Driver `off` (bawaan: kanal telepon tidak ditawarkan, kontak telepon ditolak 422), `log` (lokal/uji), `http` (gateway generik: URL/header/badan dengan placeholder `{to} {message} {secret} {sender}`, format nomor `e164|digits|local`, path sukses opsional). Dikirim lewat `KirimPesanSingkatJob` (3 percobaan). Pesan sengaja minim — tanpa penanda anak, tanpa tujuan pemrosesan. `App\Services\Pesan\KanalPesan::tersedia()` adalah satu-satunya sumber kebenaran "kanal hidup".
+
+### Peralihan anak → dewasa
+
+`php artisan consent:peralihan-anak` (harian 03:15, terdaftar di `routes/console.php`; `--dry-run`, `--pada=YYYY-MM-DD`): cabut kewenangan wali, keadaan `menunggu_konfirmasi`, kirim tautan ke kanal milik subjek. Tanpa kanal = antrean kerja di dashboard, TIDAK dicabut otomatis.
+
+### Jangan
+
+- Jangan simpan NIK / tanggal lahir wali di mana pun — hanya `verification_reference`. `KlaimIdentitas` sengaja tanpa properti publik dan tanpa `JsonSerializable`.
+- Jangan `where('contact', $plaintext)` pada kolom tersandi — pakai `contact_hash` / `subject_hash` lewat `App\Support\KunciPencarian`.
+- Jangan tawarkan metode/kanal yang tidak bisa dijalankan (`VerificationMethod::dapatDijalankan()`, `KanalPesan::tersedia()`): sakelar yang tersimpan tanpa efek adalah kebohongan yang sama dengan `guardian_mode` versi lama.
+- Jangan `Http::fake()` dua kali dalam satu uji — stub digabung dan yang pertama menang; pakai satu closure yang jawabannya diganti per fase.
+
+Uji: `AlurWaliTest`, `VerifikasiKuatTest`, `KanalTeleponTest`, `KewenanganDinyatakanTenantTest`, `TautanHalamanFrontendTest`, `PeralihanAnakDewasaTest`, `KewenanganWaliAdminTest`, `AksesibilitasAdminTest`, `DsrWaliTest`, `TulangPunggungWaliTest`, unit `NomorTeleponTest`.
+
 ## Routing
 
 Single file: `routes/api.php`.
 
-- **Public** (no auth, throttled): register, login, public feature-requests, public consent capture, SSO callback, threat-intel webhook.
+- **Public** (no auth, throttled): register, login, public feature-requests, public consent capture + alur wali & peralihan (`/public/consent/guardian/*`, `/public/consent/transition/*`), SSO callback, threat-intel webhook.
 - **Authenticated** (`auth:sanctum`): everything else, including menu registry, themes, module CRUD, AI agent, license, user management.
-- **Partner v1** (`Api\V1` namespace, `AuthenticatePartnerApi` middleware): external-facing partner endpoints (`POST /api/v1/breaches` today). Keep future public-integration endpoints here.
+- **Partner v1** (`Api\V1` namespace): `AuthenticatePartnerApi` for `POST /api/v1/breaches`; `consent.api_key` (HMAC per collection point) for `/api/v1/consent/*`; `dsr.api_key` for `/api/v1/dsr/*`. Keep future public-integration endpoints here.
 
 ## Things NOT to do
 
