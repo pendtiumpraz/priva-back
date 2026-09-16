@@ -431,6 +431,7 @@ Publik (widget; CORS `*`, throttle):
 - `GET|POST /api/public/consent/guardian/verify/{token}` — lihat / setujui
 - `GET /api/public/consent/transition/{token}`, `POST …/confirm`, `POST …/withdraw`
 - `GET /api/public/consent/config` memuat `guardian_verification.methods` (hanya yang BISA dijalankan) dan `accessibility.formats` (hanya yang terbukti: tersedia DAN pernah diuji)
+- `POST /api/public/consent/capture` — `subject_class`, `guardian_consent_id` (anak / disabilitas yang diwakili), dan `accessibility{formats_used, assisted, companion_relationship}` (bukti penyajian, disimpan hanya untuk kelas `disabilitas`); anak tanpa kewenangan sah → `422 KEWENANGAN_WALI_WAJIB`, disabilitas yang menurut penilaian kapasitas diwakili wali → kode yang sama
 
 Partner API v1 (`consent.api_key`, HMAC per titik pengumpulan): `POST /v1/consent/guardian/request`, `POST …/guardian/confirm`, `POST …/guardian/assert`, `GET …/guardian/{id}`, plus `capture` dengan `subject_class` + `guardian_consent_id`.
 
@@ -472,6 +473,8 @@ DSR oleh wali/pendamping: `requester_type`, `subject_identifier`; bukti kewenang
 - Jangan `where('contact', $plaintext)` pada kolom tersandi — pakai `contact_hash` / `subject_hash` lewat `App\Support\KunciPencarian`.
 - Jangan tawarkan metode/kanal yang tidak bisa dijalankan (`VerificationMethod::dapatDijalankan()`, `KanalPesan::tersedia()`): sakelar yang tersimpan tanpa efek adalah kebohongan yang sama dengan `guardian_mode` versi lama.
 - Jangan `Http::fake()` dua kali dalam satu uji — stub digabung dan yang pertama menang; pakai satu closure yang jawabannya diganti per fase.
+- Jangan beri titik pengumpulan modul subjek cuplikan `consent-form.js` / `consent-banner.js` milik Consent umum — data yang dikumpulkan dan endpoint yang dipanggil berbeda per modul; satu-satunya sumber cuplikan adalah `ModulSubjek::cuplikan()` lewat `{awalan}/collection-points/{id}/embed-snippet`.
+- Jangan simpan nama pendamping atau status disabilitas per orang — `accessibility_meta` hanya memuat format yang dipakai, `assisted`, dan hubungan pendamping.
 
 Uji: `ModulSubjekTest` (menu & izin per modul, backfill, `owner_module`, CRUD titik + kunci + embed, saringan kelas untuk kewenangan & DSR, gerbang bukti wali dari pintu modul), `AlurWaliTest`, `VerifikasiKuatTest`, `KanalTeleponTest`, `KewenanganDinyatakanTenantTest`, `TautanHalamanFrontendTest`, `PeralihanAnakDewasaTest`, `KewenanganWaliAdminTest`, `AksesibilitasAdminTest`, `DsrWaliTest`, `TulangPunggungWaliTest`, `TangkapAksesibilitasTest` (bukti penyajian aksesibel di kedua jalur tangkap + webhook), unit `NomorTeleponTest`.
 
@@ -496,6 +499,7 @@ Single file: `routes/api.php`.
 - Don't use MySQL-only migration helpers (`->after()`, raw `ALTER COLUMN` without engine guards). When the migration *must* be raw SQL, gate by `DB::getDriverName()` and supply at least the pgsql + mysql + sqlite branches (see `2026_04_15_000001_expand_pii_columns_for_encryption.php` for a working pattern).
 - Don't hardcode palette colors on components targeting white-labeled tenants — use CSS vars driven by `/themes/active`.
 - Don't trust Next.js/React memory for the frontend — the Next 16 + React 19 pair has breaking changes vs. typical training data.
+- Don't hand a subject-module collection point (`owner_module` = `consent_guardian` / `consent_accessibility`) the generic `consent-form.js` / `consent-banner.js` snippet — those points collect different data and call different endpoints; build snippets only through `ModulSubjek::cuplikan()`.
 
 ## License
 
