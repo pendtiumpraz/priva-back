@@ -12,6 +12,7 @@ use App\Models\Organization;
 use App\Services\Consent\ConsentOutboundGate;
 use App\Services\Consent\GerbangWali;
 use App\Services\Consent\LayananWali;
+use App\Support\BuktiAksesibilitas;
 use Illuminate\Http\Request;
 
 /**
@@ -209,7 +210,7 @@ class ConsentApiV1Controller extends Controller
             // PP 33/2026 Pasal 38 — diperiksa GerbangWali sebelum ledger ditulis.
             'subject_class' => 'nullable|in:dewasa,anak,disabilitas',
             'guardian_consent_id' => 'nullable|uuid',
-        ]);
+        ] + BuktiAksesibilitas::aturan());
 
         // Gerbang yang SAMA dengan jalur widget, dan sama-sama SEBELUM tulis.
         $wali = app(GerbangWali::class)->periksa(
@@ -225,6 +226,8 @@ class ConsentApiV1Controller extends Controller
             'user_identifier' => $data['user_identifier'],
             'subject_class' => $wali['subject_class'],
             'guardian_consent_id' => $wali['guardian_consent_id'],
+            // Pasal 39 ayat (3): bukti penyajian aksesibel — pintu mana pun, bukti yang sama.
+            'accessibility_meta' => BuktiAksesibilitas::dariMasukan($data['accessibility'] ?? null, $wali['subject_class']),
             'consented_items' => $data['consented_items'],
             'policy_version' => $data['policy_version'] ?? '1.0',
             'ip_address' => $request->ip(),
@@ -254,6 +257,8 @@ class ConsentApiV1Controller extends Controller
                         'consented_items' => $log->consented_items,
                         'policy_version' => $log->policy_version,
                         'timestamp' => $log->created_at,
+                        'subject_class' => $log->subject_class,
+                        'accessibility' => $log->accessibility_meta,
                     ], $gate ? ['decision' => ConsentOutboundGate::payload($gate)] : [])
                 );
             }

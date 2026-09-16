@@ -365,6 +365,41 @@ class ModulSubjekTest extends TestCase
     // ───────────────────────── bantu ─────────────────────────
 
     /** @param  list<string>  $izin */
+    // ───────────────────── cuplikan integrasi per modul ─────────────────────
+
+    #[Test]
+    public function cuplikan_embed_memakai_skrip_modulnya_sendiri_bukan_consent_form(): void
+    {
+        Sanctum::actingAs($this->pengguna('admin', null, ['*']));
+        config(['app.frontend_url' => 'https://app.uji.id', 'app.frontend_url_explicit' => true]);
+
+        $wali = $this->postJson('/api/consent-guardian/collection-points', ['name' => 'Portal Beasiswa'])->assertStatus(201)->json('data');
+        $aks = $this->postJson('/api/consent-accessibility/collection-points', ['name' => 'Layanan Inklusif'])->assertStatus(201)->json('data');
+
+        $c = $this->getJson('/api/consent-guardian/collection-points/'.$wali['id'].'/embed-snippet')->assertOk()->json();
+        $this->assertSame('consent_guardian', $c['module']);
+        $this->assertSame('https://app.uji.id/consent-guardian.js', $c['script_url']);
+        $this->assertStringContainsString('consent-guardian.js', $c['snippet']);
+        $this->assertStringContainsString('data-privasimu-consent-guardian', $c['snippet']);
+        $this->assertStringContainsString('data-collection-id="'.$wali['embed_token'].'"', $c['snippet']);
+        $this->assertStringContainsString('data-api-host="', $c['snippet']);
+        $this->assertStringNotContainsString('consent-form.js', $c['snippet']);
+        $this->assertStringNotContainsString('consent-banner.js', $c['snippet']);
+        $this->assertSame('https://app.uji.id/embed/consent-guardian?collection_id='.$wali['embed_token'], $c['widget_url']);
+        $this->assertStringStartsWith('https://app.uji.id/embed/subjek-preview?modul=guardian&collection_id=', $c['preview_url']);
+        $this->assertNull($c['frontend_warning']);
+
+        $d = $this->getJson('/api/consent-accessibility/collection-points/'.$aks['id'].'/embed-snippet')->assertOk()->json();
+        $this->assertSame('consent_accessibility', $d['module']);
+        $this->assertStringContainsString('consent-accessibility.js', $d['snippet']);
+        $this->assertStringContainsString('data-privasimu-consent-accessibility', $d['snippet']);
+        $this->assertStringNotContainsString('consent-guardian.js', $d['snippet']);
+        $this->assertSame('https://app.uji.id/embed/consent-accessibility?collection_id='.$aks['embed_token'], $d['widget_url']);
+
+        // Titik modul lain tidak bisa diminta cuplikannya lewat modul ini.
+        $this->getJson('/api/consent-guardian/collection-points/'.$aks['id'].'/embed-snippet')->assertStatus(404);
+    }
+
     private function pengguna(string $role, ?string $divisi, array $izin, ?Organization $org = null): User
     {
         $org ??= $this->org;

@@ -228,11 +228,16 @@ class ModulSubjekController extends Controller
         return app(ConsentCollectionController::class)->regenerateEmbedToken($request, $cp->id);
     }
 
+    /**
+     * Cuplikan integrasi MILIK MODUL — bukan cuplikan Consent umum. Skrip,
+     * halaman iframe, dan pratinjaunya berbeda per modul karena data yang
+     * dikumpulkan dan endpoint yang dipanggil berbeda (lihat ModulSubjek::SKRIP).
+     */
     public function embedSnippet(Request $request, string $id)
     {
         $cp = $this->titikMilik($request, $id);
 
-        return app(ConsentCollectionController::class)->embedSnippet($request, $cp->id);
+        return response()->json(ModulSubjek::cuplikan(ModulSubjek::dariRequest($request), $cp));
     }
 
     public function widgetConfig(Request $request, string $id)

@@ -405,6 +405,7 @@ Dua MODUL sidebar per SUBJEK, tepat setelah Consent dan bukan sub-fiturnya: **Co
 | `verification_methods` | katalog cara verifikasi: bawaan platform (`org_id` NULL, hanya baca) + milik tenant, `config` tersandi | — |
 | `accessibility_provisions`, `disability_service_scopes`, `capacity_assessments` | prasarana per kanal, ragam yang dilayani, penilaian kapasitas | — |
 | `consent_collection_points.owner_module` | pemilik titik: `consent_guardian` / `consent_accessibility` / NULL (Consent umum); tiap titik = satu aplikasi dengan whitelist domain, embed token, pasangan kunci API, webhook sendiri | satu per TITIK |
+| `consent_logs.accessibility_meta` | bukti penyajian aksesibel (Pasal 39 ayat 3): `formats_used`, `assisted`, `companion_relationship` — hanya subjek disabilitas, nama pendamping tidak pernah disimpan (`App\Support\BuktiAksesibilitas`) | per KEJADIAN |
 
 `consent_records` adalah tabel MATI (nol penulis). Jangan tempelkan apa pun ke sana.
 
@@ -442,6 +443,15 @@ Dashboard — DUA MODUL per subjek, bukan sub-fitur Consent (`ModulSubjekControl
 
 Di bawah tiap awalan: `summary`; `collection-points` (CRUD penuh + `{id}/items`, `regenerate-api-keys`, `regenerate-embed-token`, `embed-snippet`, `widget-config`) — tiap titik = SATU aplikasi enterprise dengan whitelist domain, embed token, pasangan kunci API, dan webhook sendiri, lahir dengan `settings.guardian_mode=true` + `subject_class_default` = kelas modul dan `owner_module` = modul itu (Consent umum hanya memuat titik tanpa pemilik); server key kembali SEKALI (saat dibuat dengan `api_key_enabled` atau `regenerate-api-keys`); `guardian-consents/*` (stats, show, revoke, resend, `subjects/{id}/transition-resend`) dan `dsr/*` (index, store manual, show, update, `{id}/guardian-proof`) disaring per kelas subjek modul; `verification-methods/*` (bawaan platform hanya baca; kredensial tulis-saja, `••••` = pertahankan; `POST {id}/test`) hidup di kedua awalan; `accessibility/*` (summary, provisions, scopes, assessments) hanya di modul disabilitas. Nomor `CNT`/`DSR` lewat `RegistrationCodeService::nextGlobal` + percobaan ulang. Rute lama `/guardian-consents`, `/accessibility`, `/verification-methods` sudah tidak ada.
 
+**Integrasi per titik — SKRIP EMBED MILIK MODUL, bukan consent-form.js** (`ModulSubjek::cuplikan`, `GET {awalan}/collection-points/{id}/embed-snippet` → `{module, snippet, script_url, mount_attribute, widget_url, preview_url, api_base, embed_token, client_key, frontend_warning}`; URL menunjuk `FRONTEND_URL`):
+
+| Modul | Skrip (host frontend) | Halaman iframe | Data yang dikumpulkan | Endpoint publik yang dipanggil |
+|---|---|---|---|---|
+| Consent Wali (Anak) | `consent-guardian.js` — mount `[data-privasimu-consent-guardian]` | `/embed/consent-guardian` | penanda anak, `transition_date` (dihitung di peramban), nama/kontak/hubungan wali, cara verifikasi (NIK+tgl lahir hanya di jalur kuat) | `guardian/request` → (`preview.statement`) → `guardian/verify/{token}`; TIDAK PERNAH `capture` |
+| Consent Aksesibilitas (Disabilitas) | `consent-accessibility.js` — mount `[data-privasimu-consent-accessibility]` | `/embed/consent-accessibility` | penanda subjek, pilihan poin, alat tampilan dari format TERBUKTI (teks besar / kontras / TTS), `accessibility{formats_used, assisted, companion_relationship}` | `capture` kelas `disabilitas` (+ `accessibility`); beralih ke `guardian/request` hanya bila server menjawab `422 KEWENANGAN_WALI_WAJIB` |
+
+`accessibility` diterima kedua jalur tangkap (`ConsentLogController::capture`, `V1\ConsentApiV1Controller::capture`), disimpan hanya bila kelas hasil gerbang = `disabilitas`, dan ikut ke payload webhook (`accessibility`, `subject_class`). Pratinjau skrip: `/embed/subjek-preview?modul=guardian|accessibility&collection_id=…`.
+
 DSR oleh wali/pendamping: `requester_type`, `subject_identifier`; bukti kewenangan (`App\Services\Dsr\BuktiWali`) `otomatis` bila cocok, atau keputusan DPO lewat `POST /dsr/{id}/guardian-proof`; hak yang merusak terkunci sampai bukti diterima (hook `saving` di `DsrRequest`, semua pintu).
 
 ### Tautan yang dibuka manusia
@@ -463,7 +473,7 @@ DSR oleh wali/pendamping: `requester_type`, `subject_identifier`; bukti kewenang
 - Jangan tawarkan metode/kanal yang tidak bisa dijalankan (`VerificationMethod::dapatDijalankan()`, `KanalPesan::tersedia()`): sakelar yang tersimpan tanpa efek adalah kebohongan yang sama dengan `guardian_mode` versi lama.
 - Jangan `Http::fake()` dua kali dalam satu uji — stub digabung dan yang pertama menang; pakai satu closure yang jawabannya diganti per fase.
 
-Uji: `ModulSubjekTest` (menu & izin per modul, backfill, `owner_module`, CRUD titik + kunci + embed, saringan kelas untuk kewenangan & DSR, gerbang bukti wali dari pintu modul), `AlurWaliTest`, `VerifikasiKuatTest`, `KanalTeleponTest`, `KewenanganDinyatakanTenantTest`, `TautanHalamanFrontendTest`, `PeralihanAnakDewasaTest`, `KewenanganWaliAdminTest`, `AksesibilitasAdminTest`, `DsrWaliTest`, `TulangPunggungWaliTest`, unit `NomorTeleponTest`.
+Uji: `ModulSubjekTest` (menu & izin per modul, backfill, `owner_module`, CRUD titik + kunci + embed, saringan kelas untuk kewenangan & DSR, gerbang bukti wali dari pintu modul), `AlurWaliTest`, `VerifikasiKuatTest`, `KanalTeleponTest`, `KewenanganDinyatakanTenantTest`, `TautanHalamanFrontendTest`, `PeralihanAnakDewasaTest`, `KewenanganWaliAdminTest`, `AksesibilitasAdminTest`, `DsrWaliTest`, `TulangPunggungWaliTest`, `TangkapAksesibilitasTest` (bukti penyajian aksesibel di kedua jalur tangkap + webhook), unit `NomorTeleponTest`.
 
 ## Routing
 

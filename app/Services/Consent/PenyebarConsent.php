@@ -47,6 +47,8 @@ final class PenyebarConsent
                     'ip_address' => $log->ip_address,
                     'timestamp' => $log->created_at,
                     'subject_class' => $log->subject_class,
+                    // Pasal 39 ayat (3) — null kecuali subjek disabilitas.
+                    'accessibility' => $log->accessibility_meta,
                 ], $tambahan, $gate ? ['decision' => ConsentOutboundGate::payload($gate)] : []),
             );
         }

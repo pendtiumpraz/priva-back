@@ -16,6 +16,7 @@ use App\Services\Consent\ConsentOutboundGate;
 use App\Services\Consent\GerbangWali;
 use App\Services\Consent\IpGeoResolver;
 use App\Services\Consent\UserAgentParser;
+use App\Support\BuktiAksesibilitas;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\RateLimiter;
@@ -249,7 +250,7 @@ class ConsentLogController extends Controller
             // PP 33/2026 Pasal 38 — diperiksa GerbangWali sebelum ledger ditulis.
             'subject_class' => 'nullable|in:dewasa,anak,disabilitas',
             'guardian_consent_id' => 'nullable|uuid',
-        ]);
+        ] + BuktiAksesibilitas::aturan());
 
         // Rate limit per IP — generous since legitimate widgets fire 1x per session.
         $rateKey = 'consent-capture:'.$request->ip();
@@ -313,6 +314,8 @@ class ConsentLogController extends Controller
             'user_identifier' => $request->user_identifier,
             'subject_class' => $wali['subject_class'],
             'guardian_consent_id' => $wali['guardian_consent_id'],
+            // Pasal 39 ayat (3): bagaimana persetujuan DISAJIKAN — hanya disabilitas.
+            'accessibility_meta' => BuktiAksesibilitas::dariMasukan($request->input('accessibility'), $wali['subject_class']),
             'email' => $email ? strtolower($email) : null,
             'name' => $request->input('name'),
             'phone' => $request->input('phone'),
@@ -369,6 +372,8 @@ class ConsentLogController extends Controller
                         'policy_version' => $log->policy_version,
                         'ip_address' => $log->ip_address,
                         'timestamp' => $log->created_at,
+                        'subject_class' => $log->subject_class,
+                        'accessibility' => $log->accessibility_meta,
                     ], $gate ? ['decision' => ConsentOutboundGate::payload($gate)] : [])
                 );
             }

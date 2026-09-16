@@ -59,11 +59,15 @@ class ConsentLog extends Model
         // Pasal 38 & 39 — lihat migrasi 2026_09_15_000008.
         'guardian_consent_id',
         'subject_class',
+        // Pasal 39 ayat (3) — bukti penyajian aksesibel, hanya subjek
+        // disabilitas; bentuknya ditentukan App\Support\BuktiAksesibilitas.
+        'accessibility_meta',
     ];
 
     protected $casts = [
         'consented_items' => 'array',
         'purpose_keys' => 'array',
+        'accessibility_meta' => 'array',
     ];
 
     public function organization()
