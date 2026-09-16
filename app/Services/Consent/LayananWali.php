@@ -12,8 +12,11 @@ use App\Models\Guardian;
 use App\Models\GuardianConsent;
 use App\Models\Organization;
 use App\Models\VerificationMethod;
+use App\Services\Pesan\KanalPesan;
+use App\Services\Pesan\PesanSingkat;
 use App\Services\Verifikasi\KlaimIdentitas;
 use App\Services\Verifikasi\RegistriPenyedia;
+use App\Support\NomorTelepon;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -65,6 +68,8 @@ final class LayananWali
 
     public const KANAL_BELUM_DIDUKUNG = 'KANAL_WALI_BELUM_DIDUKUNG';
 
+    public const KONTAK_TIDAK_VALID = 'KONTAK_WALI_TIDAK_VALID';
+
     public const TERLALU_CEPAT = 'TERLALU_CEPAT';
 
     public const TOKEN_TIDAK_DIKENAL = 'TOKEN_TIDAK_DIKENAL';
@@ -90,7 +95,10 @@ final class LayananWali
         'lainnya' => 'wali',
     ];
 
-    public function __construct(private readonly RegistriPenyedia $penyedia) {}
+    public function __construct(
+        private readonly RegistriPenyedia $penyedia,
+        private readonly KanalPesan $kanalPesan,
+    ) {}
 
     /**
      * Langkah 1 — catat niat, kirim tautan ke wali.
@@ -102,14 +110,18 @@ final class LayananWali
         $kontak = trim((string) ($data['guardian']['contact'] ?? ''));
 
         // Diperiksa SEBELUM transaksi: kanal yang tidak bisa kita layani tidak
-        // boleh meninggalkan subjek dan wali setengah jadi.
+        // boleh meninggalkan subjek dan wali setengah jadi. Telepon hanya
+        // diterima bila kanal pesan platform benar-benar hidup.
         if (! str_contains($kontak, '@')) {
-            $this->tolak(
-                self::KANAL_BELUM_DIDUKUNG,
-                'Untuk saat ini verifikasi wali hanya tersedia lewat surel. Kanal telepon menyusul.',
-                422,
-                'guardian.contact',
-            );
+            if (! KanalPesan::tersedia()) {
+                $this->tolak(
+                    self::KANAL_BELUM_DIDUKUNG,
+                    'Verifikasi wali lewat telepon belum diaktifkan di platform ini. Gunakan surel wali.',
+                    422,
+                    'guardian.contact',
+                );
+            }
+            $this->pastikanNomorValid($kontak);
         }
 
         $kewenangan = $this->siapkanKewenangan($cp, $data, $kontak, $ip, $sumber);
@@ -152,6 +164,12 @@ final class LayananWali
     {
         $klaimMentah = (array) ($data['verification'] ?? []);
         $kontak = trim((string) ($data['guardian']['contact'] ?? ''));
+
+        // Tidak ada yang dikirim ke kontak di jalur ini, tetapi kontak yang
+        // tersimpan tetap harus kontak sungguhan — ia kunci pencocokan DSR.
+        if (! str_contains($kontak, '@')) {
+            $this->pastikanNomorValid($kontak);
+        }
 
         $metode = VerificationMethod::untukOrg($cp->org_id)
             ->where('code', (string) ($klaimMentah['method_code'] ?? ''))
@@ -410,10 +428,12 @@ final class LayananWali
 
             // Verifikasi pertama untuk pasangan ini. Pengajuan berikutnya
             // memakai kewenangan yang sama — verified_at aslinya dipertahankan.
+            // Yang dibuktikan tautan adalah penguasaan KANAL — surel atau
+            // telepon — dan kodenya menyebut kanal mana; keyakinannya sama: rendah.
             if ($kw->verified_at === null) {
                 $isi += [
                     'verified_at' => now(),
-                    'verification_method_code' => 'otp_email',
+                    'verification_method_code' => ($kw->guardian->contact_type ?? 'email') === 'phone' ? 'otp_phone' : 'otp_email',
                     'verification_driver' => VerificationMethod::DRIVER_OTP,
                     'verification_confidence' => 'rendah',
                 ];
@@ -465,9 +485,11 @@ final class LayananWali
             'module' => 'consent',
             'record_id' => $log->id,
             'action' => 'guardian_consent.confirm',
-            'user_name' => $kw->verification_driver === VerificationMethod::DRIVER_OTP
-                ? 'wali (tautan surel)'
-                : 'wali (identitas terverifikasi)',
+            'user_name' => match (true) {
+                $kw->verification_driver !== VerificationMethod::DRIVER_OTP => 'wali (identitas terverifikasi)',
+                $kw->verification_method_code === 'otp_phone' => 'wali (tautan telepon)',
+                default => 'wali (tautan surel)',
+            },
             'user_role' => 'guardian',
             'changes' => [
                 'guardian_consent_id' => $kw->id,
@@ -506,6 +528,26 @@ final class LayananWali
 
     private function kirimTautan(GuardianConsent $kw): void
     {
+        $kw->loadMissing('guardian');
+        $wali = $kw->guardian;
+        $lewatTelepon = ($wali->contact_type ?? 'email') === 'phone';
+        $tujuanTelepon = null;
+
+        // Diperiksa sebelum token diterbitkan dan pembatas dihitung: kanal
+        // yang dimatikan setelah kewenangan dibuat (kirim ulang dari dashboard)
+        // ditolak terbuka, bukan "terkirim" ke mana-mana.
+        if ($lewatTelepon) {
+            $tujuanTelepon = NomorTelepon::e164((string) $wali?->contact);
+            if ($tujuanTelepon === null || ! KanalPesan::tersedia()) {
+                $this->tolak(
+                    self::KANAL_BELUM_DIDUKUNG,
+                    'Kanal telepon tidak tersedia untuk mengirim tautan ke wali ini. Gunakan surel wali, atau aktifkan kanal pesan di Pengaturan Sistem.',
+                    422,
+                    'guardian.contact',
+                );
+            }
+        }
+
         $kunci = 'guardian-link:'.$kw->id;
 
         // Pengajuan ulang beruntun (tombol ditekan dua kali, skrip yang
@@ -524,11 +566,48 @@ final class LayananWali
         $mentah = $kw->terbitkanToken(self::MASA_BERLAKU_JAM);
         $url = url('/api/public/consent/guardian/verify/'.$mentah);
 
-        $kw->loadMissing('guardian');
+        if ($lewatTelepon) {
+            $this->kanalPesan->antre(new PesanSingkat(
+                (string) $tujuanTelepon,
+                $this->teksTautanWali($kw, $url),
+                PesanSingkat::KONTEKS_TAUTAN_WALI,
+            ));
 
-        Mail::to($kw->guardian->contact)->queue(
+            return;
+        }
+
+        Mail::to((string) $wali?->contact)->queue(
             new GuardianVerificationMail($kw, $url, $this->pratinjau($kw)),
         );
+    }
+
+    /**
+     * Isi pesan SMS/WhatsApp ke wali. SENGAJA minim: nama pengendali, nama
+     * wali, hubungan, tautan. Penanda anak dan tujuan pemrosesan tidak ikut —
+     * SMS bukan kanal tersandi, dan wali melihat semuanya di halaman tautan.
+     */
+    private function teksTautanWali(GuardianConsent $kw, string $url): string
+    {
+        $p = $this->pratinjau($kw);
+        $org = (string) ($p['organization'] ?? 'pengendali data');
+        $nama = (string) ($p['guardian_name'] ?? 'Bapak/Ibu');
+        $hubungan = (string) ($p['relationship_label'] ?? 'wali');
+
+        return "{$org} (via Privasimu): {$nama}, ada permintaan persetujuan yang menunggu Anda selaku {$hubungan}. "
+            .'Baca dan putuskan di tautan ini (berlaku '.self::MASA_BERLAKU_JAM." jam): {$url} "
+            .'Abaikan bila Anda tidak mengenali permintaan ini.';
+    }
+
+    private function pastikanNomorValid(string $kontak): void
+    {
+        if (NomorTelepon::e164($kontak) === null) {
+            $this->tolak(
+                self::KONTAK_TIDAK_VALID,
+                'Nomor telepon wali tidak valid. Gunakan nomor seluler Indonesia (08…) atau format internasional (+62…).',
+                422,
+                'guardian.contact',
+            );
+        }
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Pesan\KanalPesan;
 use App\Services\Verifikasi\RegistriPenyedia;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -164,7 +165,9 @@ class VerificationMethod extends Model
         }
 
         return match ($this->driver) {
-            self::DRIVER_OTP => $this->code === 'otp_email',
+            // Surel selalu ada; telepon hanya bila kanal pesan platform hidup.
+            self::DRIVER_OTP => $this->code === 'otp_email'
+                || ($this->code === 'otp_phone' && KanalPesan::tersedia()),
             self::DRIVER_DUKCAPIL, self::DRIVER_EKYC => trim((string) ($this->config['endpoint'] ?? '')) !== ''
                 && ! empty($this->config['match_all']),
             self::DRIVER_MOCK => ! RegistriPenyedia::produksi(),

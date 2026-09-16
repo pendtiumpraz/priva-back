@@ -3,15 +3,21 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\SystemSettings\AiEmbeddingRequest;
 use App\Http\Requests\SystemSettings\AiRequest;
 use App\Http\Requests\SystemSettings\DeploymentRequest;
+use App\Http\Requests\SystemSettings\DiscoveryRequest;
 use App\Http\Requests\SystemSettings\InfrastructureRequest;
 use App\Http\Requests\SystemSettings\MailRequest;
+use App\Http\Requests\SystemSettings\MessagingRequest;
 use App\Http\Requests\SystemSettings\RedisRequest;
 use App\Http\Requests\SystemSettings\SecurityRequest;
 use App\Models\AuditLog;
 use App\Models\SystemSetting;
 use App\Providers\SettingsServiceProvider;
+use App\Services\Pesan\KanalPesan;
+use App\Services\Pesan\PesanSingkat;
+use App\Support\NomorTelepon;
 use Aws\Sqs\SqsClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -51,6 +57,10 @@ class SystemSettingsController extends Controller
         // RAG embedding cloud provider credentials
         'ai_embedding.openai_api_key',
         'ai_embedding.cohere_api_key',
+        // Kanal pesan (SMS/WhatsApp) — header gateway bisa memuat token, dan
+        // rahasia tunggalnya jelas rahasia.
+        'messaging.sms_http_headers',
+        'messaging.sms_http_secret',
     ];
 
     /** Section → list of setting keys (single source of truth for save/read). */
@@ -92,6 +102,21 @@ class SystemSettingsController extends Controller
             'mail.smtp_port',
             'mail.smtp_username',
             'mail.smtp_password',
+        ],
+        // Kanal pesan singkat (SMS/WhatsApp) — tautan verifikasi wali dan
+        // tautan peralihan anak → dewasa ke nomor telepon (PP 33/2026 Ps 38).
+        // Gateway HTTP generik; kontraknya dipetakan lewat templat.
+        'messaging' => [
+            'messaging.sms_driver',
+            'messaging.sms_http_url',
+            'messaging.sms_http_method',
+            'messaging.sms_http_headers',
+            'messaging.sms_http_secret',
+            'messaging.sms_http_body',
+            'messaging.sms_http_success_path',
+            'messaging.sms_http_success_equals',
+            'messaging.sms_to_format',
+            'messaging.sms_sender_name',
         ],
         'deployment' => [
             'deployment.mode',
@@ -236,8 +261,8 @@ class SystemSettingsController extends Controller
 
             $status[$section] = [
                 'status' => match (true) {
-                    !empty($missing) && $configured === 0 => 'not_configured',
-                    !empty($missing) => 'incomplete',
+                    ! empty($missing) && $configured === 0 => 'not_configured',
+                    ! empty($missing) => 'incomplete',
                     default => 'configured',
                 },
                 'missing' => $missing,
@@ -273,8 +298,8 @@ class SystemSettingsController extends Controller
             return response()->json([
                 'error' => 'RAG_REQUIRES_POSTGRES',
                 'message' => 'Fitur RAG butuh PostgreSQL dengan extension pgvector. Database aktif saat ini: '
-                    . DB::connection()->getDriverName()
-                    . '. Migrasi ke Postgres dulu, atau biarkan ai_embedding.enabled=false.',
+                    .DB::connection()->getDriverName()
+                    .'. Migrasi ke Postgres dulu, atau biarkan ai_embedding.enabled=false.',
             ], 422);
         }
 
@@ -344,6 +369,7 @@ class SystemSettingsController extends Controller
                 'redis' => $this->testRedis($request),
                 'mail' => $this->testMail($request),
                 'infrastructure' => $this->testInfrastructure($request),
+                'messaging' => $this->testMessaging($request),
                 default => throw new \InvalidArgumentException("Section {$section} has no test"),
             };
 
@@ -384,6 +410,7 @@ class SystemSettingsController extends Controller
         ]]);
 
         $pong = Redis::connection('test_probe')->ping();
+
         return ['pong' => (string) $pong];
     }
 
@@ -454,6 +481,62 @@ class SystemSettingsController extends Controller
         ];
     }
 
+    /**
+     * Kirim SATU pesan uji ke nomor yang diketik superadmin (`test_to`),
+     * memakai konfigurasi dari formulir — bukan yang tersimpan — supaya
+     * admin menguji sebelum menyimpan. Rahasia yang dikirim sebagai "***"
+     * atau kosong diambil dari yang tersimpan.
+     *
+     * @return array<string, mixed>
+     */
+    private function testMessaging(Request $request): array
+    {
+        $tujuan = NomorTelepon::e164((string) $request->input('test_to'));
+        if ($tujuan === null) {
+            throw new \InvalidArgumentException('test_to wajib diisi dengan nomor seluler yang valid (08… atau +62…)');
+        }
+
+        $cfg = KanalPesan::konfigurasi();
+        foreach (self::SECTION_KEYS['messaging'] as $fullKey) {
+            $short = $this->shortKey($fullKey);            // sms_http_url
+            $cfgKey = substr($short, strlen('sms_'));      // http_url
+            if (! $request->has($short)) {
+                continue;
+            }
+            $nilai = $request->input($short);
+            if (in_array($fullKey, self::ENCRYPTED_KEYS, true) && ($nilai === null || $nilai === '' || $nilai === '***')) {
+                $tersimpan = SystemSetting::get($fullKey);
+                if (is_string($tersimpan) && $tersimpan !== '') {
+                    $cfg[$cfgKey] = $tersimpan;
+                }
+
+                continue;
+            }
+            if ($nilai !== null && $nilai !== '') {
+                $cfg[$cfgKey] = $nilai;
+            }
+        }
+
+        if (KanalPesan::driver($cfg) === 'off') {
+            throw new \InvalidArgumentException('driver=off — tidak ada yang bisa diuji');
+        }
+
+        $hasil = app(KanalPesan::class)->kirim(
+            new PesanSingkat($tujuan, 'Uji kanal pesan Privasimu. Bila pesan ini sampai, gateway sudah benar.', PesanSingkat::KONTEKS_UJI),
+            $cfg,
+        );
+        if (! $hasil->ok) {
+            throw new \RuntimeException($hasil->alasan ?? 'Pengiriman gagal.');
+        }
+
+        return [
+            'to' => NomorTelepon::samarkan($tujuan),
+            'driver' => KanalPesan::driver($cfg),
+            'http_status' => $hasil->httpStatus,
+            'reference' => $hasil->referensi,
+        ];
+    }
+
     // ──────────────────────────── helpers ────────────────────────────
 
     private function validatorFor(string $section, Request $request)
@@ -462,11 +545,12 @@ class SystemSettingsController extends Controller
             'infrastructure' => InfrastructureRequest::class,
             'redis' => RedisRequest::class,
             'ai' => AiRequest::class,
-            'ai_embedding' => \App\Http\Requests\SystemSettings\AiEmbeddingRequest::class,
+            'ai_embedding' => AiEmbeddingRequest::class,
             'mail' => MailRequest::class,
+            'messaging' => MessagingRequest::class,
             'deployment' => DeploymentRequest::class,
             'security' => SecurityRequest::class,
-            'discovery' => \App\Http\Requests\SystemSettings\DiscoveryRequest::class,
+            'discovery' => DiscoveryRequest::class,
             default => null,
         };
 
@@ -492,6 +576,7 @@ class SystemSettingsController extends Controller
     private function shortKey(string $fullKey): string
     {
         $pos = strpos($fullKey, '.');
+
         return $pos === false ? $fullKey : substr($fullKey, $pos + 1);
     }
 
@@ -592,6 +677,7 @@ class SystemSettingsController extends Controller
         if ($row->is_encrypted) {
             return $this->hasEncryptedValue($row);
         }
+
         return $row->value !== null && $row->value !== '';
     }
 
@@ -602,6 +688,7 @@ class SystemSettingsController extends Controller
         }
         try {
             $plain = Crypt::decryptString((string) $row->value);
+
             return $plain !== '';
         } catch (\Throwable) {
             // Corrupt ciphertext counts as "no usable value".

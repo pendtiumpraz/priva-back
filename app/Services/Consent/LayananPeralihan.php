@@ -9,7 +9,10 @@ use App\Models\ConsentLog;
 use App\Models\ConsentSubject;
 use App\Models\GuardianConsent;
 use App\Models\Organization;
+use App\Services\Pesan\KanalPesan;
+use App\Services\Pesan\PesanSingkat;
 use App\Support\KelasSubjek;
+use App\Support\NomorTelepon;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -56,8 +59,10 @@ final class LayananPeralihan
 
     public const TERLALU_CEPAT = 'TERLALU_CEPAT';
 
+    public function __construct(private readonly KanalPesan $kanalPesan) {}
+
     /**
-     * Antrean. Mengembalikan hitungan: diproses, surel terkirim, tanpa kanal.
+     * Antrean. Mengembalikan hitungan: diproses, tautan terkirim, tanpa kanal.
      *
      * @return array{diproses: int, terkirim: int, tanpa_kanal: int}
      */
@@ -128,8 +133,8 @@ final class LayananPeralihan
         if ($subjek->transition_state !== KelasSubjek::TRANSISI_MENUNGGU) {
             $this->tolak(self::BUKAN_MENUNGGU, 'Subjek ini tidak sedang menunggu konfirmasi peralihan.', 409);
         }
-        if (! $this->punyaKanalSurel($subjek)) {
-            $this->tolak(self::TANPA_KANAL, 'Subjek ini tidak punya kanal surel miliknya sendiri — hubungi lewat jalur lain.', 422);
+        if (! $this->punyaKanal($subjek)) {
+            $this->tolak(self::TANPA_KANAL, 'Subjek ini tidak punya kanal miliknya sendiri yang bisa dihubungi — hubungi lewat jalur lain.', 422);
         }
 
         $this->kirimTautan($subjek, true);
@@ -287,7 +292,7 @@ final class LayananPeralihan
 
     private function kirimTautan(ConsentSubject $subjek, bool $batasi): bool
     {
-        if (! $this->punyaKanalSurel($subjek)) {
+        if (! $this->punyaKanal($subjek)) {
             return false;
         }
 
@@ -301,21 +306,44 @@ final class LayananPeralihan
 
         $mentah = $subjek->terbitkanTokenPeralihan(self::MASA_BERLAKU_HARI);
         $url = url('/api/public/consent/transition/'.$mentah);
+        $kanal = trim((string) ($subjek->subject_own_channel ?? ''));
 
-        Mail::to((string) $subjek->subject_own_channel)->queue(
-            new PeralihanDewasaMail($subjek, $url, $this->pratinjau($subjek)),
-        );
+        if (str_contains($kanal, '@')) {
+            Mail::to($kanal)->queue(
+                new PeralihanDewasaMail($subjek, $url, $this->pratinjau($subjek)),
+            );
+        } else {
+            // Nomor telepon milik subjek: pesan singkat, minim — tanpa
+            // daftar consent (itu dilihat di halaman tautan, bukan di SMS).
+            $org = Organization::find($subjek->org_id)->name ?? 'pengendali data';
+            $this->kanalPesan->antre(new PesanSingkat(
+                (string) NomorTelepon::e164($kanal),
+                "{$org} (via Privasimu): Anda kini berusia 18 tahun. Persetujuan yang dulu diberikan wali Anda kini menunggu keputusan Anda sendiri — "
+                    .'lanjutkan atau tarik di tautan ini (berlaku '.self::MASA_BERLAKU_HARI." hari): {$url}",
+                PesanSingkat::KONTEKS_TAUTAN_PERALIHAN,
+            ));
+        }
 
         $subjek->forceFill(['transition_notified_at' => now()])->save();
 
         return true;
     }
 
-    private function punyaKanalSurel(ConsentSubject $subjek): bool
+    /**
+     * Kanal milik subjek yang bisa dihubungi SAAT INI: surel selalu; telepon
+     * hanya bila kanal pesan platform hidup dan nomornya masuk akal.
+     */
+    private function punyaKanal(ConsentSubject $subjek): bool
     {
-        $kanal = (string) ($subjek->subject_own_channel ?? '');
+        $kanal = trim((string) ($subjek->subject_own_channel ?? ''));
+        if ($kanal === '') {
+            return false;
+        }
+        if (str_contains($kanal, '@')) {
+            return true;
+        }
 
-        return $kanal !== '' && str_contains($kanal, '@');
+        return KanalPesan::tersedia() && NomorTelepon::e164($kanal) !== null;
     }
 
     private function subjekDariToken(string $tokenMentah): ConsentSubject

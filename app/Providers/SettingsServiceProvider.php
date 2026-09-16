@@ -136,6 +136,19 @@ class SettingsServiceProvider extends ServiceProvider
             'mail.smtp_username' => 'mail.mailers.smtp.username',
             'mail.smtp_password' => 'mail.mailers.smtp.password',
 
+            // Kanal pesan singkat (SMS/WhatsApp) — config/messaging.php.
+            // Dibaca App\Services\Pesan\KanalPesan lewat config('messaging.sms').
+            'messaging.sms_driver' => 'messaging.sms.driver',
+            'messaging.sms_http_url' => 'messaging.sms.http_url',
+            'messaging.sms_http_method' => 'messaging.sms.http_method',
+            'messaging.sms_http_headers' => 'messaging.sms.http_headers',
+            'messaging.sms_http_secret' => 'messaging.sms.http_secret',
+            'messaging.sms_http_body' => 'messaging.sms.http_body',
+            'messaging.sms_http_success_path' => 'messaging.sms.http_success_path',
+            'messaging.sms_http_success_equals' => 'messaging.sms.http_success_equals',
+            'messaging.sms_to_format' => 'messaging.sms.to_format',
+            'messaging.sms_sender_name' => 'messaging.sms.sender_name',
+
             // Custom ai.* config (operational toggles only — provider creds
             // come from the AiProvider model, not from system_settings).
             'ai.jobs_enabled' => 'ai.jobs_enabled',
