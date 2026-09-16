@@ -26,6 +26,10 @@ Schedule::command('consent:prune-cookie-logs')->dailyAt('02:30');
 // baris per penangkapan. Tabel yang dibuat demi kepatuhan tidak boleh berubah
 // jadi timbunan data pribadi tanpa batas waktu.
 Schedule::command('consent:prune-rule-decisions')->dailyAt('02:45');
+// Peralihan anak → dewasa (PP 33/2026 Pasal 38 ayat 8): cabut kewenangan wali
+// pada hari anak genap 18, kirim tautan keputusan ke kanal milik subjek.
+// Harian sudah cukup — hak baru berlaku per tanggal, bukan per jam.
+Schedule::command('consent:peralihan-anak')->dailyAt('03:15')->withoutOverlapping();
 // Privacy Notice — terbitkan versi yang penjadwalannya sudah jatuh tempo.
 // Tiap 15 menit: penjadwalan naskah hukum lazim ditetapkan pada jam bulat,
 // dan menunggu sampai sehari kemudian bukan pilihan yang dapat diterima.

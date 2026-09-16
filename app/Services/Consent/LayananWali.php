@@ -2,8 +2,6 @@
 
 namespace App\Services\Consent;
 
-use App\Jobs\FireConsentWebhookJob;
-use App\Jobs\PushConsentToCrmJob;
 use App\Mail\GuardianVerificationMail;
 use App\Models\AuditLog;
 use App\Models\ConsentCollectionPoint;
@@ -372,41 +370,11 @@ final class LayananWali
 
     /**
      * Webhook dan CRM — sama seperti jalur widget, dengan `source` yang jujur
-     * dan dua bidang tambahan supaya penerima tahu ini consent lewat wali.
+     * dan satu bidang tambahan supaya penerima tahu ini consent lewat wali.
      */
     private function sebarkan(ConsentCollectionPoint $cp, ConsentLog $log, GuardianConsent $kw): void
     {
-        $gate = app(ConsentOutboundGate::class)->decide($cp, (string) $log->user_identifier, 'guardian_verify');
-
-        if ($gate !== null && $gate->blocked) {
-            return;
-        }
-
-        if ($cp->webhook_url) {
-            FireConsentWebhookJob::dispatch(
-                $cp->webhook_url,
-                $cp->collection_id,
-                array_merge([
-                    'event' => 'consent.captured',
-                    'source' => 'guardian_verify',
-                    'collection_id' => $cp->collection_id,
-                    'user_identifier' => $log->user_identifier,
-                    'consented_items' => $log->consented_items,
-                    'consented_items_labeled' => $log->labeledConsentedItems(),
-                    'consented_purposes' => $log->grantedPurposeTitles(),
-                    'policy_version' => $log->policy_version,
-                    'ip_address' => $log->ip_address,
-                    'timestamp' => $log->created_at,
-                    'subject_class' => $log->subject_class,
-                    'guardian_consent_id' => $kw->id,
-                ], $gate ? ['decision' => ConsentOutboundGate::payload($gate)] : []),
-            );
-        }
-
-        $org = Organization::find($cp->org_id);
-        foreach (($org?->settings['crm_connections'] ?? []) as $providerId => $config) {
-            PushConsentToCrmJob::dispatch($providerId, (array) $config, $log->id);
-        }
+        app(PenyebarConsent::class)->sebarkan($cp, $log, 'guardian_verify', ['guardian_consent_id' => $kw->id]);
     }
 
     /**

@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\ConsentCollectionPoint;
 use App\Models\ConsentLog;
+use App\Models\ConsentSubject;
 use App\Models\GuardianConsent;
+use App\Services\Consent\LayananPeralihan;
 use App\Services\Consent\LayananWali;
 use App\Support\AssignmentScope;
 use App\Support\KunciPencarian;
@@ -168,6 +170,44 @@ class GuardianConsentAdminController extends Controller
         ]]);
     }
 
+    /**
+     * Kirim ulang tautan keputusan peralihan (Pasal 38 ayat 8) ke kanal MILIK
+     * subjek — untuk antrean kerja yang subjeknya belum menanggapi. Subjek
+     * tanpa kanal, atau yang tidak sedang menunggu, ditolak terbuka.
+     */
+    public function transitionResend(Request $request, string $subjectId)
+    {
+        $user = $request->user();
+
+        // Subjek yang terlihat pengguna = subjek yang kewenangannya (apa pun
+        // keadaannya) lewat titik pengumpulan yang terlihat.
+        $subjek = ConsentSubject::withoutGlobalScope('org')
+            ->where('org_id', $user->org_id)
+            ->whereIn('id', $this->dasar($request)->select('consent_subject_id'))
+            ->find($subjectId);
+
+        if (! $subjek) {
+            abort(404, 'Subjek tidak ditemukan.');
+        }
+
+        app(LayananPeralihan::class)->kirimUlang($subjek);
+
+        AuditLog::create([
+            'module' => 'consent',
+            'record_id' => $subjek->id,
+            'action' => 'consent_subject.transition_resend',
+            'user_id' => $user->id,
+            'user_name' => $user->name ?? null,
+            'user_role' => $user->role ?? null,
+            'ip_address' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => 'Tautan keputusan dikirim ulang ke kanal milik subjek.',
+            'expires_at' => $subjek->fresh()?->transition_token_expires_at?->toIso8601String(),
+        ]);
+    }
+
     // ───────────────────────── internal ─────────────────────────
 
     /** @return Builder<GuardianConsent> */
@@ -219,10 +259,16 @@ class GuardianConsentAdminController extends Controller
             'id' => $kw->id,
             'status' => $status,
             'subject' => [
+                'id' => $subjek?->id,
                 'label' => $subjek?->subject_label,
                 'class' => $subjek?->subject_class,
                 'transition_date' => $subjek?->transition_date?->toDateString(),
                 'transition_state' => $subjek?->transition_state,
+                // Pasal 38 ayat (8): kapan tautan dikirim, kapan subjek memutuskan.
+                // Menunggu + notified NULL = tidak punya kanal = antrean kerja.
+                'transition_notified_at' => $subjek?->transition_notified_at?->toIso8601String(),
+                'transition_confirmed_at' => $subjek?->transition_confirmed_at?->toIso8601String(),
+                'has_own_channel' => (bool) ($subjek?->subject_own_channel),
             ],
             'guardian' => [
                 'name' => $wali?->name,

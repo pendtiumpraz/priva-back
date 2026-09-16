@@ -30,6 +30,7 @@ use App\Http\Controllers\Api\ConsentCollectionController;
 use App\Http\Controllers\Api\ConsentItemController;
 use App\Http\Controllers\Api\ConsentLogController;
 use App\Http\Controllers\Api\GuardianConsentPublicController;
+use App\Http\Controllers\Api\TransitionPublicController;
 use App\Http\Controllers\Api\ConsentRuleSetController;
 use App\Http\Controllers\Api\ContainmentController;
 use App\Http\Controllers\Api\ContractReviewCrudController;
@@ -217,6 +218,15 @@ Route::middleware('throttle:api')->group(function () {
     Route::get('/public/consent/guardian/verify/{token}', [GuardianConsentPublicController::class, 'show'])
         ->middleware('throttle:30,1');
     Route::post('/public/consent/guardian/verify/{token}', [GuardianConsentPublicController::class, 'confirm'])
+        ->middleware('throttle:10,1');
+
+    // Peralihan anak → dewasa — PP 33/2026 Pasal 38 ayat (8). GET hanya
+    // MELIHAT; keputusan (lanjutkan / tarik) hanya lewat POST.
+    Route::get('/public/consent/transition/{token}', [TransitionPublicController::class, 'show'])
+        ->middleware('throttle:30,1');
+    Route::post('/public/consent/transition/{token}/confirm', [TransitionPublicController::class, 'confirm'])
+        ->middleware('throttle:10,1');
+    Route::post('/public/consent/transition/{token}/withdraw', [TransitionPublicController::class, 'withdraw'])
         ->middleware('throttle:10,1');
 
     // Public Cookie Banner API v2 (Phase B — anonymous visitor capture)
@@ -1528,6 +1538,10 @@ Route::middleware(['auth:sanctum', 'throttle:api', 'throttle:tenant-api', 'tenan
         Route::post('/{id}/revoke', [GuardianConsentAdminController::class, 'revoke'])
             ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
         Route::post('/{id}/resend', [GuardianConsentAdminController::class, 'resend'])
+            ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
+        // Peralihan anak → dewasa (Pasal 38 ayat 8): kirim ulang tautan keputusan
+        // ke kanal milik subjek — untuk antrean kerja yang belum ditanggapi.
+        Route::post('/subjects/{id}/transition-resend', [GuardianConsentAdminController::class, 'transitionResend'])
             ->where('id', '[0-9a-fA-F-]{36}')->middleware('permission:consent,write');
     });
 

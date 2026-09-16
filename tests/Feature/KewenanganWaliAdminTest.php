@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Mail\GuardianVerificationMail;
+use App\Mail\PeralihanDewasaMail;
 use App\Models\AuditLog;
 use App\Models\ConsentCollectionPoint;
 use App\Models\ConsentLog;
@@ -13,6 +14,7 @@ use App\Models\GuardianConsent;
 use App\Models\Organization;
 use App\Models\TenantRole;
 use App\Models\User;
+use App\Services\Consent\LayananPeralihan;
 use App\Services\Consent\LayananWali;
 use App\Support\KelasSubjek;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -271,6 +273,50 @@ class KewenanganWaliAdminTest extends TestCase
             ->assertStatus(409)->assertJsonPath('code', LayananWali::TIDAK_ADA_YANG_MENUNGGU);
 
         Mail::assertNothingQueued();
+    }
+
+    // ───────────────────────── peralihan (Pasal 38 ayat 8) ─────────────────────────
+
+    #[Test]
+    public function kirim_ulang_tautan_peralihan_hanya_untuk_yang_menunggu_dan_punya_kanal(): void
+    {
+        $cp = $this->titik('Formulir Pelajar');
+        $kw = $this->kewenangan($cp, 'anak@contoh.id', 'terverifikasi', 'w1@contoh.id', [
+            'transition_date' => now()->subDay()->toDateString(),
+            'subject_own_channel' => 'aku@contoh.id',
+        ]);
+        $subjek = $kw->consentSubject;
+
+        Sanctum::actingAs($this->pengguna('admin', null));
+
+        // Belum masuk antrean → bukan menunggu → ditolak terbuka.
+        $this->postJson('/api/guardian-consents/subjects/'.$subjek->id.'/transition-resend')
+            ->assertStatus(409)->assertJsonPath('code', LayananPeralihan::BUKAN_MENUNGGU);
+
+        $this->artisan('consent:peralihan-anak')->assertSuccessful();
+        Mail::assertQueued(PeralihanDewasaMail::class);
+        $hashLama = $subjek->fresh()->transition_token_hash;
+
+        // Jeda kirim ulang dihormati — dua menit — lalu token baru diterbitkan.
+        $this->travel(LayananPeralihan::JEDA_KIRIM_ULANG_DETIK + 1)->seconds();
+        $this->postJson('/api/guardian-consents/subjects/'.$subjek->id.'/transition-resend')
+            ->assertOk()->assertJsonStructure(['expires_at']);
+        $this->assertNotSame($hashLama, $subjek->fresh()->transition_token_hash);
+        Mail::assertQueuedCount(2);
+        $this->assertSame(1, AuditLog::where('action', 'consent_subject.transition_resend')->count());
+
+        // Daftar memuat keadaan peralihannya.
+        $this->getJson('/api/guardian-consents')->assertOk()
+            ->assertJsonPath('data.0.subject.transition_state', KelasSubjek::TRANSISI_MENUNGGU)
+            ->assertJsonPath('data.0.subject.has_own_channel', true);
+
+        // Subjek tanpa kanal: ditolak terbuka, bukan "terkirim" palsu.
+        $tanpa = $this->kewenangan($cp, 'lain@contoh.id', 'terverifikasi', 'w2@contoh.id', [
+            'transition_date' => now()->subDay()->toDateString(),
+        ])->consentSubject;
+        $this->artisan('consent:peralihan-anak')->assertSuccessful();
+        $this->postJson('/api/guardian-consents/subjects/'.$tanpa->id.'/transition-resend')
+            ->assertStatus(422)->assertJsonPath('code', LayananPeralihan::TANPA_KANAL);
     }
 
     // ───────────────────────── izin ─────────────────────────
