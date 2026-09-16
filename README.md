@@ -392,7 +392,7 @@ Enable cron: `* * * * * cd /path && php artisan schedule:run >> /dev/null 2>&1`.
 
 ## Consent Anak & Disabilitas (PP 33/2026 Pasal 38 & 39)
 
-Dua fitur di menu (nama tampilan menunggu keputusan produk), tetapi **SATU ledger** (`consent_logs`), satu antrean DSR, satu widget, satu kontrak `/v1/consent`. Semua halaman dashboard-nya di bawah `/consent/*`: `guardian`, `accessibility`, `verification-methods`.
+Dua MODUL sidebar per SUBJEK, tepat setelah Consent dan bukan sub-fiturnya: **Consent Wali (Anak)** di `/consent-guardian` (izin `consent_guardian`) dan **Consent Aksesibilitas (Disabilitas)** di `/consent-accessibility` (izin `consent_accessibility`). Masing-masing lengkap — titik pengumpulan per aplikasi (CRUD), kewenangan wali, DSR per kelas subjek; katalog metode verifikasi di modul wali, prasarana/ragam/penilaian di modul disabilitas. Tetapi **SATU ledger** (`consent_logs`), satu antrean DSR, satu widget, satu kontrak `/v1/consent` — yang dipisah adalah pintu, izin, dan pandangan (`owner_module` titik, kelas subjek), bukan datanya. Rincian rute di **Endpoint → Dashboard** di bawah.
 
 ### Tabel
 
@@ -404,12 +404,13 @@ Dua fitur di menu (nama tampilan menunggu keputusan produk), tetapi **SATU ledge
 | `consent_logs` | apa yang disetujui (+ `guardian_consent_id`, `subject_class`) | satu per KEJADIAN |
 | `verification_methods` | katalog cara verifikasi: bawaan platform (`org_id` NULL, hanya baca) + milik tenant, `config` tersandi | — |
 | `accessibility_provisions`, `disability_service_scopes`, `capacity_assessments` | prasarana per kanal, ragam yang dilayani, penilaian kapasitas | — |
+| `consent_collection_points.owner_module` | pemilik titik: `consent_guardian` / `consent_accessibility` / NULL (Consent umum); tiap titik = satu aplikasi dengan whitelist domain, embed token, pasangan kunci API, webhook sendiri | satu per TITIK |
 
 `consent_records` adalah tabel MATI (nol penulis). Jangan tempelkan apa pun ke sana.
 
 ### Gerbang
 
-`App\Services\Consent\GerbangWali::periksa()` dipanggil kedua jalur tangkap (widget publik & Partner API) SEBELUM `ConsentLog::create`: `anak` wajib `guardian_consent_id` yang sah (tenant sama, terverifikasi, belum dicabut, subjek sama); `disabilitas` menyetujui sendiri kecuali penilaian kapasitas terbaru = `diwakili_wali`; `settings.guardian_mode` pada titik pengumpulan berarti kelas subjek wajib dinyatakan.
+`App\Services\Consent\GerbangWali::periksa()` dipanggil kedua jalur tangkap (widget publik & Partner API) SEBELUM `ConsentLog::create`: `anak` wajib `guardian_consent_id` yang sah (tenant sama, terverifikasi, belum dicabut, subjek sama); `disabilitas` menyetujui sendiri kecuali penilaian kapasitas terbaru = `diwakili_wali`; `settings.guardian_mode` pada titik pengumpulan berarti kelas subjek wajib dinyatakan — titik milik modul subjek selalu menyalakannya dan membawa `subject_class_default` = kelas modul, sehingga widget dan API server-to-server langsung menempuh jalur yang benar.
 
 ### Empat cara memverifikasi wali
 
@@ -462,7 +463,7 @@ DSR oleh wali/pendamping: `requester_type`, `subject_identifier`; bukti kewenang
 - Jangan tawarkan metode/kanal yang tidak bisa dijalankan (`VerificationMethod::dapatDijalankan()`, `KanalPesan::tersedia()`): sakelar yang tersimpan tanpa efek adalah kebohongan yang sama dengan `guardian_mode` versi lama.
 - Jangan `Http::fake()` dua kali dalam satu uji — stub digabung dan yang pertama menang; pakai satu closure yang jawabannya diganti per fase.
 
-Uji: `AlurWaliTest`, `VerifikasiKuatTest`, `KanalTeleponTest`, `KewenanganDinyatakanTenantTest`, `TautanHalamanFrontendTest`, `PeralihanAnakDewasaTest`, `KewenanganWaliAdminTest`, `AksesibilitasAdminTest`, `DsrWaliTest`, `TulangPunggungWaliTest`, unit `NomorTeleponTest`.
+Uji: `ModulSubjekTest` (menu & izin per modul, backfill, `owner_module`, CRUD titik + kunci + embed, saringan kelas untuk kewenangan & DSR, gerbang bukti wali dari pintu modul), `AlurWaliTest`, `VerifikasiKuatTest`, `KanalTeleponTest`, `KewenanganDinyatakanTenantTest`, `TautanHalamanFrontendTest`, `PeralihanAnakDewasaTest`, `KewenanganWaliAdminTest`, `AksesibilitasAdminTest`, `DsrWaliTest`, `TulangPunggungWaliTest`, unit `NomorTeleponTest`.
 
 ## Routing
 
