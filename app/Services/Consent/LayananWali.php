@@ -564,7 +564,8 @@ final class LayananWali
         RateLimiter::hit($kunci, self::JEDA_KIRIM_ULANG_DETIK);
 
         $mentah = $kw->terbitkanToken(self::MASA_BERLAKU_JAM);
-        $url = url('/api/public/consent/guardian/verify/'.$mentah);
+        // Halaman Next.js /wali/{token} — bukan endpoint API — yang dibuka wali.
+        $url = TautanPublik::wali($mentah);
 
         if ($lewatTelepon) {
             $this->kanalPesan->antre(new PesanSingkat(

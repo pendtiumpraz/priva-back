@@ -576,9 +576,12 @@ class AlurWaliTest extends TestCase
 
         $url = $tautan[$ke - 1] ?? null;
         $this->assertNotNull($url, "surel ke-{$ke} tidak ditemukan");
-        $this->assertMatchesRegularExpression('~/api/public/consent/guardian/verify/[A-Za-z0-9]{64}$~', $url);
+        // Tautan di surel menunjuk HALAMAN Next.js (/wali/{token}); halaman itu
+        // memanggil endpoint API di bawah — uji ini langsung ke endpointnya.
+        $this->assertMatchesRegularExpression('~/wali/([A-Za-z0-9]{64})$~', $url);
+        preg_match('~/wali/([A-Za-z0-9]{64})$~', $url, $m);
 
-        return $url;
+        return '/api/public/consent/guardian/verify/'.$m[1];
     }
 
     /** Kewenangan yang sudah terverifikasi, dibuat langsung — untuk uji gerbang. */

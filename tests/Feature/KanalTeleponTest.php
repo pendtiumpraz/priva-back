@@ -120,7 +120,7 @@ class KanalTeleponTest extends TestCase
             $p = $job->pesan;
             $this->assertSame('+6281234567890', $p->tujuan);
             $this->assertSame(PesanSingkat::KONTEKS_TAUTAN_WALI, $p->konteks);
-            $this->assertMatchesRegularExpression('~/api/public/consent/guardian/verify/[A-Za-z0-9]{64}~', $p->teks);
+            $this->assertMatchesRegularExpression('~/wali/[A-Za-z0-9]{64}~', $p->teks);
             $this->assertStringContainsString('Bank Uji', $p->teks);
             $this->assertStringContainsString('Siti Rahayu', $p->teks);
             $this->assertStringContainsString('orang tua', $p->teks);
@@ -275,7 +275,7 @@ class KanalTeleponTest extends TestCase
         Queue::assertPushed(KirimPesanSingkatJob::class, function (KirimPesanSingkatJob $job) {
             $this->assertSame('+6281234567890', $job->pesan->tujuan);
             $this->assertSame(PesanSingkat::KONTEKS_TAUTAN_PERALIHAN, $job->pesan->konteks);
-            $this->assertMatchesRegularExpression('~/api/public/consent/transition/[A-Za-z0-9]{64}~', $job->pesan->teks);
+            $this->assertMatchesRegularExpression('~/peralihan/[A-Za-z0-9]{64}~', $job->pesan->teks);
             $this->assertStringContainsString('Bank Uji', $job->pesan->teks);
             $this->assertStringNotContainsString('anak@contoh.id', $job->pesan->teks);
 
@@ -429,17 +429,18 @@ class KanalTeleponTest extends TestCase
 
     private function tautanDariPesan(): string
     {
-        $url = null;
-        Queue::assertPushed(KirimPesanSingkatJob::class, function (KirimPesanSingkatJob $job) use (&$url) {
-            if (preg_match('~https?://\S+/api/public/consent/guardian/verify/[A-Za-z0-9]{64}~', $job->pesan->teks, $m)) {
-                $url = $m[0];
+        $token = null;
+        Queue::assertPushed(KirimPesanSingkatJob::class, function (KirimPesanSingkatJob $job) use (&$token) {
+            if (preg_match('~https?://\S+/wali/([A-Za-z0-9]{64})~', $job->pesan->teks, $m)) {
+                $token = $m[1];
             }
 
             return true;
         });
-        $this->assertNotNull($url, 'tautan tidak ditemukan di pesan');
+        $this->assertNotNull($token, 'tautan tidak ditemukan di pesan');
 
-        return (string) $url;
+        // Pesan menunjuk halaman Next.js; uji langsung ke endpoint API di baliknya.
+        return '/api/public/consent/guardian/verify/'.$token;
     }
 
     private function pengguna(): User

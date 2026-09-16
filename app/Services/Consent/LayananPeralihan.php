@@ -305,7 +305,8 @@ final class LayananPeralihan
         }
 
         $mentah = $subjek->terbitkanTokenPeralihan(self::MASA_BERLAKU_HARI);
-        $url = url('/api/public/consent/transition/'.$mentah);
+        // Halaman Next.js /peralihan/{token} — bukan endpoint API — yang dibuka subjek.
+        $url = TautanPublik::peralihan($mentah);
         $kanal = trim((string) ($subjek->subject_own_channel ?? ''));
 
         if (str_contains($kanal, '@')) {

@@ -789,7 +789,10 @@ class VerifikasiKuatTest extends TestCase
             return true;
         });
         $this->assertNotNull($tautan);
+        // Tautan surel menunjuk halaman Next.js /wali/{token}; uji langsung ke endpoint API-nya.
+        $this->assertMatchesRegularExpression('~/wali/([A-Za-z0-9]{64})$~', (string) $tautan);
+        preg_match('~/wali/([A-Za-z0-9]{64})$~', (string) $tautan, $m);
 
-        return (string) $tautan;
+        return '/api/public/consent/guardian/verify/'.$m[1];
     }
 }

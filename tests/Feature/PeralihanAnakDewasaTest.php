@@ -107,9 +107,11 @@ class PeralihanAnakDewasaTest extends TestCase
             return true;
         });
         $this->assertNotNull($url);
-        $this->assertMatchesRegularExpression('~/api/public/consent/transition/[A-Za-z0-9]{64}$~', $url);
+        // Tautan surel menunjuk halaman Next.js /peralihan/{token}; uji langsung ke endpoint API-nya.
+        $this->assertMatchesRegularExpression('~/peralihan/([A-Za-z0-9]{64})$~', $url);
+        preg_match('~/peralihan/([A-Za-z0-9]{64})$~', $url, $m);
 
-        return $url;
+        return '/api/public/consent/transition/'.$m[1];
     }
 
     // ───────────────────────── antrean ─────────────────────────
