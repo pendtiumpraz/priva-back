@@ -453,6 +453,21 @@ Di bawah tiap awalan: `summary`; `collection-points` (CRUD penuh + `{id}/items`,
 
 `accessibility` diterima kedua jalur tangkap (`ConsentLogController::capture`, `V1\ConsentApiV1Controller::capture`), disimpan hanya bila kelas hasil gerbang = `disabilitas`, dan ikut ke payload webhook (`accessibility`, `subject_class`). Pratinjau skrip: `/embed/subjek-preview?modul=guardian|accessibility&collection_id=…`.
 
+### Webhook keluar — Consent & DSR bertanda tangan
+
+Kedua webhook keluar memakai kontrak header yang sama, sehingga satu penerima di sisi tenant bisa melayani keduanya. Frontend membangkitkan kode penerimanya per tech stack dari kontrak ini (`frontend/src/lib/integrasi/webhook.ts`) — mengubah header atau bentuk payload di sini berarti mengubah tutorial di sana.
+
+| | Consent (`FireConsentWebhookJob`) | DSR (`FireDsrWebhookJob`) |
+|---|---|---|
+| Kunci tanda tangan | `ConsentCollectionPoint::kunciTandaWebhook()` = `embed_token` titik (cadangan `collection_id` untuk titik lama tanpa token) | `embed_token` aplikasi DSR |
+| `X-Privasimu-Signature` | `sha256=` + HMAC-SHA256 atas **byte badan yang dikirim** | sama |
+| `X-Privasimu-Delivery` | UUID, dibuat saat job dibentuk — **sama di setiap percobaan ulang** (dipakai penerima untuk membuang duplikat) | sama |
+| `X-Privasimu-Event` · `X-Privasimu-Timestamp` | nama event · detik epoch | sama |
+| Bentuk payload | datar (`event`, `user_identifier`, `consented_items`, `subject_class`, …) | terbungkus `{ event, delivery_id, timestamp, data{…} }`, tanpa nama/email pemohon |
+| Percobaan | 3× (jeda 30 dtk, 2 mnt), batas jawab 5 dtk | 5× (30 dtk → 1 jam), batas jawab 10 dtk |
+
+Badan di-`json_encode` SEKALI lalu dikirim lewat `withBody()` — menandatangani array lalu membiarkan klien HTTP meng-encode ulang membuat tanda tangan tidak cocok begitu ada garis miring atau karakter non-ASCII. Ketiga pintu tangkap (`ConsentLogController::capture`, `V1\ConsentApiV1Controller::capture`, `PenyebarConsent`) meneruskan kunci titiknya sendiri. Tanpa kunci, header tanda tangan tidak dikirim sama sekali (tidak pernah tanda tangan kosong). Uji: `WebhookConsentBertandaTest`.
+
 DSR oleh wali/pendamping: `requester_type`, `subject_identifier`; bukti kewenangan (`App\Services\Dsr\BuktiWali`) `otomatis` bila cocok, atau keputusan DPO lewat `POST /dsr/{id}/guardian-proof`; hak yang merusak terkunci sampai bukti diterima (hook `saving` di `DsrRequest`, semua pintu).
 
 ### Tautan yang dibuka manusia
