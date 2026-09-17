@@ -183,6 +183,17 @@ class ConsentCollectionPoint extends Model
         ];
     }
 
+    /**
+     * Kunci HMAC untuk menandatangani webhook titik ini (lihat
+     * FireConsentWebhookJob). `embed_token` — nilai yang sudah dipegang
+     * integrator karena ada di cuplikan embed mereka. Titik lama yang belum
+     * punya token memakai `collection_id`, sama seperti fallback cuplikannya.
+     */
+    public function kunciTandaWebhook(): string
+    {
+        return (string) ($this->embed_token ?: $this->collection_id);
+    }
+
     public function bustConsentCache(): void
     {
         Cache::forget('consent:config:'.sha1($this->collection_id));

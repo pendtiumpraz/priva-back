@@ -374,7 +374,8 @@ class ConsentLogController extends Controller
                         'timestamp' => $log->created_at,
                         'subject_class' => $log->subject_class,
                         'accessibility' => $log->accessibility_meta,
-                    ], $gate ? ['decision' => ConsentOutboundGate::payload($gate)] : [])
+                    ], $gate ? ['decision' => ConsentOutboundGate::payload($gate)] : []),
+                    $collection->kunciTandaWebhook(),
                 );
             }
 

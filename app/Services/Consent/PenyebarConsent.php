@@ -50,6 +50,7 @@ final class PenyebarConsent
                     // Pasal 39 ayat (3) — null kecuali subjek disabilitas.
                     'accessibility' => $log->accessibility_meta,
                 ], $tambahan, $gate ? ['decision' => ConsentOutboundGate::payload($gate)] : []),
+                $cp->kunciTandaWebhook(),
             );
         }
 
