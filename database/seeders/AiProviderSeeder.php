@@ -333,6 +333,127 @@ class AiProviderSeeder extends Seeder
                     ['model_id' => 'inception-mercury-2', 'name' => 'Inception Mercury 2 (via ModelsLab)', 'category' => 'chat', 'context_window' => 131072, 'max_output_tokens' => 8192, 'supports_tools' => false, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => null, 'output_price_per_m' => null, 'sort_order' => 12],
                 ],
             ],
+
+            // =============================================
+            // 12. Sumopod AI (Aggregator, OpenAI-compatible)
+            // =============================================
+            //
+            // Satu kunci untuk Claude, GPT, Gemini, DeepSeek, GLM, Qwen, Kimi,
+            // MiniMax, MiMo, dan Hunyuan. Endpoint `/v1/chat/completions` dengan
+            // Bearer token — jadi tidak perlu cabang kode baru; `auth_header` dan
+            // `auth_prefix` memakai bawaan.
+            //
+            // HARGA. Diambil dari daftar harga Sumopod per 18 September 2026 dan
+            // WAJIB dicek ulang sebelum dipakai untuk menghitung anggaran —
+            // katalog gateway berubah sering. Tiga aturan dipakai saat menurunkan
+            // satu angka dari daftar yang punya lebih dari satu:
+            //
+            //   - promo  ("25% Off", coret) -> harga SETELAH diskon (yang dibayar);
+            //   - peak / off-peak (DeepSeek) -> harga PEAK, supaya perkiraan biaya
+            //     tidak pernah lebih rendah dari tagihan;
+            //   - bertingkat menurut panjang konteks (qwen3.7-flash) -> tingkat
+            //     TERTINGGI, dengan alasan yang sama.
+            //
+            // Harga cache (kolom ketiga di daftar Sumopod) TIDAK disimpan: tabel
+            // `ai_models` hanya punya harga input & output, dan keduanya murni
+            // untuk ditampilkan — belum ada perhitungan biaya yang membacanya.
+            //
+            // `max_output_tokens` dibiarkan null karena Sumopod tidak menyebutnya.
+            // Kemampuan (tools / vision / reasoning) mengikuti keluarga model
+            // hulunya, bukan klaim Sumopod; `supports_vision` sengaja dibiarkan
+            // false kecuali model itu memang model penglihatan — salah menyalakan
+            // berarti galat saat dipakai, salah mematikan hanya berarti tidak
+            // ditawarkan.
+            [
+                'slug' => 'sumopod',
+                'name' => 'Sumopod AI',
+                'api_base_url' => 'https://ai.sumopod.com/v1',
+                'supports_tools' => true,
+                'supports_streaming' => true,
+                'sort_order' => 12,
+                'description' => 'Sumopod AI — gateway OpenAI-compatible, satu kunci untuk Claude, GPT, Gemini, DeepSeek, GLM, Qwen, Kimi, MiniMax, MiMo, dan Hunyuan.',
+                'website' => 'https://ai.sumopod.com',
+                'icon' => '🛰️',
+                'models' => [
+                    // Anthropic
+                    ['model_id' => 'claude-opus-5', 'name' => 'Claude Opus 5 (via Sumopod)', 'category' => 'reasoning', 'context_window' => 1000000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 5.0, 'output_price_per_m' => 25.0, 'sort_order' => 1],
+                    ['model_id' => 'claude-opus-4-8', 'name' => 'Claude Opus 4.8 (via Sumopod)', 'category' => 'reasoning', 'context_window' => 1000000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 5.0, 'output_price_per_m' => 25.0, 'sort_order' => 2],
+                    ['model_id' => 'claude-sonnet-5', 'name' => 'Claude Sonnet 5 (via Sumopod)', 'category' => 'chat', 'context_window' => 1000000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 2.0, 'output_price_per_m' => 10.0, 'sort_order' => 3],
+                    ['model_id' => 'claude-haiku-4-5', 'name' => 'Claude Haiku 4.5 (via Sumopod)', 'category' => 'chat', 'context_window' => 200000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 1.0, 'output_price_per_m' => 5.0, 'sort_order' => 4],
+
+                    // OpenAI
+                    ['model_id' => 'gpt-5.6-sol', 'name' => 'GPT-5.6 Sol (via Sumopod)', 'category' => 'reasoning', 'context_window' => 922000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 4.0, 'output_price_per_m' => 20.0, 'sort_order' => 5],
+                    ['model_id' => 'gpt-5.6-terra', 'name' => 'GPT-5.6 Terra (via Sumopod)', 'category' => 'reasoning', 'context_window' => 922000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 2.0, 'output_price_per_m' => 12.0, 'sort_order' => 6],
+                    ['model_id' => 'gpt-5.6-luna', 'name' => 'GPT-5.6 Luna (via Sumopod)', 'category' => 'chat', 'context_window' => 922000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => true, 'recommended_for_agent' => false, 'input_price_per_m' => 0.2, 'output_price_per_m' => 1.2, 'sort_order' => 7],
+                    ['model_id' => 'gpt-5.4', 'name' => 'GPT-5.4 (via Sumopod)', 'category' => 'reasoning', 'context_window' => 1050000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 2.5, 'output_price_per_m' => 15.0, 'sort_order' => 8],
+                    ['model_id' => 'gpt-5.4-mini', 'name' => 'GPT-5.4 Mini (via Sumopod)', 'category' => 'chat', 'context_window' => 272000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => true, 'recommended_for_agent' => false, 'input_price_per_m' => 0.75, 'output_price_per_m' => 4.5, 'sort_order' => 9],
+                    ['model_id' => 'gpt-5.4-nano', 'name' => 'GPT-5.4 Nano (via Sumopod)', 'category' => 'chat', 'context_window' => 272000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.2, 'output_price_per_m' => 1.25, 'sort_order' => 10],
+                    ['model_id' => 'gpt-5', 'name' => 'GPT-5 (via Sumopod)', 'category' => 'reasoning', 'context_window' => 272000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 1.25, 'output_price_per_m' => 10.0, 'sort_order' => 11],
+                    ['model_id' => 'gpt-5-mini', 'name' => 'GPT-5 Mini (via Sumopod)', 'category' => 'chat', 'context_window' => 272000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => true, 'recommended_for_agent' => false, 'input_price_per_m' => 0.25, 'output_price_per_m' => 2.0, 'sort_order' => 12],
+                    ['model_id' => 'gpt-5-nano', 'name' => 'GPT-5 Nano (via Sumopod)', 'category' => 'chat', 'context_window' => 272000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.05, 'output_price_per_m' => 0.4, 'sort_order' => 13],
+                    ['model_id' => 'gpt-4.1', 'name' => 'GPT-4.1 (via Sumopod)', 'category' => 'chat', 'context_window' => 1047576, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 2.0, 'output_price_per_m' => 8.0, 'sort_order' => 14],
+                    ['model_id' => 'gpt-4.1-mini', 'name' => 'GPT-4.1 Mini (via Sumopod)', 'category' => 'chat', 'context_window' => 1047576, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.4, 'output_price_per_m' => 1.6, 'sort_order' => 15],
+                    ['model_id' => 'gpt-4.1-nano', 'name' => 'GPT-4.1 Nano (via Sumopod)', 'category' => 'chat', 'context_window' => 1047576, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.1, 'output_price_per_m' => 0.4, 'sort_order' => 16],
+                    ['model_id' => 'gpt-4o', 'name' => 'GPT-4o (via Sumopod)', 'category' => 'chat', 'context_window' => 128000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 2.5, 'output_price_per_m' => 10.0, 'sort_order' => 17],
+                    ['model_id' => 'gpt-4o-mini', 'name' => 'GPT-4o Mini (via Sumopod)', 'category' => 'chat', 'context_window' => 128000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.15, 'output_price_per_m' => 0.6, 'sort_order' => 18],
+
+                    // Google Gemini — id-nya memang berawalan "gemini/" di Sumopod.
+                    ['model_id' => 'gemini/gemini-3.1-pro-preview', 'name' => 'Gemini 3.1 Pro Preview (via Sumopod)', 'category' => 'reasoning', 'context_window' => 1048576, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 2.0, 'output_price_per_m' => 12.0, 'sort_order' => 19],
+                    ['model_id' => 'gemini/gemini-3.8-flash', 'name' => 'Gemini 3.8 Flash (via Sumopod)', 'category' => 'chat', 'context_window' => 1048576, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.75, 'output_price_per_m' => 3.75, 'sort_order' => 20],
+                    ['model_id' => 'gemini/gemini-3.7-flash', 'name' => 'Gemini 3.7 Flash (via Sumopod)', 'category' => 'chat', 'context_window' => 1048576, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.75, 'output_price_per_m' => 3.75, 'sort_order' => 21],
+                    ['model_id' => 'gemini/gemini-3.5-flash', 'name' => 'Gemini 3.5 Flash (via Sumopod)', 'category' => 'chat', 'context_window' => 1048576, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 1.5, 'output_price_per_m' => 9.0, 'sort_order' => 22],
+                    ['model_id' => 'gemini/gemini-3.5-flash-lite', 'name' => 'Gemini 3.5 Flash Lite (via Sumopod)', 'category' => 'chat', 'context_window' => 1048576, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.3, 'output_price_per_m' => 2.5, 'sort_order' => 23],
+                    ['model_id' => 'gemini/gemini-3-flash-preview', 'name' => 'Gemini 3 Flash Preview (via Sumopod)', 'category' => 'chat', 'context_window' => 1048576, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.5, 'output_price_per_m' => 3.0, 'sort_order' => 24],
+                    ['model_id' => 'gemini/gemini-3.1-flash-lite', 'name' => 'Gemini 3.1 Flash Lite (via Sumopod)', 'category' => 'chat', 'context_window' => 1048576, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.25, 'output_price_per_m' => 1.5, 'sort_order' => 25],
+                    // Embedding: bukan model percakapan — tanpa tool, tanpa vision, keluaran gratis.
+                    ['model_id' => 'gemini/gemini-embedding-001', 'name' => 'Gemini Embedding 001 (via Sumopod)', 'category' => 'embedding', 'context_window' => 2048, 'max_output_tokens' => null, 'supports_tools' => false, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.15, 'output_price_per_m' => 0.0, 'sort_order' => 26],
+
+                    // DeepSeek — harga PEAK (lihat catatan aturan harga di atas).
+                    ['model_id' => 'deepseek-v4-pro', 'name' => 'DeepSeek V4 Pro (via Sumopod)', 'category' => 'reasoning', 'context_window' => 1000000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 1.32, 'output_price_per_m' => 3.96, 'sort_order' => 27],
+                    ['model_id' => 'deepseek-v4-flash', 'name' => 'DeepSeek V4 Flash (via Sumopod)', 'category' => 'chat', 'context_window' => 1000000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.3, 'output_price_per_m' => 1.2, 'sort_order' => 28],
+                    ['model_id' => 'deepseek-flash', 'name' => 'DeepSeek Flash (via Sumopod)', 'category' => 'chat', 'context_window' => 1000000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.3, 'output_price_per_m' => 1.2, 'sort_order' => 29],
+                    ['model_id' => 'deepseek-v4-flash-vision-exp', 'name' => 'DeepSeek V4 Flash Vision (eksperimen, via Sumopod)', 'category' => 'vision', 'context_window' => 1000000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.3, 'output_price_per_m' => 1.2, 'sort_order' => 30],
+                    // Varian ":netra" berjalan di runtime Netra, harganya tetap (tanpa peak).
+                    ['model_id' => 'deepseek-v4.1-flash:netra', 'name' => 'DeepSeek V4.1 Flash — Netra (via Sumopod)', 'category' => 'chat', 'context_window' => 1000000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.3, 'output_price_per_m' => 1.0, 'sort_order' => 31],
+                    ['model_id' => 'deepseek-v4-flash-0731:netra', 'name' => 'DeepSeek V4 Flash 0731 — Netra (via Sumopod)', 'category' => 'chat', 'context_window' => 1000000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.2, 'output_price_per_m' => 0.5, 'sort_order' => 32],
+
+                    // Z.ai (GLM)
+                    ['model_id' => 'glm-5.2', 'name' => 'GLM-5.2 (via Sumopod)', 'category' => 'reasoning', 'context_window' => 1000000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 1.05, 'output_price_per_m' => 3.3, 'sort_order' => 33],
+                    ['model_id' => 'glm-5.1', 'name' => 'GLM-5.1 (via Sumopod)', 'category' => 'reasoning', 'context_window' => 1000000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 1.4, 'output_price_per_m' => 4.4, 'sort_order' => 34],
+                    ['model_id' => 'glm-5', 'name' => 'GLM-5 (via Sumopod)', 'category' => 'chat', 'context_window' => 128000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => true, 'recommended_for_agent' => false, 'input_price_per_m' => 0.6, 'output_price_per_m' => 2.0, 'sort_order' => 35],
+                    ['model_id' => 'glm-5.3-flash', 'name' => 'GLM-5.3 Flash (via Sumopod)', 'category' => 'chat', 'context_window' => 1000000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.07, 'output_price_per_m' => 0.25, 'sort_order' => 36],
+                    // Sumopod menulis konteks glm-5-turbo = 0 (tidak disebut); disamakan
+                    // dengan saudaranya yang 128K daripada memasang angka karangan.
+                    ['model_id' => 'glm-5-turbo', 'name' => 'GLM-5 Turbo (via Sumopod)', 'category' => 'chat', 'context_window' => 128000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 1.2, 'output_price_per_m' => 4.0, 'sort_order' => 37],
+                    ['model_id' => 'glm-5v-turbo', 'name' => 'GLM-5V Turbo (via Sumopod)', 'category' => 'vision', 'context_window' => 128000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => true, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 1.2, 'output_price_per_m' => 4.0, 'sort_order' => 38],
+
+                    // Alibaba Qwen
+                    ['model_id' => 'qwen3.8-max', 'name' => 'Qwen 3.8 Max (via Sumopod)', 'category' => 'reasoning', 'context_window' => 991808, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 1.0, 'output_price_per_m' => 3.0, 'sort_order' => 39],
+                    ['model_id' => 'qwen3.7-max', 'name' => 'Qwen 3.7 Max (via Sumopod)', 'category' => 'reasoning', 'context_window' => 1000000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 1.25, 'output_price_per_m' => 3.75, 'sort_order' => 40],
+                    ['model_id' => 'qwen3.8-flash', 'name' => 'Qwen 3.8 Flash (via Sumopod)', 'category' => 'chat', 'context_window' => 1000000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.15, 'output_price_per_m' => 0.47, 'sort_order' => 41],
+                    ['model_id' => 'qwen3.7-plus', 'name' => 'Qwen 3.7 Plus (via Sumopod)', 'category' => 'chat', 'context_window' => 1000000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.32, 'output_price_per_m' => 1.28, 'sort_order' => 42],
+                    // Harga bertingkat menurut panjang konteks; dipasang tingkat >256K.
+                    ['model_id' => 'qwen3.7-flash-2026-07-15', 'name' => 'Qwen 3.7 Flash (via Sumopod)', 'category' => 'chat', 'context_window' => 1000000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.2, 'output_price_per_m' => 0.8, 'sort_order' => 43],
+                    ['model_id' => 'qwen3.6-plus', 'name' => 'Qwen 3.6 Plus (via Sumopod)', 'category' => 'chat', 'context_window' => 1000000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.5, 'output_price_per_m' => 3.0, 'sort_order' => 44],
+                    ['model_id' => 'qwen3.6-flash', 'name' => 'Qwen 3.6 Flash (via Sumopod)', 'category' => 'chat', 'context_window' => 1000000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.25, 'output_price_per_m' => 1.5, 'sort_order' => 45],
+
+                    // Moonshot (Kimi)
+                    ['model_id' => 'kimi-k3', 'name' => 'Kimi K3 (via Sumopod)', 'category' => 'reasoning', 'context_window' => 1000000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => true, 'recommended_for_agent' => true, 'input_price_per_m' => 1.5, 'output_price_per_m' => 7.5, 'sort_order' => 46],
+                    ['model_id' => 'kimi-k2.7', 'name' => 'Kimi K2.7 (via Sumopod)', 'category' => 'chat', 'context_window' => 262100, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => true, 'recommended_for_agent' => false, 'input_price_per_m' => 0.95, 'output_price_per_m' => 4.0, 'sort_order' => 47],
+                    ['model_id' => 'kimi-k2.6', 'name' => 'Kimi K2.6 (via Sumopod)', 'category' => 'chat', 'context_window' => 262100, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => true, 'recommended_for_agent' => false, 'input_price_per_m' => 0.67, 'output_price_per_m' => 3.39, 'sort_order' => 48],
+
+                    // MiniMax
+                    ['model_id' => 'MiniMax-M3', 'name' => 'MiniMax M3 (via Sumopod)', 'category' => 'chat', 'context_window' => 1000000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => true, 'recommended_for_agent' => false, 'input_price_per_m' => 0.3, 'output_price_per_m' => 1.2, 'sort_order' => 49],
+                    ['model_id' => 'MiniMax-M2.7-highspeed', 'name' => 'MiniMax M2.7 Highspeed (via Sumopod)', 'category' => 'chat', 'context_window' => 204800, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => true, 'recommended_for_agent' => false, 'input_price_per_m' => 0.03, 'output_price_per_m' => 0.12, 'sort_order' => 50],
+
+                    // Xiaomi MiMo
+                    ['model_id' => 'mimo-v2.5-pro', 'name' => 'MiMo V2.5 Pro (via Sumopod)', 'category' => 'reasoning', 'context_window' => 1100000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => true, 'recommended_for_agent' => false, 'input_price_per_m' => 0.43, 'output_price_per_m' => 0.87, 'sort_order' => 51],
+                    ['model_id' => 'mimo-v2.5', 'name' => 'MiMo V2.5 (via Sumopod)', 'category' => 'chat', 'context_window' => 1100000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.14, 'output_price_per_m' => 0.28, 'sort_order' => 52],
+
+                    // Tencent Hunyuan
+                    ['model_id' => 'hy3', 'name' => 'Hunyuan 3 (via Sumopod)', 'category' => 'chat', 'context_window' => 256000, 'max_output_tokens' => null, 'supports_tools' => true, 'supports_vision' => false, 'is_reasoning' => false, 'recommended_for_agent' => false, 'input_price_per_m' => 0.13, 'output_price_per_m' => 0.53, 'sort_order' => 53],
+                ],
+            ],
         ];
 
         foreach ($providers as $providerData) {

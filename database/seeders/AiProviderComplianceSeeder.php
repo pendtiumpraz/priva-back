@@ -160,6 +160,21 @@ class AiProviderComplianceSeeder extends Seeder
                 'zdr_note' => 'EU Data Boundary (Data Zone Standard EUR) — data tetap di UE. Tidak menyimpan/melatih.',
                 'compliance_note' => 'Azure AI Speech di bawah Microsoft Products & Services DPA. Kontrol residency TERKUAT (EU Data Boundary). Suara = biometrik → consent. Sangat aman.',
             ],
+            // Gateway: yurisdiksi EFEKTIFNYA mengikuti model yang dipilih, bukan
+            // gateway-nya. Field di bawah sengaja kosong (null) di tempat yang
+            // belum saya verifikasi — lebih baik "belum diketahui" daripada klaim
+            // kepatuhan yang salah. `no_training` null (bukan false) supaya
+            // pemilihannya tidak diblokir gerbang PDP, tetapi tetap ditandai
+            // "caution" agar DPO memeriksa dulu.
+            'sumopod' => [
+                'jurisdiction' => 'Belum diverifikasi — permintaan diteruskan ke penyedia hulu (AS / Tiongkok / lainnya, tergantung model)',
+                'gdpr_status' => null, 'no_training' => null,
+                'zdr_available' => false, 'pdp_risk' => 'caution',
+                'dpa_url' => null,
+                'privacy_url' => null,
+                'zdr_note' => 'Belum dipublikasi/diverifikasi. Anggap prompt tersimpan di gateway sampai Sumopod menyatakan sebaliknya secara tertulis.',
+                'compliance_note' => 'Gateway agregator: satu kunci meneruskan ke Anthropic, OpenAI, Google, DeepSeek, Z.ai, Alibaba, Moonshot, MiniMax, Xiaomi, dan Tencent. Risiko kepatuhan MENGIKUTI MODEL yang dipilih — memilih model DeepSeek/GLM/Qwen/Kimi/Hunyuan berarti pemrosesan di Tiongkok, yang bukan negara adekuasi. DPO wajib memastikan (1) DPA dengan Sumopod, (2) retensi & pelatihan di sisi gateway, (3) rantai subprosesor ke penyedia hulu, SEBELUM dipakai untuk data pribadi.',
+            ],
             'minimax-tts' => [
                 'jurisdiction' => 'Tiongkok (Nanonoble, entitas Singapura)', 'gdpr_status' => 'partial', 'no_training' => null,
                 'zdr_available' => false, 'pdp_risk' => 'caution',
