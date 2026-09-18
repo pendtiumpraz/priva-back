@@ -44,6 +44,18 @@ class DatabaseSeeder extends Seeder
             // dengan tabel detail. Non-destruktif (firstOrCreate) — editan root
             // tidak tertimpa saat re-seed. Reset ke default via endpoint /reset.
             DueDiligenceSeeder::class,
+            // Katalog provider & model AI (+ metadata kepatuhannya). DI ATAS
+            // gerbang "sudah pernah di-seed" di bawah, BUKAN di bawahnya:
+            // katalog ini bertambah tiap kali ada provider/model baru, dan
+            // keduanya idempoten (updateOrCreate / fill+save), jadi
+            // `php artisan db:seed` di basis data yang sudah terisi memang
+            // seharusnya memutakhirkannya. Sebelumnya keduanya dipanggil di
+            // ujung run(), sehingga provider baru TIDAK PERNAH masuk ke basis
+            // data mana pun yang sudah punya superadmin — gerbang itu sudah
+            // pulang duluan. Urutan wajib: katalog dulu, metadata kepatuhan
+            // sesudahnya (ia mengisi baris provider yang sudah ada).
+            AiProviderSeeder::class,
+            AiProviderComplianceSeeder::class,
         ]);
 
         if (User::where('email', 'superadmin@privasimu.com')->exists()) {
@@ -405,8 +417,8 @@ class DatabaseSeeder extends Seeder
         $this->call(UuPdpPasalSeeder::class); // full UU PDP per-pasal (skeleton until verbatim text supplied)
         $this->call(PpPdpPasalSeeder::class); // full PP 33/2026 per-pasal (aturan pelaksana UU PDP)
         $this->call(RegulationSeeder::class); // registry regulasi (UU PDP + PP 33 core, sisanya add-on)
-        $this->call(AiProviderSeeder::class);
-        $this->call(AiProviderComplianceSeeder::class);
+        // AiProviderSeeder + AiProviderComplianceSeeder sudah dipanggil di blok
+        // idempoten paling atas — lihat alasannya di sana.
         $this->call(VoiceTtsProviderSeeder::class);
         $this->call(QaTestCaseSeeder::class);
 

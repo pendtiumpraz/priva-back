@@ -4,9 +4,12 @@ namespace Tests\Feature;
 
 use App\Models\AiModel;
 use App\Models\AiProvider;
+use App\Models\User;
 use Database\Seeders\AiProviderComplianceSeeder;
 use Database\Seeders\AiProviderSeeder;
+use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -143,6 +146,35 @@ class SumopodAiSeederTest extends TestCase
         $this->assertSame($providerAwal, AiProvider::count());
         $this->assertSame($modelAwal, AiModel::count());
         $this->assertSame($idAwal, $this->sumopod()->id, 'provider dibuat ulang, bukan diperbarui');
+    }
+
+    /**
+     * `php artisan db:seed` polos — inilah yang orang jalankan, bukan `--class=`.
+     *
+     * DatabaseSeeder pulang lebih awal begitu superadmin@privasimu.com ada
+     * ("Database is already seeded"), dan katalog AI DULU dipanggil di bawah
+     * gerbang itu. Akibatnya provider baru tidak pernah masuk ke basis data
+     * mana pun yang sudah terisi — hanya ke basis data kosong. Katalognya kini
+     * dipanggil di atas gerbang; test ini yang menjaganya tetap di sana.
+     */
+    public function test_db_seed_polos_tetap_memasukkan_katalog_di_basis_data_yang_sudah_terisi(): void
+    {
+        // Menandai basis data "sudah pernah di-seed" persis seperti gerbangnya membaca.
+        User::create([
+            'id' => (string) Str::uuid(),
+            'name' => 'Super Admin',
+            'email' => 'superadmin@privasimu.com',
+            'password' => bcrypt('rahasia-uji'),
+            'role' => 'superadmin',
+        ]);
+
+        $this->seed(DatabaseSeeder::class);
+
+        $p = $this->sumopod();
+        $this->assertSame('https://ai.sumopod.com/v1', $p->api_base_url);
+        $this->assertSame(53, AiModel::where('provider_id', $p->id)->count());
+        // Metadata kepatuhan ikut terisi — urutan pemanggilannya benar.
+        $this->assertSame('caution', $p->pdp_risk);
     }
 
     public function test_provider_lain_tidak_tersenggol(): void
